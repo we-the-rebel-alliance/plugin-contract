@@ -258,7 +258,7 @@ export interface EventsListRequest {
 
 // ── Errors (design §2.1, "Errors") ────────────────────────────────────────
 
-/** The one error table: the draft's nine and the final design's three. */
+/** The one error table: the draft's nine, the final design's three, and the two input refusals (D3). */
 export const ERROR_CODES = [
   "NEEDS_SIGN_IN",
   "ACCOUNT_MISMATCH",
@@ -272,14 +272,16 @@ export const ERROR_CODES = [
   "SCOPE_MISSING",
   "BUDGET_EXCEEDED",
   "SOURCE_DISABLED",
+  "INPUT_INVALID",
+  "SOURCE_UNKNOWN",
 ] as const
 export type ErrorCode = (typeof ERROR_CODES)[number]
 
 /**
- * Codes the nine plugins use today for refusals the table has no row for: a malformed input and a source the plugin
- * does not have. Proposed for the table (`docs/events.md`, decision D3); until decided, `canonicalCode` accepts them.
+ * Codes proposed for the table and not yet in it. Empty: D3 (a) moved `INPUT_INVALID` and `SOURCE_UNKNOWN` into
+ * `ERROR_CODES`. Kept for one release so an importer does not break.
  */
-export const PROPOSED_CODES = ["INPUT_INVALID", "SOURCE_UNKNOWN"] as const
+export const PROPOSED_CODES = [] as const
 export type ProposedCode = (typeof PROPOSED_CODES)[number]
 
 /** Another name for a code in the table: `AUTH_REQUIRED` is `NEEDS_SIGN_IN` (design §2.1). */

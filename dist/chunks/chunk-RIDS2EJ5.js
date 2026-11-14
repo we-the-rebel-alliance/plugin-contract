@@ -2,14 +2,13 @@
 import {
   findSource,
   maxBytesOf
-} from "./chunk-67YPTXM6.js";
+} from "./chunk-KYWBTAF4.js";
 import {
   ERROR_CODES,
   PAGE,
-  PROPOSED_CODES,
   canonicalCode,
   resultProblems
-} from "./chunk-JSXTKSG3.js";
+} from "./chunk-ZUKF7P6U.js";
 import {
   canonicalScope
 } from "./chunk-I2RXJJJM.js";
@@ -47,8 +46,8 @@ function failureFromError(error) {
   const message = typeof record["message"] === "string" ? record["message"] : String(error);
   const raw = [record["code"], data["code"], /^([A-Z][A-Z_]+):/.exec(message)?.[1]].find((code2) => typeof code2 === "string");
   const canonical = raw === void 0 ? void 0 : canonicalCode(raw);
-  const refusedInput = canonical !== void 0 && PROPOSED_CODES.includes(canonical);
-  const code = refusedInput ? "SCHEMA_VIOLATION" : canonical !== void 0 && FAILURE_CODES.includes(canonical) ? canonical : void 0;
+  const refusedInput = canonical === "INPUT_INVALID" || canonical === "SOURCE_UNKNOWN";
+  const code = canonical !== void 0 && FAILURE_CODES.includes(canonical) ? canonical : void 0;
   const first = message.split(/\r?\n/, 1)[0].slice(0, 300);
   const fallback = refusedInput ? "Check the source's descriptor against the installed plugin's version; if they match, report it to the plugin's maintainers." : "Try again later; if it keeps failing, check the plugin's status.";
   const next = typeof data["next"] === "string" ? data["next"] : /Next step: (.*)$/.exec(first)?.[1] ?? fallback;

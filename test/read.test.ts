@@ -121,10 +121,15 @@ describe("read a snapshot", () => {
     assert.equal(fake.closed(), 1)
   })
 
-  test("reads a plugin's INPUT_INVALID or SOURCE_UNKNOWN as SCHEMA_VIOLATION, never as a reason to try again (D3)", async () => {
-    for (const message of ["INPUT_INVALID: the input is invalid", "EVENTS_SOURCE_UNKNOWN: this plugin lists one source, gws", "SOURCE_UNKNOWN: no such source. Next step: Pass gmail."]) {
+  test("passes a plugin's INPUT_INVALID or SOURCE_UNKNOWN through as itself, never as a reason to try again (D3 (a))", async () => {
+    for (const [message, expected] of [
+      ["INPUT_INVALID: the input is invalid", "INPUT_INVALID"],
+      ["EVENTS_INVALID_INPUT: the input is invalid", "INPUT_INVALID"],
+      ["SOURCE_UNKNOWN: no such source. Next step: Pass gmail.", "SOURCE_UNKNOWN"],
+      ["EVENTS_SOURCE_UNKNOWN: this plugin lists one source, gws", "SOURCE_UNKNOWN"],
+    ] as const) {
       const outcome = await read(fakeHost(() => Promise.reject(new Error(message))).host, todayRequest())
-      assert.equal(outcome.ok ? "ok" : outcome.failure.code, "SCHEMA_VIOLATION", message)
+      assert.equal(outcome.ok ? "ok" : outcome.failure.code, expected, message)
       if (outcome.ok) continue
       assert.doesNotMatch(outcome.failure.next, /Try again later/)
     }

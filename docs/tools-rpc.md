@@ -79,7 +79,7 @@ unknown until that file is shared.
 ## Decisions needed
 
 - **T1.** The code for a resolver that names no resource: `RESOURCE_UNRESOLVED` (new), or the events table's
-  proposed `INPUT_INVALID`?
+  `INPUT_INVALID`?
 - **T2.** The read-verb rule applies to `class: "read"` methods only, so a write method (gws's commit methods under
   `rpcCommits`) can resolve a write operation. Agreed?
 - **T3.** "Starts with a read verb": `getProfile` and `lookup_by_id` pass; `getaway`, `listing` and `batchGet` are

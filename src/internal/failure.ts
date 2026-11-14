@@ -5,7 +5,7 @@
  * `canonicalCode`: `AUTH_REQUIRED` is `NEEDS_SIGN_IN`, and contract 1's names (`EVENTS_CURSOR_INVALID`) are the
  * table's.
  */
-import { canonicalCode, ERROR_CODES, PROPOSED_CODES, type ErrorCode } from "./events.ts"
+import { canonicalCode, ERROR_CODES, type ErrorCode } from "./events.ts"
 
 /** The codes a read answers: the events table. */
 export const FAILURE_CODES = ERROR_CODES
@@ -34,10 +34,9 @@ export function failure(code: FailureCode, what: string, next: string, retryAfte
  * A plugin's or a host's error as a read failure: its `code` (or the code its message starts with) when the contract
  * knows it, with `AUTH_REQUIRED` read as `NEEDS_SIGN_IN`; anything else is UNAVAILABLE, with the message's first line.
  *
- * A plugin's `INPUT_INVALID` or `SOURCE_UNKNOWN` (all nine source plugins refuse a malformed input or an unknown
- * source, and the table has no row for either yet) is SCHEMA_VIOLATION, the code `read` gives an input it refuses
- * itself: the read and the installed plugin disagree, and trying again will not help. Tied to decision D3 (app#2346,
- * PR #7): if the table adopts the two codes, they pass through here as themselves.
+ * A plugin's `INPUT_INVALID` or `SOURCE_UNKNOWN` (a malformed input, or a source the plugin does not have) passes
+ * through as itself (D3 (a)). Trying again will not help, so its fallback next step says to compare the descriptor with
+ * the installed plugin rather than to try again.
  */
 export function failureFromError(error: unknown): ReadFailure {
   const record = typeof error === "object" && error !== null ? (error as Record<string, unknown>) : {}
@@ -45,8 +44,8 @@ export function failureFromError(error: unknown): ReadFailure {
   const message = typeof record["message"] === "string" ? record["message"] : String(error)
   const raw = [record["code"], data["code"], /^([A-Z][A-Z_]+):/.exec(message)?.[1]].find((code): code is string => typeof code === "string")
   const canonical = raw === undefined ? undefined : canonicalCode(raw)
-  const refusedInput = canonical !== undefined && (PROPOSED_CODES as readonly string[]).includes(canonical)
-  const code = refusedInput ? "SCHEMA_VIOLATION" : canonical !== undefined && (FAILURE_CODES as readonly string[]).includes(canonical) ? (canonical as FailureCode) : undefined
+  const refusedInput = canonical === "INPUT_INVALID" || canonical === "SOURCE_UNKNOWN"
+  const code = canonical !== undefined && (FAILURE_CODES as readonly string[]).includes(canonical) ? (canonical as FailureCode) : undefined
   const first = message.split(/\r?\n/, 1)[0]!.slice(0, 300)
   const fallback = refusedInput
     ? "Check the source's descriptor against the installed plugin's version; if they match, report it to the plugin's maintainers."
