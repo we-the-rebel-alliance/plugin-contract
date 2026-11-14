@@ -32,7 +32,7 @@ copy's import path. `src/events.ts` is the entry; the code is under `src/interna
 | `cost`: what the provider reported, for billed sources | — | `EventsCost { units: [{ per, count }], usd? }`. `per` names the descriptor's `cost.units[].per`. | done; D6 |
 | Cursor: opaque, versioned, bound to `(plugin, source, account, scope)`; foreign → `CURSOR_INVALID`; lost history → `CURSOR_EXPIRED` with `gap` | version 1, bound to the source only. Each plugin binds the rest in its own state (6 of 9 put the account in `a`; linear, slack and x bind only an owner hash in `o`, which all 9 carry). | `src/cursor`: version 2, `encodeBoundCursor` / `decodeBoundCursor`, with a 16-hex hash of the canonical binding. `acceptV1` reads the version 1 cursors collectors already hold, for the whole source only (see "Cursors" below). Conformance option `binding`: the same state rebound to another plugin, account or scope must be refused. | done; D12 |
 | Core kinds + `task`, `file`; extensions `x-<plugin>/<kind>` | 9 kinds | `EVENT_KINDS` (11), `EXTENSION_KIND`, `isEventKind`. Conformance option `kinds`: the descriptor's `reads`. | done; D13 |
-| Errors: the draft's table + `SCOPE_MISSING`, `BUDGET_EXCEEDED`, `SOURCE_DISABLED`; `AUTH_REQUIRED` aliases `NEEDS_SIGN_IN`; the message is `CODE: what happened. Next step: …` | each plugin's own codes | `ERROR_CODES` (12), `ERROR_ALIASES`, `CONTRACT1_CODES` (the family's `EVENTS_*` names), `canonicalCode`, `SourceError`, `parseSourceError`. Conformance option `codes`. | done; D3 |
+| Errors: the draft's table + `SCOPE_MISSING`, `BUDGET_EXCEEDED`, `SOURCE_DISABLED`; `AUTH_REQUIRED` aliases `NEEDS_SIGN_IN`; the message is `CODE: what happened. Next step: …` | each plugin's own codes | `ERROR_CODES` (14), `ERROR_ALIASES`, `CONTRACT1_CODES` (the family's `EVENTS_*` names), `canonicalCode`, `SourceError`, `parseSourceError`. Conformance option `codes`. | done; D3 |
 | `events_list` input `scope?` | refused as an unknown field | accepted only when the source declares `scopeKeys` (`parseEventsListInput(input, { scopeKeys })`), so a source that cannot narrow never silently reads more. Keys and values are checked, and the scope is canonicalised. Optional echo on the page (`scope`); conformance option `scopeEcho`. | done; D7 |
 | The draft's envelope: `plugin`, `asOf` | — | optional on the page | done; D1 |
 | `maxBytes` (64 KB default, up to 1 MB) | `MAX_PAGE_BYTES` = 900 000 | `MAX_BYTES`. `fitPage(events, limit, maxBytes)`, `resultProblems(result, limit, maxBytes)` and conformance option `maxBytes`. `MAX_PAGE_BYTES` is 65 536, the descriptor's default (D10, (b), adopted). | done |
@@ -118,9 +118,8 @@ every page. `isEventKind` alone still accepts any well-formed extension.
   three different hashes. *Recommendation:* keep contract 1's content hash. The consumer's id is separate (Memory
   already derives `evt_…` from `source:account:external_id`), and Memory should read the library's hash rather than
   recompute its own.
-- **D3. Codes for malformed input and an unknown source.** The table has no row for either. All nine plugins refuse
-  both today. The package proposes `INPUT_INVALID` and `SOURCE_UNKNOWN` (`PROPOSED_CODES`); the alternative is
-  `SCHEMA_VIOLATION` for both.
+- **D3. Codes for malformed input and an unknown source.** Decided (a): `INPUT_INVALID` and `SOURCE_UNKNOWN` are in
+  `ERROR_CODES`, and `read` passes them through as themselves. `PROPOSED_CODES` is empty, kept for one release.
 - **D4. The gap.** The final design has `{ reason: "expired" | "window-truncated", since }`. Memory's contract 2 has
   `sync-token-expired | cursor-invalid | window-truncated` and an optional `until`. The package implements the
   final design's shape and refuses `until`. Should `until` be allowed? (`cursor-invalid` is `CURSOR_INVALID`, an

@@ -181,14 +181,14 @@ export interface EventsListRequest {
     readonly source?: string;
     readonly scope?: Record<string, string | string[]>;
 }
-/** The one error table: the draft's nine and the final design's three. */
-export declare const ERROR_CODES: readonly ["NEEDS_SIGN_IN", "ACCOUNT_MISMATCH", "CURSOR_INVALID", "CURSOR_EXPIRED", "RATE_LIMITED", "TOO_LARGE", "SCHEMA_VIOLATION", "PERMISSION_DENIED", "UNAVAILABLE", "SCOPE_MISSING", "BUDGET_EXCEEDED", "SOURCE_DISABLED"];
+/** The one error table: the draft's nine, the final design's three, and the two input refusals (D3). */
+export declare const ERROR_CODES: readonly ["NEEDS_SIGN_IN", "ACCOUNT_MISMATCH", "CURSOR_INVALID", "CURSOR_EXPIRED", "RATE_LIMITED", "TOO_LARGE", "SCHEMA_VIOLATION", "PERMISSION_DENIED", "UNAVAILABLE", "SCOPE_MISSING", "BUDGET_EXCEEDED", "SOURCE_DISABLED", "INPUT_INVALID", "SOURCE_UNKNOWN"];
 export type ErrorCode = (typeof ERROR_CODES)[number];
 /**
- * Codes the nine plugins use today for refusals the table has no row for: a malformed input and a source the plugin
- * does not have. Proposed for the table (`docs/events.md`, decision D3); until decided, `canonicalCode` accepts them.
+ * Codes proposed for the table and not yet in it. Empty: D3 (a) moved `INPUT_INVALID` and `SOURCE_UNKNOWN` into
+ * `ERROR_CODES`. Kept for one release so an importer does not break.
  */
-export declare const PROPOSED_CODES: readonly ["INPUT_INVALID", "SOURCE_UNKNOWN"];
+export declare const PROPOSED_CODES: readonly [];
 export type ProposedCode = (typeof PROPOSED_CODES)[number];
 /** Another name for a code in the table: `AUTH_REQUIRED` is `NEEDS_SIGN_IN` (design §2.1). */
 export declare const ERROR_ALIASES: Readonly<Record<string, ErrorCode>>;

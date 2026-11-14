@@ -53,6 +53,8 @@ One table, in the family's form: `CODE: what happened. Next step: …`.
 | `BUDGET_EXCEEDED` | the person's own budget is spent; not the provider's limit |
 | `SOURCE_DISABLED` | the person turned the source off; not an error state |
 | `TOO_LARGE` | the answer is over the source's `maxBytes` |
+| `INPUT_INVALID` | the plugin refused a malformed input; compare the descriptor with the installed plugin |
+| `SOURCE_UNKNOWN` | the plugin has no such source; compare the descriptor with the installed plugin |
 | `SCHEMA_VIOLATION` | an input or an answer breaks the contract |
 | `PERMISSION_DENIED` | a session rule refused the read |
 | `UNAVAILABLE` | anything else; try again later |
