@@ -24,7 +24,7 @@ export type { AssertInput, Assertion, Grant, RecordingPermission, SessionContext
 export { pageChecks, pageProblems } from "./internal/conformance/page.ts"
 export type { PageChecks, PageOptions } from "./internal/conformance/page.ts"
 
-export { probeProblems } from "./internal/conformance/probe.ts"
+export { probeProblems, probeSourceName } from "./internal/conformance/probe.ts"
 
 export { SENTINEL, detailInput, detailInputProblems, scopeProblems, syntheticEvent } from "./internal/conformance/details.ts"
 export type { DetailCallInput } from "./internal/conformance/details.ts"

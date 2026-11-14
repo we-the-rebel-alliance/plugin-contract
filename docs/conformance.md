@@ -15,7 +15,7 @@ The draft's ten checks, and Memory's additions:
 | 3 | Events: a stable `external_id`, the library's `hash`, a parseable `occurred_at`, an https `url`, and no secret pattern survives. | the family's `events` |
 | 4 | Cursors round-trip with no repeat or gap; a foreign cursor is refused; an expired one answers `CURSOR_EXPIRED` with `gap`; `failed[]` holds the cursor back. | the family's `cursor`, Memory's additions |
 | 5 | Another account is refused. | `read` (`ACCOUNT_MISMATCH`), the kit |
-| 6 | `probe` reads no content, asserts only its own grant, and answers an owner. | Memory's `conformance` |
+| 6 | `probe` reads no content, asserts only its own grant, and answers `{ source, account, owner: { id, label }, trust }` (never `owner: null`). | Memory's `conformance` |
 | 7 | A snapshot's `data` validates against its output. | `registry`, `read` |
 | 8 | Paging honours `more`; the answer stays within `maxBytes`, and `TOO_LARGE` is used rather than truncation. | the kit, `read` |
 | 9 | Calls stay within the declared cost. | the kit |

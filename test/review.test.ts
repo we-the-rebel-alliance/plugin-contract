@@ -227,10 +227,10 @@ describe("a report is incomplete when a check did not run", () => {
 
   test("a source with no cases is incomplete, and not ok", async () => {
     const calls: ConformanceCalls = {
-      probe: async (_input, context) => {
+      probe: async (input, context) => {
         await context.permission.assert({ action: "slack_events_list" })
         await context.permission.assert({ action: "slack_slack_read_user_profile" })
-        return { account: ACCOUNT, owner: null }
+        return { source: "slack", account: (input as { account: string }).account, owner: { id: "slack:U0PILOTOWN", label: "Pilot Owner" }, trust: "untrusted" }
       },
     }
     const report = await sourceConformance({
@@ -259,9 +259,9 @@ describe("a report is incomplete when a check did not run", () => {
       source: sourceOf(snapshot),
       tools: [{ id: "calendar_today", readOnly: true }],
       calls: {
-        probe: async (_input, context) => {
+        probe: async (input, context) => {
           await context.permission.assert({ action: "gws.calendar_today" })
-          return { account: "sam.rivera@example.com", owner: null }
+          return { source: "slack", account: (input as { account: string }).account, owner: { id: "slack:U0PILOTOWN", label: "Pilot Owner" }, trust: "untrusted" }
         },
         snapshot: async (_input, context) => {
           await context.permission.assert({ action: "gws.read", resources: ["sam.rivera@example.com:calendar.events.list"] })
@@ -313,9 +313,9 @@ describe("probe may assert only the identity operations", () => {
           await context.permission.assert({ action: "gws.read", resources: ["sam.rivera@example.com:gmail.users.messages.list"] })
           return page()
         },
-        probe: async (_input, context) => {
+        probe: async (input, context) => {
           await context.permission.assert({ action: probeAction, resources: [probeResource] })
-          return { account: "sam.rivera@example.com", owner: null }
+          return { source: "gws", account: (input as { account: string }).account, owner: { id: "slack:U0PILOTOWN", label: "Pilot Owner" }, trust: "untrusted" }
         },
       },
     })
@@ -371,10 +371,10 @@ describe("details must refuse an event outside the confirmed scope", () => {
           await context.permission.assert({ action: "slack_slack_read_channel" })
           return page()
         },
-        probe: async (_input, context) => {
+        probe: async (input, context) => {
           await context.permission.assert({ action: "slack_events_list" })
           await context.permission.assert({ action: "slack_slack_read_user_profile" })
-          return { account: ACCOUNT, owner: null }
+          return { source: "slack", account: (input as { account: string }).account, owner: { id: "slack:U0PILOTOWN", label: "Pilot Owner" }, trust: "untrusted" }
         },
         details: {
           "slack.workspace.thread": async (input, context) => {
@@ -410,10 +410,10 @@ describe("details must refuse an event outside the confirmed scope", () => {
           await context.permission.assert({ action: "slack_slack_read_channel" })
           return page()
         },
-        probe: async (_input, context) => {
+        probe: async (input, context) => {
           await context.permission.assert({ action: "slack_events_list" })
           await context.permission.assert({ action: "slack_slack_read_user_profile" })
-          return { account: ACCOUNT, owner: null }
+          return { source: "slack", account: (input as { account: string }).account, owner: { id: "slack:U0PILOTOWN", label: "Pilot Owner" }, trust: "untrusted" }
         },
         details: { "slack.workspace.thread": async () => page() },
       },
@@ -461,14 +461,14 @@ describe("the three mutations the reviewer killed", () => {
           await context.permission.assert({ action: "slack_slack_read_channel" })
           return page()
         },
-        probe: async (_input, context) => {
+        probe: async (input, context) => {
           await context.permission.assert({ action: "slack_events_list" })
           await context.permission.assert({ action: "slack_slack_read_user_profile" })
-          return { account: ACCOUNT, owner: null, data: { messages: [] } }
+          return { source: "slack", account: (input as { account: string }).account, owner: { id: "slack:U0PILOTOWN", label: "Pilot Owner" }, trust: "untrusted", data: { messages: [] } }
         },
       },
     })
-    assert.ok(report.problems.some((problem) => /must read no content/.test(problem)))
+    assert.ok(report.problems.some((problem) => /reads no content/.test(problem)))
   })
 
   test("a suggest tool that is not read-only is refused", () => {
@@ -492,10 +492,10 @@ describe("the three mutations the reviewer killed", () => {
           await context.permission.assert({ action: "slack_slack_read_channel" })
           throw new Error("CURSOR_INVALID: that cursor is not ours. Next step: read without a cursor.")
         },
-        probe: async (_input, context) => {
+        probe: async (input, context) => {
           await context.permission.assert({ action: "slack_events_list" })
           await context.permission.assert({ action: "slack_slack_read_user_profile" })
-          return { account: ACCOUNT, owner: null }
+          return { source: "slack", account: (input as { account: string }).account, owner: { id: "slack:U0PILOTOWN", label: "Pilot Owner" }, trust: "untrusted" }
         },
       },
     })
@@ -597,10 +597,10 @@ describe("the running session's unused-grant check", () => {
           await context.permission.assert({ action: "gws.events_list" })
           return page()
         },
-        probe: async (_input, context) => {
+        probe: async (input, context) => {
           await context.permission.assert({ action: "gws.events_list" })
           await context.permission.assert({ action: "gws.read", resources: ["sam.rivera@example.com:gmail.users.getProfile"] })
-          return { account: "sam.rivera@example.com", owner: null }
+          return { source: "gws", account: (input as { account: string }).account, owner: { id: "slack:U0PILOTOWN", label: "Pilot Owner" }, trust: "untrusted" }
         },
       },
     })
@@ -648,12 +648,12 @@ describe("identity operations", () => {
           if (pageAssertsIdentity) await context.permission.assert({ action: "gws.read", resources: ["sam.rivera@example.com:gmail.users.getProfile"] })
           return page()
         },
-        probe: async (_input, context) => {
+        probe: async (input, context) => {
           await context.permission.assert({ action: "gws.events_list" })
           for (const operation of identityOperations) {
             await context.permission.assert({ action: "gws.read", resources: [`sam.rivera@example.com:${operation}`] })
           }
-          return { account: "sam.rivera@example.com", owner: null }
+          return { source: "gws", account: (input as { account: string }).account, owner: { id: "slack:U0PILOTOWN", label: "Pilot Owner" }, trust: "untrusted" }
         },
       },
     })
@@ -689,10 +689,10 @@ describe("identity operations", () => {
           await context.permission.assert({ action: "gws.read", resources: ["sam.rivera@example.com:gmail.users.messages.list"] })
           return page()
         },
-        probe: async (_input, context) => {
+        probe: async (input, context) => {
           await context.permission.assert({ action: "gws.events_list" })
           await context.permission.assert({ action: "gws.read", resources: ["sam.rivera@example.com:gmail.users.getProfile"] })
-          return { account: "sam.rivera@example.com", owner: null }
+          return { source: "gws", account: (input as { account: string }).account, owner: { id: "slack:U0PILOTOWN", label: "Pilot Owner" }, trust: "untrusted" }
         },
         details: {
           "gws.gmail.message": async (_input, context) => {
@@ -803,10 +803,10 @@ describe("an out-of-scope detail read refuses with a defined code", () => {
           await context.permission.assert({ action: "slack_slack_read_channel" })
           return page()
         },
-        probe: async (_input, context) => {
+        probe: async (input, context) => {
           await context.permission.assert({ action: "slack_events_list" })
           await context.permission.assert({ action: "slack_slack_read_user_profile" })
-          return { account: ACCOUNT, owner: null }
+          return { source: "slack", account: (input as { account: string }).account, owner: { id: "slack:U0PILOTOWN", label: "Pilot Owner" }, trust: "untrusted" }
         },
         details: {
           "slack.workspace.thread": async (input, context) => {
@@ -846,10 +846,10 @@ describe("an out-of-scope detail read refuses with a defined code", () => {
           await context.permission.assert({ action: "slack_slack_read_channel" })
           return page()
         },
-        probe: async (_input, context) => {
+        probe: async (input, context) => {
           await context.permission.assert({ action: "slack_events_list" })
           await context.permission.assert({ action: "slack_slack_read_user_profile" })
-          return { account: ACCOUNT, owner: null }
+          return { source: "slack", account: (input as { account: string }).account, owner: { id: "slack:U0PILOTOWN", label: "Pilot Owner" }, trust: "untrusted" }
         },
         details: {
           "slack.workspace.thread": async (input, context) => {
@@ -938,10 +938,10 @@ describe("a page fetched atomically", () => {
           if (input["cursor"] === "stale") return page({ gap: { reason: "expired", since: ISO }, cursor: "fresh" })
           return page()
         },
-        probe: async (_input, context) => {
+        probe: async (input, context) => {
           await context.permission.assert({ action: "gws.events_list" })
           await context.permission.assert({ action: "gws.read", resources: ["sam.rivera@example.com:calendar.calendarList.get"] })
-          return { account: "sam.rivera@example.com", owner: { id: "mailto:sam.rivera@example.com", label: "Sam Rivera" } }
+          return { source: "calendar", account: (input as { account: string }).account, owner: { id: "mailto:sam.rivera@example.com", label: "Sam Rivera" }, trust: "untrusted" }
         },
       },
     })
@@ -1009,9 +1009,9 @@ describe("the kit drives the secret screening from a fixture", () => {
           await context.permission.assert({ action: "gws.read", resources: ["sam.rivera@example.com:gmail.users.messages.list"] })
           return answer
         },
-        probe: async (_input, context) => {
+        probe: async (input, context) => {
           await context.permission.assert({ action: "gws.events_list" })
-          return { account: "sam.rivera@example.com", owner: { id: "mailto:sam.rivera@example.com", label: "Sam Rivera" } }
+          return { source: "gmail", account: (input as { account: string }).account, owner: { id: "mailto:sam.rivera@example.com", label: "Sam Rivera" }, trust: "untrusted" }
         },
       },
     })

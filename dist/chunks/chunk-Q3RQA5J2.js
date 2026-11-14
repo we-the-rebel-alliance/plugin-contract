@@ -7,6 +7,7 @@ import {
   ERROR_CODES,
   PAGE,
   canonicalCode,
+  probeResultProblems,
   resultProblems
 } from "./chunk-ZUKF7P6U.js";
 import {
@@ -226,10 +227,14 @@ async function probe(host, request) {
   );
   if (!called.ok) return called;
   const answer = called.answer;
-  if (!plain(answer) || typeof answer["account"] !== "string" || !plain(answer["owner"]) || typeof answer["owner"]["id"] !== "string") {
-    return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s probe did not answer an account and an owner`, "Report it to the plugin's maintainers.") };
+  if (plain(answer) && answer["owner"] === null) {
+    return { ok: false, failure: failure("NEEDS_SIGN_IN", `${source.id} is not signed in`, "Sign the plugin in to the account you mean. A probe refuses with NEEDS_SIGN_IN; it never answers owner: null.") };
   }
-  if (answer["account"] !== request.account) return { ok: false, failure: failure("ACCOUNT_MISMATCH", `${source.id} is signed in to another account`, "Sign the plugin in to the account you mean.") };
+  if (plain(answer) && typeof answer["account"] === "string" && answer["account"] !== request.account) return { ok: false, failure: failure("ACCOUNT_MISMATCH", `${source.id} is signed in to another account`, "Sign the plugin in to the account you mean.") };
+  const problems = probeResultProblems(answer, { ...typeof source.input?.["source"] === "string" ? { source: source.input["source"] } : {}, account: request.account });
+  if (problems.length > 0) {
+    return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s probe answer is not the contract's: ${problems[0]}`, "Report it to the plugin's maintainers.") };
+  }
   return { ok: true, answer };
 }
 

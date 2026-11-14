@@ -10,6 +10,7 @@ import {
   PAGE,
   REFUSAL_REASONS,
   isEventKindIn,
+  probeResultProblems,
   resultProblems,
   secretKinds,
   sourceNamespace
@@ -10921,26 +10922,16 @@ function namedSource(source) {
 
 // src/internal/conformance/probe.ts
 var plain3 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-var CONTENT_KEYS = ["events", "data", "body", "content", "items", "text", "title"];
-function probeProblems(answer, source) {
+function probeSourceName(source) {
+  const name = source.input?.["source"];
+  return typeof name === "string" ? name : void 0;
+}
+function probeProblems(answer, source, expected = {}) {
   const where = `probe(${source.id})`;
-  if (!plain3(answer)) return [`${where} answered nothing: an object with account and owner`];
-  const problems = [];
-  if (typeof answer["account"] !== "string" || answer["account"].length === 0) problems.push(`${where} must answer the account`);
-  const owner = answer["owner"];
-  if (owner !== null && owner !== void 0) {
-    if (!plain3(owner) || typeof owner["id"] !== "string" || owner["id"].length === 0) problems.push(`${where} owner must be null or { id, label? }`);
-    else if (owner["label"] !== void 0 && typeof owner["label"] !== "string") problems.push(`${where} owner.label must be a string when present`);
-  } else if (owner === void 0) {
-    problems.push(`${where} must answer owner as null or { id, label? }`);
-  }
-  for (const key2 of CONTENT_KEYS) {
-    if (answer[key2] !== void 0) problems.push(`${where} must read no content, and it answered "${key2}"`);
-  }
-  const scopes = answer["scopes"];
-  if (scopes !== void 0 && (!Array.isArray(scopes) || !scopes.every((scope) => typeof scope === "string"))) {
-    problems.push(`${where} scopes must be a list of strings when present`);
-  }
+  if (!plain3(answer)) return [`${where} answered nothing: an object with source, account, owner and trust`];
+  const name = probeSourceName(source);
+  const problems = probeResultProblems(answer, { ...name === void 0 ? {} : { source: name }, ...expected.account === void 0 ? {} : { account: expected.account } }).map((problem) => `${where}: ${problem}`);
+  if (answer["owner"] === null) problems.push(`${where} must not answer owner: null: a source that is not signed in refuses with NEEDS_SIGN_IN and a next step, and a local source names a synthetic owner (os-user:<user>@<host>)`);
   return problems;
 }
 
@@ -11110,8 +11101,8 @@ async function sourceConformance(options) {
   const probe = [];
   const assertedBeforeProbe = running.assertions.length;
   try {
-    const answer = await calls.probe({ source: source.id, account }, context);
-    probe.push(...probeProblems(answer, source));
+    const answer = await calls.probe({ source: probeSourceName(source) ?? source.id, account }, context);
+    probe.push(...probeProblems(answer, source, { account }));
   } catch (error) {
     probe.push(`probe(${source.id}) failed: ${messageOf(error)}`);
   }
@@ -11379,6 +11370,7 @@ export {
   pageChecks,
   pageProblems,
   probeProblems,
+  probeSourceName,
   publicSuffixOf,
   readVerbProblem,
   recordingPermission,

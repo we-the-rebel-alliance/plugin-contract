@@ -318,7 +318,7 @@
       ],
       "probe": {
         "input": {
-          "source": "gws.calendar",
+          "source": "calendar",
           "account": "sam.rivera@example.com"
         },
         "asserts": [
@@ -332,12 +332,14 @@
           }
         ],
         "answer": {
+          "source": "calendar",
           "account": "sam.rivera@example.com",
           "owner": {
             "id": "mailto:sam.rivera@example.com",
             "label": "Sam Rivera"
           },
-          "scopes": []
+          "scopes": [],
+          "trust": "untrusted"
         }
       },
       "details": [],
@@ -352,7 +354,7 @@
       "cases": [],
       "probe": {
         "input": {
-          "source": "gws.calendar.today",
+          "source": "calendar",
           "account": "sam.rivera@example.com"
         },
         "asserts": [
@@ -366,12 +368,14 @@
           }
         ],
         "answer": {
+          "source": "calendar",
           "account": "sam.rivera@example.com",
           "owner": {
             "id": "mailto:sam.rivera@example.com",
             "label": "Sam Rivera"
           },
-          "scopes": []
+          "scopes": [],
+          "trust": "untrusted"
         }
       },
       "details": [],

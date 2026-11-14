@@ -817,7 +817,7 @@
       ],
       "probe": {
         "input": {
-          "source": "slack.workspace",
+          "source": "slack",
           "account": "T0PILOT01"
         },
         "asserts": [
@@ -831,6 +831,7 @@
           }
         ],
         "answer": {
+          "source": "slack",
           "account": "T0PILOT01",
           "owner": {
             "id": "slack:U0PILOTOWN",
@@ -838,7 +839,8 @@
           },
           "scopes": [
             "channels"
-          ]
+          ],
+          "trust": "untrusted"
         }
       },
       "details": [

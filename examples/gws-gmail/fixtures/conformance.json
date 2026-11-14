@@ -441,7 +441,7 @@
       ],
       "probe": {
         "input": {
-          "source": "gws.gmail",
+          "source": "gmail",
           "account": "sam.rivera@example.com"
         },
         "asserts": [
@@ -455,12 +455,14 @@
           }
         ],
         "answer": {
+          "source": "gmail",
           "account": "sam.rivera@example.com",
           "owner": {
             "id": "mailto:sam.rivera@example.com",
             "label": "Sam Rivera"
           },
-          "scopes": []
+          "scopes": [],
+          "trust": "untrusted"
         }
       },
       "details": [

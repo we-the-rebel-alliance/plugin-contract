@@ -151,12 +151,15 @@ export declare function readDetail(host: ReadHost, request: DetailRequest): Prom
 }>;
 /** What `probe` answers: the signed-in owner and the scopes the provider sign-in holds. It reads no content. */
 export interface ProbeAnswer {
+    readonly source: string;
     readonly account: string;
     readonly owner: {
         readonly id: string;
-        readonly label?: string;
+        readonly label: string;
     };
     readonly scopes?: readonly string[];
+    readonly cost?: unknown;
+    readonly trust: "untrusted";
 }
 /**
  * Probes a source for an account, in a session fenced by its probe rules: the plugin's declared probe action

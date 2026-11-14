@@ -16,7 +16,7 @@ import type { InstalledDescriptor, SourceItem } from "./descriptor.ts"
 import { findSource, maxBytesOf } from "./descriptor.ts"
 import { canonicalScope } from "./cursor.ts"
 import type { Checked } from "./internal/checked.ts"
-import { PAGE, resultProblems } from "./internal/events.ts"
+import { PAGE, probeResultProblems, resultProblems } from "./internal/events.ts"
 import { failure, failureFromError, type ReadFailure } from "./internal/failure.ts"
 import { resolveParams, resolveSince, type ParamsContext } from "./params.ts"
 import { detailRules, grantCovers, probeRules, sessionRules, type Grant, type PermissionRule } from "./permission.ts"
@@ -296,9 +296,12 @@ export async function readDetail(host: ReadHost, request: DetailRequest): Promis
 
 /** What `probe` answers: the signed-in owner and the scopes the provider sign-in holds. It reads no content. */
 export interface ProbeAnswer {
+  readonly source: string
   readonly account: string
-  readonly owner: { readonly id: string; readonly label?: string }
+  readonly owner: { readonly id: string; readonly label: string }
   readonly scopes?: readonly string[]
+  readonly cost?: unknown
+  readonly trust: "untrusted"
 }
 
 /**
@@ -324,9 +327,13 @@ export async function probe(host: ReadHost, request: { readonly installed: Insta
   )
   if (!called.ok) return called
   const answer = called.answer
-  if (!plain(answer) || typeof answer["account"] !== "string" || !plain(answer["owner"]) || typeof answer["owner"]["id"] !== "string") {
-    return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s probe did not answer an account and an owner`, "Report it to the plugin's maintainers.") }
+  if (plain(answer) && answer["owner"] === null) {
+    return { ok: false, failure: failure("NEEDS_SIGN_IN", `${source.id} is not signed in`, "Sign the plugin in to the account you mean. A probe refuses with NEEDS_SIGN_IN; it never answers owner: null.") }
   }
-  if (answer["account"] !== request.account) return { ok: false, failure: failure("ACCOUNT_MISMATCH", `${source.id} is signed in to another account`, "Sign the plugin in to the account you mean.") }
+  if (plain(answer) && typeof answer["account"] === "string" && answer["account"] !== request.account) return { ok: false, failure: failure("ACCOUNT_MISMATCH", `${source.id} is signed in to another account`, "Sign the plugin in to the account you mean.") }
+  const problems = probeResultProblems(answer, { ...(typeof source.input?.["source"] === "string" ? { source: source.input["source"] } : {}), account: request.account })
+  if (problems.length > 0) {
+    return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s probe answer is not the contract's: ${problems[0]}`, "Report it to the plugin's maintainers.") }
+  }
   return { ok: true, answer: answer as unknown as ProbeAnswer }
 }
