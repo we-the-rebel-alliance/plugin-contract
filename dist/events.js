@@ -7,6 +7,8 @@ import {
   EVENT_KINDS,
   EVENT_LIMITS,
   EXTENSION_KIND,
+  EXTENSION_NAME,
+  EXTENSION_SEGMENT_MAX,
   FIRST_RUN_HOURS,
   GAP_REASONS,
   MAX_BYTES,
@@ -30,6 +32,7 @@ import {
   fitPage,
   isEventKind,
   isEventKindIn,
+  isExtensionName,
   makeEvent,
   oldestFirst,
   parseEventsListInput,
@@ -44,7 +47,7 @@ import {
   sinceTime,
   sourceNamespace,
   startTime
-} from "./chunks/chunk-WJ4C2MR4.js";
+} from "./chunks/chunk-JSXTKSG3.js";
 import {
   decodeBoundCursor,
   decodeCursor,
@@ -207,6 +210,8 @@ export {
   EVENT_KINDS,
   EVENT_LIMITS,
   EXTENSION_KIND,
+  EXTENSION_NAME,
+  EXTENSION_SEGMENT_MAX,
   FIRST_RUN_HOURS,
   GAP_REASONS,
   MAX_BYTES,
@@ -234,6 +239,7 @@ export {
   fitPage,
   isEventKind,
   isEventKindIn,
+  isExtensionName,
   makeEvent,
   oldestFirst,
   parseEventsListInput,

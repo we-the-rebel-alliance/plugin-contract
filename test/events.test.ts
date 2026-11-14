@@ -10,11 +10,17 @@ import {
   eventsListConformance,
   eventsListResult,
   fitPage,
+  EXTENSION_KIND,
+  EXTENSION_NAME,
+  EXTENSION_SEGMENT_MAX,
   extensionNamespace,
+  isExtensionName,
   isEventKind,
   isEventKindIn,
   sourceNamespace,
   makeEvent,
+  MAX_BYTES,
+  MAX_PAGE_BYTES,
   parseEventsListInput,
   parseProbeInput,
   PROBE,
@@ -45,6 +51,18 @@ describe("kinds", () => {
       expect(eventProblems(event(1, { kind: kind as never })), kind).toEqual([])
     }
     for (const kind of ["tweet", "x-/a", "x-jelly", "x-Jelly/run", "x-jelly/Run", `x-jelly/${"a".repeat(60)}`]) expect(isEventKind(kind), kind).toBe(false)
+  })
+
+  test("one length rule for kinds and outputs: each segment 1 to 32 characters (source-contract#21)", () => {
+    const max = "a".repeat(EXTENSION_SEGMENT_MAX)
+    expect(EXTENSION_SEGMENT_MAX).toBe(32)
+    expect(isEventKind(`x-${max}/${max}`)).toBe(true)
+    expect(isExtensionName(`x-${max}/${max}`)).toBe(true)
+    expect(isEventKind(`x-${max}a/run`)).toBe(false)
+    expect(isEventKind(`x-jelly/${max}a`)).toBe(false)
+    expect(isExtensionName("x-mem/receipt")).toBe(true)
+    expect(isExtensionName("message")).toBe(false)
+    expect(EXTENSION_KIND).toBe(EXTENSION_NAME)
   })
 })
 
@@ -129,6 +147,13 @@ describe("scope input", () => {
     expect((parse({ label: "x\ny" }) as { problems: string[] }).problems).toHaveLength(1)
     expect((parse("INBOX") as { problems: string[] }).problems).toEqual(['"scope" must be an object of the source\'s scope keys'])
     expect(JSON.stringify(parse({ label: "secret-label\u0000" }))).not.toContain("secret-label")
+  })
+})
+
+describe("the default page cap (D10)", () => {
+  test("is the descriptor's default maxBytes, 64 KB", () => {
+    expect(MAX_PAGE_BYTES).toBe(MAX_BYTES.default)
+    expect(MAX_PAGE_BYTES).toBe(65_536)
   })
 })
 

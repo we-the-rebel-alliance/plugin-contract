@@ -114,8 +114,11 @@ function secretKinds(text2) {
 import { createHash } from "node:crypto";
 var EVENTS_LIST = "events_list";
 var EVENT_KINDS = ["message", "meeting", "session", "bookmark", "issue", "pr", "commit", "doc", "event", "task", "file"];
-var EXTENSION_KIND = /^x-[a-z][a-z0-9-]*\/[a-z][a-z0-9-]*$/;
-var isEventKind = (kind) => typeof kind === "string" && (EVENT_KINDS.includes(kind) || kind.length <= 64 && EXTENSION_KIND.test(kind));
+var EXTENSION_SEGMENT_MAX = 32;
+var EXTENSION_NAME = new RegExp(`^x-[a-z][a-z0-9-]{0,${EXTENSION_SEGMENT_MAX - 1}}/[a-z][a-z0-9-]{0,${EXTENSION_SEGMENT_MAX - 1}}$`);
+var EXTENSION_KIND = EXTENSION_NAME;
+var isExtensionName = (name) => typeof name === "string" && EXTENSION_NAME.test(name);
+var isEventKind = (kind) => typeof kind === "string" && (EVENT_KINDS.includes(kind) || isExtensionName(kind));
 function extensionNamespace(kind) {
   return isEventKind(kind) && kind.startsWith("x-") ? kind.slice(2, kind.indexOf("/")) : void 0;
 }
@@ -152,7 +155,7 @@ var EVENT_LIMITS = {
   costUnits: 8
 };
 var PAGE = { default: 100, min: 1, max: 500 };
-var MAX_PAGE_BYTES = 9e5;
+var MAX_PAGE_BYTES = 65536;
 var MAX_BYTES = { default: 65536, max: 1048576 };
 var FIRST_RUN_HOURS = 24;
 var TRUST = "untrusted";
@@ -601,7 +604,10 @@ export {
   secretKinds,
   EVENTS_LIST,
   EVENT_KINDS,
+  EXTENSION_SEGMENT_MAX,
+  EXTENSION_NAME,
   EXTENSION_KIND,
+  isExtensionName,
   isEventKind,
   extensionNamespace,
   isEventKindIn,

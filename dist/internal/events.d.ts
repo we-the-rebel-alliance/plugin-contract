@@ -10,9 +10,19 @@ export type CoreKind = (typeof EVENT_KINDS)[number];
 /** A plugin's own kind: `x-<plugin>/<kind>`, such as `x-jelly/routine-run`. */
 export type ExtensionKind = `x-${string}/${string}`;
 export type EventKind = CoreKind | ExtensionKind;
-/** An extension kind: `x-`, a lowercase plugin word, `/`, a lowercase kind word; at most 64 characters. */
+/** The most characters each segment of an `x-<namespace>/<name>` takes: the namespace, and the name. */
+export declare const EXTENSION_SEGMENT_MAX = 32;
+/**
+ * The one rule for an extension name, an event kind (`x-jelly/routine-run`) or a snapshot output (`x-mem/receipt`):
+ * `x-`, a lowercase namespace word, `/`, a lowercase name word, each of 1 to `EXTENSION_SEGMENT_MAX` characters.
+ * Memory's schema and the registry use this pattern rather than their own (source-contract#21).
+ */
+export declare const EXTENSION_NAME: RegExp;
+/** An extension kind: `EXTENSION_NAME`, the one rule for kinds and outputs. */
 export declare const EXTENSION_KIND: RegExp;
-/** True for a core kind, or an extension kind of at most 64 characters. */
+/** True for an extension name, a kind or an output, by `EXTENSION_NAME`. */
+export declare const isExtensionName: (name: unknown) => name is ExtensionKind;
+/** True for a core kind, or an extension kind (`EXTENSION_NAME`). */
 export declare const isEventKind: (kind: unknown) => kind is EventKind;
 /** An extension kind's namespace: `jelly` in `x-jelly/routine-run`; undefined for a core kind or a malformed one. */
 export declare function extensionNamespace(kind: string): string | undefined;
@@ -58,10 +68,11 @@ export declare const PAGE: {
     readonly max: 500;
 };
 /**
- * The most bytes of JSON one result holds when the source declares no `maxBytes`. Contract 1's cap. The descriptor's
- * `maxBytes` (64 KB by default, at most 1 MB) is the cap a host enforces, and `fitPage` and the conformance take it.
+ * The most bytes of JSON one result holds when the source declares no `maxBytes`: 64 KB, the descriptor's default
+ * `maxBytes` and the host's RPC cap (decision D10, (b); contract 1's cap was 900 000). A source that declares a larger
+ * `maxBytes` (at most 1 MB) passes it to `fitPage`, and the conformance takes it.
  */
-export declare const MAX_PAGE_BYTES = 900000;
+export declare const MAX_PAGE_BYTES = 65536;
 /** The descriptor's `maxBytes`: its default and its ceiling (design §2.2). */
 export declare const MAX_BYTES: {
     readonly default: 65536;
