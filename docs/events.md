@@ -83,11 +83,17 @@ The fixture runner records this, and fails if it changes:
 `probeResultProblems` refuses any other field, so a probe that returned content fails. It also requires
 `owner.label` (D8).
 
-This is stricter than the package's other probe checks today. The app's `read.probe` requires `account` and `owner.id`,
-but lets `owner.label` be absent and does not check `source` or `trust`. Memory's `probeProblems` also accepts
-`owner: null`. The family recommends, on #8, that both call `probeResultProblems`. A source that is not signed in
-should refuse with `NEEDS_SIGN_IN` rather than answer `owner: null`, and a local source names a synthetic owner
-(history: `os-user:<user>@<host>`). Which permission a probe runs under is the descriptor's to declare (Memory's schema, #4 point 3).
+**One check (D230, #8).** `read.probe`, the conformance kit's `probeProblems` and `events.probeResultProblems` all judge an
+answer by `probeResultProblems`, so a probe that passes conformance is one a consumer accepts. Concretely:
+
+- `owner: { id, label }` is required. There is no `owner: null`.
+- A source that is not signed in refuses the probe with `NEEDS_SIGN_IN` and a `next` step. If a plugin answers
+  `owner: null` anyway, `read.probe` reports `NEEDS_SIGN_IN` and conformance fails it.
+- A local source (history, say) names a synthetic owner: `os-user:<user>@<host>`, with a label such as the user's name.
+- `source` is the name the plugin knows the source by, the descriptor's `input.source` (`gmail`), and the answer also
+  carries `trust: "untrusted"`.
+
+Which permission a probe runs under is the descriptor's to declare (`sources.probe.action` and `permission.identity`, #4 point 3).
 
 ## Extension kinds (D13, source-contract#15)
 

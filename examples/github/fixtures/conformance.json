@@ -216,7 +216,7 @@
       ],
       "probe": {
         "input": {
-          "source": "github.activity",
+          "source": "github",
           "account": "octo@example.test"
         },
         "asserts": [
@@ -226,11 +226,13 @@
           }
         ],
         "answer": {
+          "source": "github",
           "account": "octo@example.test",
           "owner": {
             "id": "github:octocat",
             "label": "Octocat"
-          }
+          },
+          "trust": "untrusted"
         }
       },
       "details": []

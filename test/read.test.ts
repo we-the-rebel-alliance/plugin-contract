@@ -3,6 +3,8 @@ import { describe, test } from "node:test"
 import { fileURLToPath } from "node:url"
 import { readInstalledDescriptor, type InstalledDescriptor } from "../src/descriptor.ts"
 import { evaluate, type Grant, type PermissionRule } from "../src/permission.ts"
+import { probeProblems } from "../src/conformance.ts"
+import { probeResultProblems } from "../src/internal/events.ts"
 import { detailFields, probe, read, readDetail, type ReadHost, type ReadRequest } from "../src/read.ts"
 import { isBrokerAnswer, sourceReader, type BrokerAnswer, type BrokerRequest, type BrokerTransport } from "../src/broker-client.ts"
 
@@ -213,14 +215,44 @@ describe("detail reads", () => {
 
 describe("probe", () => {
   test("runs fenced to the source's action and the identity operations, and checks the account it answers", async () => {
-    const fake = fakeHost(() => ({ account: ana, owner: { id: `mailto:${ana}`, label: "Ana" }, scopes: ["gmail.readonly"] }), () => [["gws.events_list", "*"], ["gws.read", `${ana}:gmail.users.getProfile`]])
+    const fake = fakeHost(() => ({ source: "gmail", account: ana, owner: { id: `mailto:${ana}`, label: "Ana" }, scopes: ["gmail.readonly"], trust: "untrusted" }), () => [["gws.events_list", "*"], ["gws.read", `${ana}:gmail.users.getProfile`]])
     const answer = await probe(fake.host, { installed: gws, source: "gws.gmail", account: ana, identityOperations: ["gmail.users.getProfile"] })
     assert.equal(answer.ok, true, answer.ok ? "" : answer.failure.message)
-    const reads = fakeHost(() => ({ account: ana, owner: { id: "x" } }), () => [["gws.read", `${ana}:gmail.users.messages.get`]])
+    const reads = fakeHost(() => ({ source: "gmail", account: ana, owner: { id: "x" }, trust: "untrusted" }), () => [["gws.read", `${ana}:gmail.users.messages.get`]])
     const content = await probe(reads.host, { installed: gws, source: "gws.gmail", account: ana, identityOperations: ["gmail.users.getProfile"] })
     assert.equal(content.ok ? "ok" : content.failure.code, "PERMISSION_DENIED")
     const wrong = await probe(fakeHost(() => ({ account: "ben@example.com", owner: { id: "mailto:ben@example.com" } })).host, { installed: gws, source: "gws.gmail", account: ana, identityOperations: [] })
     assert.equal(wrong.ok ? "ok" : wrong.failure.code, "ACCOUNT_MISMATCH")
+  })
+})
+
+describe("one probe check (#8, D230)", () => {
+  const good = { source: "gmail", account: ana, owner: { id: `mailto:${ana}`, label: "Ana" }, scopes: ["gmail.readonly"], trust: "untrusted" }
+  const source = gws.sources.items.find((item) => item.id === "gws.gmail")!
+  const answers: readonly [string, unknown, boolean][] = [
+    ["a full answer", good, true],
+    ["owner: null", { ...good, owner: null }, false],
+    ["no label", { ...good, owner: { id: `mailto:${ana}` } }, false],
+    ["no source", { ...good, source: undefined }, false],
+    ["another source", { ...good, source: "slack" }, false],
+    ["no trust", { ...good, trust: undefined }, false],
+    ["content", { ...good, events: [] }, false],
+    ["another account", { ...good, account: "ben@example.com" }, false],
+  ]
+  for (const [name, answer, ok] of answers) {
+    test(`the three paths agree: ${name} ${ok ? "passes" : "fails"}`, async () => {
+      const viaRead = await probe(fakeHost(() => answer).host, { installed: gws, source: "gws.gmail", account: ana, identityOperations: [] })
+      const viaKit = probeProblems(answer, source as never, { account: ana })
+      const viaEvents = probeResultProblems(answer, { source: "gmail", account: ana })
+      assert.equal(viaRead.ok, ok, viaRead.ok ? "" : viaRead.failure.message)
+      assert.equal(viaKit.length === 0, ok, viaKit.join("; "))
+      assert.equal(viaEvents.length === 0, ok, viaEvents.join("; "))
+    })
+  }
+
+  test("a source that is not signed in is NEEDS_SIGN_IN to a consumer, never an owner: null", async () => {
+    const outcome = await probe(fakeHost(() => ({ ...good, owner: null })).host, { installed: gws, source: "gws.gmail", account: ana, identityOperations: [] })
+    assert.equal(outcome.ok ? "ok" : outcome.failure.code, "NEEDS_SIGN_IN")
   })
 })
 
@@ -244,12 +276,12 @@ describe("declared rpc and probe (#4)", () => {
   })
 
   test("probe is fenced by the declared action and identity operations, and called with { source, account }", async () => {
-    const fake = fakeHost(() => ({ account: ana, owner: { id: `mailto:${ana}`, label: "Ana" } }), () => [["gws.probe", "*"], ["gws.read", `${ana}:gmail.users.getProfile`]])
+    const fake = fakeHost(() => ({ source: "gmail", account: ana, owner: { id: `mailto:${ana}`, label: "Ana" }, trust: "untrusted" }), () => [["gws.probe", "*"], ["gws.read", `${ana}:gmail.users.getProfile`]])
     const answer = await probe(fake.host, { installed: declared, source: "gws.gmail", account: ana })
     assert.equal(answer.ok, true, answer.ok ? "" : answer.failure.message)
     assert.deepEqual(fake.calls[0]!.input, { source: "gmail", account: ana })
     assert.equal(evaluate(fake.calls[0]!.rules, "gws.events_list"), "deny")
-    const reading = fakeHost(() => ({ account: ana, owner: { id: "x", label: "x" } }), () => [["gws.events_list", "*"]])
+    const reading = fakeHost(() => ({ source: "gmail", account: ana, owner: { id: "x", label: "x" }, trust: "untrusted" }), () => [["gws.events_list", "*"]])
     assert.equal(((await probe(reading.host, { installed: declared, source: "gws.gmail", account: ana })) as { ok: boolean }).ok, false)
   })
 

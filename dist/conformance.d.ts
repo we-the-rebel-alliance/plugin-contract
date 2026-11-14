@@ -21,7 +21,7 @@ export { assertionMatches, recordingPermission, sameResource, unusedGrants } fro
 export type { AssertInput, Assertion, Grant, RecordingPermission, SessionContext } from "./internal/conformance/permission.js";
 export { pageChecks, pageProblems } from "./internal/conformance/page.js";
 export type { PageChecks, PageOptions } from "./internal/conformance/page.js";
-export { probeProblems } from "./internal/conformance/probe.js";
+export { probeProblems, probeSourceName } from "./internal/conformance/probe.js";
 export { SENTINEL, detailInput, detailInputProblems, scopeProblems, syntheticEvent } from "./internal/conformance/details.js";
 export type { DetailCallInput } from "./internal/conformance/details.js";
 export { suggestProblems } from "./internal/conformance/suggest.js";

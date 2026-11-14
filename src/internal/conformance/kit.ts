@@ -37,7 +37,7 @@ import {
 import { sessionRules } from "../../permission.ts"
 import { toolsRpcIdProblems } from "../../tools-rpc.ts"
 import { pageChecks, type PageOptions } from "./page.ts"
-import { probeProblems } from "./probe.ts"
+import { probeProblems, probeSourceName } from "./probe.ts"
 import { detailInput, detailInputProblems, scopeProblems, type DetailCallInput } from "./details.ts"
 import { suggestProblems } from "./suggest.ts"
 
@@ -268,8 +268,8 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
   const probe: string[] = []
   const assertedBeforeProbe = running.assertions.length
   try {
-    const answer = await calls.probe({ source: source.id, account }, context)
-    probe.push(...probeProblems(answer, source))
+    const answer = await calls.probe({ source: probeSourceName(source) ?? source.id, account }, context)
+    probe.push(...probeProblems(answer, source, { account }))
   } catch (error) {
     probe.push(`probe(${source.id}) failed: ${messageOf(error)}`)
   }

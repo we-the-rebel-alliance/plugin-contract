@@ -258,10 +258,10 @@ describe("sourceConformance", () => {
 
   const full = (over: Partial<ConformanceCalls> = {}): ConformanceCalls => ({
     list: list(),
-    probe: async (_input, context) => {
+    probe: async (input, context) => {
       await context.permission.assert({ action: "slack_events_list" })
       await context.permission.assert({ action: "slack_slack_read_user_profile" })
-      return { account: ACCOUNT, owner: { id: "slack:U0PILOTOWN", label: "Pilot Owner" } }
+      return { source: "slack", account: (input as { account: string }).account, owner: { id: "slack:U0PILOTOWN", label: "Pilot Owner" }, trust: "untrusted" }
     },
     details: {
       "slack.workspace.thread": async (input, context) => {
@@ -325,16 +325,27 @@ describe("sourceConformance", () => {
 
   test("probe reads no content and asserts only its own grant", async () => {
     const withContent = await run(full({ probe: async () => ({ account: ACCOUNT, owner: null, events: [] }) }))
-    assert.ok(withContent.problems.some((problem) => /must read no content/.test(problem)))
+    assert.ok(withContent.problems.some((problem) => /reads no content/.test(problem)))
     const overAsserting = await run(
       full({
-        probe: async (_input, context) => {
+        probe: async (input, context) => {
           await context.permission.assert({ action: "gws.read" })
-          return { account: ACCOUNT, owner: null }
+          return { source: "slack", account: (input as { account: string }).account, owner: { id: "slack:U0PILOTOWN", label: "Pilot Owner" }, trust: "untrusted" }
         },
       }),
     )
     assert.ok(overAsserting.problems.some((problem) => /PERMISSION_DENIED|not among the grants/.test(problem)))
+  })
+
+  test("probe: owner null, a missing label, a missing source or trust, and another account all fail (D230)", async () => {
+    const good = (input: unknown) => ({ source: "slack", account: (input as { account: string }).account, owner: { id: "slack:U0PILOTOWN", label: "Pilot Owner" }, trust: "untrusted" })
+    const failing = async (change: (answer: Record<string, unknown>) => Record<string, unknown>) => (await run(full({ probe: async (input, context) => { await context.permission.assert({ action: "slack_events_list" }); await context.permission.assert({ action: "slack_slack_read_user_profile" }); return change(good(input)) } }))).problems.filter((problem) => /^probe\(/.test(problem))
+    assert.deepEqual(await failing((answer) => answer), [])
+    assert.ok((await failing((answer) => ({ ...answer, owner: null }))).some((problem) => /owner: null/.test(problem)))
+    assert.ok((await failing((answer) => ({ ...answer, owner: { id: "slack:U0PILOTOWN" } }))).some((problem) => /owner must be \{ id, label \}/.test(problem)))
+    assert.ok((await failing(({ source: _source, ...answer }) => answer)).some((problem) => /source/.test(problem)))
+    assert.ok((await failing(({ trust: _trust, ...answer }) => answer)).some((problem) => /trust/.test(problem)))
+    assert.ok((await failing((answer) => ({ ...answer, account: "someone-else" }))).some((problem) => /another account/.test(problem)))
   })
 
   test("a detail read is called with the fields it names, and asserts only its grant", async () => {

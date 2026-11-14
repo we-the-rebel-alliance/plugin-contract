@@ -128,9 +128,9 @@ describe("conformance with an extension output", () => {
       tools: [{ id: "snapshot_read", readOnly: true }],
       snapshotCases: [{ window: "today" }],
       calls: {
-        probe: async (_input, context) => {
+        probe: async (input, context) => {
           await context.permission.assert({ action: "mem.snapshot_read" })
-          return { account: ACCOUNT, owner: { id: "mem:1", label: "Memory" } }
+          return { source: "mem", account: (input as { account: string }).account, owner: { id: "mem:1", label: "Memory" }, trust: "untrusted" }
         },
         snapshot: async (_input, context) => {
           await context.permission.assert({ action: "mem.snapshot_read" })
@@ -239,9 +239,9 @@ describe("a source whose grants are stated verbatim", () => {
               failed: [],
             }
           },
-          probe: async (_input, context) => {
+          probe: async (input, context) => {
             await context.permission.assert({ action: "github.probe" })
-            return { account: "octo@example.test", owner: { id: "github:octocat", label: "Octocat" } }
+            return { source: "github", account: (input as { account: string }).account, owner: { id: "github:octocat", label: "Octocat" }, trust: "untrusted" }
           },
         },
       })
