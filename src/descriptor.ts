@@ -59,43 +59,9 @@ export interface SourceDetail {
   readonly from: readonly string[]
 }
 
-/** One source a plugin declares. */
-export interface SourceItem {
-  readonly id: string
-  readonly kind: "events" | "snapshot"
-  /** The tools-RPC method a read calls. */
-  readonly tool: string
-  /** Fixed input the method always gets, such as `{ "source": "gmail" }`. */
-  readonly input?: Readonly<Record<string, unknown>>
-  /** An events source's event kind. */
-  readonly reads?: string
-  /** A snapshot source's output: a registry name, or `x-<namespace>/<name>`. */
-  readonly output?: string
-  /** An `x-` output's schema, inline: JSON Schema draft 2020-12. Absent for a registry name. */
-  readonly outputSchema?: Readonly<Record<string, unknown>> | boolean
-  readonly params?: Readonly<Record<string, ParamSpec>>
-  readonly accounts?: { readonly named?: boolean; readonly server?: string }
-  readonly scope?: {
-    readonly keys: readonly string[]
-    readonly describe?: string
-    /** The read-only tool that lists choices at consent, and the operations it asserts; run only at bind. */
-    readonly suggest?: { readonly tool: string; readonly operations: readonly string[] }
-  }
-  readonly details?: readonly SourceDetail[]
-  readonly permission: SourcePermission
-  readonly private?: boolean
-  readonly cost: {
-    readonly class: "free" | "metered" | "billed"
-    readonly units?: readonly { readonly per: string; readonly usd: number; readonly conditions?: string; readonly min?: number }[]
-    readonly probe?: { readonly per: string; readonly usd: number; readonly conditions?: string; readonly min?: number }
-  }
-  readonly cadence?: { readonly providerMinMinutes?: number }
-  readonly maxBytes?: number
-  readonly maxAgeSec?: number
-  readonly retentionDays?: number
-  readonly urlHosts?: readonly string[]
-  readonly [key: string]: unknown
-}
+/** One source a plugin declares: Memory's schema type, the one `SourceItem` the package exports (#30, item 8). */
+export type { SourceItem } from "./internal/schema/types.ts"
+import type { SourceItem } from "./internal/schema/types.ts"
 
 /** The `sources` key. */
 export interface SourcesDescriptor {

@@ -66,7 +66,7 @@ describe("sessionRules", () => {
   })
 
   test("refuse a declared action or operation with a wildcard", () => {
-    const loose = { ...gmail, permission: { ...gmail.permission, operations: ["gmail.*"] } }
+    const loose = { ...gmail, permission: { ...gmail.permission, operations: ["gmail.*"] } } as SourceItem
     assert.match(problemsIn(sessionRules(loose, { source: "gws.gmail", account: ana }))[0]!, /wildcard/)
   })
 })
