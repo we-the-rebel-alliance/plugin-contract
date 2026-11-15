@@ -41,7 +41,14 @@
               "action": "github_api",
               "resource": "GET /notifications"
             }
-          ]
+          ],
+          "identityRules": [
+            {
+              "action": "github_api",
+              "resource": "GET /user"
+            }
+          ],
+          "readsIdentity": true
         },
         "private": true,
         "cost": {

@@ -108,6 +108,22 @@ describe("detail and probe rules", () => {
     assert.equal(evaluate(rules.value, "gws.read", `${ana}:gmail.users.messages.get`), "deny")
     assert.equal(probeRules(gmail, "*", []).ok, false)
   })
+
+  test("a rules source's probe is fenced to its identityRules, verbatim, whatever operations are passed (#30, item 10)", () => {
+    const github = {
+      id: "github.activity",
+      kind: "events",
+      tool: "events_list",
+      reads: "issue",
+      permission: { events: "github.events_list", rules: [{ action: "github_api", resource: "GET /user" }, { action: "github_api", resource: "GET /search/issues" }], identityRules: [{ action: "github_api", resource: "GET /user" }] },
+    } as unknown as SourceItem
+    const rules = probeRules(github, "octo@example.test", [], "github.probe")
+    assert.ok(rules.ok)
+    assert.equal(evaluate(rules.value, "github.probe"), "allow")
+    assert.equal(evaluate(rules.value, "github_api", "GET /user"), "allow")
+    assert.equal(evaluate(rules.value, "github_api", "GET /search/issues"), "deny")
+    assert.deepEqual(probeRules(github, "octo@example.test", ["user.get"], "github.probe"), rules)
+  })
 })
 
 describe("grantCovers", () => {

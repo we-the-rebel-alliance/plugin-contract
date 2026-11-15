@@ -27,7 +27,7 @@ import {
   assertionMatches,
   bindGrantsFor,
   grantsFor,
-  identityGrantsFor,
+  probeIdentityGrants,
   recordingPermission,
   unusedGrants,
   type Assertion,
@@ -194,7 +194,7 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
     ...(declaredProbe === undefined ? [] : [{ action: declaredProbe, resource: "*" }]),
   ]
   const running = recordingPermission(runningGrants)
-  const identityGrants = identityGrantsFor(source, identityOperations)
+  const identityGrants = probeIdentityGrants(source, identityOperations)
   const identity: string[] = []
   const bind = recordingPermission(bindGrantsFor(source))
   const context: SessionContext = { account, permission: running.permission }
@@ -310,7 +310,7 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
   const probeAssertions = running.assertions.slice(assertedBeforeProbe)
   if (probeAssertions.length === 0) probe.push(`probe(${source.id}) asserted nothing: it reads the identity under its own grant`)
   const declared = probeAction !== undefined
-  probe.push(...identityProblems(probeAssertions, source, identityOperations, declared ? probeAction : undefined))
+  probe.push(...identityProblems(probeAssertions, source, identityGrants, declared ? probeAction : undefined))
   add("probe", probe)
 
   const details: string[] = []
@@ -483,7 +483,7 @@ async function assertDetail(
     problems.push(`${where} failed inside the confirmed scope: ${messageOf(error)}`)
   }
   problems.push(...outsideGrants(running.assertions.slice(assertedBefore), runningGrants, where))
-  problems.push(...identityOverlap(running.assertions.slice(assertedBefore), identityGrantsFor(source, identityOperations), where, source.permission.readsIdentity === true))
+  problems.push(...identityOverlap(running.assertions.slice(assertedBefore), probeIdentityGrants(source, identityOperations), where, source.permission.readsIdentity === true))
 }
 
 /** The word or code an error carries, for a refusal case. */
@@ -611,19 +611,12 @@ function identityOverlap(assertions: readonly Assertion[], identityGrants: reado
 function identityProblems(
   assertions: readonly Assertion[],
   source: SourceItem,
-  identityOperations: readonly string[],
+  identityGrants: readonly Grant[],
   probeAction?: string,
 ): string[] {
   const action = probeAction ?? (source.kind === "events" ? source.permission.events : source.permission.tool)
-  const head = source.id.split(".")[0] ?? source.id
-  const allowed: Grant[] = [{ action, resource: "*" }]
-  for (const operation of identityOperations) {
-    allowed.push(
-      operation.includes(".")
-        ? { action: `${head}.read`, resource: `{account}:${operation}` }
-        : { action: `${head}_${operation}`, resource: "*" },
-    )
-  }
+  // The identity grants: a rules source's identityRules verbatim, or its identity operations derived (probeIdentityGrants).
+  const allowed: Grant[] = [{ action, resource: "*" }, ...identityGrants]
   const problems: string[] = []
   for (const assertion of assertions) {
     const resources = assertion.resources.length > 0 ? assertion.resources : ["*"]

@@ -91,6 +91,16 @@ export function identityGrantsFor(source: SourceItem, identityOperations: readon
   return grants
 }
 
+/**
+ * The grants a source's probe may assert beyond its action: a rules source's `identityRules` verbatim (#30, item 10),
+ * or else its identity operations by the conventional derivation.
+ */
+export function probeIdentityGrants(source: SourceItem, identityOperations: readonly string[]): Grant[] {
+  const verbatim = source.permission.identityRules
+  if (verbatim !== undefined) return verbatim.map((rule) => ({ action: rule.action, resource: rule.resource }))
+  return identityGrantsFor(source, identityOperations)
+}
+
 /** One operation's grant, as the same derivation makes it. */
 function addGrant(grants: Grant[], source: SourceItem, operation: string): void {
   const head = source.id.split(".")[0] ?? source.id
