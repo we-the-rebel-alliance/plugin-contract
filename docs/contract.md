@@ -8,7 +8,7 @@ The source contract has three layers: the data model (L0), the descriptor a plug
 
 ## L0: the data model
 
-Every result is marked `trust: "untrusted"`: its text is data, never instructions. An owner is `{ id, label }` (both required, D8), where `id` is scheme-qualified (`mailto:`, `slack:`). It may carry `verified: false` when the provider does not confirm who it is, so the id is the plugin's best knowledge (Wispr Flow names OpenCode's credential, `wisprflow:credential:<id>`); a consumer shows such an owner as unverified, and absent means the plugin vouches that the provider named it ([#30](https://github.com/we-the-rebel-alliance/source-contract/issues/30) item 13). A consumer on an older package refuses an owner with `verified`, so it ships in a minor release and a plugin sends it after consumers re-vendor.
+Every result is marked `trust: "untrusted"`: its text is data, never instructions. An owner is `{ id, label }` (both required, D8), where `id` is scheme-qualified (`mailto:`, `slack:`). It may carry `verified: false` when the provider does not confirm who it is, so the id is the plugin's best knowledge (Wispr Flow names OpenCode's credential, `wisprflow:credential:<id>`); a consumer shows such an owner as unverified, and absent means the plugin vouches that the provider named it. Only `false` is accepted, so an owner has one encoding ([#30](https://github.com/we-the-rebel-alliance/source-contract/issues/30) item 13). A consumer on an older package refuses an owner with `verified`, so it ships in a minor release and a plugin sends it after consumers re-vendor.
 
 ### Events
 

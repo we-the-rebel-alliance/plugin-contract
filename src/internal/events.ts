@@ -178,17 +178,17 @@ export interface EventsOwner {
   /**
    * (#30, item 13) `false` when the provider does not confirm who this is, so the id is the plugin's best knowledge
    * (Wispr Flow names OpenCode's credential, `wisprflow:credential:<id>`). A consumer shows it as unverified. Absent
-   * means the plugin vouches that the provider named the owner.
+   * means the plugin vouches that the provider named the owner. Only `false` is accepted, so one owner has one encoding.
    */
-  readonly verified?: boolean
+  readonly verified?: false
 }
 
-/** An owner's problems as `what` describes it: `{ id, label, verified? }`, two non-empty lines and an optional boolean. */
+/** An owner's problems as `what` describes it: `{ id, label, verified? }`, two non-empty lines and an optional `false`. */
 function ownerShapeProblems(owner: unknown, what: string): string[] {
   if (!plainObject(owner) || !line(owner["id"], EVENT_LIMITS.ownerId) || !line(owner["label"], EVENT_LIMITS.ownerLabel) || Object.keys(owner).some((key) => key !== "id" && key !== "label" && key !== "verified")) {
     return [`${what} must be { id, label }, two non-empty lines`]
   }
-  if (owner["verified"] !== undefined && typeof owner["verified"] !== "boolean") return [`${what}.verified must be true or false`]
+  if (owner["verified"] !== undefined && owner["verified"] !== false) return [`${what}.verified must be false, or left out for an owner the provider named`]
   return []
 }
 

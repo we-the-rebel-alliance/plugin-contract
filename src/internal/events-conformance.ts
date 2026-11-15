@@ -145,7 +145,7 @@ export async function eventsListConformance(list: EventsList, fixtures: Conforma
     if (fixtures.account !== undefined && result.account !== fixtures.account) problems.push(`${what}: the result names the account ${result.account}, not ${fixtures.account}`)
     accounts.add(result.account)
     owners.add(JSON.stringify(result.owner))
-    if (fixtures.owner && JSON.stringify(result.owner) !== JSON.stringify({ id: fixtures.owner.id, label: fixtures.owner.label })) problems.push(`${what}: the owner is not the fixture's owner`)
+    if (fixtures.owner && JSON.stringify(result.owner) !== JSON.stringify({ id: fixtures.owner.id, label: fixtures.owner.label, ...(fixtures.owner.verified === undefined ? {} : { verified: fixtures.owner.verified }) })) problems.push(`${what}: the owner is not the fixture's owner`)
     if (fixtures.scopeEcho && fixtures.scope !== undefined) {
       if (result.scope === undefined) problems.push(`${what}: the result does not echo the scope`)
       else if (JSON.stringify(result.scope) !== JSON.stringify(sortedScope(fixtures.scope))) problems.push(`${what}: the result's scope is not the call's scope`)

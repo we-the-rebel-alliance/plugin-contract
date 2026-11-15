@@ -299,7 +299,8 @@ export async function readDetail(host: ReadHost, request: DetailRequest): Promis
 export interface ProbeAnswer {
   readonly source: string
   readonly account: string
-  readonly owner: { readonly id: string; readonly label: string }
+  /** `verified: false` marks an owner the provider does not confirm (#30, item 13). */
+  readonly owner: { readonly id: string; readonly label: string; readonly verified?: false }
   readonly scopes?: readonly string[]
   readonly cost?: unknown
   readonly trust: "untrusted"
