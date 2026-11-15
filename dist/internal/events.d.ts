@@ -127,6 +127,25 @@ export interface FailedEvent {
     readonly code: string;
     readonly retryAfterSec?: number;
 }
+/**
+ * Why a source no longer stands behind something it listed (#27): `deleted`, the provider's copy is gone; `withheld`,
+ * the source may not show it now (a permission lost, a policy, a person's instruction); `expired`, the source no longer
+ * keeps it.
+ */
+export declare const REMOVAL_REASONS: readonly ["deleted", "withheld", "expired"];
+export type RemovalReason = (typeof REMOVAL_REASONS)[number];
+/**
+ * Something the source listed before and no longer stands behind (#27), so a consumer can retract what it derived.
+ * `external_id` is the id the source listed, never a hash (D2); `at` is when the source learned of it, UTC, never later
+ * than the page's `asOf`. A removal is an answer, not a drop: the page's cursor covers it and it never holds a cursor
+ * back, so no id is in both `removals[]` and `failed[]`. It may name an id that is also among the page's events (a
+ * tombstone); a consumer applies the events first, then the removals.
+ */
+export interface EventsRemoval {
+    readonly external_id: string;
+    readonly at: string;
+    readonly reason: RemovalReason;
+}
 /** Why history was lost: the provider expired it, or the source read only part of the window. */
 export declare const GAP_REASONS: readonly ["expired", "window-truncated"];
 export type GapReason = (typeof GAP_REASONS)[number];
@@ -165,6 +184,8 @@ export interface EventsListResult {
     readonly scope?: Record<string, string | string[]>;
     readonly refused?: RefusedEvent[];
     readonly failed?: FailedEvent[];
+    /** Things the source listed before and no longer stands behind (#27). */
+    readonly removals?: EventsRemoval[];
     readonly gap?: EventsGap;
     readonly cost?: EventsCost;
     /** The plugin's package name or id (the draft's envelope). */
@@ -371,6 +392,7 @@ export interface PageExtras {
     readonly scope?: Scope;
     readonly refused?: readonly RefusedEvent[];
     readonly failed?: readonly FailedEvent[];
+    readonly removals?: readonly EventsRemoval[];
     readonly gap?: EventsGap;
     readonly cost?: EventsCost;
     readonly plugin?: string;
@@ -380,6 +402,12 @@ export interface PageExtras {
 export declare function eventsListResult(identity: EventsListIdentity, events: readonly SourceEvent[], cursor: string, more: boolean, extras?: PageExtras): EventsListResult;
 /** One event's problems, one sentence each; none when it keeps the contract. */
 export declare function eventProblems(event: unknown, where?: string): string[];
+/**
+ * A page's `removals[]` problems (#27), one sentence each; none when it is absent or keeps the contract: at most 500
+ * entries of exactly `{ external_id, at, reason }`, each id once, none also in `failed[]`, and no `at` later than the
+ * page's `asOf`. An id may also be among the page's events. The conformance kit's `removals-are-final` reports these.
+ */
+export declare function removalProblems(result: unknown): string[];
 /**
  * A result's problems: its shape, every event, the order, the limit and the size, and each optional addition that is
  * present. None when it keeps the contract. `maxBytes` is the source's declared cap, `MAX_PAGE_BYTES` by default.

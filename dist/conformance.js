@@ -1,10 +1,10 @@
 // @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
 import {
   maxBytesOf
-} from "./chunks/chunk-UAIG37GQ.js";
+} from "./chunks/chunk-5KLPHQMY.js";
 import {
   SOURCES_SCHEMA
-} from "./chunks/chunk-4CLX7GJY.js";
+} from "./chunks/chunk-4BP7XOG2.js";
 import {
   toolsRpcIdProblems
 } from "./chunks/chunk-N4LAUCF3.js";
@@ -14,10 +14,11 @@ import {
   REFUSAL_REASONS,
   isEventKindIn,
   probeResultProblems,
+  removalProblems,
   resultProblems,
   secretKinds,
   sourceNamespace
-} from "./chunks/chunk-SCRRTLIA.js";
+} from "./chunks/chunk-EMHGNGJL.js";
 import "./chunks/chunk-I2RXJJJM.js";
 import {
   sessionRules
@@ -11046,6 +11047,8 @@ async function sourceConformance(options) {
   const cost = [];
   let sawFailed = false;
   let sawRefused = false;
+  const removals = [];
+  let sawRemovals = false;
   let sawGap = false;
   const gapOnce = [];
   let sawAnyGap = false;
@@ -11095,6 +11098,10 @@ async function sourceConformance(options) {
       sawAnyGap = true;
       gapOnce.push(...await gapAnsweredOnce(where, answer, { calls, context, input: item.input }));
     }
+    if (plain5(answer) && answer["removals"] !== void 0) {
+      sawRemovals = true;
+      removals.push(...removalProblems(answer).map((problem) => `${where}: ${problem}`));
+    }
     sawFailed ||= hasEntries(answer, "failed");
     sawRefused ||= hasEntries(answer, "refused");
     if (expect === "empty" && plain5(answer) && Array.isArray(answer["events"]) && answer["events"].length > 0) {
@@ -11110,6 +11117,7 @@ async function sourceConformance(options) {
   add("gap-and-cursor-expired", gap, noExpiry ? false : isEvents && sawGap, !isEvents || noExpiry, noExpiry ? noExpiryReason : void 0);
   add("gap-once-per-read", gapOnce, isEvents && sawAnyGap, !isEvents || !sawAnyGap);
   add("refused-is-final", refused, isEvents && sawRefused, !isEvents);
+  add("removals-are-final", removals, isEvents && sawRemovals, !isEvents || !sawRemovals);
   add("billed-cost", cost, source.cost.class === "billed" && isEvents, source.cost.class !== "billed");
   for (const operation of identityOperations) {
     if (!(source.permission.operations ?? []).includes(operation)) {

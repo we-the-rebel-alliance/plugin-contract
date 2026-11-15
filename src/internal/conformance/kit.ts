@@ -34,6 +34,7 @@ import {
   type Grant,
   type SessionContext,
 } from "./permission.ts"
+import { removalProblems } from "../events.ts"
 import { sessionRules } from "../../permission.ts"
 import { toolsRpcIdProblems } from "../../tools-rpc.ts"
 import { pageChecks, type PageOptions } from "./page.ts"
@@ -162,6 +163,7 @@ const CHECKS = [
   "gap-and-cursor-expired",
   "gap-once-per-read",
   "refused-is-final",
+  "removals-are-final",
   "billed-cost",
   "identity-grants",
   "probe",
@@ -212,6 +214,8 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
   const cost: string[] = []
   let sawFailed = false
   let sawRefused = false
+  const removals: string[] = []
+  let sawRemovals = false
   let sawGap = false
   const gapOnce: string[] = []
   let sawAnyGap = false
@@ -263,6 +267,10 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
       sawAnyGap = true
       gapOnce.push(...(await gapAnsweredOnce(where, answer, { calls, context, input: item.input })))
     }
+    if (plain(answer) && answer["removals"] !== undefined) {
+      sawRemovals = true
+      removals.push(...removalProblems(answer).map((problem) => `${where}: ${problem}`))
+    }
     sawFailed ||= hasEntries(answer, "failed")
     sawRefused ||= hasEntries(answer, "refused")
     if (expect === "empty" && plain(answer) && Array.isArray(answer["events"]) && (answer["events"] as unknown[]).length > 0) {
@@ -282,6 +290,8 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
   // A gap is answered once, on the page where the source restarts (#28): applies whenever an answer carries one.
   add("gap-once-per-read", gapOnce, isEvents && sawAnyGap, !isEvents || !sawAnyGap)
   add("refused-is-final", refused, isEvents && sawRefused, !isEvents)
+  // A removal is final (#27): checked whenever an answer carries removals[]; a source that never removes has none.
+  add("removals-are-final", removals, isEvents && sawRemovals, !isEvents || !sawRemovals)
   add("billed-cost", cost, source.cost.class === "billed" && isEvents, source.cost.class !== "billed")
 
   for (const operation of identityOperations) {

@@ -199,6 +199,27 @@ export interface FailedEvent {
   readonly retryAfterSec?: number
 }
 
+/**
+ * Why a source no longer stands behind something it listed (#27): `deleted`, the provider's copy is gone; `withheld`,
+ * the source may not show it now (a permission lost, a policy, a person's instruction); `expired`, the source no longer
+ * keeps it.
+ */
+export const REMOVAL_REASONS = ["deleted", "withheld", "expired"] as const
+export type RemovalReason = (typeof REMOVAL_REASONS)[number]
+
+/**
+ * Something the source listed before and no longer stands behind (#27), so a consumer can retract what it derived.
+ * `external_id` is the id the source listed, never a hash (D2); `at` is when the source learned of it, UTC, never later
+ * than the page's `asOf`. A removal is an answer, not a drop: the page's cursor covers it and it never holds a cursor
+ * back, so no id is in both `removals[]` and `failed[]`. It may name an id that is also among the page's events (a
+ * tombstone); a consumer applies the events first, then the removals.
+ */
+export interface EventsRemoval {
+  readonly external_id: string
+  readonly at: string
+  readonly reason: RemovalReason
+}
+
 /** Why history was lost: the provider expired it, or the source read only part of the window. */
 export const GAP_REASONS = ["expired", "window-truncated"] as const
 export type GapReason = (typeof GAP_REASONS)[number]
@@ -238,6 +259,8 @@ export interface EventsListResult {
   readonly scope?: Record<string, string | string[]>
   readonly refused?: RefusedEvent[]
   readonly failed?: FailedEvent[]
+  /** Things the source listed before and no longer stands behind (#27). */
+  readonly removals?: EventsRemoval[]
   readonly gap?: EventsGap
   readonly cost?: EventsCost
   /** The plugin's package name or id (the draft's envelope). */
@@ -695,6 +718,7 @@ export interface PageExtras {
   readonly scope?: Scope
   readonly refused?: readonly RefusedEvent[]
   readonly failed?: readonly FailedEvent[]
+  readonly removals?: readonly EventsRemoval[]
   readonly gap?: EventsGap
   readonly cost?: EventsCost
   readonly plugin?: string
@@ -714,6 +738,7 @@ export function eventsListResult(identity: EventsListIdentity, events: readonly 
     ...(extras.scope === undefined ? {} : { scope: canonicalScope(extras.scope) }),
     ...(extras.refused && extras.refused.length > 0 ? { refused: [...extras.refused] } : {}),
     ...(extras.failed && extras.failed.length > 0 ? { failed: [...extras.failed] } : {}),
+    ...(extras.removals && extras.removals.length > 0 ? { removals: [...extras.removals] } : {}),
     ...(extras.gap === undefined ? {} : { gap: extras.gap }),
     ...(extras.cost === undefined ? {} : { cost: extras.cost }),
     ...(extras.plugin === undefined ? {} : { plugin: extras.plugin }),
@@ -783,9 +808,43 @@ export function eventProblems(event: unknown, where = "event"): string[] {
 
 /** The fields contract 1 defines, then the optional ones the final page result adds. */
 const RESULT_KEYS: readonly string[] = ["source", "account", "owner", "events", "cursor", "more", "trust"]
-const EXTRA_KEYS: readonly string[] = ["scope", "refused", "failed", "gap", "cost", "plugin", "asOf"]
+const EXTRA_KEYS: readonly string[] = ["scope", "refused", "failed", "removals", "gap", "cost", "plugin", "asOf"]
 
-/** The additions' problems: `scope`, `refused`, `failed`, `gap`, `cost`, `plugin` and `asOf`, each when present. */
+/**
+ * A page's `removals[]` problems (#27), one sentence each; none when it is absent or keeps the contract: at most 500
+ * entries of exactly `{ external_id, at, reason }`, each id once, none also in `failed[]`, and no `at` later than the
+ * page's `asOf`. An id may also be among the page's events. The conformance kit's `removals-are-final` reports these.
+ */
+export function removalProblems(result: unknown): string[] {
+  if (!plainObject(result) || result["removals"] === undefined) return []
+  const list = result["removals"]
+  if (!Array.isArray(list) || list.length > EVENT_LIMITS.refused) return [`the result's removals must be a list of at most ${EVENT_LIMITS.refused}`]
+  const problems: string[] = []
+  const asOf = isoUtc(result["asOf"]) ? Date.parse(result["asOf"]) : undefined
+  const seen = new Set<string>()
+  for (const [index, entry] of list.entries()) {
+    const at = `removals[${index}]`
+    if (!plainObject(entry)) {
+      problems.push(`${at} is not an object`)
+      continue
+    }
+    for (const key of Object.keys(entry)) if (!["external_id", "at", "reason"].includes(key)) problems.push(`${at} has the field "${key}", which the contract does not define`)
+    const id = entry["external_id"]
+    if (!line(id, EVENT_LIMITS.externalId)) problems.push(`${at}.external_id must be a non-empty id of at most ${EVENT_LIMITS.externalId} characters`)
+    else if (seen.has(id)) problems.push("the result's removals lists one event twice")
+    else seen.add(id)
+    if (!isoUtc(entry["at"])) problems.push(`${at}.at must be a UTC ISO date-time ending in Z`)
+    else if (asOf !== undefined && Date.parse(entry["at"]) > asOf) problems.push(`${at}.at is later than the page's asOf`)
+    if (!(REMOVAL_REASONS as readonly unknown[]).includes(entry["reason"])) problems.push(`${at}.reason must be one of ${REMOVAL_REASONS.join(", ")}`)
+  }
+  const failed = result["failed"]
+  if (Array.isArray(failed) && failed.some((entry) => plainObject(entry) && typeof entry["external_id"] === "string" && seen.has(entry["external_id"]))) {
+    problems.push("an event is both removed and failed: a removal is final, so nothing is retried")
+  }
+  return problems
+}
+
+/** The additions' problems: `scope`, `refused`, `failed`, `removals`, `gap`, `cost`, `plugin` and `asOf`, each when present. */
 function extraProblems(result: Record<string, unknown>, ids: ReadonlySet<string>): string[] {
   const problems: string[] = []
   if (result["scope"] !== undefined) {
@@ -839,6 +898,7 @@ function extraProblems(result: Record<string, unknown>, ids: ReadonlySet<string>
     const refused = new Set((result["refused"] as unknown[]).map((entry) => (plainObject(entry) ? entry["external_id"] : undefined)))
     if ((result["failed"] as unknown[]).some((entry) => plainObject(entry) && refused.has(entry["external_id"]))) problems.push("an event is both refused and failed")
   }
+  problems.push(...removalProblems(result))
   if (result["gap"] !== undefined) {
     const gap = result["gap"]
     if (!plainObject(gap) || Object.keys(gap).some((key) => key !== "reason" && key !== "since") || !(GAP_REASONS as readonly unknown[]).includes(gap["reason"]) || !isoUtc(gap["since"])) {

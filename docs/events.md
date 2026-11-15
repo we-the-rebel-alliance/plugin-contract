@@ -30,6 +30,7 @@ copy's import path. `src/events.ts` is the entry; the code is under `src/interna
 | `failed[]`: retryable drops; any entry holds the cursor back | — | `FailedEvent { external_id, code, retryAfterSec? }`, validated on the page. The rule that it holds the cursor is the consumer's; its check is Memory's (`hooks.after`). | done; seam |
 | `gap: { reason: "expired" \| "window-truncated", since }` when history is lost | — | `EventsGap`, exactly those two keys. `SourceError` carries `gap` for `CURSOR_EXPIRED`. A gap is answered once, on the page where the source restarts its window; no later page of that read repeats it (#28, the kit's `gap-once-per-read`). | done; D4 |
 | `cost`: what the provider reported, for billed sources | — | `EventsCost { units: [{ per, count }], usd? }`. `per` names the descriptor's `cost.units[].per`. | done; D6 |
+| `removals[]`: what a source no longer stands behind (#27) | — | `EventsRemoval { external_id, at, reason: "deleted" \| "withheld" \| "expired" }`, `REMOVAL_REASONS`, `removalProblems`, and `PageExtras.removals`. At most 500 per page, each id once, none also in `failed[]`, no `at` after `asOf`; an id may also be a tombstone event on the page. The kit's `removals-are-final` runs whenever an answer carries it. | done; D19 |
 | Cursor: opaque, versioned, bound to `(plugin, source, account, scope)`; foreign → `CURSOR_INVALID`; lost history → `CURSOR_EXPIRED` with `gap` | version 1, bound to the source only. Each plugin binds the rest in its own state (6 of 9 put the account in `a`; linear, slack and x bind only an owner hash in `o`, which all 9 carry). | `src/cursor`: version 2, `encodeBoundCursor` / `decodeBoundCursor`, with a 16-hex hash of the canonical binding. `acceptV1` reads the version 1 cursors collectors already hold, for the whole source only (see "Cursors" below). Conformance option `binding`: the same state rebound to another plugin, account or scope must be refused. | done; D12 |
 | Core kinds + `task`, `file`; extensions `x-<plugin>/<kind>` | 9 kinds | `EVENT_KINDS` (11), `EXTENSION_KIND`, `isEventKind`. Conformance option `kinds`: the descriptor's `reads`. | done; D13 |
 | Errors: the draft's table + `SCOPE_MISSING`, `BUDGET_EXCEEDED`, `SOURCE_DISABLED`; `AUTH_REQUIRED` aliases `NEEDS_SIGN_IN`; the message is `CODE: what happened. Next step: …` | each plugin's own codes | `ERROR_CODES` (14), `ERROR_ALIASES`, `CONTRACT1_CODES` (the family's `EVENTS_*` names), `canonicalCode`, `SourceError`, `parseSourceError`. Conformance option `codes`. | done; D3 |
@@ -170,6 +171,11 @@ every page. `isEventKind` alone still accepts any well-formed extension.
 - **D18. Forgery.** (a) the binding hash only, with the source checking its state and the grant fencing the read (as
   now), or (b) a keyed MAC with a plugin-held secret. *Recommendation:* (a) for v1. A forged cursor can only point a
   read inside what the grant already allows, and (b) needs key storage in every plugin.
+- **D19. Retractions (#27).** A source that deletes or withholds something it listed needs to say so, so a consumer
+  can retract what it derived. Options: (a) an optional page key `removals[]` of `{ external_id, at, reason }`, or
+  (b) a removal as an event of kind `x-<plugin>/removal`. *Decided in #27:* (a). A removal is not content, needs no
+  hash, can name an id the provider has already pruned, and stays out of consumers' budgets and page sizes. jelly's
+  tombstone event stays legal beside it, and Memory keeps its interim label rule until jelly sends the key.
 - **R1. `maxBytes` and images (the app's `registry` decision).** `read` checks `maxBytes` against the answer's JSON
   bytes, and §2.2 caps `maxBytes` at 1 MB. But `registry`'s `image` allows a `dataUri` of 1 MB of image (about 1.4 MB
   of base64), so a full-size inline image is always `TOO_LARGE`. Options: (a) `maxBytes` counts the answer's bytes,

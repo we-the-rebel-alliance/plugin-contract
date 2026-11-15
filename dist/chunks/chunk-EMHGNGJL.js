@@ -160,6 +160,7 @@ var MAX_BYTES = { default: 65536, max: 1048576 };
 var FIRST_RUN_HOURS = 24;
 var TRUST = "untrusted";
 var REFUSAL_REASONS = ["instruction", "secret", "owner"];
+var REMOVAL_REASONS = ["deleted", "withheld", "expired"];
 var GAP_REASONS = ["expired", "window-truncated"];
 var ERROR_CODES = [
   "NEEDS_SIGN_IN",
@@ -438,6 +439,7 @@ function eventsListResult(identity, events, cursor, more, extras = {}) {
     ...extras.scope === void 0 ? {} : { scope: canonicalScope(extras.scope) },
     ...extras.refused && extras.refused.length > 0 ? { refused: [...extras.refused] } : {},
     ...extras.failed && extras.failed.length > 0 ? { failed: [...extras.failed] } : {},
+    ...extras.removals && extras.removals.length > 0 ? { removals: [...extras.removals] } : {},
     ...extras.gap === void 0 ? {} : { gap: extras.gap },
     ...extras.cost === void 0 ? {} : { cost: extras.cost },
     ...extras.plugin === void 0 ? {} : { plugin: extras.plugin },
@@ -498,7 +500,35 @@ function eventProblems(event, where = "event") {
   return problems;
 }
 var RESULT_KEYS = ["source", "account", "owner", "events", "cursor", "more", "trust"];
-var EXTRA_KEYS = ["scope", "refused", "failed", "gap", "cost", "plugin", "asOf"];
+var EXTRA_KEYS = ["scope", "refused", "failed", "removals", "gap", "cost", "plugin", "asOf"];
+function removalProblems(result) {
+  if (!plainObject(result) || result["removals"] === void 0) return [];
+  const list = result["removals"];
+  if (!Array.isArray(list) || list.length > EVENT_LIMITS.refused) return [`the result's removals must be a list of at most ${EVENT_LIMITS.refused}`];
+  const problems = [];
+  const asOf = isoUtc(result["asOf"]) ? Date.parse(result["asOf"]) : void 0;
+  const seen = /* @__PURE__ */ new Set();
+  for (const [index, entry] of list.entries()) {
+    const at = `removals[${index}]`;
+    if (!plainObject(entry)) {
+      problems.push(`${at} is not an object`);
+      continue;
+    }
+    for (const key of Object.keys(entry)) if (!["external_id", "at", "reason"].includes(key)) problems.push(`${at} has the field "${key}", which the contract does not define`);
+    const id = entry["external_id"];
+    if (!line(id, EVENT_LIMITS.externalId)) problems.push(`${at}.external_id must be a non-empty id of at most ${EVENT_LIMITS.externalId} characters`);
+    else if (seen.has(id)) problems.push("the result's removals lists one event twice");
+    else seen.add(id);
+    if (!isoUtc(entry["at"])) problems.push(`${at}.at must be a UTC ISO date-time ending in Z`);
+    else if (asOf !== void 0 && Date.parse(entry["at"]) > asOf) problems.push(`${at}.at is later than the page's asOf`);
+    if (!REMOVAL_REASONS.includes(entry["reason"])) problems.push(`${at}.reason must be one of ${REMOVAL_REASONS.join(", ")}`);
+  }
+  const failed = result["failed"];
+  if (Array.isArray(failed) && failed.some((entry) => plainObject(entry) && typeof entry["external_id"] === "string" && seen.has(entry["external_id"]))) {
+    problems.push("an event is both removed and failed: a removal is final, so nothing is retried");
+  }
+  return problems;
+}
 function extraProblems(result, ids) {
   const problems = [];
   if (result["scope"] !== void 0) {
@@ -550,6 +580,7 @@ function extraProblems(result, ids) {
     const refused = new Set(result["refused"].map((entry) => plainObject(entry) ? entry["external_id"] : void 0));
     if (result["failed"].some((entry) => plainObject(entry) && refused.has(entry["external_id"]))) problems.push("an event is both refused and failed");
   }
+  problems.push(...removalProblems(result));
   if (result["gap"] !== void 0) {
     const gap = result["gap"];
     if (!plainObject(gap) || Object.keys(gap).some((key) => key !== "reason" && key !== "since") || !GAP_REASONS.includes(gap["reason"]) || !isoUtc(gap["since"])) {
@@ -623,6 +654,7 @@ export {
   FIRST_RUN_HOURS,
   TRUST,
   REFUSAL_REASONS,
+  REMOVAL_REASONS,
   GAP_REASONS,
   ERROR_CODES,
   PROPOSED_CODES,
@@ -651,5 +683,6 @@ export {
   probeResultProblems,
   eventsListResult,
   eventProblems,
+  removalProblems,
   resultProblems
 };
