@@ -226,6 +226,40 @@ describe("probe", () => {
   })
 })
 
+describe("probe for a rules source (#30, item 10)", () => {
+  // The form opencode-github would adopt: its probe reads GET /user under github_probe, declared as identityRules.
+  const item = {
+    id: "github.activity",
+    kind: "events",
+    reads: "issue",
+    tool: "events_list",
+    input: { source: "github" },
+    permission: {
+      events: "github_events_list",
+      rules: [{ action: "github_probe", resource: "GET /user" }, { action: "github_events_list", resource: "GET /search/issues" }],
+      identityRules: [{ action: "github_probe", resource: "GET /user" }],
+    },
+    cost: { class: "free" },
+  }
+  const installed = { package: "@joe-broadhead/opencode-github", version: "0.0.0", directory: ".", hash: "sha256:x", sources: { contractVersion: 1, probe: { action: "github_probe" }, items: [item] } } as unknown as InstalledDescriptor
+  const answer = { source: "github", account: "octo@example.test", owner: { id: "github:octocat", label: "Octocat" }, trust: "untrusted" }
+
+  test("probes from the declaration alone, fenced to the probe action and the identity rules", async () => {
+    const fake = fakeHost(() => answer, () => [["github_probe", "*"], ["github_probe", "GET /user"]])
+    const probed = await probe(fake.host, { installed, source: "github.activity", account: "octo@example.test" })
+    assert.equal(probed.ok, true, probed.ok ? "" : probed.failure.message)
+    assert.equal(evaluate(fake.calls[0]!.rules, "github_events_list", "GET /search/issues"), "deny")
+    const content = await probe(fakeHost(() => answer, () => [["github_events_list", "GET /search/issues"]]).host, { installed, source: "github.activity", account: "octo@example.test" })
+    assert.equal(content.ok ? "ok" : content.failure.code, "PERMISSION_DENIED")
+  })
+
+  test("without identityRules or identity operations it is refused, as before", async () => {
+    const bare = { ...installed, sources: { ...installed.sources, items: [{ ...item, permission: { events: item.permission.events, rules: item.permission.rules } }] } } as unknown as InstalledDescriptor
+    const refused = await probe(fakeHost(() => answer).host, { installed: bare, source: "github.activity", account: "octo@example.test" })
+    assert.equal(refused.ok ? "ok" : refused.failure.code, "PERMISSION_DENIED")
+  })
+})
+
 describe("one probe check (#8, D230)", () => {
   const good = { source: "gmail", account: ana, owner: { id: `mailto:${ana}`, label: "Ana" }, scopes: ["gmail.readonly"], trust: "untrusted" }
   const source = gws.sources.items.find((item) => item.id === "gws.gmail")!

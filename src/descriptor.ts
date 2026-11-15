@@ -43,6 +43,8 @@ export interface SourcePermission {
    * `GET /user`). A source states `operations` or `rules` (#21).
    */
   readonly rules?: readonly { readonly action: string; readonly resource: string }[]
+  /** For a rules source: the grants `probe` asserts, verbatim, each among `rules` (#30, item 10). Empty when the probe asserts only its action. */
+  readonly identityRules?: readonly { readonly action: string; readonly resource: string }[]
   /** The identity operations `probe` asserts for this source; they are among `operations` (#4, point 3; #21). Optional; empty when the probe asserts only its action. */
   readonly identity?: readonly string[]
   /** True when the source's content reads assert an identity operation (#30, item 4); every identity operation is still declared. */
@@ -157,6 +159,7 @@ const item = z
       // A provider whose resources are method-and-path (GitHub's `github_api` on `GET /user`) states its grants
       // verbatim; `operationRule` derives from `operations` for every other provider (#4, from the github plugin).
       rules: z.array(z.object({ action, resource: z.string().min(1).max(200) })).min(1).optional(),
+      identityRules: z.array(z.object({ action, resource: z.string().min(1).max(200) })).optional(),
     }),
     private: z.boolean().optional(),
     cost: z.looseObject({ class: z.enum(["free", "metered", "billed"]), units: z.array(price).optional(), probe: price.optional() }),

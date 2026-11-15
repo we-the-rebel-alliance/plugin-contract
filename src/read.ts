@@ -313,7 +313,8 @@ export interface ProbeAnswer {
 export async function probe(host: ReadHost, request: { readonly installed: InstalledDescriptor; readonly source: string; readonly account: string; readonly identityOperations?: readonly string[]; readonly signal?: AbortSignal }): Promise<{ readonly ok: true; readonly answer: ProbeAnswer } | { readonly ok: false; readonly failure: ReadFailure }> {
   const source = findSource(request.installed.sources, request.source)
   if (!source) return { ok: false, failure: failure("UNAVAILABLE", `${request.installed.package} declares no source ${request.source}`, "Check the source id.") }
-  const declared = source.permission.identity
+  // A rules source declares its probe's grants verbatim (identityRules, #30 item 10), which probeRules allows as written.
+  const declared = source.permission.identity ?? (source.permission.identityRules !== undefined ? [] : undefined)
   const identity = declared ?? request.identityOperations
   if (identity === undefined) {
     return { ok: false, failure: failure("PERMISSION_DENIED", `${source.id} declares no identity operations, and none were given`, "Declare permission.identity in the source, or pass the identity operations.") }

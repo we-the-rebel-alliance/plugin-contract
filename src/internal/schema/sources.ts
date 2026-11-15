@@ -149,9 +149,28 @@ const permissionBase = {
     .min(1)
     .optional()
     .describe("The grants verbatim, for a provider whose resources are not <account>:<operation> (GitHub's github_api on GET /user)."),
+  identityRules: z
+    .array(
+      z
+        .object({
+          action: z.string().max(80).regex(ACTION, { error: "must be a permission action such as github_api" }),
+          resource: z.string().max(200).describe("The resource the action is asserted on, such as GET /user."),
+        })
+        .strict(),
+    )
+    .optional()
+    .describe(
+      "For a rules source: the grants probe asserts for this source, verbatim, each among permission.rules (#30, item 10). Empty when the probe asserts only sources.probe.action; absent when undeclared. A rules source's equivalent of identity.",
+    ),
 }
 
-const permissionEither = (value: { readonly operations?: unknown; readonly rules?: unknown }, ctx: z.RefinementCtx): void => {
+const permissionEither = (value: { readonly operations?: unknown; readonly rules?: unknown; readonly identity?: unknown; readonly identityRules?: unknown }, ctx: z.RefinementCtx): void => {
+  if (value.identityRules !== undefined && value.rules === undefined) {
+    ctx.addIssue({ code: "custom", path: ["identityRules"], message: "identityRules is for a source that states its rules verbatim; a source with operations declares identity" })
+  }
+  if (value.identity !== undefined && value.rules !== undefined) {
+    ctx.addIssue({ code: "custom", path: ["identity"], message: "a source that states its rules verbatim declares its probe's grants as identityRules, not identity" })
+  }
   if (value.operations === undefined && value.rules === undefined) {
     ctx.addIssue({ code: "custom", message: "a permission states its operations, or its rules verbatim" })
   }

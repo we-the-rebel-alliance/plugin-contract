@@ -225,6 +225,10 @@
           {
             "action": "github.probe",
             "resource": "*"
+          },
+          {
+            "action": "github_api",
+            "resource": "GET /user"
           }
         ],
         "answer": {

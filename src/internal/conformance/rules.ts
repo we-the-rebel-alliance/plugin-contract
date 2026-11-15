@@ -321,6 +321,19 @@ export function declarationProblems(sources: unknown, options: DeclarationOption
     for (const operation of unique(identity as readonly string[])) {
       if (identity.filter((entry) => entry === operation).length > 1) problems.push(`${at}.permission.identity lists "${operation}" twice`)
     }
+    // A rules source's probe grants, verbatim (#30, item 10): each among the source's rules, as identity is among its
+    // operations, and each once.
+    const identityRules = item.permission.identityRules ?? []
+    const ruleKey = (rule: { readonly action: string; readonly resource: string }) => `${rule.action}\u0000${rule.resource}`
+    const declaredRules = new Set(rules.map(ruleKey))
+    const seenIdentityRules = new Set<string>()
+    for (const rule of identityRules) {
+      if (!declaredRules.has(ruleKey(rule))) {
+        problems.push(`${at}.permission.identityRules lists ${rule.action} on ${rule.resource}, which permission.rules does not: a source's rules are everything its reads assert, identity included`)
+      }
+      if (seenIdentityRules.has(ruleKey(rule))) problems.push(`${at}.permission.identityRules lists ${rule.action} on ${rule.resource} twice`)
+      seenIdentityRules.add(ruleKey(rule))
+    }
 
     const details = item.kind === "events" ? (item.details ?? []) : []
     for (const [i, detail] of details.entries()) {
@@ -394,8 +407,14 @@ function isSourceItem(value: unknown): value is SourceItem {
   if (kind !== "events" && kind !== "snapshot") return false
   if (typeof value["id"] !== "string" || typeof value["tool"] !== "string") return false
   const permission = value["permission"]
-  if (!plain(permission) || !Array.isArray(permission["operations"])) return false
-  if (!permission["operations"].every((operation) => typeof operation === "string")) return false
+  // A source states operations or rules (#21): either makes it an item every per-item rule runs on (#30, item 11).
+  if (!plain(permission)) return false
+  const operations = permission["operations"]
+  const rules = permission["rules"]
+  if (operations !== undefined && (!Array.isArray(operations) || !operations.every((operation) => typeof operation === "string"))) return false
+  if (rules !== undefined && (!Array.isArray(rules) || !rules.every((rule) => plain(rule) && typeof rule["action"] === "string" && typeof rule["resource"] === "string"))) return false
+  const identityRules = permission["identityRules"]
+  if (identityRules !== undefined && (!Array.isArray(identityRules) || !identityRules.every((rule) => plain(rule) && typeof rule["action"] === "string" && typeof rule["resource"] === "string"))) return false
   const action = kind === "events" ? permission["events"] : permission["tool"]
   if (typeof action !== "string") return false
   if (permission["operations"] === undefined && permission["rules"] === undefined) return false

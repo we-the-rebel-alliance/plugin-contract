@@ -134,13 +134,16 @@ export function detailRules(source: SourceItem, detailId: string, grant: Pick<Gr
 /**
  * The session rules for the source's `probe` on `account`: deny everything, then allow the probe's action (the
  * plugin's declared `sources.probe.action`, or else the source's own action) and its identity operations, which are
- * among the source's `operations` (#21). That a probe reads no content is the kit's check of its answer.
+ * among the source's `operations` (#21). A source that states its rules verbatim declares its probe's grants as
+ * `identityRules`, allowed as written (#30, item 10). That a probe reads no content is the kit's check of its answer.
  */
 export function probeRules(source: SourceItem, account: string, identityOperations: readonly string[], probeAction?: string): Checked<readonly PermissionRule[]> {
   const problem = accountProblem(account)
   if (problem) return { ok: false, problems: [problem] }
   const method = probeAction ?? methodAction(source)
   if (method === undefined) return { ok: false, problems: [`${source.id} names no action for its method`] }
+  const verbatim = source.permission.identityRules
+  if (verbatim !== undefined) return fenced([allow(method, "*"), ...verbatim.map((rule) => allow(rule.action, rule.resource))])
   return fenced([allow(method, "*"), ...identityOperations.map((operation) => operationRule(source, operation, account))])
 }
 

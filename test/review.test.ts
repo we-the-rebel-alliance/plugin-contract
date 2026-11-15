@@ -1369,3 +1369,74 @@ describe("removals are final (#27)", () => {
     assert.equal(found?.notApplicable, true)
   })
 })
+
+describe("a rules source (#30, items 10 and 11)", () => {
+  const github = (permission: Record<string, unknown> = {}, over: Record<string, unknown> = {}): Record<string, unknown> => ({
+    id: "github.activity",
+    kind: "events",
+    reads: "issue",
+    tool: "events_list",
+    input: { source: "github" },
+    permission: {
+      events: "github.events_list",
+      rules: [{ action: "github_api", resource: "GET /user" }, { action: "github_api", resource: "GET /search/issues" }],
+      ...permission,
+    },
+    cost: { class: "free" },
+    ...over,
+  })
+
+  test("item 10: a rules source declares its probe's grants as identityRules, among its rules", () => {
+    assert.deepEqual(problemsOf(declarationOf(github({ identityRules: [{ action: "github_api", resource: "GET /user" }] }))), [])
+    assert.deepEqual(problemsOf(declarationOf(github({ identityRules: [] }))), [])
+    assert.deepEqual(declarationProblems(declarationOf(github({ identityRules: [{ action: "github_api", resource: "GET /user" }] }))), [])
+    assert.deepEqual(declarationProblems(declarationOf(github({ identityRules: [{ action: "github_api", resource: "GET /emails" }] }))), [
+      "items[0] (github.activity).permission.identityRules lists github_api on GET /emails, which permission.rules does not: a source's rules are everything its reads assert, identity included",
+    ])
+    assert.deepEqual(declarationProblems(declarationOf(github({ identityRules: [{ action: "github_api", resource: "GET /user" }, { action: "github_api", resource: "GET /user" }] }))), [
+      "items[0] (github.activity).permission.identityRules lists github_api on GET /user twice",
+    ])
+  })
+
+  test("item 10: identityRules is for rules sources, and identity for operations sources", () => {
+    const withOperations = { ...github(), permission: { events: "github.events_list", operations: ["user.get"], identityRules: [{ action: "github_api", resource: "GET /user" }] } }
+    assert.ok(problemsOf(declarationOf(withOperations)).some((problem) => problem.includes("identityRules is for a source that states its rules verbatim")))
+    assert.ok(problemsOf(declarationOf(github({ identity: ["user.get"] }))).some((problem) => problem.includes("declares its probe's grants as identityRules, not identity")))
+  })
+
+  test("item 11: every per-item rule runs on a rules source: a reads outside its namespace is refused", () => {
+    assert.deepEqual(declarationProblems(declarationOf(github({}, { reads: "issue" }))), [])
+    const problems = declarationProblems(declarationOf(github({}, { reads: "x-other/thing" })))
+    assert.equal(problems.length, 1)
+    assert.match(problems[0] ?? "", /x-other\/thing/)
+  })
+
+  test("item 10: the kit fences a rules source's probe by its identityRules, exactly", async () => {
+    const run = (probeAsserts: readonly { action: string; resource: string }[], permission: Record<string, unknown>) =>
+      sourceConformance({
+        plugin: "@joe-broadhead/opencode-github",
+        source: sourceOf(github({ readsIdentity: true, ...permission })),
+        sources: { probe: { action: "github.probe" } },
+        tools: [{ id: "events_list", readOnly: true }],
+        account: "octo@example.test",
+        cases: [],
+        noExpiry: { reason: "no cases in this test" },
+        calls: {
+          probe: async (_input, context) => {
+            for (const assertion of probeAsserts) await context.permission.assert({ action: assertion.action, resources: [assertion.resource] })
+            return { source: "github", account: "octo@example.test", owner: { id: "github:octocat", label: "Octocat" }, trust: "untrusted" }
+          },
+        },
+      })
+    const probeOf = async (asserts: readonly { action: string; resource: string }[], permission: Record<string, unknown>) =>
+      (await run(asserts, permission)).checks.find((check) => check.name === "probe")?.problems
+    const user = { action: "github_api", resource: "GET /user" }
+    assert.deepEqual(await probeOf([{ action: "github.probe", resource: "*" }, user], { identityRules: [user] }), [])
+    assert.deepEqual(await probeOf([{ action: "github.probe", resource: "*" }], { identityRules: [user] }), [
+      "probe(github.activity) does not assert github_api on GET /user, which the declaration names",
+    ])
+    assert.deepEqual(await probeOf([{ action: "github.probe", resource: "*" }, user, { action: "github_api", resource: "GET /search/issues" }], { identityRules: [user] }), [
+      "probe(github.activity) asserts github_api on GET /search/issues, which is not an identity operation: a probe reads the account, never content",
+    ])
+  })
+})

@@ -79,7 +79,8 @@ export declare function detailRules(source: SourceItem, detailId: string, grant:
 /**
  * The session rules for the source's `probe` on `account`: deny everything, then allow the probe's action (the
  * plugin's declared `sources.probe.action`, or else the source's own action) and its identity operations, which are
- * among the source's `operations` (#21). That a probe reads no content is the kit's check of its answer.
+ * among the source's `operations` (#21). A source that states its rules verbatim declares its probe's grants as
+ * `identityRules`, allowed as written (#30, item 10). That a probe reads no content is the kit's check of its answer.
  */
 export declare function probeRules(source: SourceItem, account: string, identityOperations: readonly string[], probeAction?: string): Checked<readonly PermissionRule[]>;
 /**

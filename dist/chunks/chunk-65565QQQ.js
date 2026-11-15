@@ -54,6 +54,8 @@ function probeRules(source, account, identityOperations, probeAction) {
   if (problem) return { ok: false, problems: [problem] };
   const method = probeAction ?? methodAction(source);
   if (method === void 0) return { ok: false, problems: [`${source.id} names no action for its method`] };
+  const verbatim = source.permission.identityRules;
+  if (verbatim !== void 0) return fenced([allow(method, "*"), ...verbatim.map((rule) => allow(rule.action, rule.resource))]);
   return fenced([allow(method, "*"), ...identityOperations.map((operation) => operationRule(source, operation, account))]);
 }
 function evaluate(rules, action, resource = "*") {

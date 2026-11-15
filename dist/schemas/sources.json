@@ -447,6 +447,30 @@
                       ],
                       "additionalProperties": false
                     }
+                  },
+                  "identityRules": {
+                    "description": "For a rules source: the grants probe asserts for this source, verbatim, each among permission.rules (#30, item 10). Empty when the probe asserts only sources.probe.action; absent when undeclared. A rules source's equivalent of identity.",
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "action": {
+                          "type": "string",
+                          "maxLength": 80,
+                          "pattern": "^(?:[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*|[a-z][a-z0-9]*_[a-z][a-z0-9_]*)$"
+                        },
+                        "resource": {
+                          "type": "string",
+                          "maxLength": 200,
+                          "description": "The resource the action is asserted on, such as GET /user."
+                        }
+                      },
+                      "required": [
+                        "action",
+                        "resource"
+                      ],
+                      "additionalProperties": false
+                    }
                   }
                 },
                 "required": [
@@ -847,6 +871,30 @@
                   "rules": {
                     "description": "The grants verbatim, for a provider whose resources are not <account>:<operation> (GitHub's github_api on GET /user).",
                     "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "action": {
+                          "type": "string",
+                          "maxLength": 80,
+                          "pattern": "^(?:[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*|[a-z][a-z0-9]*_[a-z][a-z0-9_]*)$"
+                        },
+                        "resource": {
+                          "type": "string",
+                          "maxLength": 200,
+                          "description": "The resource the action is asserted on, such as GET /user."
+                        }
+                      },
+                      "required": [
+                        "action",
+                        "resource"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "identityRules": {
+                    "description": "For a rules source: the grants probe asserts for this source, verbatim, each among permission.rules (#30, item 10). Empty when the probe asserts only sources.probe.action; absent when undeclared. A rules source's equivalent of identity.",
                     "type": "array",
                     "items": {
                       "type": "object",

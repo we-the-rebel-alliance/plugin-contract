@@ -1,7 +1,7 @@
 // @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
 import {
   SOURCES_SCHEMA
-} from "./chunk-4BP7XOG2.js";
+} from "./chunk-CBOKN6VH.js";
 import {
   SUPPORTED_CONTRACT_VERSIONS
 } from "./chunk-ELPJD3ND.js";
@@ -67,7 +67,8 @@ var item = looseObject({
     operations: array(operation).min(1, "must name at least one operation: grants and off switches key on them").optional(),
     // A provider whose resources are method-and-path (GitHub's `github_api` on `GET /user`) states its grants
     // verbatim; `operationRule` derives from `operations` for every other provider (#4, from the github plugin).
-    rules: array(object({ action, resource: string().min(1).max(200) })).min(1).optional()
+    rules: array(object({ action, resource: string().min(1).max(200) })).min(1).optional(),
+    identityRules: array(object({ action, resource: string().min(1).max(200) })).optional()
   }),
   private: boolean().optional(),
   cost: looseObject({ class: _enum(["free", "metered", "billed"]), units: array(price).optional(), probe: price.optional() }),

@@ -127,6 +127,8 @@ export interface PermissionEvents {
     readonly operations?: readonly string[] | undefined;
     /** The grants verbatim, for a provider whose resources are not `<account>:<operation>` such as GitHub's `github_api` on `GET /user`. */
     readonly rules?: readonly PermissionRuleLike[] | undefined;
+    /** For a rules source: the grants `probe` asserts, verbatim, each among `rules` (#30, item 10). Empty when the probe asserts only its action; absent when undeclared. */
+    readonly identityRules?: readonly PermissionRuleLike[] | undefined;
     /** The identity operations `probe` asserts for this source (#4, #8); each is among permission.operations, and no content read asserts it. Empty when the probe asserts only its action; absent when undeclared. */
     readonly identity?: readonly string[] | undefined;
     /** True when the source's content reads assert an identity operation (#30, item 4); every identity operation is still declared. */
@@ -140,6 +142,8 @@ export interface PermissionTool {
     readonly operations?: readonly string[] | undefined;
     /** The grants verbatim, when the provider's resources are not `<account>:<operation>`. */
     readonly rules?: readonly PermissionRuleLike[] | undefined;
+    /** For a rules source: the grants `probe` asserts, verbatim, each among `rules` (#30, item 10). Empty when the probe asserts only its action; absent when undeclared. */
+    readonly identityRules?: readonly PermissionRuleLike[] | undefined;
     /** The identity operations `probe` asserts for this source (#4, #8); each is among permission.operations, and no content read asserts it. Empty when the probe asserts only its action; absent when undeclared. */
     readonly identity?: readonly string[] | undefined;
     /** True when the source's content reads assert an identity operation (#30, item 4); every identity operation is still declared. */
