@@ -88,6 +88,7 @@ The fixture runner records this, and fails if it changes:
 answer by `probeResultProblems`, so a probe that passes conformance is one a consumer accepts. Concretely:
 
 - `owner: { id, label }` is required. There is no `owner: null`.
+- `owner.verified: false` marks an owner the provider does not confirm (Wispr Flow's `wisprflow:credential:<id>`); `probeResult` carries it, the page's and the probe answer's owner checks accept it (only `false`; absent is the vouched owner), and `eventsListConformance` compares it with `fixtures.owner` (#30 item 13).
 - `owner.id` is scheme-qualified, as `docs/contract.md` gives an owner (`mailto:sam@example.com`, `slack:U0123`),
   with the rule an actor's id follows: a lowercase scheme, `:`, then no whitespace. A bare `sam@example.com` fails.
 - A source that is not signed in refuses the probe with `NEEDS_SIGN_IN` and a `next` step. If a plugin answers

@@ -146,6 +146,52 @@ describe("probe (source-contract#8, #4)", () => {
   })
 })
 
+describe("a weak owner (#30, item 13)", () => {
+  const WEAK = { id: "wisprflow:credential:abc123", label: "Wispr Flow sign-in", verified: false as const }
+
+  test("a probe answer and a page may mark their owner unverified; probeResult carries it", () => {
+    const answer = probeResult({ ...WHOSE, owner: WEAK })
+    expect(answer.owner).toEqual(WEAK)
+    expect(probeResultProblems(answer)).toEqual([])
+    expect(probeResult(WHOSE).owner).toEqual(OWNER)
+    expect(resultProblems(eventsListResult({ ...WHOSE, owner: WEAK }, [event(1)], "c", false))).toEqual([])
+  })
+
+  test("verified may only be false (absent is the vouched owner), and no other owner key is allowed", () => {
+    expect(probeResultProblems({ ...probeResult(WHOSE), owner: { ...OWNER, verified: true } })).toEqual(["the probe answer's owner.verified must be false, or left out for an owner the provider named"])
+    expect(probeResultProblems({ ...probeResult(WHOSE), owner: { ...OWNER, verified: "no" } })).toEqual(["the probe answer's owner.verified must be false, or left out for an owner the provider named"])
+    expect(resultProblems({ ...eventsListResult(WHOSE, [], "c", false), owner: { ...OWNER, verified: 0 } })).toEqual(["the result's owner.verified must be false, or left out for an owner the provider named"])
+    expect(probeResultProblems({ ...probeResult(WHOSE), owner: { ...OWNER, trust: "weak" } })).toEqual(["the probe answer's owner must be { id, label }, two non-empty lines"])
+  })
+})
+
+describe("a weak owner in the conformance (#30, item 13)", () => {
+  const WEAK = { id: "wisprflow:credential:abc123", label: "Wispr Flow sign-in", verified: false as const }
+  const BOUND = { plugin: "jelly", source: "demo", account: "work" }
+  const items = [event(0), event(1)]
+  const lister = (owner: typeof OWNER | typeof WEAK) => async (input: EventsListInput) => {
+    const parsed = parseEventsListInput(input)
+    if (!parsed.ok) throw new SourceError({ code: "INPUT_INVALID", what: parsed.problems.join("; "), next: "Fix it." })
+    if (parsed.value.source !== undefined && parsed.value.source !== "demo") throw new SourceError({ code: "SOURCE_UNKNOWN", what: "no", next: "Pass demo." })
+    let n = 0
+    if (parsed.value.cursor !== undefined) {
+      const decoded = decodeBoundCursor(BOUND, parsed.value.cursor)
+      if (!decoded.ok) throw new SourceError({ code: "CURSOR_INVALID", what: "no", next: "Start again." })
+      n = decoded.state["n"] as number
+    } else if (parsed.value.since !== undefined && parsed.value.since > T0 + 3_600_000) n = items.length
+    const page = items.slice(n, n + parsed.value.limit)
+    return eventsListResult({ ...WHOSE, owner }, page, encodeBoundCursor(BOUND, { n: n + page.length }), n + page.length < items.length)
+  }
+  const fixtures = { source: "demo", account: "work", since: "2026-11-01T08:00:00Z", expected: ["item-0", "item-1"] }
+
+  test("an unverified owner passes when the fixture names that same owner, and not when it names the vouched one", async () => {
+    expect(await eventsListConformance(lister(WEAK), { ...fixtures, owner: WEAK })).toEqual([])
+    expect(await eventsListConformance(lister(OWNER), { ...fixtures, owner: OWNER })).toEqual([])
+    expect(await eventsListConformance(lister(WEAK), { ...fixtures, owner: { id: WEAK.id, label: WEAK.label } })).toContainEqual(expect.stringContaining("the owner is not the fixture's owner"))
+    expect(await eventsListConformance(lister(OWNER), { ...fixtures, owner: { ...OWNER, verified: false } })).toContainEqual(expect.stringContaining("the owner is not the fixture's owner"))
+  })
+})
+
 describe("scope input", () => {
   test("is refused, as contract 1 refuses it, unless the source declares scope keys", () => {
     expect(parseEventsListInput({ scope: { label: "INBOX" } })).toEqual({ ok: false, problems: ['"scope" is not an input of events_list'] })

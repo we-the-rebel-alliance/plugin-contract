@@ -1,9 +1,9 @@
 // @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
 import {
   SOURCES_SCHEMA
-} from "./chunks/chunk-DAKLW6GD.js";
+} from "./chunks/chunk-VIKGHAOJ.js";
 import "./chunks/chunk-5N64VVBX.js";
-import "./chunks/chunk-EMHGNGJL.js";
+import "./chunks/chunk-JT3SATQH.js";
 import "./chunks/chunk-I2RXJJJM.js";
 import "./chunks/chunk-IAXJCLVR.js";
 import {
