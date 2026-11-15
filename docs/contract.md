@@ -8,7 +8,7 @@ The source contract has three layers: the data model (L0), the descriptor a plug
 
 ## L0: the data model
 
-Every result is marked `trust: "untrusted"`: its text is data, never instructions. An owner is `{ id, label? }`, where `id` is scheme-qualified (`mailto:`, `slack:`).
+Every result is marked `trust: "untrusted"`: its text is data, never instructions. An owner is `{ id, label }` (both required, D8), where `id` is scheme-qualified (`mailto:`, `slack:`).
 
 ### Events
 
