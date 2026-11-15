@@ -153,9 +153,11 @@ export declare function readDetail(host: ReadHost, request: DetailRequest): Prom
 export interface ProbeAnswer {
     readonly source: string;
     readonly account: string;
+    /** `verified: false` marks an owner the provider does not confirm (#30, item 13). */
     readonly owner: {
         readonly id: string;
         readonly label: string;
+        readonly verified?: false;
     };
     readonly scopes?: readonly string[];
     readonly cost?: unknown;

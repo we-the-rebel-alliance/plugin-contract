@@ -159,6 +159,13 @@ var MAX_PAGE_BYTES = 65536;
 var MAX_BYTES = { default: 65536, max: 1048576 };
 var FIRST_RUN_HOURS = 24;
 var TRUST = "untrusted";
+function ownerShapeProblems(owner, what) {
+  if (!plainObject(owner) || !line(owner["id"], EVENT_LIMITS.ownerId) || !line(owner["label"], EVENT_LIMITS.ownerLabel) || Object.keys(owner).some((key) => key !== "id" && key !== "label" && key !== "verified")) {
+    return [`${what} must be { id, label }, two non-empty lines`];
+  }
+  if (owner["verified"] !== void 0 && owner["verified"] !== false) return [`${what}.verified must be false, or left out for an owner the provider named`];
+  return [];
+}
 var REFUSAL_REASONS = ["instruction", "secret", "owner"];
 var REMOVAL_REASONS = ["deleted", "withheld", "expired"];
 var GAP_REASONS = ["expired", "window-truncated"];
@@ -398,7 +405,7 @@ function probeResult(identity, extras = {}) {
   return {
     source: identity.source,
     account: identity.account,
-    owner: { id: identity.owner.id, label: identity.owner.label },
+    owner: { id: identity.owner.id, label: identity.owner.label, ...identity.owner.verified === void 0 ? {} : { verified: identity.owner.verified } },
     ...extras.scopes === void 0 ? {} : { scopes: [...new Set(extras.scopes)] },
     ...extras.cost === void 0 ? {} : { cost: extras.cost },
     trust: TRUST
@@ -414,8 +421,9 @@ function probeResultProblems(result, expected = {}) {
   if (!line(result["account"], EVENT_LIMITS.account)) problems.push(`the probe answer's account must be a non-empty name of at most ${EVENT_LIMITS.account} characters`);
   else if (expected.account !== void 0 && result["account"] !== expected.account) problems.push("the probe answer names another account than the one asked for");
   const owner = result["owner"];
-  if (!plainObject(owner) || !line(owner["id"], EVENT_LIMITS.ownerId) || !line(owner["label"], EVENT_LIMITS.ownerLabel) || Object.keys(owner).some((key) => key !== "id" && key !== "label")) {
-    problems.push("the probe answer's owner must be { id, label }, two non-empty lines");
+  const ownerShape = ownerShapeProblems(owner, "the probe answer's owner");
+  if (ownerShape.length > 0) {
+    problems.push(...ownerShape);
   } else if (!SCHEMED.test(owner["id"])) {
     problems.push("the probe answer's owner.id must be a scheme-qualified id such as mailto:someone@example.com or slack:U0123");
   }
@@ -610,9 +618,7 @@ function resultProblems(result, limit = PAGE.max, maxBytes = MAX_PAGE_BYTES) {
   if (!named) problems.push("the result's source must be a lowercase name such as gmail");
   if (!line(account, EVENT_LIMITS.account)) problems.push(`the result's account must be a non-empty name of at most ${EVENT_LIMITS.account} characters`);
   const owner = result["owner"];
-  if (!plainObject(owner) || !line(owner["id"], EVENT_LIMITS.ownerId) || !line(owner["label"], EVENT_LIMITS.ownerLabel) || Object.keys(owner).some((key) => key !== "id" && key !== "label")) {
-    problems.push("the result's owner must be { id, label }, two non-empty lines");
-  }
+  problems.push(...ownerShapeProblems(owner, "the result's owner"));
   const cursor = result["cursor"];
   if (typeof cursor !== "string" || cursor.length === 0 || cursor.length > EVENT_LIMITS.cursor) problems.push(`the result's cursor must be a non-empty string of at most ${EVENT_LIMITS.cursor} characters`);
   if (typeof result["more"] !== "boolean") problems.push("the result's more must be true or false");

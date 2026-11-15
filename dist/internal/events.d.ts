@@ -109,6 +109,12 @@ export interface SourceEvent {
 export interface EventsOwner {
     readonly id: string;
     readonly label: string;
+    /**
+     * (#30, item 13) `false` when the provider does not confirm who this is, so the id is the plugin's best knowledge
+     * (Wispr Flow names OpenCode's credential, `wisprflow:credential:<id>`). A consumer shows it as unverified. Absent
+     * means the plugin vouches that the provider named the owner. Only `false` is accepted, so one owner has one encoding.
+     */
+    readonly verified?: false;
 }
 /** Why an event is refused for good: instruction-shaped text from someone else, a secret, or not the owner's. */
 export declare const REFUSAL_REASONS: readonly ["instruction", "secret", "owner"];
