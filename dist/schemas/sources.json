@@ -409,6 +409,10 @@
                       "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,199}$"
                     }
                   },
+                  "readsIdentity": {
+                    "description": "True when the source's content reads assert an identity operation (#30, item 4); every identity operation is still declared.",
+                    "type": "boolean"
+                  },
                   "operations": {
                     "description": "Every operation the source's reads assert, and nothing else. Absent when `rules` states them.",
                     "minItems": 1,
@@ -825,6 +829,10 @@
                       "maxLength": 200,
                       "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,199}$"
                     }
+                  },
+                  "readsIdentity": {
+                    "description": "True when the source's content reads assert an identity operation (#30, item 4); every identity operation is still declared.",
+                    "type": "boolean"
                   },
                   "operations": {
                     "description": "Every operation the source's reads assert, and nothing else. Absent when `rules` states them.",

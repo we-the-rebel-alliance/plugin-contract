@@ -129,6 +129,8 @@ export interface PermissionEvents {
     readonly rules?: readonly PermissionRuleLike[] | undefined;
     /** The identity operations `probe` asserts for this source (#4, #8); each is among permission.operations, and no content read asserts it. Empty when the probe asserts only its action; absent when undeclared. */
     readonly identity?: readonly string[] | undefined;
+    /** True when the source's content reads assert an identity operation (#30, item 4); every identity operation is still declared. */
+    readonly readsIdentity?: boolean | undefined;
 }
 /** A snapshot's permission: the read tool's action, and the provider operations it asserts. */
 export interface PermissionTool {
@@ -140,6 +142,8 @@ export interface PermissionTool {
     readonly rules?: readonly PermissionRuleLike[] | undefined;
     /** The identity operations `probe` asserts for this source (#4, #8); each is among permission.operations, and no content read asserts it. Empty when the probe asserts only its action; absent when undeclared. */
     readonly identity?: readonly string[] | undefined;
+    /** True when the source's content reads assert an identity operation (#30, item 4); every identity operation is still declared. */
+    readonly readsIdentity?: boolean | undefined;
 }
 /** What one read costs: `free` charges nothing, `metered` charges per unit, `billed` charges per call. */
 export type Cost = CostFree | CostMetered | CostBilled;

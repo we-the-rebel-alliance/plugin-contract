@@ -1,12 +1,15 @@
 // @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
 import {
+  maxBytesOf
+} from "./chunks/chunk-NYXY4D23.js";
+import {
   SOURCES_SCHEMA
-} from "./chunks/chunk-7JWZ2Z4J.js";
+} from "./chunks/chunk-TSY66QMH.js";
 import {
   toolsRpcIdProblems
 } from "./chunks/chunk-KWEWSZ4V.js";
+import "./chunks/chunk-ELPJD3ND.js";
 import {
-  MAX_PAGE_BYTES,
   PAGE,
   REFUSAL_REASONS,
   isEventKindIn,
@@ -19,6 +22,7 @@ import "./chunks/chunk-I2RXJJJM.js";
 import {
   sessionRules
 } from "./chunks/chunk-3M5PAKSS.js";
+import "./chunks/chunk-6HDIB2SA.js";
 import {
   fromJSONSchema
 } from "./chunks/chunk-W5SHR7DQ.js";
@@ -10873,7 +10877,8 @@ var wildcard = (pattern, value) => {
 // src/internal/conformance/page.ts
 var plain2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 function pageChecks(answer, options) {
-  const shape = [...resultProblems(answer, PAGE.max, MAX_PAGE_BYTES)];
+  const limit = typeof options.input["limit"] === "number" && Number.isInteger(options.input["limit"]) ? options.input["limit"] : PAGE.max;
+  const shape = [...resultProblems(answer, limit, maxBytesOf(options.source))];
   const page = answer;
   if (plain2(answer) && answer["plugin"] !== options.plugin) {
     shape.push(`the page names plugin ${JSON.stringify(answer["plugin"])}, not ${options.plugin}`);
@@ -11079,7 +11084,7 @@ async function sourceConformance(options) {
     gap.push(...result.gap);
     refused.push(...result.refused);
     cost.push(...result.cost);
-    identity.push(...identityOverlap(running.assertions.slice(assertedBeforePage), identityGrants, where));
+    identity.push(...identityOverlap(running.assertions.slice(assertedBeforePage), identityGrants, where, source.permission.readsIdentity === true));
     sawFailed ||= hasEntries(answer, "failed");
     sawRefused ||= hasEntries(answer, "refused");
     if (expect === "empty" && plain5(answer) && Array.isArray(answer["events"]) && answer["events"].length > 0) {
@@ -11168,7 +11173,7 @@ async function sourceConformance(options) {
         const assertedBeforeSnapshot = running.assertions.length;
         try {
           const answer = await calls.snapshot(input, context);
-          identity.push(...identityOverlap(running.assertions.slice(assertedBeforeSnapshot), identityGrants, `snapshot_read(${JSON.stringify(input)})`));
+          identity.push(...identityOverlap(running.assertions.slice(assertedBeforeSnapshot), identityGrants, `snapshot_read(${JSON.stringify(input)})`, source.permission.readsIdentity === true));
           if (extensionOutput) outputSchema.push(...snapshotDataProblems(answer, source));
         } catch (error) {
           snapshot.push(`snapshot_read(${JSON.stringify(input)}) failed: ${messageOf(error)}`);
@@ -11257,7 +11262,7 @@ async function assertDetail(entry, detail, source, read, context, running, runni
     problems.push(`${where} failed inside the confirmed scope: ${messageOf(error)}`);
   }
   problems.push(...outsideGrants(running.assertions.slice(assertedBefore), runningGrants, where));
-  problems.push(...identityOverlap(running.assertions.slice(assertedBefore), identityGrantsFor(source, identityOperations), where));
+  problems.push(...identityOverlap(running.assertions.slice(assertedBefore), identityGrantsFor(source, identityOperations), where, source.permission.readsIdentity === true));
 }
 function messageOf(error) {
   if (error instanceof Error) return error.message;
@@ -11317,7 +11322,8 @@ function snapshotDataProblems(answer, source) {
   if (checked.success) return [];
   return checked.error.issues.map((issue) => `snapshot_read data at ${issue.path.length === 0 ? "the value" : issue.path.map(String).join(".")}: ${issue.message}`);
 }
-function identityOverlap(assertions, identityGrants, where) {
+function identityOverlap(assertions, identityGrants, where, readsIdentity = false) {
+  if (readsIdentity) return [];
   const problems = [];
   for (const assertion of assertions) {
     const resources = assertion.resources.length > 0 ? assertion.resources : ["*"];

@@ -10,7 +10,8 @@
  *   rather than delivered;
  * - a billed source reports its `cost`.
  */
-import { MAX_PAGE_BYTES, PAGE, REFUSAL_REASONS, isEventKindIn, resultProblems, secretKinds, sourceNamespace, type EventsListResult } from "../events.ts"
+import { PAGE, REFUSAL_REASONS, isEventKindIn, resultProblems, secretKinds, sourceNamespace, type EventsListResult } from "../events.ts"
+import { maxBytesOf } from "../../descriptor.ts"
 import type { SourceItem } from "../schema/types.ts"
 
 /** What a page is checked against. */
@@ -42,7 +43,9 @@ const plain = (value: unknown): value is Record<string, unknown> => typeof value
 
 /** The page's problems, by concern. */
 export function pageChecks(answer: unknown, options: PageOptions): PageChecks {
-  const shape = [...resultProblems(answer, PAGE.max, MAX_PAGE_BYTES)]
+  // As `read.acceptAnswer` does: the source's own `maxBytes`, and the limit the read asked for.
+  const limit = typeof options.input["limit"] === "number" && Number.isInteger(options.input["limit"]) ? options.input["limit"] : PAGE.max
+  const shape = [...resultProblems(answer, limit, maxBytesOf(options.source))]
   // A source read through a page is not the app's: its plugin is the one that answered, so the page must name it.
   const page = answer as EventsListResult
   if (plain(answer) && answer["plugin"] !== options.plugin) {
