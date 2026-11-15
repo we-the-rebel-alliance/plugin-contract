@@ -100,6 +100,14 @@ export interface SourceConformanceOptions {
     readonly atomicPages?: {
         readonly reason: string;
     } | undefined;
+    /**
+     * Set when the source's cursors never expire, so it cannot produce an expired one (X's ids never expire). The
+     * `gap-and-cursor-expired` check is then not applicable, and the reason is shown in the report, as `atomicPages` does
+     * for `failed-holds-cursor`. The reason must be non-empty; an empty one is ignored.
+     */
+    readonly noExpiry?: {
+        readonly reason: string;
+    } | undefined;
 }
 /** One named check: whether it ran, whether it applies at all, and what it found. */
 export interface ConformanceCheck {
@@ -111,7 +119,9 @@ export interface ConformanceCheck {
     readonly reason?: string | undefined;
     readonly problems: readonly string[];
 }
-/** A source's report. `ok` is true only when every check ran or does not apply, and none found a problem. */
+/**
+ * A source's report. `ok` is true only when every check ran or does not apply, and none found a problem.
+ */
 export interface ConformanceReport {
     readonly source: string;
     readonly plugin: string;

@@ -113,6 +113,12 @@ export interface SourceConformanceOptions {
    * not applicable, and the reason is shown in the report. The reason must be non-empty; an empty one is ignored.
    */
   readonly atomicPages?: { readonly reason: string } | undefined
+  /**
+   * Set when the source's cursors never expire, so it cannot produce an expired one (X's ids never expire). The
+   * `gap-and-cursor-expired` check is then not applicable, and the reason is shown in the report, as `atomicPages` does
+   * for `failed-holds-cursor`. The reason must be non-empty; an empty one is ignored.
+   */
+  readonly noExpiry?: { readonly reason: string } | undefined
 }
 
 /** One named check: whether it ran, whether it applies at all, and what it found. */
@@ -126,7 +132,9 @@ export interface ConformanceCheck {
   readonly problems: readonly string[]
 }
 
-/** A source's report. `ok` is true only when every check ran or does not apply, and none found a problem. */
+/**
+ * A source's report. `ok` is true only when every check ran or does not apply, and none found a problem.
+ */
 export interface ConformanceReport {
   readonly source: string
   readonly plugin: string
@@ -256,7 +264,10 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
   const atomicReason = options.atomicPages?.reason.trim() ?? ""
   const atomic = isEvents && atomicReason !== ""
   add("failed-holds-cursor", cursor, atomic ? false : isEvents && sawFailed, !isEvents || atomic, atomic ? atomicReason : undefined)
-  add("gap-and-cursor-expired", gap, isEvents && sawGap, !isEvents)
+  // A source whose cursors never expire cannot produce one, so the check does not apply; an empty reason is no reason.
+  const noExpiryReason = options.noExpiry?.reason.trim() ?? ""
+  const noExpiry = isEvents && noExpiryReason !== ""
+  add("gap-and-cursor-expired", gap, noExpiry ? false : isEvents && sawGap, !isEvents || noExpiry, noExpiry ? noExpiryReason : undefined)
   add("refused-is-final", refused, isEvents && sawRefused, !isEvents)
   add("billed-cost", cost, source.cost.class === "billed" && isEvents, source.cost.class !== "billed")
 

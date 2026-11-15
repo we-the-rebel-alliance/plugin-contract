@@ -109,6 +109,17 @@ describe("the sources schema", () => {
     assert.deepEqual(problemsOf(declaration(eventItem({ permission: { events: "slack_events_list", operations: ["a.b.c.get"] } }))), [])
   })
 
+  test("a price may state a condition and the lowest rate that applies", () => {
+    const units = (unit: unknown): readonly string[] => problemsOf(declaration(eventItem({ cost: { class: "metered", units: [unit] } })))
+    assert.deepEqual(units({ per: "post", usd: 0.005, conditions: "X app owners only", min: 0.001 }), [])
+    assert.deepEqual(units({ per: "post", usd: 0.005, min: 0.005 }), [])
+    assert.deepEqual(units({ per: "post", usd: 0.005, conditions: "X app owners only" }), [])
+    assert.ok(units({ per: "post", usd: 0.005, conditions: "" }).length > 0)
+    assert.ok(units({ per: "post", usd: 0.005, conditions: "a".repeat(201) }).length > 0)
+    assert.ok(units({ per: "post", usd: 0.005, min: -0.001 }).length > 0)
+    assert.ok(units({ per: "post", usd: 0.005, min: 0.01 }).length > 0)
+  })
+
   test("cost states a class, and a billed source states its units and probe cost", () => {
     assert.ok(problemsOf(declaration(eventItem({ cost: { class: "expensive" } }))).some((problem) => /free, metered or billed|one of/.test(problem)))
     assert.ok(problemsOf(declaration(eventItem({ cost: { class: "billed" } }))).some((problem) => /units/.test(problem)))

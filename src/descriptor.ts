@@ -82,8 +82,8 @@ export interface SourceItem {
   readonly private?: boolean
   readonly cost: {
     readonly class: "free" | "metered" | "billed"
-    readonly units?: readonly { readonly per: string; readonly usd: number }[]
-    readonly probe?: { readonly per: string; readonly usd: number }
+    readonly units?: readonly { readonly per: string; readonly usd: number; readonly conditions?: string; readonly min?: number }[]
+    readonly probe?: { readonly per: string; readonly usd: number; readonly conditions?: string; readonly min?: number }
   }
   readonly cadence?: { readonly providerMinMinutes?: number }
   readonly maxBytes?: number

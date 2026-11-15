@@ -37,8 +37,14 @@ var PRICE_PER = /^[a-z][a-z0-9-]{0,31}$/;
 var HOST = /^(?:\*\.)?[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
 var price = object({
   per: string().max(32).regex(PRICE_PER, { error: "must be a lowercase word such as post, author or call" }),
-  usd: number().min(0)
-}).strict().describe("One price unit, in US dollars, from the plugin's own price table.");
+  usd: number().min(0),
+  conditions: string().min(1).max(200).optional().describe("The short sentence shown at consent when this price applies, such as X app owners only."),
+  min: number().min(0).optional().describe("The lowest rate that may apply, in US dollars: at most usd.")
+}).strict().describe("One price unit, in US dollars, from the plugin's own price table.").superRefine((value, ctx) => {
+  if (value.min !== void 0 && value.min > value.usd) {
+    ctx.addIssue({ code: "custom", path: ["min"], message: "must not exceed usd, the price the source declares" });
+  }
+});
 var units = array(price).min(1);
 var freeCost = object({
   class: literal("free"),

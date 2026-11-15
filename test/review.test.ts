@@ -103,6 +103,16 @@ describe("the cost rules are in the generated JSON Schema", () => {
     assert.equal(byClass["metered"]["required"].includes("probe"), false)
   })
 
+  test("a price may carry a consent condition and a minimum rate", () => {
+    const metered = costBranches().find((branch) => branch["properties"]["class"]["const"] === "metered")
+    if (metered === undefined) throw new Error("the generated schema has no metered branch")
+    const unit = metered["properties"]["units"]["items"]
+    assert.equal(unit["properties"]["conditions"]["maxLength"], 200)
+    assert.equal(unit["properties"]["min"]["minimum"], 0)
+    assert.equal((unit["required"] as string[]).includes("conditions"), false)
+    assert.equal((unit["required"] as string[]).includes("min"), false)
+  })
+
   test("the schema refuses the cost shapes the rule refused", () => {
     assert.ok(problemsOf(declarationOf({ ...(designItems()[2] as Record<string, unknown>), cost: { class: "billed", units: [{ per: "post", usd: 1 }] } })).length > 0)
     assert.ok(problemsOf(declarationOf({ ...(designItems()[2] as Record<string, unknown>), cost: { class: "free", units: [{ per: "post", usd: 1 }] } })).length > 0)
@@ -967,6 +977,85 @@ describe("a page fetched atomically", () => {
     for (const reason of ["", "   "]) {
       const report = await run({ reason })
       const check = report.checks.find((entry) => entry.name === "failed-holds-cursor")
+      assert.equal(check?.notApplicable, false, reason)
+      assert.equal(report.incomplete, true, reason)
+    }
+  })
+})
+
+describe("a source whose cursors never expire", () => {
+  const item = (): Record<string, unknown> => validPage({
+    id: "gws.gmail",
+    kind: "events",
+    reads: "message",
+    tool: "events_list",
+    input: { source: "gmail" },
+    accounts: { named: true },
+    permission: { events: "gws.events_list", operations: ["gmail.users.messages.list"] },
+    cost: { class: "free" },
+  })
+  const page = (over: Record<string, unknown> = {}): Record<string, unknown> => validPage({
+    source: "gmail",
+    plugin: "@joe-broadhead/opencode-gws",
+    account: "sam.rivera@example.com",
+    owner: { id: "mailto:sam.rivera@example.com", label: "Sam Rivera" },
+    asOf: ISO,
+    trust: "untrusted",
+    events: [],
+    cursor: "c1",
+    more: false,
+    refused: [],
+    failed: [],
+    ...over,
+  })
+  const run = (noExpiry?: { reason: string }) =>
+    sourceConformance({
+      plugin: "@joe-broadhead/opencode-gws",
+      source: sourceOf(item()),
+      tools: [{ id: "events_list", readOnly: true }],
+      account: "sam.rivera@example.com",
+      cases: [
+        { name: "a page", input: {} },
+        { name: "a page with a failed event", input: { cursor: "c2" } },
+        { name: "a page with a refused event", input: { cursor: "c3" } },
+      ],
+      ...(noExpiry === undefined ? {} : { noExpiry }),
+      calls: {
+        list: async (input, context) => {
+          await context.permission.assert({ action: "gws.events_list" })
+          await context.permission.assert({ action: "gws.read", resources: ["sam.rivera@example.com:gmail.users.messages.list"] })
+          if (input["cursor"] === "c2") return page({ failed: [{ external_id: "18f0000000000002", code: "RATE_LIMITED" }], cursor: "c2" })
+          if (input["cursor"] === "c3") return page({ refused: [{ external_id: "18f0000000000003", reason: "secret" }], cursor: "c3" })
+          return page()
+        },
+        probe: async (_input, context) => {
+          await context.permission.assert({ action: "gws.events_list" })
+          return { source: "gmail", account: "sam.rivera@example.com", owner: { id: "mailto:sam.rivera@example.com", label: "Sam Rivera" }, trust: "untrusted" }
+        },
+      },
+    })
+
+  test("without a reason, a source that cannot produce an expired cursor is incomplete", async () => {
+    const report = await run()
+    assert.equal(report.incomplete, true)
+    assert.equal(report.checks.find((check) => check.name === "gap-and-cursor-expired")?.ran, false)
+    assert.equal(report.checks.find((check) => check.name === "gap-and-cursor-expired")?.notApplicable, false)
+  })
+
+  test("with a reason, the check does not apply, the reason is shown, and the report is ok", async () => {
+    const report = await run({ reason: "X's ids never expire, so it cannot produce an expired cursor" })
+    const check = report.checks.find((entry) => entry.name === "gap-and-cursor-expired")
+    assert.equal(check?.notApplicable, true)
+    assert.equal(check?.reason, "X's ids never expire, so it cannot produce an expired cursor")
+    assert.deepEqual(report.problems, [])
+    assert.equal(report.ok, true)
+    assert.equal(report.incomplete, false)
+  })
+
+  test("an empty reason is no reason: the check applies, and the report is incomplete", async () => {
+    for (const reason of ["", "   "]) {
+      const report = await run({ reason })
+      const check = report.checks.find((entry) => entry.name === "gap-and-cursor-expired")
       assert.equal(check?.notApplicable, false, reason)
       assert.equal(report.incomplete, true, reason)
     }

@@ -68,10 +68,14 @@ export interface SourceItem {
         readonly units?: readonly {
             readonly per: string;
             readonly usd: number;
+            readonly conditions?: string;
+            readonly min?: number;
         }[];
         readonly probe?: {
             readonly per: string;
             readonly usd: number;
+            readonly conditions?: string;
+            readonly min?: number;
         };
     };
     readonly cadence?: {

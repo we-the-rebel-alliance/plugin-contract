@@ -1,7 +1,7 @@
 // @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
 import {
   SOURCES_SCHEMA
-} from "./chunks/chunk-MMWN45QY.js";
+} from "./chunks/chunk-TMCE2QBM.js";
 import {
   toolsRpcIdProblems
 } from "./chunks/chunk-KWEWSZ4V.js";
@@ -11090,7 +11090,9 @@ async function sourceConformance(options) {
   const atomicReason = options.atomicPages?.reason.trim() ?? "";
   const atomic = isEvents && atomicReason !== "";
   add("failed-holds-cursor", cursor, atomic ? false : isEvents && sawFailed, !isEvents || atomic, atomic ? atomicReason : void 0);
-  add("gap-and-cursor-expired", gap, isEvents && sawGap, !isEvents);
+  const noExpiryReason = options.noExpiry?.reason.trim() ?? "";
+  const noExpiry = isEvents && noExpiryReason !== "";
+  add("gap-and-cursor-expired", gap, noExpiry ? false : isEvents && sawGap, !isEvents || noExpiry, noExpiry ? noExpiryReason : void 0);
   add("refused-is-final", refused, isEvents && sawRefused, !isEvents);
   add("billed-cost", cost, source.cost.class === "billed" && isEvents, source.cost.class !== "billed");
   for (const operation of identityOperations) {
