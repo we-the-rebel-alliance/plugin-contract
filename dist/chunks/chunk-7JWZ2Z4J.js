@@ -71,7 +71,9 @@ var detail = object({
   from: array(_enum(["external_id", "kind", "occurred_at", "url", "thread", "actors", "labels", "hash"])).min(1).describe("The event fields the detail's input comes from. Identifiers only: an event's title and text are never an input.")
 }).strict().describe("One read of an event's detail: the tool, and the event fields its input comes from.");
 var permissionBase = {
-  identity: array(string().max(200).regex(OPERATION, { error: "must be a provider operation or an MCP tool name" })).min(1).optional().describe("The identity operations probe asserts for this source (#4, #8); each is among permission.operations, and no content read asserts it."),
+  identity: array(string().max(200).regex(OPERATION, { error: "must be a provider operation or an MCP tool name" })).optional().describe(
+    "The identity operations probe asserts for this source (#4, #8); each is among permission.operations, and no content read asserts it. Empty when the probe asserts only sources.probe.action; absent when the source does not declare it, so a consumer uses its fallback."
+  ),
   operations: array(string().max(200).regex(OPERATION, { error: "must be a provider operation or an MCP tool name" })).min(1).optional().describe("Every operation the source's reads assert, and nothing else. Absent when `rules` states them."),
   rules: array(
     object({

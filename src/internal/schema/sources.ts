@@ -119,9 +119,10 @@ const detail = z
 const permissionBase = {
   identity: z
     .array(z.string().max(200).regex(OPERATION, { error: "must be a provider operation or an MCP tool name" }))
-    .min(1)
     .optional()
-    .describe("The identity operations probe asserts for this source (#4, #8); each is among permission.operations, and no content read asserts it."),
+    .describe(
+      "The identity operations probe asserts for this source (#4, #8); each is among permission.operations, and no content read asserts it. Empty when the probe asserts only sources.probe.action; absent when the source does not declare it, so a consumer uses its fallback.",
+    ),
   operations: z
     .array(z.string().max(200).regex(OPERATION, { error: "must be a provider operation or an MCP tool name" }))
     .min(1)

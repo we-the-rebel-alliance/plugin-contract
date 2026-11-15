@@ -23,7 +23,7 @@ export interface SourcePermission {
         readonly action: string;
         readonly resource: string;
     }[];
-    /** The identity operations `probe` asserts for this source; they are among `operations` (#4, point 3; #21). Optional. */
+    /** The identity operations `probe` asserts for this source; they are among `operations` (#4, point 3; #21). Optional; empty when the probe asserts only its action. */
     readonly identity?: readonly string[];
 }
 /** A detail read: a declared read per event, whose inputs come only from the event's own fields, never its text. */

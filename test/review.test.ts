@@ -676,6 +676,52 @@ describe("identity operations", () => {
     assert.ok(undeclared.problems.some((problem) => /getDraft.*not among permission\.operations/.test(problem)), undeclared.problems.join("; "))
   })
 
+  test("an empty permission.identity declares a probe that asserts only its action", async () => {
+    const empty = validPage({
+      id: "gws.gmail",
+      kind: "events",
+      reads: "message",
+      tool: "events_list",
+      input: { source: "gws" },
+      accounts: { named: true },
+      permission: { events: "gws.events_list", operations: ["gmail.users.messages.list"], identity: [] },
+      cost: { class: "free" },
+    })
+    const report = await sourceConformance({
+      plugin: "@joe-broadhead/opencode-gws",
+      source: sourceOf(empty),
+      tools: [{ id: "events_list", readOnly: true }],
+      sources: { probe: { action: "gws.probe" } },
+      account: "sam.rivera@example.com",
+      // A declaration's empty identity is declared, not absent: the fallback does not apply.
+      identityOperations: ["gmail.users.getProfile"],
+      cases: [
+        { name: "a page", input: {} },
+        { name: "a page with a failed event", input: { cursor: "c2" } },
+        { name: "a page with a refused event", input: { cursor: "c3" } },
+        { name: "an expired cursor", input: { cursor: "stale" }, expect: "expired" },
+      ],
+      calls: {
+        list: async (input, context) => {
+          await context.permission.assert({ action: "gws.events_list" })
+          await context.permission.assert({ action: "gws.read", resources: ["sam.rivera@example.com:gmail.users.messages.list"] })
+          if (input["cursor"] === "c2") return { ...page(), failed: [{ external_id: "18f0000000000002", code: "RATE_LIMITED" }], cursor: "c2" }
+          if (input["cursor"] === "c3") return { ...page(), refused: [{ external_id: "18f0000000000003", reason: "secret" }], cursor: "c3" }
+          if (input["cursor"] === "stale") return { ...page(), gap: { reason: "expired", since: ISO }, cursor: "fresh" }
+          return page()
+        },
+        probe: async (_input, context) => {
+          await context.permission.assert({ action: "gws.probe" })
+          return { source: "gws", account: "sam.rivera@example.com", owner: { id: "slack:U0PILOTOWN", label: "Pilot Owner" }, trust: "untrusted" }
+        },
+      },
+    })
+    assert.deepEqual(report.problems, [], report.problems.join("; "))
+    assert.deepEqual(report.identityOperations, [])
+    assert.equal(report.probeAction, "gws.probe")
+    assert.equal(report.ok, true)
+  })
+
   test("a content run that asserts an identity operation is refused", async () => {
     const report = await run(["gmail.users.getProfile"], true)
     assert.ok(report.problems.some((problem) => /content read asserts gws\.read on .*gmail\.users\.getProfile/.test(problem)), report.problems.join("; "))

@@ -317,6 +317,9 @@
         {
           "name": "the restarted window reads on",
           "input": {
+            "source": "gmail",
+            "account": "sam.rivera@example.com",
+            "cursor": "gmail:sam.rivera@example.com:history:0001",
             "since": "2026-10-13T09:00:00.000Z"
           },
           "expect": "page",
