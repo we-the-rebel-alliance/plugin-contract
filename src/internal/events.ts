@@ -284,8 +284,12 @@ export type ErrorCode = (typeof ERROR_CODES)[number]
 export const PROPOSED_CODES = [] as const
 export type ProposedCode = (typeof PROPOSED_CODES)[number]
 
-/** Another name for a code in the table: `AUTH_REQUIRED` is `NEEDS_SIGN_IN` (design §2.1). */
-export const ERROR_ALIASES: Readonly<Record<string, ErrorCode>> = { AUTH_REQUIRED: "NEEDS_SIGN_IN" }
+/**
+ * Other names for codes in the table. `AUTH_REQUIRED` is `NEEDS_SIGN_IN` (design §2.1). `ACCOUNT_UNKNOWN`, the code the
+ * family's tools RPC and plugins give for an account the plugin does not have, is `ACCOUNT_MISMATCH`: the read named
+ * an account other than one the source can read, and trying again will not help.
+ */
+export const ERROR_ALIASES: Readonly<Record<string, ErrorCode>> = { AUTH_REQUIRED: "NEEDS_SIGN_IN", ACCOUNT_UNKNOWN: "ACCOUNT_MISMATCH" }
 
 /**
  * The codes contract 1's plugins use, mapped to the table, so a consumer can read a plugin that has not moved yet
@@ -664,6 +668,9 @@ export function probeResultProblems(result: unknown, expected: { readonly source
   const owner = result["owner"]
   if (!plainObject(owner) || !line(owner["id"], EVENT_LIMITS.ownerId) || !line(owner["label"], EVENT_LIMITS.ownerLabel) || Object.keys(owner).some((key) => key !== "id" && key !== "label")) {
     problems.push("the probe answer's owner must be { id, label }, two non-empty lines")
+  } else if (!SCHEMED.test(owner["id"])) {
+    // docs/contract.md: an owner's id is scheme-qualified (mailto:, slack:), as an actor's id is.
+    problems.push("the probe answer's owner.id must be a scheme-qualified id such as mailto:someone@example.com or slack:U0123")
   }
   const scopes = result["scopes"]
   if (scopes !== undefined && (!Array.isArray(scopes) || scopes.length > PROBE_LIMITS.scopes || scopes.some((scope) => !line(scope, PROBE_LIMITS.scope)) || new Set(scopes).size !== scopes.length)) {
