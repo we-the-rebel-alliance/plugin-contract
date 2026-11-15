@@ -191,6 +191,12 @@ async function registerToolsRpc(ctx, options) {
     if (!CLASSES.includes(method.class)) throw new Error(`registerToolsRpc: ${method.name} has the class "${String(method.class)}"; use one of ${CLASSES.join(", ")}`);
     if (method.kind === "plugin" && (typeof method.run !== "function" || method.action === "")) throw new Error(`registerToolsRpc: the plugin method ${method.name} needs a run function and an action`);
     if (method.kind === "plugin" && method.resource !== void 0 && typeof method.resource !== "function") throw new Error(`registerToolsRpc: the plugin method ${method.name}'s resource must be a function of its input`);
+    if (method.kind === "plugin" && method.resourceKind !== void 0 && method.resourceKind !== "read" && method.resourceKind !== "any") {
+      throw new Error(`registerToolsRpc: the plugin method ${method.name}'s resourceKind must be "read" or "any"`);
+    }
+    if (method.kind === "plugin" && method.resourceKind !== void 0 && method.resource === void 0) {
+      throw new Error(`registerToolsRpc: the plugin method ${method.name} sets resourceKind but has no resource resolver`);
+    }
     if (method.kind === "mcp" && "resource" in method) throw new Error(`registerToolsRpc: the MCP method ${method.name} cannot have a resource resolver; only a plugin method can`);
   }
   const fail = (code, what) => {
@@ -212,14 +218,16 @@ async function registerToolsRpc(ctx, options) {
     let resource;
     try {
       resource = method.resource(envelope2.input);
-    } catch {
+    } catch (error) {
+      const coded = codedRefusal(error);
+      if (coded) throw new ScriptError(coded);
       resource = null;
     }
     const unresolved = (what) => new ScriptError({ code: "RESOURCE_UNRESOLVED", what, next: NEXT_STEPS.RESOURCE_UNRESOLVED ?? RESOURCE_NEXT });
     if (resource === null || resource === void 0) throw unresolved(`${method.name}'s input names no account and operation for ${method.action} to be resolved on`);
     if (typeof resource !== "string" || !RESOURCE_PATTERN.test(resource)) throw unresolved(`${method.name}'s input resolves to a resource that is not <account>:<operation>`);
     const operation = resource.slice(resource.indexOf(":") + 1);
-    if (method.class === "read" && !readOperation(operation)) {
+    if (method.class === "read" && method.resourceKind !== "any" && !readOperation(operation)) {
       throw new ScriptError({
         code: "PERMISSION_DENIED",
         what: `${method.name} is a read, and ${operation} is not a read operation`,
@@ -227,6 +235,18 @@ async function registerToolsRpc(ctx, options) {
       });
     }
     return resource;
+  };
+  const codedRefusal = (error) => {
+    const own = pluginError(error);
+    if (own) return own;
+    if (!record(error)) return void 0;
+    const code = error["code"];
+    const next = error["next"];
+    if (typeof code !== "string" || !/^[A-Z][A-Z0-9_]*$/.test(code) || typeof next !== "string" || next.trim() === "") return void 0;
+    const message = typeof error["message"] === "string" ? error["message"].split(/\r?\n/, 1)[0] : "";
+    const what = typeof error["what"] === "string" && error["what"].trim() !== "" ? error["what"] : message.replace(new RegExp(`^${code}:\\s*`), "").replace(/\s*Next step:.*$/, "");
+    if (what.trim() === "") return void 0;
+    return { code, what: upstreamText(what), next };
   };
   const session = async (sessionID) => {
     let info;
