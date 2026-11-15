@@ -17,7 +17,7 @@ The draft's ten checks, and Memory's additions:
 | 5 | Another account is refused. | `read` (`ACCOUNT_MISMATCH`), the kit |
 | 6 | `probe` reads no content, asserts only its own grant, and answers `{ source, account, owner: { id, label }, trust }` (never `owner: null`). | Memory's `conformance` |
 | 7 | A snapshot's `data` validates against its output. | `registry`, `read` |
-| 8 | Paging honours `more`; the answer stays within `maxBytes`, and `TOO_LARGE` is used rather than truncation. | the kit, `read` |
+| 8 | Paging honours `more`; the answer stays within the source's `maxBytes` and the read's limit, and `TOO_LARGE` is used rather than truncation. | the kit, `read` |
 | 9 | Calls stay within the declared cost. | the kit |
 | 10 | Every result is marked `trust: "untrusted"`. | `read`, the kit |
 | + | **The verb rule.** Names are tokenised (snake, kebab, dot, camelCase); an unambiguous write verb anywhere is refused; a compound (`get_and_send`, `getAndSend`) is refused; a noun-verb in a verb's position with an object after it is a write (`slack_post_message`), while `get_issue` and a single-token `drive.files.export` are reads; an operation's last segment carries no write verb and a noun may lead it (`x.users.mentions`). | Memory's `conformance` |
@@ -50,6 +50,10 @@ await sourceConformance({ ...options, atomicPages: { reason: "events.list answer
 
 `failed-holds-cursor` is then not applicable, the reason is shown in the report's check, and the report can be ok. An
 empty reason is no reason: the check applies, and the report is incomplete.
+
+## A content read that reads the signed-in identity
+
+A feed sometimes needs the signed-in user's own id: X reads mentions and the home timeline with it. Such a source declares `permission.readsIdentity: true`, and the kit allows its content reads to assert an identity operation. Every identity operation is still declared in `permission.operations`, so the declaration stays exact ([#30](https://github.com/we-the-rebel-alliance/source-contract/issues/30) item 4).
 
 ## Proving the secret screening
 

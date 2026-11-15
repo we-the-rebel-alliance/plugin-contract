@@ -126,6 +126,15 @@ describe("the sources schema", () => {
     assert.deepEqual(problemsOf(declaration(eventItem({ maxBytes: MAX_BYTES_LIMIT }))), [])
   })
 
+  test("permission.readsIdentity is a boolean, and absent by default", () => {
+    const item = (readsIdentity: unknown): readonly string[] =>
+      problemsOf(declaration(eventItem({ permission: { events: "gws.events_list", operations: ["gmail.users.getProfile"], readsIdentity } })))
+    assert.deepEqual(item(true), [])
+    assert.deepEqual(item(false), [])
+    assert.deepEqual(item(undefined), [])
+    assert.ok(item("true").length > 0)
+  })
+
   test("details carry an id, a tool and event field names only", () => {
     const withDetails = (details: unknown): readonly string[] => problemsOf(declaration(eventItem({ details })))
     assert.deepEqual(withDetails([{ id: "slack.workspace.thread", tool: "slack_read_thread", from: ["thread"] }]), [])

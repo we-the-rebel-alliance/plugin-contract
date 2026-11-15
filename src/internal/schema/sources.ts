@@ -110,6 +110,15 @@ const permissionBase = {
     .min(1)
     .optional()
     .describe("The identity operations probe asserts for this source (#4, #8); each is among permission.operations, and no content read asserts it."),
+  /**
+   * True when the source's content reads legitimately assert an identity operation, such as reading mentions needing
+   * the signed-in user's id. Each identity operation is still declared in `permission.identity` and among
+   * `permission.operations`. Absent means content reads never assert one.
+   */
+  readsIdentity: z
+    .boolean()
+    .optional()
+    .describe("True when the source's content reads assert an identity operation (#30, item 4); every identity operation is still declared."),
   operations: z
     .array(z.string().max(200).regex(OPERATION, { error: "must be a provider operation or an MCP tool name" }))
     .min(1)

@@ -124,6 +124,16 @@ describe("the page fields Memory's checks read", () => {
     assert.ok(pageProblems(page({ events: [fullEvent({ anything: true })] }), options).some((problem) => /anything/.test(problem)))
   })
 
+  test("a page is measured against the source's maxBytes, and the read's limit", () => {
+    const large = Array.from({ length: 20 }, (_, index) => fullEvent({ external_id: `C0PILOT001:${index + 10}`, text: "a".repeat(4000) }))
+    const answer = page({ events: large })
+    const big = sourceOf(slackItem({ maxBytes: 262144 }))
+    assert.deepEqual(pageProblems(answer, { ...options, source: big }), [])
+    assert.ok(pageProblems(answer, options).some((problem) => /over 65536/.test(problem)))
+    const three = page({ events: large.slice(0, 3) })
+    assert.ok(pageProblems(three, { ...options, input: { limit: 2 } }).some((problem) => /over the limit of 2/.test(problem)))
+  })
+
   test("a detail page has no cursor to hold back, and still carries one", () => {
     assert.deepEqual(pageProblems(page({ events: [], cursor: "c1" }), { ...options, detail: true }), [])
     assert.ok(pageProblems({ ...page(), events: [], cursor: "" }, { ...options, detail: true }).some((problem) => /cursor/.test(problem)))
