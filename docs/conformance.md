@@ -55,6 +55,13 @@ empty reason is no reason: the check applies, and the report is incomplete.
 
 A feed sometimes needs the signed-in user's own id: X reads mentions and the home timeline with it. Such a source declares `permission.readsIdentity: true`, and the kit allows its content reads to assert an identity operation. Every identity operation is still declared in `permission.operations`, so the declaration stays exact ([#30](https://github.com/we-the-rebel-alliance/source-contract/issues/30) item 4).
 
+## Restarting an expired cursor
+
+When a source answers `CURSOR_EXPIRED` or a `gap` with reason `expired`, the kit restarts the listing with the cursor
+or `since` hint the source gave, and keeps the source's own `input`: `{ ...input, cursor }` or `{ ...input, since }`. A
+plugin with several sources is therefore restarted for the same source, not its default ([#30](https://github.com/we-the-rebel-alliance/source-contract/issues/30) item 3).
+
+
 ## Proving the secret screening
 
 `refused-is-final` is mandatory for every events source, because the contract screens every result for secrets. A

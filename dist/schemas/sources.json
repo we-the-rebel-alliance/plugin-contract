@@ -357,8 +357,7 @@
                     "not": {}
                   },
                   "identity": {
-                    "description": "The identity operations probe asserts for this source (#4, #8); each is among permission.operations, and no content read asserts it.",
-                    "minItems": 1,
+                    "description": "The identity operations probe asserts for this source (#4, #8); each is among permission.operations, and no content read asserts it. Empty when the probe asserts only sources.probe.action; absent when the source does not declare it, so a consumer uses its fallback.",
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -735,8 +734,7 @@
                     "not": {}
                   },
                   "identity": {
-                    "description": "The identity operations probe asserts for this source (#4, #8); each is among permission.operations, and no content read asserts it.",
-                    "minItems": 1,
+                    "description": "The identity operations probe asserts for this source (#4, #8); each is among permission.operations, and no content read asserts it. Empty when the probe asserts only sources.probe.action; absent when the source does not declare it, so a consumer uses its fallback.",
                     "type": "array",
                     "items": {
                       "type": "string",

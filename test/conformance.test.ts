@@ -404,7 +404,7 @@ describe("sourceConformance", () => {
         list: async (input, context) => {
           await context.permission.assert({ action: "slack_events_list" })
           await context.permission.assert({ action: "slack_slack_read_channel" })
-          if (input["cursor"] === "stale") {
+          if (input["cursor"] === "stale" && input["since"] === undefined) {
             throw Object.assign(new Error("CURSOR_EXPIRED: the history is gone. Next step: read again with since."), { since: ISO })
           }
           return page()
@@ -412,6 +412,44 @@ describe("sourceConformance", () => {
       }),
     )
     assert.deepEqual(report.problems, [])
+  })
+
+  test("an expired cursor restarts with the source's own input", async () => {
+    const base = list()
+    const sourced: PageCase[] = [
+      { name: "a page", input: { source: "slack", account: ACCOUNT } },
+      { name: "a page with a failed event", input: { source: "slack", cursor: "c2" } },
+      { name: "a page with a refused event", input: { source: "slack", cursor: "c3" } },
+      { name: "an expired cursor", input: { source: "slack", cursor: "stale" }, expect: "expired" },
+    ]
+    const gapRestarts: unknown[] = []
+    const gap = await run(
+      full({
+        list: async (input, context) => {
+          if (input["cursor"] === "fresh") gapRestarts.push(input)
+          return base!(input, context)
+        },
+      }),
+      { cases: sourced },
+    )
+    assert.deepEqual(gap.problems, [], gap.problems.join("; "))
+    assert.deepEqual(gapRestarts, [{ source: "slack", cursor: "fresh" }])
+    const errorRestarts: unknown[] = []
+    const error = await run(
+      full({
+        list: async (input, context) => {
+          if (input["since"] !== undefined) errorRestarts.push(input)
+          if (input["cursor"] === "stale" && input["since"] === undefined) {
+            throw Object.assign(new Error("CURSOR_EXPIRED: the history is gone. Next step: read again with since."), { since: ISO })
+          }
+          return base!(input, context)
+        },
+      }),
+      { cases: sourced },
+    )
+    assert.deepEqual(error.problems, [], error.problems.join("; "))
+    // The restart keeps the source's own input: the call answers for the source the case names, not the plugin's default.
+    assert.deepEqual(errorRestarts, [{ source: "slack", cursor: "stale", since: ISO }])
   })
 
   test("a suggestion lists values a person may confirm", () => {

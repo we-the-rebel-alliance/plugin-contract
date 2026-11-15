@@ -243,6 +243,9 @@
         {
           "name": "the restarted window reads on",
           "input": {
+            "source": "calendar",
+            "account": "sam.rivera@example.com",
+            "cursor": "calendar:sam.rivera@example.com:sync:sync-expired",
             "since": "2026-10-13T09:00:00.000Z"
           },
           "expect": "page",

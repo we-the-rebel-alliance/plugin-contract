@@ -23,7 +23,7 @@ export interface SourcePermission {
         readonly action: string;
         readonly resource: string;
     }[];
-    /** The identity operations `probe` asserts for this source; they are among `operations` (#4, point 3; #21). Optional. */
+    /** The identity operations `probe` asserts for this source; they are among `operations` (#4, point 3; #21). Optional; empty when the probe asserts only its action. */
     readonly identity?: readonly string[];
     /** True when the source's content reads assert an identity operation (#30, item 4); every identity operation is still declared. */
     readonly readsIdentity?: boolean;

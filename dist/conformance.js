@@ -1,10 +1,10 @@
 // @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
 import {
   maxBytesOf
-} from "./chunks/chunk-CG3NEWXQ.js";
+} from "./chunks/chunk-53IKPGMA.js";
 import {
   SOURCES_SCHEMA
-} from "./chunks/chunk-CUTYPDNB.js";
+} from "./chunks/chunk-7CKPOVRW.js";
 import {
   toolsRpcIdProblems
 } from "./chunks/chunk-KWEWSZ4V.js";
@@ -11062,7 +11062,7 @@ async function sourceConformance(options) {
       }
       if (expect === "expired") {
         sawGap = true;
-        gap.push(...await expiredByError(where, error, { source, plugin, calls, context }));
+        gap.push(...await expiredByError(where, error, { source, plugin, calls, context, input: item.input }));
         continue;
       }
       shape.push(`${where}: failed: ${messageOf(error)}`);
@@ -11074,7 +11074,7 @@ async function sourceConformance(options) {
     }
     if (expect === "expired") {
       sawGap = true;
-      gap.push(...await expiredByGap(where, answer, { source, plugin, calls, context }));
+      gap.push(...await expiredByGap(where, answer, { source, plugin, calls, context, input: item.input }));
       continue;
     }
     const page = { source, plugin, input: item.input };
@@ -11277,11 +11277,11 @@ async function expiredByGap(where, answer, options) {
   if (typeof cursor !== "string" || cursor.length === 0) return [`${where}: an expired cursor must answer a cursor a consumer can restart from`];
   let next;
   try {
-    next = await options.calls.list?.({ cursor }, options.context);
+    next = await options.calls.list?.({ ...options.input, cursor }, options.context);
   } catch (error) {
     return [`${where} after the restart: failed with ${messageOf(error)}`];
   }
-  const checks = pageChecks(next, { source: options.source, plugin: options.plugin, input: { cursor } });
+  const checks = pageChecks(next, { source: options.source, plugin: options.plugin, input: { ...options.input, cursor } });
   const problems = [...checks.shape, ...checks.cursor];
   if (plain5(next) && plain5(next["gap"]) && next["gap"]["reason"] === "expired") {
     problems.push(`${where}: the cursor the expired page answered expired again, so the round trip does not restart`);
@@ -11295,11 +11295,11 @@ async function expiredByError(where, error, options) {
   const hint = /(?:Z|[+-]\d{2}:\d{2})$/.test(since) && !Number.isNaN(Date.parse(since)) ? since : RECOVERY_SINCE;
   let next;
   try {
-    next = await options.calls.list?.({ since: hint }, options.context);
+    next = await options.calls.list?.({ ...options.input, since: hint }, options.context);
   } catch (failed) {
     return [`${where} after the restart: failed with ${messageOf(failed)}`];
   }
-  const checks = pageChecks(next, { source: options.source, plugin: options.plugin, input: { since: hint } });
+  const checks = pageChecks(next, { source: options.source, plugin: options.plugin, input: { ...options.input, since: hint } });
   return [...checks.shape, ...checks.cursor].map((problem) => `${where} after the restart: ${problem}`);
 }
 function outsideGrants(assertions, grants, where) {
