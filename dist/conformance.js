@@ -11047,6 +11047,8 @@ async function sourceConformance(options) {
   let sawFailed = false;
   let sawRefused = false;
   let sawGap = false;
+  const gapOnce = [];
+  let sawAnyGap = false;
   if (cases.length > 0 && calls.list === void 0) shape.push("events_list cases are declared and the kit has no list call");
   for (const item of cases) {
     const where = `events_list(${item.name})`;
@@ -11075,6 +11077,10 @@ async function sourceConformance(options) {
     if (expect === "expired") {
       sawGap = true;
       gap.push(...await expiredByGap(where, answer, { source, plugin, calls, context, input: item.input }));
+      if (hasGap(answer)) {
+        sawAnyGap = true;
+        gapOnce.push(...await gapAnsweredOnce(where, answer, { calls, context, input: item.input }));
+      }
       continue;
     }
     const page = { source, plugin, input: item.input };
@@ -11085,6 +11091,10 @@ async function sourceConformance(options) {
     refused.push(...result.refused);
     cost.push(...result.cost);
     identity.push(...identityOverlap(running.assertions.slice(assertedBeforePage), identityGrants, where, source.permission.readsIdentity === true));
+    if (hasGap(answer)) {
+      sawAnyGap = true;
+      gapOnce.push(...await gapAnsweredOnce(where, answer, { calls, context, input: item.input }));
+    }
     sawFailed ||= hasEntries(answer, "failed");
     sawRefused ||= hasEntries(answer, "refused");
     if (expect === "empty" && plain5(answer) && Array.isArray(answer["events"]) && answer["events"].length > 0) {
@@ -11098,6 +11108,7 @@ async function sourceConformance(options) {
   const noExpiryReason = options.noExpiry?.reason.trim() ?? "";
   const noExpiry = isEvents && noExpiryReason !== "";
   add("gap-and-cursor-expired", gap, noExpiry ? false : isEvents && sawGap, !isEvents || noExpiry, noExpiry ? noExpiryReason : void 0);
+  add("gap-once-per-read", gapOnce, isEvents && sawAnyGap, !isEvents || !sawAnyGap);
   add("refused-is-final", refused, isEvents && sawRefused, !isEvents);
   add("billed-cost", cost, source.cost.class === "billed" && isEvents, source.cost.class !== "billed");
   for (const operation of identityOperations) {
@@ -11271,6 +11282,20 @@ function messageOf(error) {
 var isRefusal = (expect) => typeof expect === "object" && expect !== null && "refuses" in expect;
 var plain5 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var hasEntries = (answer, key2) => plain5(answer) && Array.isArray(answer[key2]) && answer[key2].length > 0;
+var hasGap = (answer) => plain5(answer) && answer["gap"] !== void 0;
+async function gapAnsweredOnce(where, answer, options) {
+  if (answer["more"] !== true) return [];
+  const cursor = answer["cursor"];
+  if (typeof cursor !== "string" || cursor.length === 0) return [`${where}: the page carries gap and more: true, and no cursor to read the rest of the read with`];
+  let next;
+  try {
+    next = await options.calls.list?.({ ...options.input, cursor }, options.context);
+  } catch (error) {
+    return [`${where}: the page carries gap and more: true, so the page its cursor names must be recorded to show the gap is not repeated (${messageOf(error)})`];
+  }
+  if (hasGap(next)) return [`${where}: the read's second page repeats the gap, which a consumer counts as a second resync`];
+  return [];
+}
 async function expiredByGap(where, answer, options) {
   if (!plain5(answer) || !plain5(answer["gap"]) || answer["gap"]["reason"] !== "expired") {
     return [`${where}: an expired cursor must answer gap.reason "expired", or throw CURSOR_EXPIRED`];
