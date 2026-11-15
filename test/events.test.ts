@@ -2,6 +2,7 @@
 // plugin and asOf, the error table, the secret-pattern refusal, and the conformance's opt-in checks.
 import { describe, test } from "node:test"
 import { expect } from "./support/expect.ts"
+import { failureFromError } from "../src/internal/failure.ts"
 import { encodeBoundCursor, decodeBoundCursor, type CursorBinding } from "../src/cursor.ts"
 import {
   canonicalCode,
@@ -219,7 +220,18 @@ describe("errors", () => {
     expect(parseSourceError(new Error("GWS_VALIDATION_ERROR: Limit: Too big. Next step: x."))).toEqual({ code: "GWS_VALIDATION_ERROR", what: "Limit: Too big", next: "x." })
     expect(parseSourceError(new Error("The cursor is invalid or has expired."))).toBeUndefined()
     for (const code of ["SCOPE_MISSING", "BUDGET_EXCEEDED", "SOURCE_DISABLED", "INPUT_INVALID", "SOURCE_UNKNOWN"]) expect(canonicalCode(code)).toBe(code)
+    expect(canonicalCode("ACCOUNT_UNKNOWN")).toBe("ACCOUNT_MISMATCH")
+    expect(parseSourceError(new Error("ACCOUNT_UNKNOWN: there is no account 'work'. Next step: Pass a known account."))?.canonical).toBe("ACCOUNT_MISMATCH")
     expect(new SourceError({ code: "RATE_LIMITED", what: "x", next: "Wait.", retryAfterSec: 60 }).retryAfterSec).toBe(60)
+  })
+})
+
+describe("read's failures take the aliases", () => {
+  test("a plugin's ACCOUNT_UNKNOWN reaches read as ACCOUNT_MISMATCH, not UNAVAILABLE (Wave 1, the Slack review)", () => {
+    const failed = failureFromError(new Error("ACCOUNT_UNKNOWN: there is no account 'work'. Next step: Pass a known account."))
+    expect(failed.code).toBe("ACCOUNT_MISMATCH")
+    expect(failed.next).toBe("Pass a known account.")
+    expect(failureFromError(Object.assign(new Error("no such account"), { data: { code: "ACCOUNT_UNKNOWN", next: "Pass a known account." } })).code).toBe("ACCOUNT_MISMATCH")
   })
 })
 
