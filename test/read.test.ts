@@ -291,7 +291,7 @@ describe("one probe check (#8, D230)", () => {
 })
 
 describe("declared rpc and probe (#4)", () => {
-  const items = gws.sources.items.map((item) => (item.id === "gws.gmail" ? { ...item, permission: { ...item.permission, identity: ["gmail.users.getProfile"] } } : item))
+  const items = gws.sources.items.map((item) => (item.id === "gws.gmail" ? ({ ...item, permission: { ...item.permission, identity: ["gmail.users.getProfile"] } } as typeof item) : item))
   const declared: InstalledDescriptor = { ...gws, sources: { ...gws.sources, rpc: "google-workspace.gws.tools", probe: { action: "gws.probe" }, items } }
 
   test("a read passes the declared tools-RPC id to the host", async () => {

@@ -18,7 +18,7 @@ import { canonicalScope } from "./cursor.ts"
 import type { Checked } from "./internal/checked.ts"
 import { PAGE, probeResultProblems, resultProblems } from "./internal/events.ts"
 import { failure, failureFromError, type ReadFailure } from "./internal/failure.ts"
-import { resolveParams, resolveSince, type ParamsContext } from "./params.ts"
+import { resolveParams, resolveSince, type ParamSpec, type ParamsContext } from "./params.ts"
 import { detailRules, grantCovers, probeRules, sessionRules, type Grant, type PermissionRule } from "./permission.ts"
 import { pick, pickProblemsForOutput } from "./pick.ts"
 import { checkOutput } from "./registry.ts"
@@ -151,7 +151,8 @@ function prepare(request: ReadRequest): { source: SourceItem; input: Record<stri
     if (request.limit !== undefined) input["limit"] = request.limit
     return { source, input }
   }
-  const params = resolveParams(source.params, request.params, request.context)
+  // The descriptor frame checks that every declared param is { relative?, me? } (a ParamSpec).
+  const params = resolveParams(source.params as Readonly<Record<string, ParamSpec>> | undefined, request.params, request.context)
   if (!params.ok) return refused("SCHEMA_VIOLATION", params.problems.join("; "), "Pass only the params the source declares, as its descriptor describes them.")
   return { source, input: { ...input, ...params.value } }
 }

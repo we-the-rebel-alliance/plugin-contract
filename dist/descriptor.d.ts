@@ -1,100 +1,14 @@
 import type { Checked } from "./internal/checked.js";
-import type { ParamSpec } from "./params.js";
 /** The most bytes a source may declare for one answer (1 MB), and the default when it declares none (64 KB): `events`' `MAX_BYTES`. */
 export declare const MAX_BYTES_LIMIT: number;
 export declare const DEFAULT_MAX_BYTES: number;
-/** Who may be asked, and how (design §2.2 `permission`). */
-export interface SourcePermission {
-    /** An events source's method action, such as `gws.events_list`. */
-    readonly events?: string;
-    /** A snapshot source's method action, such as `gws.calendar_today`. */
-    readonly tool?: string;
-    /**
-     * What the read does at the provider: what grants and a person's off switches key on. A dotted operation
-     * (`gmail.users.messages.get`) is asserted as `<namespace>.read` on `<account>:<operation>`; a bare one
-     * (`slack_read_channel`) is an MCP tool, asserted as `<namespace>_<operation>` on `*` (`permission.operationRule`).
-     */
-    readonly operations?: readonly string[];
-    /**
-     * Grants stated verbatim, for a provider whose resources are not `<account>:<operation>` (GitHub's `github_api` on
-     * `GET /user`). A source states `operations` or `rules` (#21).
-     */
-    readonly rules?: readonly {
-        readonly action: string;
-        readonly resource: string;
-    }[];
-    /** For a rules source: the grants `probe` asserts, verbatim, each among `rules` (#30, item 10). Empty when the probe asserts only its action. */
-    readonly identityRules?: readonly {
-        readonly action: string;
-        readonly resource: string;
-    }[];
-    /** The identity operations `probe` asserts for this source; they are among `operations` (#4, point 3; #21). Optional; empty when the probe asserts only its action. */
-    readonly identity?: readonly string[];
-    /** True when the source's content reads assert an identity operation (#30, item 4); every identity operation is still declared. */
-    readonly readsIdentity?: boolean;
-}
-/** A detail read: a declared read per event, whose inputs come only from the event's own fields, never its text. */
-export interface SourceDetail {
-    readonly id: string;
-    readonly tool: string;
-    /** The event fields its input is: `external_id`, `thread`, and the others Memory's schema lists. */
-    readonly from: readonly string[];
-}
-/** One source a plugin declares. */
-export interface SourceItem {
-    readonly id: string;
-    readonly kind: "events" | "snapshot";
-    /** The tools-RPC method a read calls. */
-    readonly tool: string;
-    /** Fixed input the method always gets, such as `{ "source": "gmail" }`. */
-    readonly input?: Readonly<Record<string, unknown>>;
-    /** An events source's event kind. */
-    readonly reads?: string;
-    /** A snapshot source's output: a registry name, or `x-<namespace>/<name>`. */
-    readonly output?: string;
-    /** An `x-` output's schema, inline: JSON Schema draft 2020-12. Absent for a registry name. */
-    readonly outputSchema?: Readonly<Record<string, unknown>> | boolean;
-    readonly params?: Readonly<Record<string, ParamSpec>>;
-    readonly accounts?: {
-        readonly named?: boolean;
-        readonly server?: string;
-    };
-    readonly scope?: {
-        readonly keys: readonly string[];
-        readonly describe?: string;
-        /** The read-only tool that lists choices at consent, and the operations it asserts; run only at bind. */
-        readonly suggest?: {
-            readonly tool: string;
-            readonly operations: readonly string[];
-        };
-    };
-    readonly details?: readonly SourceDetail[];
-    readonly permission: SourcePermission;
-    readonly private?: boolean;
-    readonly cost: {
-        readonly class: "free" | "metered" | "billed";
-        readonly units?: readonly {
-            readonly per: string;
-            readonly usd: number;
-            readonly conditions?: string;
-            readonly min?: number;
-        }[];
-        readonly probe?: {
-            readonly per: string;
-            readonly usd: number;
-            readonly conditions?: string;
-            readonly min?: number;
-        };
-    };
-    readonly cadence?: {
-        readonly providerMinMinutes?: number;
-    };
-    readonly maxBytes?: number;
-    readonly maxAgeSec?: number;
-    readonly retentionDays?: number;
-    readonly urlHosts?: readonly string[];
-    readonly [key: string]: unknown;
-}
+/** Who may be asked, and how (design §2.2 `permission`): Memory's schema type, so there is one definition (#30, item 8). */
+export type SourcePermission = Permission;
+/** A detail read, a declared read per event whose inputs come only from the event's own fields: Memory's schema type (#30, item 8). */
+export type SourceDetail = Detail;
+/** One source a plugin declares: Memory's schema type, the one `SourceItem` the package exports (#30, item 8). */
+export type { SourceItem } from "./internal/schema/types.js";
+import type { Detail, Permission, SourceItem } from "./internal/schema/types.js";
 /** The `sources` key. */
 export interface SourcesDescriptor {
     readonly contractVersion: number;
