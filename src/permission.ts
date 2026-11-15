@@ -80,9 +80,32 @@ export function namespaceOf(source: Pick<SourceItem, "id">): string {
  * `<account>:<operation>`, a bare one (an MCP tool) as `<namespace>_<operation>` on `*`. The same derivation as Memory's
  * conformance kit, so declared equals asserted means the same thing in a plugin's CI and in a consumer's session.
  */
-export function operationRule(source: Pick<SourceItem, "id">, operation: string, account: string): PermissionRule {
+export function operationRule(source: Pick<SourceItem, "id" | "accounts">, operation: string, account: string): PermissionRule {
   const namespace = namespaceOf(source)
-  return operation.includes(".") ? allow(`${namespace}.read`, `${account}:${operation}`) : allow(`${namespace}_${operation}`, "*")
+  return operation.includes(".") ? allow(`${namespace}.read`, `${account}:${operation}`) : allow(`${serverOf(source, account)}_${operation}`, "*")
+}
+
+/** The account the default MCP server serves: its tools are `<namespace>_<tool>`, whatever `accounts.server` says. */
+export const DEFAULT_ACCOUNT = "default"
+
+/** An account that may stand in a per-account server's name: a tool id's characters only. */
+export const SERVER_ACCOUNT_PATTERN = /^[A-Za-z0-9_-]{1,64}$/
+
+/**
+ * The MCP server a bare operation of `source` runs on for `account` (#30, item 9): the namespace, or, for a plugin with
+ * one MCP server per account (`accounts.server`, such as `plaud-{account}`), that server for every account but
+ * `default`. Plaud's `list_files` is `plaud_list_files` for the default account and `plaud-work_list_files` for work.
+ */
+export function serverOf(source: Pick<SourceItem, "id" | "accounts">, account: string): string {
+  const template = source.accounts?.server
+  if (template === undefined || account === DEFAULT_ACCOUNT) return namespaceOf(source)
+  return template.replace("{account}", account)
+}
+
+/** Why `account` cannot name `source`'s per-account server, or undefined when it can (or the source has none). */
+function serverAccountProblem(source: Pick<SourceItem, "accounts">, account: string): string | undefined {
+  if (source.accounts?.server === undefined || account === DEFAULT_ACCOUNT || SERVER_ACCOUNT_PATTERN.test(account)) return undefined
+  return `the account must be letters, digits, _ or - (at most 64), since it names the MCP server ${source.accounts.server}`
 }
 
 function fenced(rules: readonly PermissionRule[]): Checked<readonly PermissionRule[]> {
@@ -118,6 +141,8 @@ export function sessionRules(source: SourceItem, grant: Pick<Grant, "source" | "
   if (declared !== undefined) return fenced([allow(method, "*"), ...declared.map((rule) => allow(rule.action, rule.resource))])
   const operations = source.permission.operations ?? []
   if (operations.length === 0) return { ok: false, problems: [`${source.id} declares neither operations nor rules`] }
+  const server = serverAccountProblem(source, grant.account)
+  if (server) return { ok: false, problems: [server] }
   return fenced([allow(method, "*"), ...operations.map((operation) => operationRule(source, operation, grant.account))])
 }
 
@@ -142,6 +167,8 @@ export function probeRules(source: SourceItem, account: string, identityOperatio
   if (problem) return { ok: false, problems: [problem] }
   const method = probeAction ?? methodAction(source)
   if (method === undefined) return { ok: false, problems: [`${source.id} names no action for its method`] }
+  const server = serverAccountProblem(source, account)
+  if (server) return { ok: false, problems: [server] }
   const verbatim = source.permission.identityRules
   if (verbatim !== undefined) return fenced([allow(method, "*"), ...verbatim.map((rule) => allow(rule.action, rule.resource))])
   return fenced([allow(method, "*"), ...identityOperations.map((operation) => operationRule(source, operation, account))])

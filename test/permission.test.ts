@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { describe, test } from "node:test"
 import type { SourceItem } from "../src/descriptor.ts"
-import { accountProblem, DENY_ALL, detailRules, evaluate, grantCovers, namespaceOf, operationRule, probeRules, sessionRules, type Grant } from "../src/permission.ts"
+import { accountProblem, DENY_ALL, detailRules, evaluate, grantCovers, namespaceOf, operationRule, probeRules, serverOf, sessionRules, type Grant } from "../src/permission.ts"
 import type { Checked } from "../src/index.ts"
 
 const problemsIn = (checked: Checked<unknown>): readonly string[] => (checked.ok ? [] : checked.problems)
@@ -136,5 +136,44 @@ describe("grantCovers", () => {
     assert.equal(grantCovers(grant, { source: "slack.workspace", account: "T9999", scope: { channels: ["C01"] } }), false)
     assert.equal(grantCovers(grant, { source: "gws.gmail", account: "T0123" }), false)
     assert.equal(grantCovers(grant, { source: "slack.workspace", account: "T0123", scope: { labels: ["INBOX"] } }), false)
+  })
+})
+
+describe("one MCP server per account (#30, item 9)", () => {
+  const plaud = {
+    id: "plaud.recordings",
+    kind: "events",
+    tool: "events_list",
+    reads: "meeting",
+    accounts: { named: true, server: "plaud-{account}" },
+    permission: { events: "plaud.events_list", operations: ["list_files", "get_note"], identity: ["get_current_user"] },
+  } as unknown as SourceItem
+
+  test("a named account's bare operations run on its own server; the default account keeps the namespace", () => {
+    assert.equal(serverOf(plaud, "default"), "plaud")
+    assert.equal(serverOf(plaud, "work"), "plaud-work")
+    assert.deepEqual(operationRule(plaud, "list_files", "work"), { action: "plaud-work_list_files", resource: "*", effect: "allow" })
+    assert.deepEqual(operationRule(plaud, "list_files", "default"), { action: "plaud_list_files", resource: "*", effect: "allow" })
+    const rules = sessionRules(plaud, { source: "plaud.recordings", account: "work" })
+    assert.ok(rules.ok)
+    assert.equal(evaluate(rules.value, "plaud.events_list"), "allow")
+    assert.equal(evaluate(rules.value, "plaud-work_list_files"), "allow")
+    assert.equal(evaluate(rules.value, "plaud_list_files"), "deny")
+    assert.equal(evaluate(rules.value, "plaud-home_list_files"), "deny")
+    const probe = probeRules(plaud, "work", ["get_current_user"], "plaud.probe")
+    assert.ok(probe.ok)
+    assert.equal(evaluate(probe.value, "plaud-work_get_current_user"), "allow")
+  })
+
+  test("a dotted operation is unchanged, and a source without accounts.server is unchanged", () => {
+    assert.deepEqual(operationRule({ ...plaud, id: "plaud.recordings" } as SourceItem, "files.list", "work"), { action: "plaud.read", resource: "work:files.list", effect: "allow" })
+    assert.deepEqual(operationRule(slack, "slack_read_channel", "T0123"), operationRule({ id: slack.id } as SourceItem, "slack_read_channel", "T0123"))
+  })
+
+  test("an account that cannot stand in a server's name is refused before any rule is made", () => {
+    for (const account of ["a.b", "work space", "x".repeat(65)]) {
+      assert.equal(sessionRules(plaud, { source: "plaud.recordings", account }).ok, false, account)
+      assert.equal(probeRules(plaud, account, [], "plaud.probe").ok, false, account)
+    }
   })
 })

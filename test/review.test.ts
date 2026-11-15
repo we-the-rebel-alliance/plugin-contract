@@ -1440,3 +1440,28 @@ describe("a rules source (#30, items 10 and 11)", () => {
     ])
   })
 })
+
+describe("accounts.server (#30, item 9)", () => {
+  const plaud = (server: unknown): Record<string, unknown> => ({
+    id: "plaud.recordings",
+    kind: "events",
+    reads: "meeting",
+    tool: "events_list",
+    input: { source: "plaud" },
+    accounts: { named: true, server },
+    permission: { events: "plaud.events_list", operations: ["list_files"] },
+    cost: { class: "free" },
+  })
+
+  test("a per-account server holds {account} once, in lowercase words", () => {
+    for (const server of ["plaud-{account}", "{x}-{account}".replace("{x}-", "mcp-"), "plaud_{account}_v2"]) assert.deepEqual(problemsOf(declarationOf(plaud(server))), [], server)
+    for (const server of ["plaud", "Plaud-{account}", "plaud-{account}-{account}", "plaud {account}", "{account}", `${"p".repeat(60)}-{account}`]) {
+      assert.ok(problemsOf(declarationOf(plaud(server))).length > 0, server)
+    }
+  })
+
+  test("a source without it is unchanged", () => {
+    const { accounts: _accounts, ...rest } = plaud("plaud-{account}")
+    assert.deepEqual(problemsOf(declarationOf({ ...rest, accounts: { named: true } })), [])
+  })
+})
