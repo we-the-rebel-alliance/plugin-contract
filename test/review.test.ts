@@ -1454,10 +1454,17 @@ describe("accounts.server (#30, item 9)", () => {
   })
 
   test("a per-account server holds {account} once, in lowercase words", () => {
-    for (const server of ["plaud-{account}", "{x}-{account}".replace("{x}-", "mcp-"), "plaud_{account}_v2"]) assert.deepEqual(problemsOf(declarationOf(plaud(server))), [], server)
+    for (const server of ["plaud-{account}", "plaud_{account}_v2"]) assert.deepEqual(problemsOf(declarationOf(plaud(server))), [], server)
     for (const server of ["plaud", "Plaud-{account}", "plaud-{account}-{account}", "plaud {account}", "{account}", `${"p".repeat(60)}-{account}`]) {
       assert.ok(problemsOf(declarationOf(plaud(server))).length > 0, server)
     }
+  })
+
+  test("the server begins with the plugin's namespace, as every action of a source does", () => {
+    assert.deepEqual(declarationProblems(declarationOf(plaud("plaud-{account}"))), [])
+    assert.deepEqual(declarationProblems(declarationOf(plaud("mcp-{account}"))), [
+      'items[0] (plaud.recordings).accounts.server "mcp-{account}" does not begin with the plugin\'s namespace "plaud": every action of a source begins with it',
+    ])
   })
 
   test("a source without it is unchanged", () => {
