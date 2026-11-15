@@ -47,7 +47,7 @@ A source whose provider resources are not `<account>:<operation>` states `permis
 tool verbs and uniqueness ([#30](https://github.com/we-the-rebel-alliance/source-contract/issues/30) item 11). Its probe's
 grants are `permission.identityRules`, each among its `rules`; with `sources.probe.action` declared, the probe must
 assert exactly that action and those rules, and a content read that asserts one needs `permission.readsIdentity`
-(item 10). `examples/github` declares both.
+(item 10). `examples/github` illustrates the shape: its probe asserts `github.probe` and `github_api` on `GET /user`, and its events read asserts `GET /user` too, hence `readsIdentity`. The shipped GitHub plugin uses `github_probe`, and would declare `identityRules: [{ "action": "github_probe", "resource": "GET /user" }]` with that rule among its `rules`; its events read does not assert `GET /user`, so it needs no `readsIdentity`.
 
 ## A page that cannot fail one item
 
