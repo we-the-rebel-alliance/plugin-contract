@@ -1297,3 +1297,75 @@ describe("a gap is answered once per read (#28)", () => {
     assert.equal(found?.notApplicable, true)
   })
 })
+
+describe("removals are final (#27)", () => {
+  const item = (): Record<string, unknown> => validPage({
+    id: "gws.gmail",
+    kind: "events",
+    reads: "message",
+    tool: "events_list",
+    input: { source: "gmail" },
+    accounts: { named: true },
+    permission: { events: "gws.events_list", operations: ["gmail.users.messages.list"] },
+    cost: { class: "free" },
+  })
+  const page = (over: Record<string, unknown> = {}): Record<string, unknown> => validPage({
+    source: "gmail",
+    plugin: "@joe-broadhead/opencode-gws",
+    account: "sam.rivera@example.com",
+    owner: { id: "mailto:sam.rivera@example.com", label: "Sam Rivera" },
+    asOf: ISO,
+    trust: "untrusted",
+    events: [],
+    cursor: "c1",
+    more: false,
+    refused: [],
+    failed: [],
+    ...over,
+  })
+  const run = (answer: Record<string, unknown>) =>
+    sourceConformance({
+      plugin: "@joe-broadhead/opencode-gws",
+      source: sourceOf(item()),
+      tools: [{ id: "events_list", readOnly: true }],
+      account: "sam.rivera@example.com",
+      cases: [{ name: "a page with removals", input: {} }],
+      noExpiry: { reason: "this fake has no expired cursor" },
+      calls: {
+        list: async (_input, context) => {
+          await context.permission.assert({ action: "gws.events_list" })
+          await context.permission.assert({ action: "gws.read", resources: ["sam.rivera@example.com:gmail.users.messages.list"] })
+          return answer
+        },
+        probe: async (_input, context) => {
+          await context.permission.assert({ action: "gws.events_list" })
+          return { source: "gmail", account: "sam.rivera@example.com", owner: { id: "mailto:sam.rivera@example.com", label: "Sam Rivera" }, trust: "untrusted" }
+        },
+      },
+    })
+  const check = async (answer: Record<string, unknown>) => (await run(answer)).checks.find((entry) => entry.name === "removals-are-final")
+  const before = new Date(Date.parse(ISO) - 60_000).toISOString()
+
+  test("runs and passes when a page carries well-formed removals", async () => {
+    const found = await check(page({ removals: [{ external_id: "18f0000000000004", at: before, reason: "deleted" }, { external_id: "18f0000000000005", at: before, reason: "withheld" }] }))
+    assert.deepEqual(found, { name: "removals-are-final", ran: true, notApplicable: false, problems: [] })
+  })
+
+  test("fails on a removal that is also failed, a repeat, or one later than asOf", async () => {
+    const found = await check(page({
+      removals: [{ external_id: "a", at: before, reason: "deleted" }, { external_id: "a", at: before, reason: "expired" }, { external_id: "b", at: "2099-01-01T00:00:00.000Z", reason: "withheld" }],
+      failed: [{ external_id: "a", code: "RATE_LIMITED" }],
+    }))
+    assert.deepEqual(found?.problems, [
+      "events_list(a page with removals): the result's removals lists one event twice",
+      "events_list(a page with removals): removals[2].at is later than the page's asOf",
+      "events_list(a page with removals): an event is both removed and failed: a removal is final, so nothing is retried",
+    ])
+  })
+
+  test("does not apply to a source that never removes anything", async () => {
+    const found = await check(page())
+    assert.equal(found?.ran, false)
+    assert.equal(found?.notApplicable, true)
+  })
+})

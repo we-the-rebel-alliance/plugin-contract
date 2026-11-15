@@ -28,6 +28,8 @@ import {
   probeResult,
   probeResultProblems,
   parseSourceError,
+  REMOVAL_REASONS,
+  removalProblems,
   resultProblems,
   screenEvents,
   secretKinds,
@@ -164,6 +166,42 @@ describe("the default page cap (D10)", () => {
   test("is the descriptor's default maxBytes, 64 KB", () => {
     expect(MAX_PAGE_BYTES).toBe(MAX_BYTES.default)
     expect(MAX_PAGE_BYTES).toBe(65_536)
+  })
+})
+
+describe("removals[] (#27)", () => {
+  const AS_OF = "2026-11-01T10:00:00.000Z"
+  const removal = (id: string, reason: "deleted" | "withheld" | "expired" = "deleted", at = "2026-11-01T09:30:00.000Z") => ({ external_id: id, at, reason })
+
+  test("a page may name what the source no longer stands behind, and the builder leaves an empty list out", () => {
+    expect(REMOVAL_REASONS).toEqual(["deleted", "withheld", "expired"])
+    const page = eventsListResult(WHOSE, [event(1)], "c", false, { asOf: AS_OF, removals: [removal("item-7"), removal("item-8", "withheld")] })
+    expect(page.removals).toEqual([removal("item-7"), removal("item-8", "withheld")])
+    expect(resultProblems(page)).toEqual([])
+    expect(Object.hasOwn(eventsListResult(WHOSE, [], "c", false, { removals: [] }), "removals")).toBe(false)
+  })
+
+  test("a removal may name an id that is also a tombstone event on the same page (rule 7)", () => {
+    const tombstone = event(9, { title: "", text: "", labels: ["gone"] })
+    const page = eventsListResult(WHOSE, [tombstone], "c", false, { asOf: AS_OF, removals: [removal("item-9")] })
+    expect(resultProblems(page)).toEqual([])
+  })
+
+  test("finds each way removals[] breaks the contract", () => {
+    const problems = (removals: unknown, extra: Record<string, unknown> = {}) => removalProblems({ ...eventsListResult(WHOSE, [], "c", false, { asOf: AS_OF }), removals, ...extra })
+    expect(problems([{ ...removal("a"), hash: "sha256:x" }])).toEqual(['removals[0] has the field "hash", which the contract does not define'])
+    expect(problems([{ at: "2026-11-01T09:00:00.000Z", reason: "deleted" }])).toEqual([expect.stringContaining("removals[0].external_id")])
+    expect(problems([removal("a", "deleted", "2026-11-01")])).toEqual(["removals[0].at must be a UTC ISO date-time ending in Z"])
+    expect(problems([removal("a", "gone" as never)])).toEqual(["removals[0].reason must be one of deleted, withheld, expired"])
+    expect(problems([removal("a"), removal("a", "withheld")])).toEqual(["the result's removals lists one event twice"])
+    expect(problems([removal("a", "deleted", "2026-11-01T11:00:00.000Z")])).toEqual(["removals[0].at is later than the page's asOf"])
+    expect(problems([removal("a")], { failed: [{ external_id: "a", code: "UNAVAILABLE" }] })).toEqual(["an event is both removed and failed: a removal is final, so nothing is retried"])
+    expect(problems("a")).toEqual(["the result's removals must be a list of at most 500"])
+    expect(problems(Array.from({ length: 501 }, (_, i) => removal(`id-${i}`)))).toEqual(["the result's removals must be a list of at most 500"])
+    // Without asOf, at is only checked for its form.
+    expect(removalProblems({ ...eventsListResult(WHOSE, [], "c", false), removals: [removal("a", "deleted", "2099-01-01T00:00:00.000Z")] })).toEqual([])
+    // resultProblems carries the same problems, so read refuses such a page.
+    expect(resultProblems({ ...eventsListResult(WHOSE, [], "c", false, { asOf: AS_OF }), removals: [removal("a", "gone" as never)] })).toEqual(["removals[0].reason must be one of deleted, withheld, expired"])
   })
 })
 

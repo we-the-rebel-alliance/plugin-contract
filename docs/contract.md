@@ -27,6 +27,9 @@ An **event** is one thing a source recorded: `source`, `account`, `external_id` 
 | `failed[]` | retryable drops. Any entry holds the cursor back. |
 | `gap` | `{ reason: "expired" \| "window-truncated", since }` when history is lost |
 | `cost` | what the provider reported, for a billed source |
+| `removals[]` | things the source no longer stands behind: `{ external_id, at, reason }`, with `reason` `deleted`, `withheld` or `expired`. An answer, not a drop: the consumer may advance past it ([#27](https://github.com/we-the-rebel-alliance/source-contract/issues/27)). |
+
+**A removal** ([#27](https://github.com/we-the-rebel-alliance/source-contract/issues/27)) names the `external_id` the source listed before, never a hash (D2). Its `at` is when the source learned of it, UTC, never later than the page's `asOf`. It is optional on any page, and an empty list is left out. A removal is an answer, not a drop: the page's cursor covers it and it never holds the cursor back, so no id is in both `removals[]` and `failed[]`, and no id appears twice. It may name an id that is also among the page's events (a tombstone, such as jelly's `file` event with its words cleared): a consumer applies the page's `events` first, then its `removals[]`. A thing is back when a later event names the same id with an `occurred_at` later than the removal's `at`. What a consumer retracts is its own business.
 
 **A `gap` is answered once** ([#28](https://github.com/we-the-rebel-alliance/source-contract/issues/28)). It appears on the page where the source restarts its window: the page that answers the consumer's cursor, or the first page of a read from `since`. No later page of that read repeats it, at either reason, even while the hole is still behind the cursor. Reading again at the same cursor is the same page, so it may answer the same `gap` again. A consumer counts one resync per `gap`, so a repeat at an advanced cursor would be a second resync.
 
