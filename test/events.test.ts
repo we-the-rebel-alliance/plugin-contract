@@ -146,6 +146,25 @@ describe("probe (source-contract#8, #4)", () => {
   })
 })
 
+describe("a weak owner (#30, item 13)", () => {
+  const WEAK = { id: "wisprflow:credential:abc123", label: "Wispr Flow sign-in", verified: false }
+
+  test("a probe answer and a page may mark their owner unverified; probeResult carries it", () => {
+    const answer = probeResult({ ...WHOSE, owner: WEAK })
+    expect(answer.owner).toEqual(WEAK)
+    expect(probeResultProblems(answer)).toEqual([])
+    expect(probeResult(WHOSE).owner).toEqual(OWNER)
+    expect(resultProblems(eventsListResult({ ...WHOSE, owner: WEAK }, [event(1)], "c", false))).toEqual([])
+    expect(resultProblems(eventsListResult({ ...WHOSE, owner: { ...OWNER, verified: true } }, [], "c", false))).toEqual([])
+  })
+
+  test("verified must be a boolean, and no other owner key is allowed", () => {
+    expect(probeResultProblems({ ...probeResult(WHOSE), owner: { ...OWNER, verified: "no" } })).toEqual(["the probe answer's owner.verified must be true or false"])
+    expect(resultProblems({ ...eventsListResult(WHOSE, [], "c", false), owner: { ...OWNER, verified: 0 } })).toEqual(["the result's owner.verified must be true or false"])
+    expect(probeResultProblems({ ...probeResult(WHOSE), owner: { ...OWNER, trust: "weak" } })).toEqual(["the probe answer's owner must be { id, label }, two non-empty lines"])
+  })
+})
+
 describe("scope input", () => {
   test("is refused, as contract 1 refuses it, unless the source declares scope keys", () => {
     expect(parseEventsListInput({ scope: { label: "INBOX" } })).toEqual({ ok: false, problems: ['"scope" is not an input of events_list'] })

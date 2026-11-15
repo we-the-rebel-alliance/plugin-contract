@@ -175,6 +175,21 @@ export interface SourceEvent {
 export interface EventsOwner {
   readonly id: string
   readonly label: string
+  /**
+   * (#30, item 13) `false` when the provider does not confirm who this is, so the id is the plugin's best knowledge
+   * (Wispr Flow names OpenCode's credential, `wisprflow:credential:<id>`). A consumer shows it as unverified. Absent
+   * means the plugin vouches that the provider named the owner.
+   */
+  readonly verified?: boolean
+}
+
+/** An owner's problems as `what` describes it: `{ id, label, verified? }`, two non-empty lines and an optional boolean. */
+function ownerShapeProblems(owner: unknown, what: string): string[] {
+  if (!plainObject(owner) || !line(owner["id"], EVENT_LIMITS.ownerId) || !line(owner["label"], EVENT_LIMITS.ownerLabel) || Object.keys(owner).some((key) => key !== "id" && key !== "label" && key !== "verified")) {
+    return [`${what} must be { id, label }, two non-empty lines`]
+  }
+  if (owner["verified"] !== undefined && typeof owner["verified"] !== "boolean") return [`${what}.verified must be true or false`]
+  return []
 }
 
 // ── The page result's additions (design §2.1) ─────────────────────────────
@@ -666,7 +681,7 @@ export function probeResult(identity: EventsListIdentity, extras: { readonly sco
   return {
     source: identity.source,
     account: identity.account,
-    owner: { id: identity.owner.id, label: identity.owner.label },
+    owner: { id: identity.owner.id, label: identity.owner.label, ...(identity.owner.verified === undefined ? {} : { verified: identity.owner.verified }) },
     ...(extras.scopes === undefined ? {} : { scopes: [...new Set(extras.scopes)] }),
     ...(extras.cost === undefined ? {} : { cost: extras.cost }),
     trust: TRUST,
@@ -689,9 +704,10 @@ export function probeResultProblems(result: unknown, expected: { readonly source
   if (!line(result["account"], EVENT_LIMITS.account)) problems.push(`the probe answer's account must be a non-empty name of at most ${EVENT_LIMITS.account} characters`)
   else if (expected.account !== undefined && result["account"] !== expected.account) problems.push("the probe answer names another account than the one asked for")
   const owner = result["owner"]
-  if (!plainObject(owner) || !line(owner["id"], EVENT_LIMITS.ownerId) || !line(owner["label"], EVENT_LIMITS.ownerLabel) || Object.keys(owner).some((key) => key !== "id" && key !== "label")) {
-    problems.push("the probe answer's owner must be { id, label }, two non-empty lines")
-  } else if (!SCHEMED.test(owner["id"])) {
+  const ownerShape = ownerShapeProblems(owner, "the probe answer's owner")
+  if (ownerShape.length > 0) {
+    problems.push(...ownerShape)
+  } else if (!SCHEMED.test((owner as Record<string, string>)["id"]!)) {
     // docs/contract.md: an owner's id is scheme-qualified (mailto:, slack:), as an actor's id is.
     problems.push("the probe answer's owner.id must be a scheme-qualified id such as mailto:someone@example.com or slack:U0123")
   }
@@ -936,9 +952,7 @@ export function resultProblems(result: unknown, limit: number = PAGE.max, maxByt
   if (!named) problems.push("the result's source must be a lowercase name such as gmail")
   if (!line(account, EVENT_LIMITS.account)) problems.push(`the result's account must be a non-empty name of at most ${EVENT_LIMITS.account} characters`)
   const owner = result["owner"]
-  if (!plainObject(owner) || !line(owner["id"], EVENT_LIMITS.ownerId) || !line(owner["label"], EVENT_LIMITS.ownerLabel) || Object.keys(owner).some((key) => key !== "id" && key !== "label")) {
-    problems.push("the result's owner must be { id, label }, two non-empty lines")
-  }
+  problems.push(...ownerShapeProblems(owner, "the result's owner"))
   const cursor = result["cursor"]
   if (typeof cursor !== "string" || cursor.length === 0 || cursor.length > EVENT_LIMITS.cursor) problems.push(`the result's cursor must be a non-empty string of at most ${EVENT_LIMITS.cursor} characters`)
   if (typeof result["more"] !== "boolean") problems.push("the result's more must be true or false")
