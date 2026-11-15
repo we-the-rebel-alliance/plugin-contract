@@ -68,6 +68,12 @@ var permissionBase = {
   identity: array(string().max(200).regex(OPERATION, { error: "must be a provider operation or an MCP tool name" })).optional().describe(
     "The identity operations probe asserts for this source (#4, #8); each is among permission.operations, and no content read asserts it. Empty when the probe asserts only sources.probe.action; absent when the source does not declare it, so a consumer uses its fallback."
   ),
+  /**
+   * True when the source's content reads legitimately assert an identity operation, such as reading mentions needing
+   * the signed-in user's id. Each identity operation is still declared in `permission.identity` and among
+   * `permission.operations`. Absent means content reads never assert one.
+   */
+  readsIdentity: boolean().optional().describe("True when the source's content reads assert an identity operation (#30, item 4); every identity operation is still declared."),
   operations: array(string().max(200).regex(OPERATION, { error: "must be a provider operation or an MCP tool name" })).min(1).optional().describe("Every operation the source's reads assert, and nothing else. Absent when `rules` states them."),
   rules: array(
     object({

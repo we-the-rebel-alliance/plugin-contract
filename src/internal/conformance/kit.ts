@@ -173,7 +173,7 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
   const cases = options.cases ?? []
   const account = options.account ?? "conformance"
   // Declared must equal asserted overall: an identity operation is one of the source's operations, so the running
-  // session already holds it, and no content read may assert it.
+  // session already holds it, and no content read may assert it unless the source declares permission.readsIdentity.
   const declaredIdentity = source.permission.identity
   const probeAction = options.sources?.probe?.action
   const identityOperations = declaredIdentity ?? options.identityOperations ?? []
@@ -243,7 +243,7 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
     gap.push(...result.gap)
     refused.push(...result.refused)
     cost.push(...result.cost)
-    identity.push(...identityOverlap(running.assertions.slice(assertedBeforePage), identityGrants, where))
+    identity.push(...identityOverlap(running.assertions.slice(assertedBeforePage), identityGrants, where, source.permission.readsIdentity === true))
     sawFailed ||= hasEntries(answer, "failed")
     sawRefused ||= hasEntries(answer, "refused")
     if (expect === "empty" && plain(answer) && Array.isArray(answer["events"]) && (answer["events"] as unknown[]).length > 0) {
@@ -336,7 +336,7 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
         const assertedBeforeSnapshot = running.assertions.length
         try {
           const answer = await calls.snapshot(input, context)
-          identity.push(...identityOverlap(running.assertions.slice(assertedBeforeSnapshot), identityGrants, `snapshot_read(${JSON.stringify(input)})`))
+          identity.push(...identityOverlap(running.assertions.slice(assertedBeforeSnapshot), identityGrants, `snapshot_read(${JSON.stringify(input)})`, source.permission.readsIdentity === true))
           if (extensionOutput) outputSchema.push(...snapshotDataProblems(answer, source))
         } catch (error) {
           snapshot.push(`snapshot_read(${JSON.stringify(input)}) failed: ${messageOf(error)}`)
@@ -449,7 +449,7 @@ async function assertDetail(
     problems.push(`${where} failed inside the confirmed scope: ${messageOf(error)}`)
   }
   problems.push(...outsideGrants(running.assertions.slice(assertedBefore), runningGrants, where))
-  problems.push(...identityOverlap(running.assertions.slice(assertedBefore), identityGrantsFor(source, identityOperations), where))
+  problems.push(...identityOverlap(running.assertions.slice(assertedBefore), identityGrantsFor(source, identityOperations), where, source.permission.readsIdentity === true))
 }
 
 /** The word or code an error carries, for a refusal case. */
@@ -532,8 +532,9 @@ function snapshotDataProblems(answer: unknown, source: SourceItem): string[] {
   return checked.error.issues.map((issue) => `snapshot_read data at ${issue.path.length === 0 ? "the value" : issue.path.map(String).join(".")}: ${issue.message}`)
 }
 
-/** A content read may not assert an identity operation: those belong to the probe. */
-function identityOverlap(assertions: readonly Assertion[], identityGrants: readonly Grant[], where: string): string[] {
+/** A content read may not assert an identity operation: those belong to the probe. A source may declare `readsIdentity`, and then its content reads may. */
+function identityOverlap(assertions: readonly Assertion[], identityGrants: readonly Grant[], where: string, readsIdentity = false): string[] {
+  if (readsIdentity) return []
   const problems: string[] = []
   for (const assertion of assertions) {
     const resources = assertion.resources.length > 0 ? assertion.resources : ["*"]

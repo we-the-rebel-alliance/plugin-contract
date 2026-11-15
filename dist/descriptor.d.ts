@@ -25,6 +25,8 @@ export interface SourcePermission {
     }[];
     /** The identity operations `probe` asserts for this source; they are among `operations` (#4, point 3; #21). Optional; empty when the probe asserts only its action. */
     readonly identity?: readonly string[];
+    /** True when the source's content reads assert an identity operation (#30, item 4); every identity operation is still declared. */
+    readonly readsIdentity?: boolean;
 }
 /** A detail read: a declared read per event, whose inputs come only from the event's own fields, never its text. */
 export interface SourceDetail {
@@ -128,4 +130,6 @@ export declare function findInstalledPackage(name: string, from: string): string
 /** A source by id, from a descriptor. */
 export declare function findSource(descriptor: SourcesDescriptor, id: string): SourceItem | undefined;
 /** The most bytes one answer of this source may take: its `maxBytes`, or 64 KB. */
-export declare function maxBytesOf(source: Pick<SourceItem, "maxBytes">): number;
+export declare function maxBytesOf(source: {
+    readonly maxBytes?: number | undefined;
+}): number;

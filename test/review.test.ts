@@ -666,6 +666,52 @@ describe("identity operations", () => {
     assert.ok(undeclared.problems.some((problem) => /getDraft.*not among permission\.operations/.test(problem)), undeclared.problems.join("; "))
   })
 
+  test("readsIdentity lets a content read assert an identity operation, and still requires it declared", async () => {
+    const declared = item({
+      permission: { events: "gws.events_list", operations: ["gmail.users.getProfile", "gmail.users.messages.list"], readsIdentity: true },
+    })
+    const report = await sourceConformance({
+      plugin: "@joe-broadhead/opencode-gws",
+      source: sourceOf(declared),
+      tools: [{ id: "events_list", readOnly: true }],
+      identityOperations: ["gmail.users.getProfile"],
+      cases: [{ name: "a page", input: {} }],
+      calls: {
+        list: async (_input, context) => {
+          await context.permission.assert({ action: "gws.events_list" })
+          await context.permission.assert({ action: "gws.read", resources: ["sam.rivera@example.com:gmail.users.messages.list"] })
+          await context.permission.assert({ action: "gws.read", resources: ["sam.rivera@example.com:gmail.users.getProfile"] })
+          return page()
+        },
+        probe: async (_input, context) => {
+          await context.permission.assert({ action: "gws.events_list" })
+          await context.permission.assert({ action: "gws.read", resources: ["sam.rivera@example.com:gmail.users.getProfile"] })
+          return { source: "gws", account: "sam.rivera@example.com", owner: { id: "slack:U0PILOTOWN", label: "Pilot Owner" }, trust: "untrusted" }
+        },
+      },
+    })
+    assert.ok(!report.problems.some((problem) => /identity operation/.test(problem)), report.problems.join("; "))
+    const undeclared = await sourceConformance({
+      plugin: "@joe-broadhead/opencode-gws",
+      source: sourceOf(item({ permission: { events: "gws.events_list", operations: ["gmail.users.messages.list"], readsIdentity: true } })),
+      tools: [{ id: "events_list", readOnly: true }],
+      identityOperations: ["gmail.users.getProfile"],
+      cases: [{ name: "a page", input: {} }],
+      calls: {
+        list: async (_input, context) => {
+          await context.permission.assert({ action: "gws.events_list" })
+          await context.permission.assert({ action: "gws.read", resources: ["sam.rivera@example.com:gmail.users.messages.list"] })
+          return page()
+        },
+        probe: async (_input, context) => {
+          await context.permission.assert({ action: "gws.events_list" })
+          return { source: "gws", account: "sam.rivera@example.com", owner: { id: "slack:U0PILOTOWN", label: "Pilot Owner" }, trust: "untrusted" }
+        },
+      },
+    })
+    assert.ok(undeclared.problems.some((problem) => /getProfile.*not among permission\.operations/.test(problem)), undeclared.problems.join("; "))
+  })
+
   test("an empty permission.identity declares a probe that asserts only its action", async () => {
     const empty = validPage({
       id: "gws.gmail",
