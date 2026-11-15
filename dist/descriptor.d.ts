@@ -57,6 +57,7 @@ export interface SourceItem {
     readonly params?: Readonly<Record<string, ParamSpec>>;
     readonly accounts?: {
         readonly named?: boolean;
+        readonly server?: string;
     };
     readonly scope?: {
         readonly keys: readonly string[];

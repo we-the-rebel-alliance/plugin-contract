@@ -45,18 +45,18 @@ export declare function grantsFor(source: SourceItem, account: string): Grant[];
  * The grants of the **bind** session: only `scope.suggest`'s tool and operations. They never enter a running grant, so
  * they are a separate session with its own unused check.
  */
-export declare function bindGrantsFor(source: SourceItem): Grant[];
+export declare function bindGrantsFor(source: SourceItem, account?: string): Grant[];
 /**
  * The grants of the identity operations a probe may assert. They are part of the running session, because a source's
  * page reads its identity too, but they are not content: a declaration may not also list one in
  * `permission.operations`.
  */
-export declare function identityGrantsFor(source: SourceItem, identityOperations: readonly string[]): Grant[];
+export declare function identityGrantsFor(source: SourceItem, identityOperations: readonly string[], account?: string): Grant[];
 /**
- * The grants a source's probe may assert beyond its action: a rules source's `identityRules` verbatim (#30, item 10),
- * or else its identity operations by the conventional derivation.
+ * The grants a source's probe may assert beyond its action, for the run's account: a rules source's `identityRules`
+ * verbatim (#30, item 10), or else its identity operations by the app's derivation (`accounts.server` too, item 9).
  */
-export declare function probeIdentityGrants(source: SourceItem, identityOperations: readonly string[]): Grant[];
+export declare function probeIdentityGrants(source: SourceItem, identityOperations: readonly string[], account?: string): Grant[];
 /** `{account}` is a wildcard for the account a call names; everything else must match exactly, or by `*`. */
 export declare function sameResource(declared: string, asserted: string): boolean;
 /** True when some assertion is the grant's action on one of its resources, with `{account}` bound to any account. */

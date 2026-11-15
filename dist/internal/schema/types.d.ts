@@ -81,6 +81,8 @@ export interface SourceSnapshot extends SourceCommon {
 export interface Accounts {
     /** True when the source reads more than one account, so a read names one. */
     readonly named: boolean;
+    /** For one MCP server per account (#30, item 9): a named account's server, with `{account}`, such as `plaud-{account}`. */
+    readonly server?: string | undefined;
 }
 /** What a person confirms at consent. */
 export interface Scope {

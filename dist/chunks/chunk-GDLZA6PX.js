@@ -1,7 +1,7 @@
 // @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
 import {
   SOURCES_SCHEMA
-} from "./chunk-CBOKN6VH.js";
+} from "./chunk-DAKLW6GD.js";
 import {
   SUPPORTED_CONTRACT_VERSIONS
 } from "./chunk-ELPJD3ND.js";
@@ -52,7 +52,7 @@ var item = looseObject({
   reads: string().refine(isEventKind, `must be an event kind: ${EVENT_KINDS.join(", ")}, or x-<plugin>/<kind>`).optional(),
   output: string().optional(),
   params: record(string(), looseObject({ relative: boolean().optional(), me: boolean().optional() })).optional(),
-  accounts: looseObject({ named: boolean().optional() }).optional(),
+  accounts: looseObject({ named: boolean().optional(), server: string().max(64).optional() }).optional(),
   scope: looseObject({ keys: array(string().regex(/^[a-z][a-zA-Z0-9_-]{0,39}$/)).min(1), describe: string().max(200).optional() }).optional(),
   details: array(
     looseObject({
