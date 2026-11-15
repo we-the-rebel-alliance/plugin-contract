@@ -844,7 +844,7 @@ export function removalProblems(result: unknown): string[] {
   return problems
 }
 
-/** The additions' problems: `scope`, `refused`, `failed`, `gap`, `cost`, `plugin` and `asOf`, each when present. */
+/** The additions' problems: `scope`, `refused`, `failed`, `removals`, `gap`, `cost`, `plugin` and `asOf`, each when present. */
 function extraProblems(result: Record<string, unknown>, ids: ReadonlySet<string>): string[] {
   const problems: string[] = []
   if (result["scope"] !== undefined) {
