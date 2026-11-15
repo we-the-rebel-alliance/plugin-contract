@@ -312,7 +312,7 @@ describe("sourceConformance", () => {
     assert.equal(report.incomplete, false)
     assert.deepEqual(
       report.checks.map((check) => check.name),
-      ["declaration", "page-result", "failed-holds-cursor", "gap-and-cursor-expired", "refused-is-final", "billed-cost", "probe", "details", "suggest", "identity-grants", "output-schema", "rpc-id", "unused-grants"],
+      ["declaration", "page-result", "failed-holds-cursor", "gap-and-cursor-expired", "gap-once-per-read", "refused-is-final", "billed-cost", "probe", "details", "suggest", "identity-grants", "output-schema", "rpc-id", "unused-grants"],
     )
     assert.deepEqual(
       report.checks.filter((check) => !check.ran).map((check) => check.name),

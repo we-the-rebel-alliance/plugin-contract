@@ -160,6 +160,7 @@ const CHECKS = [
   "page-result",
   "failed-holds-cursor",
   "gap-and-cursor-expired",
+  "gap-once-per-read",
   "refused-is-final",
   "billed-cost",
   "identity-grants",
@@ -212,6 +213,8 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
   let sawFailed = false
   let sawRefused = false
   let sawGap = false
+  const gapOnce: string[] = []
+  let sawAnyGap = false
 
   if (cases.length > 0 && calls.list === undefined) shape.push("events_list cases are declared and the kit has no list call")
 
@@ -242,6 +245,10 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
     if (expect === "expired") {
       sawGap = true
       gap.push(...(await expiredByGap(where, answer, { source, plugin, calls, context, input: item.input })))
+      if (hasGap(answer)) {
+        sawAnyGap = true
+        gapOnce.push(...(await gapAnsweredOnce(where, answer, { calls, context, input: item.input })))
+      }
       continue
     }
     const page: PageOptions = { source, plugin, input: item.input }
@@ -252,6 +259,10 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
     refused.push(...result.refused)
     cost.push(...result.cost)
     identity.push(...identityOverlap(running.assertions.slice(assertedBeforePage), identityGrants, where, source.permission.readsIdentity === true))
+    if (hasGap(answer)) {
+      sawAnyGap = true
+      gapOnce.push(...(await gapAnsweredOnce(where, answer, { calls, context, input: item.input })))
+    }
     sawFailed ||= hasEntries(answer, "failed")
     sawRefused ||= hasEntries(answer, "refused")
     if (expect === "empty" && plain(answer) && Array.isArray(answer["events"]) && (answer["events"] as unknown[]).length > 0) {
@@ -268,6 +279,8 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
   const noExpiryReason = options.noExpiry?.reason.trim() ?? ""
   const noExpiry = isEvents && noExpiryReason !== ""
   add("gap-and-cursor-expired", gap, noExpiry ? false : isEvents && sawGap, !isEvents || noExpiry, noExpiry ? noExpiryReason : undefined)
+  // A gap is answered once, on the page where the source restarts (#28): applies whenever an answer carries one.
+  add("gap-once-per-read", gapOnce, isEvents && sawAnyGap, !isEvents || !sawAnyGap)
   add("refused-is-final", refused, isEvents && sawRefused, !isEvents)
   add("billed-cost", cost, source.cost.class === "billed" && isEvents, source.cost.class !== "billed")
 
@@ -472,6 +485,32 @@ function messageOf(error: unknown): string {
 const isRefusal = (expect: CaseExpectation): expect is Refusal => typeof expect === "object" && expect !== null && "refuses" in expect
 const plain = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
 const hasEntries = (answer: unknown, key: string): boolean => plain(answer) && Array.isArray(answer[key]) && (answer[key] as unknown[]).length > 0
+
+const hasGap = (answer: unknown): answer is Record<string, unknown> => plain(answer) && answer["gap"] !== undefined
+
+/**
+ * A gap is answered once (#28): when a page carries `gap` and says `more: true`, the page its cursor names belongs to
+ * the same read and must carry no `gap` at all, at either reason, since a consumer counts one resync per gap. A gap
+ * page with `more: false` has no later page, so it passes. The next page must be recorded: without it the rule cannot
+ * be shown to hold.
+ */
+async function gapAnsweredOnce(
+  where: string,
+  answer: Record<string, unknown>,
+  options: { readonly calls: ConformanceCalls; readonly context: SessionContext; readonly input: Readonly<Record<string, unknown>> },
+): Promise<string[]> {
+  if (answer["more"] !== true) return []
+  const cursor = answer["cursor"]
+  if (typeof cursor !== "string" || cursor.length === 0) return [`${where}: the page carries gap and more: true, and no cursor to read the rest of the read with`]
+  let next: unknown
+  try {
+    next = await options.calls.list?.({ ...options.input, cursor }, options.context)
+  } catch (error) {
+    return [`${where}: the page carries gap and more: true, so the page its cursor names must be recorded to show the gap is not repeated (${messageOf(error)})`]
+  }
+  if (hasGap(next)) return [`${where}: the read's second page repeats the gap, which a consumer counts as a second resync`]
+  return []
+}
 
 /** An expired cursor answered with `gap`: the fresh cursor must read on, without another expiry. */
 async function expiredByGap(

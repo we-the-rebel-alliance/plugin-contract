@@ -13,7 +13,7 @@ The draft's ten checks, and Memory's additions:
 | 1 | The descriptor validates, and every tool a source names is a read. | `descriptor` (the frame), then Memory's `schema` |
 | 2 | **Declared equals asserted.** A recording permission context runs the fixtures and records every action and resource the code asserts: an assertion outside the declaration fails, and a declared grant no call asserts fails as over-granting. | Memory's `conformance` |
 | 3 | Events: a stable `external_id`, the library's `hash`, a parseable `occurred_at`, an https `url`, and no secret pattern survives. | the family's `events` |
-| 4 | Cursors round-trip with no repeat or gap; a foreign cursor is refused; an expired one answers `CURSOR_EXPIRED` with `gap`; `failed[]` holds the cursor back. | the family's `cursor`, Memory's additions |
+| 4 | Cursors round-trip with no repeat or gap of events (no event is listed twice or skipped); a foreign cursor is refused; an expired one answers `CURSOR_EXPIRED` with `gap`; `failed[]` holds the cursor back. The `gap` field's own rule is `gap-once-per-read`: a read answers its gap once, on the page where the source restarts, and the page its cursor names carries none ([#28](https://github.com/we-the-rebel-alliance/source-contract/issues/28)). It applies whenever an answer carries `gap`, and a gap page with `more: true` needs that next page recorded. | the family's `cursor`, Memory's additions |
 | 5 | Another account is refused. | `read` (`ACCOUNT_MISMATCH`), the kit |
 | 6 | `probe` reads no content, asserts only its own grant, and answers `{ source, account, owner: { id, label }, trust }` (never `owner: null`). | Memory's `conformance` |
 | 7 | A snapshot's `data` validates against its output. | `registry`, `read` |

@@ -28,6 +28,8 @@ An **event** is one thing a source recorded: `source`, `account`, `external_id` 
 | `gap` | `{ reason: "expired" \| "window-truncated", since }` when history is lost |
 | `cost` | what the provider reported, for a billed source |
 
+**A `gap` is answered once** ([#28](https://github.com/we-the-rebel-alliance/source-contract/issues/28)). It appears on the page where the source restarts its window: the page that answers the consumer's cursor, or the first page of a read from `since`. No later page of that read repeats it, at either reason, even while the hole is still behind the cursor. Reading again at the same cursor is the same page, so it may answer the same `gap` again. A consumer counts one resync per `gap`, so a repeat at an advanced cursor would be a second resync.
+
 **A cursor** is opaque and versioned, bound to the plugin, source, account and scope. A foreign cursor is refused with `CURSOR_INVALID`; lost history is `CURSOR_EXPIRED` with `gap`. A consumer saves its cursor in the same transaction as the page it accepts.
 
 The `events` and `cursor` modules hold the normaliser, the hash, the secret-pattern refusal and the codec (the plugin family's part).
