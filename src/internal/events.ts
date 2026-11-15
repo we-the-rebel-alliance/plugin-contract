@@ -668,6 +668,9 @@ export function probeResultProblems(result: unknown, expected: { readonly source
   const owner = result["owner"]
   if (!plainObject(owner) || !line(owner["id"], EVENT_LIMITS.ownerId) || !line(owner["label"], EVENT_LIMITS.ownerLabel) || Object.keys(owner).some((key) => key !== "id" && key !== "label")) {
     problems.push("the probe answer's owner must be { id, label }, two non-empty lines")
+  } else if (!SCHEMED.test(owner["id"])) {
+    // docs/contract.md: an owner's id is scheme-qualified (mailto:, slack:), as an actor's id is.
+    problems.push("the probe answer's owner.id must be a scheme-qualified id such as mailto:someone@example.com or slack:U0123")
   }
   const scopes = result["scopes"]
   if (scopes !== undefined && (!Array.isArray(scopes) || scopes.length > PROBE_LIMITS.scopes || scopes.some((scope) => !line(scope, PROBE_LIMITS.scope)) || new Set(scopes).size !== scopes.length)) {

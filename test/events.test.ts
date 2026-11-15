@@ -127,6 +127,15 @@ describe("probe (source-contract#8, #4)", () => {
     expect(probeResultProblems({ ...answer, events: [] })).toEqual([expect.stringContaining('the field "events": a probe reads no content')])
     expect(probeResultProblems({ ...answer, owner: { id: OWNER.id } })).toEqual(["the probe answer's owner must be { id, label }, two non-empty lines"])
     expect(probeResultProblems({ ...answer, owner: null })).toHaveLength(1)
+    // docs/contract.md: an owner's id is scheme-qualified. gws once answered the bare address (Wave 1 review).
+    expect(probeResultProblems({ ...answer, owner: { id: "sam@example.com", label: "sam@example.com" } })).toEqual([
+      "the probe answer's owner.id must be a scheme-qualified id such as mailto:someone@example.com or slack:U0123",
+    ])
+    for (const id of ["mailto:sam@example.com", "slack:U0123", "x:@fixture-samrivera", "os-user:sam@studio-mac", "linear:4f1c2e9a-0000-4000-8000-000000000001"]) {
+      expect(probeResultProblems({ ...answer, owner: { id, label: "Sam" } }), id).toEqual([])
+    }
+    expect(probeResultProblems({ ...answer, owner: { id: "Mailto:sam@example.com", label: "Sam" } })).toHaveLength(1)
+    expect(probeResultProblems({ ...answer, owner: { id: "mailto: sam", label: "Sam" } })).toHaveLength(1)
     expect(probeResultProblems(answer, { source: "gmail" })).toEqual(["the probe answer names the source demo, not gmail"])
     expect(probeResultProblems(answer, { account: "home" })).toEqual(["the probe answer names another account than the one asked for"])
     expect(probeResultProblems({ ...answer, trust: "trusted" })).toEqual([expect.stringContaining("trust")])
