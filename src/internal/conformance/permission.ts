@@ -3,7 +3,7 @@
  * with this context, so a read that asserts more than its declaration holds is refused here, and a grant nothing
  * asserts is reported at the end. Declared equals asserted.
  */
-import { sessionRules } from "../../permission.ts"
+import { operationRule, sessionRules } from "../../permission.ts"
 import type { SourceItem } from "../schema/types.ts"
 
 /** A permission action and its resource, as a declaration derives them. */
@@ -70,13 +70,13 @@ export function grantsFor(source: SourceItem, account: string): Grant[] {
  * The grants of the **bind** session: only `scope.suggest`'s tool and operations. They never enter a running grant, so
  * they are a separate session with its own unused check.
  */
-export function bindGrantsFor(source: SourceItem): Grant[] {
+export function bindGrantsFor(source: SourceItem, account = "default"): Grant[] {
   const suggest = source.scope?.suggest
   if (suggest === undefined) return []
   const action = source.kind === "events" ? source.permission.events : source.permission.tool
   const head = source.id.split(".")[0] ?? source.id
   const grants: Grant[] = [{ action: action.includes(".") ? `${head}.${suggest.tool}` : `${head}_${suggest.tool}`, resource: "*" }]
-  for (const operation of suggest.operations) addGrant(grants, source, operation)
+  for (const operation of suggest.operations) addGrant(grants, source, operation, account)
   return grants
 }
 
@@ -85,28 +85,30 @@ export function bindGrantsFor(source: SourceItem): Grant[] {
  * page reads its identity too, but they are not content: a declaration may not also list one in
  * `permission.operations`.
  */
-export function identityGrantsFor(source: SourceItem, identityOperations: readonly string[]): Grant[] {
+export function identityGrantsFor(source: SourceItem, identityOperations: readonly string[], account = "default"): Grant[] {
   const grants: Grant[] = []
-  for (const operation of identityOperations) addGrant(grants, source, operation)
+  for (const operation of identityOperations) addGrant(grants, source, operation, account)
   return grants
 }
 
 /**
- * The grants a source's probe may assert beyond its action: a rules source's `identityRules` verbatim (#30, item 10),
- * or else its identity operations by the conventional derivation.
+ * The grants a source's probe may assert beyond its action, for the run's account: a rules source's `identityRules`
+ * verbatim (#30, item 10), or else its identity operations by the app's derivation (`accounts.server` too, item 9).
  */
-export function probeIdentityGrants(source: SourceItem, identityOperations: readonly string[]): Grant[] {
+export function probeIdentityGrants(source: SourceItem, identityOperations: readonly string[], account = "default"): Grant[] {
   const verbatim = source.permission.identityRules
   if (verbatim !== undefined) return verbatim.map((rule) => ({ action: rule.action, resource: rule.resource }))
-  return identityGrantsFor(source, identityOperations)
+  return identityGrantsFor(source, identityOperations, account)
 }
 
-/** One operation's grant, as the same derivation makes it. */
-function addGrant(grants: Grant[], source: SourceItem, operation: string): void {
-  const head = source.id.split(".")[0] ?? source.id
-  const grant: Grant = operation.includes(".")
-    ? { action: `${head}.read`, resource: `{account}:${operation}` }
-    : { action: `${head}_${operation}`, resource: "*" }
+/**
+ * One operation's grant, by the app's derivation (`permission.operationRule`) for the run's account, so a per-account
+ * MCP server (`accounts.server`, #30 item 9) is followed here as in `sessionRules` and `probeRules`. The account in a
+ * resource maps back to `{account}`, as in `grantsFor`.
+ */
+function addGrant(grants: Grant[], source: SourceItem, operation: string, account: string): void {
+  const rule = operationRule(source as unknown as Parameters<typeof operationRule>[0], operation, account)
+  const grant: Grant = { action: rule.action, resource: rule.resource.replace(`${account}:`, "{account}:") }
   if (!grants.some((held) => held.action === grant.action && held.resource === grant.resource)) grants.push(grant)
 }
 

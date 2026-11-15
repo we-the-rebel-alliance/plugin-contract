@@ -194,9 +194,9 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
     ...(declaredProbe === undefined ? [] : [{ action: declaredProbe, resource: "*" }]),
   ]
   const running = recordingPermission(runningGrants)
-  const identityGrants = probeIdentityGrants(source, identityOperations)
+  const identityGrants = probeIdentityGrants(source, identityOperations, account)
   const identity: string[] = []
-  const bind = recordingPermission(bindGrantsFor(source))
+  const bind = recordingPermission(bindGrantsFor(source, account))
   const context: SessionContext = { account, permission: running.permission }
   const bindContext: SessionContext = { account, permission: bind.permission }
   const checks: ConformanceCheck[] = []
@@ -351,8 +351,8 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
       }
       const suggestAssertions = bind.assertions.slice(assertedBeforeSuggest)
       if (suggestAssertions.length === 0) suggest.push(`scope.suggest(${suggested.tool}) asserted nothing: even at bind it reads under the grant`)
-      suggest.push(...outsideGrants(suggestAssertions, bindGrantsFor(source), `scope.suggest(${suggested.tool})`))
-      for (const grant of unusedGrants(bindGrantsFor(source), bind.assertions)) {
+      suggest.push(...outsideGrants(suggestAssertions, bindGrantsFor(source, account), `scope.suggest(${suggested.tool})`))
+      for (const grant of unusedGrants(bindGrantsFor(source, account), bind.assertions)) {
         suggest.push(`the bind declaration grants ${grant.action} on ${grant.resource}, which no bind-time read asserts: a suggest operation is exactly what it asserts`)
       }
     }
@@ -483,7 +483,7 @@ async function assertDetail(
     problems.push(`${where} failed inside the confirmed scope: ${messageOf(error)}`)
   }
   problems.push(...outsideGrants(running.assertions.slice(assertedBefore), runningGrants, where))
-  problems.push(...identityOverlap(running.assertions.slice(assertedBefore), probeIdentityGrants(source, identityOperations), where, source.permission.readsIdentity === true))
+  problems.push(...identityOverlap(running.assertions.slice(assertedBefore), probeIdentityGrants(source, identityOperations, context.account), where, source.permission.readsIdentity === true))
 }
 
 /** The word or code an error carries, for a refusal case. */
@@ -615,7 +615,7 @@ function identityProblems(
   probeAction?: string,
 ): string[] {
   const action = probeAction ?? (source.kind === "events" ? source.permission.events : source.permission.tool)
-  // The identity grants: a rules source's identityRules verbatim, or its identity operations derived (probeIdentityGrants).
+  // The identity grants: a rules source's identityRules verbatim, or its identity operations derived for the run's account (probeIdentityGrants).
   const allowed: Grant[] = [{ action, resource: "*" }, ...identityGrants]
   const problems: string[] = []
   for (const assertion of assertions) {
