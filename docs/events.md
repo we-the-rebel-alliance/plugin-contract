@@ -87,6 +87,8 @@ The fixture runner records this, and fails if it changes:
 answer by `probeResultProblems`, so a probe that passes conformance is one a consumer accepts. Concretely:
 
 - `owner: { id, label }` is required. There is no `owner: null`.
+- `owner.id` is scheme-qualified, as `docs/contract.md` gives an owner (`mailto:sam@example.com`, `slack:U0123`),
+  with the rule an actor's id follows: a lowercase scheme, `:`, then no whitespace. A bare `sam@example.com` fails.
 - A source that is not signed in refuses the probe with `NEEDS_SIGN_IN` and a `next` step. If a plugin answers
   `owner: null` anyway, `read.probe` reports `NEEDS_SIGN_IN` and conformance fails it.
 - A local source (history, say) names a synthetic owner: `os-user:<user>@<host>`, with a label such as the user's name.

@@ -1,7 +1,7 @@
 // @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
 import {
   SOURCES_SCHEMA
-} from "./chunk-RRUAIQ4I.js";
+} from "./chunk-MMWN45QY.js";
 import {
   SUPPORTED_CONTRACT_VERSIONS
 } from "./chunk-ELPJD3ND.js";
@@ -9,7 +9,7 @@ import {
   EVENT_KINDS,
   MAX_BYTES,
   isEventKind
-} from "./chunk-ZUKF7P6U.js";
+} from "./chunk-SCRRTLIA.js";
 import {
   OUTPUT_NAMES,
   isExtensionOutput,

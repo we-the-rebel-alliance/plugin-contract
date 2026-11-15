@@ -2,6 +2,7 @@
 // plugin and asOf, the error table, the secret-pattern refusal, and the conformance's opt-in checks.
 import { describe, test } from "node:test"
 import { expect } from "./support/expect.ts"
+import { failureFromError } from "../src/internal/failure.ts"
 import { encodeBoundCursor, decodeBoundCursor, type CursorBinding } from "../src/cursor.ts"
 import {
   canonicalCode,
@@ -126,6 +127,15 @@ describe("probe (source-contract#8, #4)", () => {
     expect(probeResultProblems({ ...answer, events: [] })).toEqual([expect.stringContaining('the field "events": a probe reads no content')])
     expect(probeResultProblems({ ...answer, owner: { id: OWNER.id } })).toEqual(["the probe answer's owner must be { id, label }, two non-empty lines"])
     expect(probeResultProblems({ ...answer, owner: null })).toHaveLength(1)
+    // docs/contract.md: an owner's id is scheme-qualified. gws once answered the bare address (Wave 1 review).
+    expect(probeResultProblems({ ...answer, owner: { id: "sam@example.com", label: "sam@example.com" } })).toEqual([
+      "the probe answer's owner.id must be a scheme-qualified id such as mailto:someone@example.com or slack:U0123",
+    ])
+    for (const id of ["mailto:sam@example.com", "slack:U0123", "x:@fixture-samrivera", "os-user:sam@studio-mac", "linear:4f1c2e9a-0000-4000-8000-000000000001"]) {
+      expect(probeResultProblems({ ...answer, owner: { id, label: "Sam" } }), id).toEqual([])
+    }
+    expect(probeResultProblems({ ...answer, owner: { id: "Mailto:sam@example.com", label: "Sam" } })).toHaveLength(1)
+    expect(probeResultProblems({ ...answer, owner: { id: "mailto: sam", label: "Sam" } })).toHaveLength(1)
     expect(probeResultProblems(answer, { source: "gmail" })).toEqual(["the probe answer names the source demo, not gmail"])
     expect(probeResultProblems(answer, { account: "home" })).toEqual(["the probe answer names another account than the one asked for"])
     expect(probeResultProblems({ ...answer, trust: "trusted" })).toEqual([expect.stringContaining("trust")])
@@ -219,7 +229,18 @@ describe("errors", () => {
     expect(parseSourceError(new Error("GWS_VALIDATION_ERROR: Limit: Too big. Next step: x."))).toEqual({ code: "GWS_VALIDATION_ERROR", what: "Limit: Too big", next: "x." })
     expect(parseSourceError(new Error("The cursor is invalid or has expired."))).toBeUndefined()
     for (const code of ["SCOPE_MISSING", "BUDGET_EXCEEDED", "SOURCE_DISABLED", "INPUT_INVALID", "SOURCE_UNKNOWN"]) expect(canonicalCode(code)).toBe(code)
+    expect(canonicalCode("ACCOUNT_UNKNOWN")).toBe("ACCOUNT_MISMATCH")
+    expect(parseSourceError(new Error("ACCOUNT_UNKNOWN: there is no account 'work'. Next step: Pass a known account."))?.canonical).toBe("ACCOUNT_MISMATCH")
     expect(new SourceError({ code: "RATE_LIMITED", what: "x", next: "Wait.", retryAfterSec: 60 }).retryAfterSec).toBe(60)
+  })
+})
+
+describe("read's failures take the aliases", () => {
+  test("a plugin's ACCOUNT_UNKNOWN reaches read as ACCOUNT_MISMATCH, not UNAVAILABLE (Wave 1, the Slack review)", () => {
+    const failed = failureFromError(new Error("ACCOUNT_UNKNOWN: there is no account 'work'. Next step: Pass a known account."))
+    expect(failed.code).toBe("ACCOUNT_MISMATCH")
+    expect(failed.next).toBe("Pass a known account.")
+    expect(failureFromError(Object.assign(new Error("no such account"), { data: { code: "ACCOUNT_UNKNOWN", next: "Pass a known account." } })).code).toBe("ACCOUNT_MISMATCH")
   })
 })
 
