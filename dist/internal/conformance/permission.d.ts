@@ -52,6 +52,11 @@ export declare function bindGrantsFor(source: SourceItem): Grant[];
  * `permission.operations`.
  */
 export declare function identityGrantsFor(source: SourceItem, identityOperations: readonly string[]): Grant[];
+/**
+ * The grants a source's probe may assert beyond its action: a rules source's `identityRules` verbatim (#30, item 10),
+ * or else its identity operations by the conventional derivation.
+ */
+export declare function probeIdentityGrants(source: SourceItem, identityOperations: readonly string[]): Grant[];
 /** `{account}` is a wildcard for the account a call names; everything else must match exactly, or by `*`. */
 export declare function sameResource(declared: string, asserted: string): boolean;
 /** True when some assertion is the grant's action on one of its resources, with `{account}` bound to any account. */

@@ -2,7 +2,7 @@
 import {
   findSource,
   maxBytesOf
-} from "./chunk-5KLPHQMY.js";
+} from "./chunk-MPITE35X.js";
 import {
   ERROR_CODES,
   PAGE,
@@ -22,7 +22,7 @@ import {
   grantCovers,
   probeRules,
   sessionRules
-} from "./chunk-3M5PAKSS.js";
+} from "./chunk-65565QQQ.js";
 import {
   pick,
   pickProblemsForOutput
@@ -213,7 +213,7 @@ async function readDetail(host, request) {
 async function probe(host, request) {
   const source = findSource(request.installed.sources, request.source);
   if (!source) return { ok: false, failure: failure("UNAVAILABLE", `${request.installed.package} declares no source ${request.source}`, "Check the source id.") };
-  const declared = source.permission.identity;
+  const declared = source.permission.identity ?? (source.permission.identityRules !== void 0 ? [] : void 0);
   const identity = declared ?? request.identityOperations;
   if (identity === void 0) {
     return { ok: false, failure: failure("PERMISSION_DENIED", `${source.id} declares no identity operations, and none were given`, "Declare permission.identity in the source, or pass the identity operations.") };

@@ -1,7 +1,7 @@
 // @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
 import {
   isToolsRpcId
-} from "./chunk-N4LAUCF3.js";
+} from "./chunk-YAQOWYWL.js";
 import {
   isEventKind
 } from "./chunk-EMHGNGJL.js";
@@ -86,9 +86,23 @@ var permissionBase = {
       action: string().max(80).regex(ACTION, { error: "must be a permission action such as github_api" }),
       resource: string().max(200).describe("The resource the action is asserted on, such as GET /user.")
     }).strict()
-  ).min(1).optional().describe("The grants verbatim, for a provider whose resources are not <account>:<operation> (GitHub's github_api on GET /user).")
+  ).min(1).optional().describe("The grants verbatim, for a provider whose resources are not <account>:<operation> (GitHub's github_api on GET /user)."),
+  identityRules: array(
+    object({
+      action: string().max(80).regex(ACTION, { error: "must be a permission action such as github_api" }),
+      resource: string().max(200).describe("The resource the action is asserted on, such as GET /user.")
+    }).strict()
+  ).optional().describe(
+    "For a rules source: the grants probe asserts for this source, verbatim, each among permission.rules (#30, item 10). Empty when the probe asserts only sources.probe.action; absent when undeclared. A rules source's equivalent of identity."
+  )
 };
 var permissionEither = (value, ctx) => {
+  if (value.identityRules !== void 0 && value.rules === void 0) {
+    ctx.addIssue({ code: "custom", path: ["identityRules"], message: "identityRules is for a source that states its rules verbatim; a source with operations declares identity" });
+  }
+  if (value.identity !== void 0 && value.rules !== void 0) {
+    ctx.addIssue({ code: "custom", path: ["identity"], message: "a source that states its rules verbatim declares its probe's grants as identityRules, not identity" });
+  }
   if (value.operations === void 0 && value.rules === void 0) {
     ctx.addIssue({ code: "custom", message: "a permission states its operations, or its rules verbatim" });
   }

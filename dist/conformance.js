@@ -1,13 +1,13 @@
 // @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
 import {
   maxBytesOf
-} from "./chunks/chunk-5KLPHQMY.js";
+} from "./chunks/chunk-MPITE35X.js";
 import {
   SOURCES_SCHEMA
-} from "./chunks/chunk-4BP7XOG2.js";
+} from "./chunks/chunk-CBOKN6VH.js";
 import {
   toolsRpcIdProblems
-} from "./chunks/chunk-N4LAUCF3.js";
+} from "./chunks/chunk-YAQOWYWL.js";
 import "./chunks/chunk-ELPJD3ND.js";
 import {
   PAGE,
@@ -22,7 +22,7 @@ import {
 import "./chunks/chunk-I2RXJJJM.js";
 import {
   sessionRules
-} from "./chunks/chunk-3M5PAKSS.js";
+} from "./chunks/chunk-65565QQQ.js";
 import "./chunks/chunk-6HDIB2SA.js";
 import {
   fromJSONSchema
@@ -10701,6 +10701,17 @@ function declarationProblems(sources, options = {}) {
     for (const operation of unique(identity)) {
       if (identity.filter((entry) => entry === operation).length > 1) problems.push(`${at}.permission.identity lists "${operation}" twice`);
     }
+    const identityRules = item.permission.identityRules ?? [];
+    const ruleKey = (rule) => `${rule.action}\0${rule.resource}`;
+    const declaredRules = new Set(rules.map(ruleKey));
+    const seenIdentityRules = /* @__PURE__ */ new Set();
+    for (const rule of identityRules) {
+      if (!declaredRules.has(ruleKey(rule))) {
+        problems.push(`${at}.permission.identityRules lists ${rule.action} on ${rule.resource}, which permission.rules does not: a source's rules are everything its reads assert, identity included`);
+      }
+      if (seenIdentityRules.has(ruleKey(rule))) problems.push(`${at}.permission.identityRules lists ${rule.action} on ${rule.resource} twice`);
+      seenIdentityRules.add(ruleKey(rule));
+    }
     const details = item.kind === "events" ? item.details ?? [] : [];
     for (const [i, detail] of details.entries()) {
       const where = `${at}.details[${i}]`;
@@ -10766,8 +10777,13 @@ function isSourceItem(value) {
   if (kind !== "events" && kind !== "snapshot") return false;
   if (typeof value["id"] !== "string" || typeof value["tool"] !== "string") return false;
   const permission = value["permission"];
-  if (!plain(permission) || !Array.isArray(permission["operations"])) return false;
-  if (!permission["operations"].every((operation) => typeof operation === "string")) return false;
+  if (!plain(permission)) return false;
+  const operations = permission["operations"];
+  const rules = permission["rules"];
+  if (operations !== void 0 && (!Array.isArray(operations) || !operations.every((operation) => typeof operation === "string"))) return false;
+  if (rules !== void 0 && (!Array.isArray(rules) || !rules.every((rule) => plain(rule) && typeof rule["action"] === "string" && typeof rule["resource"] === "string"))) return false;
+  const identityRules = permission["identityRules"];
+  if (identityRules !== void 0 && (!Array.isArray(identityRules) || !identityRules.every((rule) => plain(rule) && typeof rule["action"] === "string" && typeof rule["resource"] === "string"))) return false;
   const action = kind === "events" ? permission["events"] : permission["tool"];
   if (typeof action !== "string") return false;
   if (permission["operations"] === void 0 && permission["rules"] === void 0) return false;
@@ -10824,6 +10840,11 @@ function identityGrantsFor(source, identityOperations) {
   const grants = [];
   for (const operation of identityOperations) addGrant(grants, source, operation);
   return grants;
+}
+function probeIdentityGrants(source, identityOperations) {
+  const verbatim = source.permission.identityRules;
+  if (verbatim !== void 0) return verbatim.map((rule) => ({ action: rule.action, resource: rule.resource }));
+  return identityGrantsFor(source, identityOperations);
 }
 function addGrant(grants, source, operation) {
   const head = source.id.split(".")[0] ?? source.id;
@@ -11029,7 +11050,7 @@ async function sourceConformance(options) {
     ...declaredProbe === void 0 ? [] : [{ action: declaredProbe, resource: "*" }]
   ];
   const running = recordingPermission(runningGrants);
-  const identityGrants = identityGrantsFor(source, identityOperations);
+  const identityGrants = probeIdentityGrants(source, identityOperations);
   const identity = [];
   const bind = recordingPermission(bindGrantsFor(source));
   const context = { account, permission: running.permission };
@@ -11135,7 +11156,7 @@ async function sourceConformance(options) {
   const probeAssertions = running.assertions.slice(assertedBeforeProbe);
   if (probeAssertions.length === 0) probe.push(`probe(${source.id}) asserted nothing: it reads the identity under its own grant`);
   const declared = probeAction !== void 0;
-  probe.push(...identityProblems(probeAssertions, source, identityOperations, declared ? probeAction : void 0));
+  probe.push(...identityProblems(probeAssertions, source, identityGrants, declared ? probeAction : void 0));
   add("probe", probe);
   const details = [];
   const declaredDetails = isEvents ? source.details ?? [] : [];
@@ -11281,7 +11302,7 @@ async function assertDetail(entry, detail, source, read, context, running, runni
     problems.push(`${where} failed inside the confirmed scope: ${messageOf(error)}`);
   }
   problems.push(...outsideGrants(running.assertions.slice(assertedBefore), runningGrants, where));
-  problems.push(...identityOverlap(running.assertions.slice(assertedBefore), identityGrantsFor(source, identityOperations), where, source.permission.readsIdentity === true));
+  problems.push(...identityOverlap(running.assertions.slice(assertedBefore), probeIdentityGrants(source, identityOperations), where, source.permission.readsIdentity === true));
 }
 function messageOf(error) {
   if (error instanceof Error) return error.message;
@@ -11368,15 +11389,9 @@ function identityOverlap(assertions, identityGrants, where, readsIdentity = fals
   }
   return problems;
 }
-function identityProblems(assertions, source, identityOperations, probeAction) {
+function identityProblems(assertions, source, identityGrants, probeAction) {
   const action = probeAction ?? (source.kind === "events" ? source.permission.events : source.permission.tool);
-  const head = source.id.split(".")[0] ?? source.id;
-  const allowed = [{ action, resource: "*" }];
-  for (const operation of identityOperations) {
-    allowed.push(
-      operation.includes(".") ? { action: `${head}.read`, resource: `{account}:${operation}` } : { action: `${head}_${operation}`, resource: "*" }
-    );
-  }
+  const allowed = [{ action, resource: "*" }, ...identityGrants];
   const problems = [];
   for (const assertion of assertions) {
     const resources = assertion.resources.length > 0 ? assertion.resources : ["*"];
