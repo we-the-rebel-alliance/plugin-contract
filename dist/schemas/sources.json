@@ -160,6 +160,17 @@
                             "usd": {
                               "type": "number",
                               "minimum": 0
+                            },
+                            "conditions": {
+                              "description": "The short sentence shown at consent when this price applies, such as X app owners only.",
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "min": {
+                              "description": "The lowest rate that may apply, in US dollars: at most usd.",
+                              "type": "number",
+                              "minimum": 0
                             }
                           },
                           "required": [
@@ -179,6 +190,17 @@
                             "pattern": "^[a-z][a-z0-9-]{0,31}$"
                           },
                           "usd": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "conditions": {
+                            "description": "The short sentence shown at consent when this price applies, such as X app owners only.",
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "min": {
+                            "description": "The lowest rate that may apply, in US dollars: at most usd.",
                             "type": "number",
                             "minimum": 0
                           }
@@ -218,6 +240,17 @@
                             "usd": {
                               "type": "number",
                               "minimum": 0
+                            },
+                            "conditions": {
+                              "description": "The short sentence shown at consent when this price applies, such as X app owners only.",
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "min": {
+                              "description": "The lowest rate that may apply, in US dollars: at most usd.",
+                              "type": "number",
+                              "minimum": 0
                             }
                           },
                           "required": [
@@ -237,6 +270,17 @@
                             "pattern": "^[a-z][a-z0-9-]{0,31}$"
                           },
                           "usd": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "conditions": {
+                            "description": "The short sentence shown at consent when this price applies, such as X app owners only.",
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "min": {
+                            "description": "The lowest rate that may apply, in US dollars: at most usd.",
                             "type": "number",
                             "minimum": 0
                           }
@@ -561,6 +605,17 @@
                             "usd": {
                               "type": "number",
                               "minimum": 0
+                            },
+                            "conditions": {
+                              "description": "The short sentence shown at consent when this price applies, such as X app owners only.",
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "min": {
+                              "description": "The lowest rate that may apply, in US dollars: at most usd.",
+                              "type": "number",
+                              "minimum": 0
                             }
                           },
                           "required": [
@@ -580,6 +635,17 @@
                             "pattern": "^[a-z][a-z0-9-]{0,31}$"
                           },
                           "usd": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "conditions": {
+                            "description": "The short sentence shown at consent when this price applies, such as X app owners only.",
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "min": {
+                            "description": "The lowest rate that may apply, in US dollars: at most usd.",
                             "type": "number",
                             "minimum": 0
                           }
@@ -619,6 +685,17 @@
                             "usd": {
                               "type": "number",
                               "minimum": 0
+                            },
+                            "conditions": {
+                              "description": "The short sentence shown at consent when this price applies, such as X app owners only.",
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "min": {
+                              "description": "The lowest rate that may apply, in US dollars: at most usd.",
+                              "type": "number",
+                              "minimum": 0
                             }
                           },
                           "required": [
@@ -638,6 +715,17 @@
                             "pattern": "^[a-z][a-z0-9-]{0,31}$"
                           },
                           "usd": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "conditions": {
+                            "description": "The short sentence shown at consent when this price applies, such as X app owners only.",
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "min": {
+                            "description": "The lowest rate that may apply, in US dollars: at most usd.",
                             "type": "number",
                             "minimum": 0
                           }

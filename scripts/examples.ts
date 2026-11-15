@@ -35,6 +35,7 @@ export interface RecordedSource {
   readonly snapshot?: (RecordedCall & { readonly input?: Readonly<Record<string, unknown>> | undefined }) | undefined
   readonly identity?: readonly string[] | undefined
   readonly atomicPages?: { readonly reason: string } | undefined
+  readonly noExpiry?: { readonly reason: string } | undefined
   readonly rpc?: string | undefined
   readonly probeAction?: { readonly action: string } | undefined
 }
@@ -158,6 +159,7 @@ export async function runExamples({ root, schema, conformance, events }: Example
         ...(fixture.account === undefined ? {} : { account: fixture.account }),
         ...(recorded.identity === undefined ? {} : { identityOperations: recorded.identity }),
         ...(recorded.atomicPages === undefined ? {} : { atomicPages: recorded.atomicPages }),
+        ...(recorded.noExpiry === undefined ? {} : { noExpiry: recorded.noExpiry }),
         ...(recorded.snapshot === undefined ? {} : { snapshotCases: [recorded.snapshot.input ?? {}] }),
         cases: (recorded.cases ?? []).map((entry) => ({
           name: entry.name ?? "a recorded case",

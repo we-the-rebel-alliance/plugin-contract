@@ -41,9 +41,21 @@ const price = z
   .object({
     per: z.string().max(32).regex(PRICE_PER, { error: "must be a lowercase word such as post, author or call" }),
     usd: z.number().min(0),
+    conditions: z
+      .string()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe("The short sentence shown at consent when this price applies, such as X app owners only."),
+    min: z.number().min(0).optional().describe("The lowest rate that may apply, in US dollars: at most usd."),
   })
   .strict()
   .describe("One price unit, in US dollars, from the plugin's own price table.")
+  .superRefine((value, ctx) => {
+    if (value.min !== undefined && value.min > value.usd) {
+      ctx.addIssue({ code: "custom", path: ["min"], message: "must not exceed usd, the price the source declares" })
+    }
+  })
 
 const units = z.array(price).min(1)
 

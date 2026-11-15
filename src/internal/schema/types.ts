@@ -192,6 +192,10 @@ export interface Price {
   readonly per: string
   /** The price of one unit, in US dollars. */
   readonly usd: number
+  /** The short sentence shown at consent when this price applies, such as X app owners only. */
+  readonly conditions?: string | undefined
+  /** The lowest rate that may apply, in US dollars: at most `usd`. */
+  readonly min?: number | undefined
 }
 
 /** A provider's own floor between reads. */

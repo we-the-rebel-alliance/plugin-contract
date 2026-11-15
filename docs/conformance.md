@@ -51,9 +51,22 @@ await sourceConformance({ ...options, atomicPages: { reason: "events.list answer
 `failed-holds-cursor` is then not applicable, the reason is shown in the report's check, and the report can be ok. An
 empty reason is no reason: the check applies, and the report is incomplete.
 
+## A source whose cursors never expire
+
+A source whose ids never expire cannot produce an expired cursor, so it cannot exercise `gap-and-cursor-expired`. Such a
+source says so:
+
+```js
+await sourceConformance({ ...options, noExpiry: { reason: "X's ids never expire" } })
+```
+
+`gap-and-cursor-expired` is then not applicable, the reason is shown in the report's check, and the report can be ok. An
+empty reason is no reason: the check applies, and the report is incomplete ([#30](https://github.com/we-the-rebel-alliance/source-contract/issues/30) item 5).
+
 ## A content read that reads the signed-in identity
 
 A feed sometimes needs the signed-in user's own id: X reads mentions and the home timeline with it. Such a source declares `permission.readsIdentity: true`, and the kit allows its content reads to assert an identity operation. Every identity operation is still declared in `permission.operations`, so the declaration stays exact ([#30](https://github.com/we-the-rebel-alliance/source-contract/issues/30) item 4).
+
 
 ## Restarting an expired cursor
 

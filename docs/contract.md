@@ -96,7 +96,7 @@ The rules:
 - `scope.keys` are what a person confirms (labels, channels, repositories);
 - each `details` entry names the event fields its input is (`external_id`, `thread` and the other identifiers), never `title` or `text`; it is called with `{ account, scope, fields }` under the source's own rules, and the plugin refuses an event outside the confirmed scope;
 - `private: true` is shown at consent;
-- `cost` states price units, including `probe`'s; a billed source must state them;
+- `cost` states price units, including `probe`'s; a billed source must state them; a price may state `conditions` (the short sentence shown at consent when it applies) and `min` (the lowest rate that may apply, at most `usd`) (#30 item 6);
 - `cadence.providerMinMinutes` only where the provider imposes a minimum;
 - `maxBytes` defaults to 64 KB and may go up to 1 MB;
 - a snapshot's `output` names a registered schema;
