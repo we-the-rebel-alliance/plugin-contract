@@ -8,6 +8,7 @@ import { join } from "node:path"
 import { expect } from "./support/expect.ts"
 import { evaluate, readOperation, registerToolsRpc, RESOURCE_PATTERN, type MethodSpec, type PluginMethod, type ToolCall } from "../src/tools-rpc.ts"
 import { PLUGIN, TOOLS_RPC_ID } from "./support/tools-rpc-block.ts"
+import { SourceError } from "../src/events.ts"
 
 type Effect = "allow" | "deny" | "ask"
 type Rule = { action: string; resource: string; effect: Effect }
@@ -176,6 +177,80 @@ describe("the resource resolver", () => {
     await expect(
       registerToolsRpc(ctx as never, { plugin: { ...PLUGIN, nextSteps: steps }, methods: [{ kind: "mcp", name: "m", class: "read", resource: resolver } as never], mcp: { server: "srv", managed: () => true } }),
     ).rejects.toThrow(/cannot have a resource resolver/)
+  })
+})
+
+describe("gws's per-operation methods (source-contract#22)", () => {
+  const CREATE = { account: "one", operation: "gmail.users.labels.create" }
+  const plan = (extra: Parameters<typeof readMethod>[0] = {}) => readMethod({ name: "plan", action: "gws.plan", ...extra })
+  const schema = (extra: Parameters<typeof readMethod>[0] = {}) => readMethod({ name: "schema", action: "gws.schema", ...extra })
+
+  test("plan and schema with resourceKind any resolve a change's own operation, and run on that exact resource", async () => {
+    const h = await setup([BASE, rule("gws.*", "ask"), rule("gws.plan", "allow", "one:gmail.users.labels.create"), rule("gws.schema", "allow", "one:gmail.users.labels.create")], [plan({ resourceKind: "any" }), schema({ resourceKind: "any" })])
+    expect(await h.call("plan", CREATE)).toEqual({ ran: CREATE, resource: "one:gmail.users.labels.create" })
+    expect(await h.call("schema", CREATE)).toEqual({ ran: CREATE, resource: "one:gmail.users.labels.create" })
+    expect(h.runs.map((run) => run.resource)).toEqual(["one:gmail.users.labels.create", "one:gmail.users.labels.create"])
+  })
+
+  test("resourceKind any widens nothing: the session's rules are still evaluated on the exact resource", async () => {
+    const h = await setup([BASE, rule("gws.*", "ask"), rule("gws.plan", "allow", "one:gmail.users.labels.create")], [plan({ resourceKind: "any" })])
+    expect(await h.call("plan", { account: "one", operation: "gmail.users.messages.send" })).toMatchObject({ data: { code: "PERMISSION_DENIED" } })
+    expect(await h.call("plan", { account: "two", operation: "gmail.users.labels.create" })).toMatchObject({ data: { code: "PERMISSION_DENIED" } })
+    expect(h.runs).toEqual([])
+  })
+
+  test("without resourceKind, or with read, a read method resolving a change is refused, as before", async () => {
+    for (const method of [plan(), plan({ resourceKind: "read" })]) {
+      const h = await setup([BASE], [method])
+      const refused = await h.call("plan", CREATE)
+      expect(refused).toMatchObject({ data: { code: "PERMISSION_DENIED" } })
+      expect(refused.message).toContain("plan is a read, and gmail.users.labels.create is not a read operation")
+      expect(h.runs).toEqual([])
+    }
+  })
+
+  test("a resolver's coded refusal reaches the caller with its own code and next step, and nothing runs", async () => {
+    const accountRequired = () => {
+      throw new SourceError({ code: "ACCOUNT_REQUIRED", what: "two accounts are configured and the input names none", next: "Pass account, one of: one, two." })
+    }
+    const h = await setup([BASE], [readMethod({ resource: accountRequired })])
+    const refused = await h.call("read", { operation: "gmail.users.messages.get" })
+    expect(refused).toMatchObject({ type: "failed", data: { code: "ACCOUNT_REQUIRED", next: "Pass account, one of: one, two." } })
+    expect(refused.message).toBe("ACCOUNT_REQUIRED: two accounts are configured and the input names none. Next step: Pass account, one of: one, two.")
+    expect(h.runs).toEqual([])
+    // A plain error carrying code, a family-form message and next works the same way.
+    const plain = await setup([BASE], [readMethod({ resource: () => { throw Object.assign(new Error("OPERATION_UNKNOWN: gmail.users.nope is not in the manifest. Next step: x."), { code: "OPERATION_UNKNOWN", next: "Call catalog to see the operations." }) } })])
+    expect(await plain.call("read", GET)).toMatchObject({ data: { code: "OPERATION_UNKNOWN", next: "Call catalog to see the operations." } })
+  })
+
+  test("the plugin's pluginError maps a resolver's throw first, as it maps a spec's failure", async () => {
+    class GwsError extends Error {}
+    const mapped = { ...PLUGIN, pluginError: (error: unknown) => (error instanceof GwsError ? { code: "OPERATION_UNKNOWN", what: error.message, next: "Call catalog." } : undefined) }
+    let handlers: Record<string, (input: unknown, context: unknown) => Promise<any>> = {}
+    const ctx = {
+      location: { directory: LOCATION },
+      rpc: { register: async (_d: unknown, registered: typeof handlers) => ((handlers = registered), { dispose: async () => {} }) },
+      permission: { hook: async () => ({ dispose: async () => {} }) },
+      session: { get: async () => ({ agent: "build" }) },
+      agent: { get: async () => ({ data: { permissions: [BASE] } }) },
+      tool: { list: async () => [] },
+      mcp: { list: async () => ({ data: [] }) },
+    }
+    await registerToolsRpc(ctx as never, { plugin: mapped, methods: [readMethod({ resource: () => { throw new GwsError("gmail.users.nope is not an operation") } })] })
+    const refused = await handlers.read!({ sessionID: "ses_1", input: {} }, { signal: new AbortController().signal, error: (type: string, message: string, data: unknown) => ({ type, message, data }) })
+    expect(refused.data).toEqual({ code: "OPERATION_UNKNOWN", next: "Call catalog." })
+  })
+
+  test("null, an error with no code, or a code with no next step stay RESOURCE_UNRESOLVED", async () => {
+    for (const resource of [() => null, () => { throw new Error("boom") }, () => { throw Object.assign(new Error("X: y"), { code: "ACCOUNT_REQUIRED" }) }, () => { throw Object.assign(new Error("x"), { code: "lower case", next: "n." }) }]) {
+      const h = await setup([BASE], [readMethod({ resource })])
+      expect(await h.call("read", GET)).toMatchObject({ data: { code: "RESOURCE_UNRESOLVED" } })
+    }
+  })
+
+  test("registration refuses an unknown resourceKind, and resourceKind without a resolver", async () => {
+    await expect(setup([BASE], [plan({ resourceKind: "write" as never })])).rejects.toThrow(/resourceKind must be "read" or "any"/)
+    await expect(setup([BASE], [plan({ resource: undefined, resourceKind: "any" })])).rejects.toThrow(/sets resourceKind but has no resource resolver/)
   })
 })
 
