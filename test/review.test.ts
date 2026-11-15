@@ -1213,3 +1213,87 @@ describe("the kit drives the secret screening from a fixture", () => {
     assert.ok(refused.some((entry) => entry.reason === "secret"), "the fixture must show the screening being driven")
   })
 })
+
+describe("a gap is answered once per read (#28)", () => {
+  const item = (): Record<string, unknown> => validPage({
+    id: "gws.gmail",
+    kind: "events",
+    reads: "message",
+    tool: "events_list",
+    input: { source: "gmail" },
+    accounts: { named: true },
+    permission: { events: "gws.events_list", operations: ["gmail.users.messages.list"] },
+    cost: { class: "free" },
+  })
+  const page = (over: Record<string, unknown> = {}): Record<string, unknown> => validPage({
+    source: "gmail",
+    plugin: "@joe-broadhead/opencode-gws",
+    account: "sam.rivera@example.com",
+    owner: { id: "mailto:sam.rivera@example.com", label: "Sam Rivera" },
+    asOf: ISO,
+    trust: "untrusted",
+    events: [],
+    cursor: "c1",
+    more: false,
+    refused: [],
+    failed: [],
+    ...over,
+  })
+  const GAP = { reason: "window-truncated", since: "2026-10-01T00:00:00.000Z" }
+  /** A read from since whose first page answers a gap; `second` answers the page its cursor names. */
+  const run = (first: Record<string, unknown>, second?: Record<string, unknown>) =>
+    sourceConformance({
+      plugin: "@joe-broadhead/opencode-gws",
+      source: sourceOf(item()),
+      tools: [{ id: "events_list", readOnly: true }],
+      account: "sam.rivera@example.com",
+      cases: [{ name: "a since before the window", input: { since: "2026-01-01T00:00:00.000Z" } }],
+      noExpiry: { reason: "this fake has no expired cursor" },
+      calls: {
+        list: async (input, context) => {
+          await context.permission.assert({ action: "gws.events_list" })
+          await context.permission.assert({ action: "gws.read", resources: ["sam.rivera@example.com:gmail.users.messages.list"] })
+          if (input["cursor"] === "c2") {
+            if (second === undefined) throw new Error("FIXTURE_MISSING: no answer recorded for the second page")
+            return second
+          }
+          return first
+        },
+        probe: async (_input, context) => {
+          await context.permission.assert({ action: "gws.events_list" })
+          return { source: "gmail", account: "sam.rivera@example.com", owner: { id: "mailto:sam.rivera@example.com", label: "Sam Rivera" }, trust: "untrusted" }
+        },
+      },
+    })
+  const check = async (first: Record<string, unknown>, second?: Record<string, unknown>) => (await run(first, second)).checks.find((entry) => entry.name === "gap-once-per-read")
+
+  test("passes when the gap is on the first page only, and the page its cursor names carries none", async () => {
+    const found = await check(page({ gap: GAP, more: true, cursor: "c2" }), page({ cursor: "c3" }))
+    assert.deepEqual(found, { name: "gap-once-per-read", ran: true, notApplicable: false, problems: [] })
+  })
+
+  test("passes for a gap page with more: false: the read has no later page", async () => {
+    const found = await check(page({ gap: GAP, more: false }))
+    assert.equal(found?.ran, true)
+    assert.deepEqual(found?.problems, [])
+  })
+
+  test("fails when the second page repeats the gap, at either reason", async () => {
+    for (const repeat of [GAP, { reason: "expired", since: "2026-10-01T00:00:00.000Z" }]) {
+      const found = await check(page({ gap: GAP, more: true, cursor: "c2" }), page({ cursor: "c3", gap: repeat }))
+      assert.deepEqual(found?.problems, ["events_list(a since before the window): the read's second page repeats the gap, which a consumer counts as a second resync"])
+    }
+  })
+
+  test("fails when a gap page says more: true and its next page is not recorded", async () => {
+    const found = await check(page({ gap: GAP, more: true, cursor: "c2" }))
+    assert.equal(found?.problems.length, 1)
+    assert.match(found?.problems[0] ?? "", /must be recorded to show the gap is not repeated/)
+  })
+
+  test("does not apply when no answer carries a gap", async () => {
+    const found = await check(page())
+    assert.equal(found?.ran, false)
+    assert.equal(found?.notApplicable, true)
+  })
+})

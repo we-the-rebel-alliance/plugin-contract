@@ -224,6 +224,131 @@
           }
         },
         {
+          "name": "a since before the window, in pages: the gap is on the first page only",
+          "input": {
+            "source": "calendar",
+            "account": "sam.rivera@example.com",
+            "since": "2025-06-01T00:00:00.000Z"
+          },
+          "expect": "page",
+          "asserts": [
+            {
+              "action": "gws.read",
+              "resource": "sam.rivera@example.com:calendar.events.list"
+            }
+          ],
+          "answer": {
+            "source": "calendar",
+            "plugin": "@joe-broadhead/opencode-gws",
+            "account": "sam.rivera@example.com",
+            "owner": {
+              "id": "mailto:sam.rivera@example.com",
+              "label": "Sam Rivera"
+            },
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "trust": "untrusted",
+            "events": [
+              {
+                "kind": "meeting",
+                "external_id": "evt-a",
+                "occurred_at": "2026-11-01T10:00:00.000Z",
+                "thread": "calendar:evt-a",
+                "actors": [
+                  {
+                    "role": "organizer",
+                    "id": "mailto:ama.mensah@example.com",
+                    "name": "Ama Mensah"
+                  },
+                  {
+                    "role": "attendee",
+                    "id": "mailto:sam.rivera@example.com",
+                    "name": "Sam Rivera"
+                  }
+                ],
+                "title": "Quarterly plan",
+                "text": "Agenda: Q4 numbers, hiring, the board pack.",
+                "url": "https://calendar.google.com/calendar/event?eid=evt-a",
+                "labels": [
+                  "confirmed",
+                  "Room-3"
+                ],
+                "source": "calendar",
+                "account": "sam.rivera@example.com",
+                "hash": "sha256:32c3413b27b6bdc89fc3c9f0769b153d1e8f17d5e6df2b101a7eda8045ef920e"
+              }
+            ],
+            "cursor": "calendar:sam.rivera@example.com:page:gap-page-2",
+            "more": true,
+            "refused": [],
+            "failed": [],
+            "gap": {
+              "reason": "window-truncated",
+              "since": "2026-10-13T09:00:00.000Z"
+            }
+          }
+        },
+        {
+          "name": "the read's second page carries no gap",
+          "input": {
+            "source": "calendar",
+            "account": "sam.rivera@example.com",
+            "since": "2025-06-01T00:00:00.000Z",
+            "cursor": "calendar:sam.rivera@example.com:page:gap-page-2"
+          },
+          "expect": "page",
+          "asserts": [
+            {
+              "action": "gws.read",
+              "resource": "sam.rivera@example.com:calendar.events.list"
+            }
+          ],
+          "answer": {
+            "source": "calendar",
+            "plugin": "@joe-broadhead/opencode-gws",
+            "account": "sam.rivera@example.com",
+            "owner": {
+              "id": "mailto:sam.rivera@example.com",
+              "label": "Sam Rivera"
+            },
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "trust": "untrusted",
+            "events": [
+              {
+                "kind": "meeting",
+                "external_id": "evt-a",
+                "occurred_at": "2026-11-01T10:00:00.000Z",
+                "thread": "calendar:evt-a",
+                "actors": [
+                  {
+                    "role": "organizer",
+                    "id": "mailto:ama.mensah@example.com",
+                    "name": "Ama Mensah"
+                  },
+                  {
+                    "role": "attendee",
+                    "id": "mailto:sam.rivera@example.com",
+                    "name": "Sam Rivera"
+                  }
+                ],
+                "title": "Quarterly plan",
+                "text": "Agenda: Q4 numbers, hiring, the board pack.",
+                "url": "https://calendar.google.com/calendar/event?eid=evt-a",
+                "labels": [
+                  "confirmed",
+                  "Room-3"
+                ],
+                "source": "calendar",
+                "account": "sam.rivera@example.com",
+                "hash": "sha256:32c3413b27b6bdc89fc3c9f0769b153d1e8f17d5e6df2b101a7eda8045ef920e"
+              }
+            ],
+            "cursor": "calendar:sam.rivera@example.com:sync:sync-4",
+            "more": false,
+            "refused": [],
+            "failed": []
+          }
+        },
+        {
           "name": "a sync token Google has forgotten is CURSOR_EXPIRED",
           "input": {
             "source": "calendar",
