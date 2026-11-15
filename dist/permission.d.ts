@@ -61,7 +61,17 @@ export declare function namespaceOf(source: Pick<SourceItem, "id">): string;
  * `<account>:<operation>`, a bare one (an MCP tool) as `<namespace>_<operation>` on `*`. The same derivation as Memory's
  * conformance kit, so declared equals asserted means the same thing in a plugin's CI and in a consumer's session.
  */
-export declare function operationRule(source: Pick<SourceItem, "id">, operation: string, account: string): PermissionRule;
+export declare function operationRule(source: Pick<SourceItem, "id" | "accounts">, operation: string, account: string): PermissionRule;
+/** The account the default MCP server serves: its tools are `<namespace>_<tool>`, whatever `accounts.server` says. */
+export declare const DEFAULT_ACCOUNT = "default";
+/** An account that may stand in a per-account server's name: a tool id's characters only. */
+export declare const SERVER_ACCOUNT_PATTERN: RegExp;
+/**
+ * The MCP server a bare operation of `source` runs on for `account` (#30, item 9): the namespace, or, for a plugin with
+ * one MCP server per account (`accounts.server`, such as `plaud-{account}`), that server for every account but
+ * `default`. Plaud's `list_files` is `plaud_list_files` for the default account and `plaud-work_list_files` for work.
+ */
+export declare function serverOf(source: Pick<SourceItem, "id" | "accounts">, account: string): string;
 /** The method action a source's read asserts. */
 export declare function methodAction(source: SourceItem): string | undefined;
 /**

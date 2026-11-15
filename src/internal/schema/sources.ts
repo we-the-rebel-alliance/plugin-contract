@@ -79,8 +79,21 @@ const cost = z
   .discriminatedUnion("class", [freeCost, meteredCost, billedCost], { error: "must be free, metered or billed" })
   .describe("What one read costs, including a probe call, which reads no content.")
 
+/** A per-account MCP server's name: lowercase words with `{account}` once, such as `plaud-{account}`. */
+const ACCOUNT_SERVER = /^[a-z][a-z0-9_-]*\{account\}[a-z0-9_-]*$/
+
 const accounts = z
-  .object({ named: z.boolean().describe("True when the source reads more than one account, so a read names one.") })
+  .object({
+    named: z.boolean().describe("True when the source reads more than one account, so a read names one."),
+    server: z
+      .string()
+      .max(64)
+      .regex(ACCOUNT_SERVER, { error: "must be lowercase words holding {account} once, such as plaud-{account}" })
+      .optional()
+      .describe(
+        "For a plugin with one MCP server per account (#30, item 9): the server a named account's MCP tools live on, with {account} for the account, such as plaud-{account}. A bare operation is then <server>_<operation> for an account other than default; the default account keeps the namespace.",
+      ),
+  })
   .strict()
   .describe("Which signed-in accounts a source reads.")
 

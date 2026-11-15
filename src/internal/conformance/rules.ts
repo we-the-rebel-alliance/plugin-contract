@@ -304,6 +304,11 @@ export function declarationProblems(sources: unknown, options: DeclarationOption
         }
       }
     }
+    // A per-account MCP server is still the source's own: it begins with the namespace (#30, item 9).
+    const server = item.accounts?.server
+    if (server !== undefined && !new RegExp(`^${head}(?:[-_]|\\{account\\})`).test(server)) {
+      problems.push(`${at}.accounts.server "${server}" does not begin with the plugin's namespace "${head}": every action of a source begins with it`)
+    }
     // A probe's identity operations are not content, and never both (#4, #8).
     for (const rule of rules) {
       if (typeof rule.action !== "string" || typeof rule.resource !== "string") problems.push(`${at}.permission.rules entries must be { action, resource }`)

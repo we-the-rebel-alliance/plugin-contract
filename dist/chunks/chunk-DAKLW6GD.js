@@ -1,7 +1,7 @@
 // @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
 import {
   isToolsRpcId
-} from "./chunk-YAQOWYWL.js";
+} from "./chunk-5N64VVBX.js";
 import {
   isEventKind
 } from "./chunk-EMHGNGJL.js";
@@ -54,7 +54,13 @@ var freeCost = object({
 var meteredCost = object({ class: literal("metered"), units, probe: price.optional() }).strict();
 var billedCost = object({ class: literal("billed"), units, probe: price }).strict();
 var cost = discriminatedUnion("class", [freeCost, meteredCost, billedCost], { error: "must be free, metered or billed" }).describe("What one read costs, including a probe call, which reads no content.");
-var accounts = object({ named: boolean().describe("True when the source reads more than one account, so a read names one.") }).strict().describe("Which signed-in accounts a source reads.");
+var ACCOUNT_SERVER = /^[a-z][a-z0-9_-]*\{account\}[a-z0-9_-]*$/;
+var accounts = object({
+  named: boolean().describe("True when the source reads more than one account, so a read names one."),
+  server: string().max(64).regex(ACCOUNT_SERVER, { error: "must be lowercase words holding {account} once, such as plaud-{account}" }).optional().describe(
+    "For a plugin with one MCP server per account (#30, item 9): the server a named account's MCP tools live on, with {account} for the account, such as plaud-{account}. A bare operation is then <server>_<operation> for an account other than default; the default account keeps the namespace."
+  )
+}).strict().describe("Which signed-in accounts a source reads.");
 var scope = object({
   keys: array(string().max(32).regex(SCOPE_KEY, { error: "must be a lowercase scope key such as channels" })).describe("The scope keys a person confirms: labels, channels, repositories. Empty when there is nothing to choose."),
   describe: string().max(200).describe("The sentence shown at consent, such as Which labels."),

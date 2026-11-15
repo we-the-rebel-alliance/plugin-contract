@@ -1,13 +1,13 @@
 // @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
 import {
   maxBytesOf
-} from "./chunks/chunk-MPITE35X.js";
+} from "./chunks/chunk-GDLZA6PX.js";
 import {
   SOURCES_SCHEMA
-} from "./chunks/chunk-CBOKN6VH.js";
+} from "./chunks/chunk-DAKLW6GD.js";
 import {
   toolsRpcIdProblems
-} from "./chunks/chunk-YAQOWYWL.js";
+} from "./chunks/chunk-5N64VVBX.js";
 import "./chunks/chunk-ELPJD3ND.js";
 import {
   PAGE,
@@ -21,8 +21,9 @@ import {
 } from "./chunks/chunk-EMHGNGJL.js";
 import "./chunks/chunk-I2RXJJJM.js";
 import {
+  operationRule,
   sessionRules
-} from "./chunks/chunk-65565QQQ.js";
+} from "./chunks/chunk-IAXJCLVR.js";
 import "./chunks/chunk-6HDIB2SA.js";
 import {
   fromJSONSchema
@@ -10687,6 +10688,10 @@ function declarationProblems(sources, options = {}) {
         }
       }
     }
+    const server = item.accounts?.server;
+    if (server !== void 0 && !new RegExp(`^${head}(?:[-_]|\\{account\\})`).test(server)) {
+      problems.push(`${at}.accounts.server "${server}" does not begin with the plugin's namespace "${head}": every action of a source begins with it`);
+    }
     for (const rule of rules) {
       if (typeof rule.action !== "string" || typeof rule.resource !== "string") problems.push(`${at}.permission.rules entries must be { action, resource }`);
     }
@@ -10827,28 +10832,28 @@ function grantsFor(source, account) {
   if (!rules.ok) return [];
   return rules.value.filter((rule) => rule.effect === "allow").map((rule) => ({ action: rule.action, resource: rule.resource.replace(`${account}:`, "{account}:") }));
 }
-function bindGrantsFor(source) {
+function bindGrantsFor(source, account = "default") {
   const suggest = source.scope?.suggest;
   if (suggest === void 0) return [];
   const action = source.kind === "events" ? source.permission.events : source.permission.tool;
   const head = source.id.split(".")[0] ?? source.id;
   const grants = [{ action: action.includes(".") ? `${head}.${suggest.tool}` : `${head}_${suggest.tool}`, resource: "*" }];
-  for (const operation of suggest.operations) addGrant(grants, source, operation);
+  for (const operation of suggest.operations) addGrant(grants, source, operation, account);
   return grants;
 }
-function identityGrantsFor(source, identityOperations) {
+function identityGrantsFor(source, identityOperations, account = "default") {
   const grants = [];
-  for (const operation of identityOperations) addGrant(grants, source, operation);
+  for (const operation of identityOperations) addGrant(grants, source, operation, account);
   return grants;
 }
-function probeIdentityGrants(source, identityOperations) {
+function probeIdentityGrants(source, identityOperations, account = "default") {
   const verbatim = source.permission.identityRules;
   if (verbatim !== void 0) return verbatim.map((rule) => ({ action: rule.action, resource: rule.resource }));
-  return identityGrantsFor(source, identityOperations);
+  return identityGrantsFor(source, identityOperations, account);
 }
-function addGrant(grants, source, operation) {
-  const head = source.id.split(".")[0] ?? source.id;
-  const grant = operation.includes(".") ? { action: `${head}.read`, resource: `{account}:${operation}` } : { action: `${head}_${operation}`, resource: "*" };
+function addGrant(grants, source, operation, account) {
+  const rule = operationRule(source, operation, account);
+  const grant = { action: rule.action, resource: rule.resource.replace(`${account}:`, "{account}:") };
   if (!grants.some((held) => held.action === grant.action && held.resource === grant.resource)) grants.push(grant);
 }
 function sameResource(declared, asserted) {
@@ -11050,9 +11055,9 @@ async function sourceConformance(options) {
     ...declaredProbe === void 0 ? [] : [{ action: declaredProbe, resource: "*" }]
   ];
   const running = recordingPermission(runningGrants);
-  const identityGrants = probeIdentityGrants(source, identityOperations);
+  const identityGrants = probeIdentityGrants(source, identityOperations, account);
   const identity = [];
-  const bind = recordingPermission(bindGrantsFor(source));
+  const bind = recordingPermission(bindGrantsFor(source, account));
   const context = { account, permission: running.permission };
   const bindContext = { account, permission: bind.permission };
   const checks = [];
@@ -11195,8 +11200,8 @@ async function sourceConformance(options) {
       }
       const suggestAssertions = bind.assertions.slice(assertedBeforeSuggest);
       if (suggestAssertions.length === 0) suggest.push(`scope.suggest(${suggested.tool}) asserted nothing: even at bind it reads under the grant`);
-      suggest.push(...outsideGrants(suggestAssertions, bindGrantsFor(source), `scope.suggest(${suggested.tool})`));
-      for (const grant of unusedGrants(bindGrantsFor(source), bind.assertions)) {
+      suggest.push(...outsideGrants(suggestAssertions, bindGrantsFor(source, account), `scope.suggest(${suggested.tool})`));
+      for (const grant of unusedGrants(bindGrantsFor(source, account), bind.assertions)) {
         suggest.push(`the bind declaration grants ${grant.action} on ${grant.resource}, which no bind-time read asserts: a suggest operation is exactly what it asserts`);
       }
     }
@@ -11302,7 +11307,7 @@ async function assertDetail(entry, detail, source, read, context, running, runni
     problems.push(`${where} failed inside the confirmed scope: ${messageOf(error)}`);
   }
   problems.push(...outsideGrants(running.assertions.slice(assertedBefore), runningGrants, where));
-  problems.push(...identityOverlap(running.assertions.slice(assertedBefore), probeIdentityGrants(source, identityOperations), where, source.permission.readsIdentity === true));
+  problems.push(...identityOverlap(running.assertions.slice(assertedBefore), probeIdentityGrants(source, identityOperations, context.account), where, source.permission.readsIdentity === true));
 }
 function messageOf(error) {
   if (error instanceof Error) return error.message;

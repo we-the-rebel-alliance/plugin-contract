@@ -56,6 +56,12 @@
                   "named": {
                     "type": "boolean",
                     "description": "True when the source reads more than one account, so a read names one."
+                  },
+                  "server": {
+                    "description": "For a plugin with one MCP server per account (#30, item 9): the server a named account's MCP tools live on, with {account} for the account, such as plaud-{account}. A bare operation is then <server>_<operation> for an account other than default; the default account keeps the namespace.",
+                    "type": "string",
+                    "maxLength": 64,
+                    "pattern": "^[a-z][a-z0-9_-]*\\{account\\}[a-z0-9_-]*$"
                   }
                 },
                 "required": [
@@ -525,6 +531,12 @@
                   "named": {
                     "type": "boolean",
                     "description": "True when the source reads more than one account, so a read names one."
+                  },
+                  "server": {
+                    "description": "For a plugin with one MCP server per account (#30, item 9): the server a named account's MCP tools live on, with {account} for the account, such as plaud-{account}. A bare operation is then <server>_<operation> for an account other than default; the default account keeps the namespace.",
+                    "type": "string",
+                    "maxLength": 64,
+                    "pattern": "^[a-z][a-z0-9_-]*\\{account\\}[a-z0-9_-]*$"
                   }
                 },
                 "required": [

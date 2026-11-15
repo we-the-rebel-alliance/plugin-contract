@@ -74,7 +74,7 @@ export interface SourceItem {
   /** An `x-` output's schema, inline: JSON Schema draft 2020-12. Absent for a registry name. */
   readonly outputSchema?: Readonly<Record<string, unknown>> | boolean
   readonly params?: Readonly<Record<string, ParamSpec>>
-  readonly accounts?: { readonly named?: boolean }
+  readonly accounts?: { readonly named?: boolean; readonly server?: string }
   readonly scope?: {
     readonly keys: readonly string[]
     readonly describe?: string
@@ -141,7 +141,7 @@ const item = z
     reads: z.string().refine(isEventKind, `must be an event kind: ${EVENT_KINDS.join(", ")}, or x-<plugin>/<kind>`).optional(),
     output: z.string().optional(),
     params: z.record(z.string(), z.looseObject({ relative: z.boolean().optional(), me: z.boolean().optional() })).optional(),
-    accounts: z.looseObject({ named: z.boolean().optional() }).optional(),
+    accounts: z.looseObject({ named: z.boolean().optional(), server: z.string().max(64).optional() }).optional(),
     scope: z.looseObject({ keys: z.array(z.string().regex(/^[a-z][a-zA-Z0-9_-]{0,39}$/)).min(1), describe: z.string().max(200).optional() }).optional(),
     details: z
       .array(

@@ -16,7 +16,18 @@ function namespaceOf(source) {
 }
 function operationRule(source, operation, account) {
   const namespace = namespaceOf(source);
-  return operation.includes(".") ? allow(`${namespace}.read`, `${account}:${operation}`) : allow(`${namespace}_${operation}`, "*");
+  return operation.includes(".") ? allow(`${namespace}.read`, `${account}:${operation}`) : allow(`${serverOf(source, account)}_${operation}`, "*");
+}
+var DEFAULT_ACCOUNT = "default";
+var SERVER_ACCOUNT_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+function serverOf(source, account) {
+  const template = source.accounts?.server;
+  if (template === void 0 || account === DEFAULT_ACCOUNT) return namespaceOf(source);
+  return template.replace("{account}", account);
+}
+function serverAccountProblem(source, account) {
+  if (source.accounts?.server === void 0 || account === DEFAULT_ACCOUNT || SERVER_ACCOUNT_PATTERN.test(account)) return void 0;
+  return `the account must be letters, digits, _ or - (at most 64), since it names the MCP server ${source.accounts.server}`;
 }
 function fenced(rules) {
   const loose = rules.find((rule) => WILDCARD.test(rule.action) || rule.resource !== "*" && WILDCARD.test(rule.resource));
@@ -43,6 +54,8 @@ function sessionRules(source, grant) {
   if (declared !== void 0) return fenced([allow(method, "*"), ...declared.map((rule) => allow(rule.action, rule.resource))]);
   const operations = source.permission.operations ?? [];
   if (operations.length === 0) return { ok: false, problems: [`${source.id} declares neither operations nor rules`] };
+  const server = serverAccountProblem(source, grant.account);
+  if (server) return { ok: false, problems: [server] };
   return fenced([allow(method, "*"), ...operations.map((operation) => operationRule(source, operation, grant.account))]);
 }
 function detailRules(source, detailId, grant) {
@@ -54,6 +67,8 @@ function probeRules(source, account, identityOperations, probeAction) {
   if (problem) return { ok: false, problems: [problem] };
   const method = probeAction ?? methodAction(source);
   if (method === void 0) return { ok: false, problems: [`${source.id} names no action for its method`] };
+  const server = serverAccountProblem(source, account);
+  if (server) return { ok: false, problems: [server] };
   const verbatim = source.permission.identityRules;
   if (verbatim !== void 0) return fenced([allow(method, "*"), ...verbatim.map((rule) => allow(rule.action, rule.resource))]);
   return fenced([allow(method, "*"), ...identityOperations.map((operation) => operationRule(source, operation, account))]);
@@ -77,6 +92,9 @@ export {
   accountProblem,
   namespaceOf,
   operationRule,
+  DEFAULT_ACCOUNT,
+  SERVER_ACCOUNT_PATTERN,
+  serverOf,
   methodAction,
   sessionRules,
   detailRules,

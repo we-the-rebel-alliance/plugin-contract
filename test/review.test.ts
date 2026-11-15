@@ -1440,3 +1440,80 @@ describe("a rules source (#30, items 10 and 11)", () => {
     ])
   })
 })
+
+describe("accounts.server (#30, item 9)", () => {
+  const plaud = (server: unknown): Record<string, unknown> => ({
+    id: "plaud.recordings",
+    kind: "events",
+    reads: "meeting",
+    tool: "events_list",
+    input: { source: "plaud" },
+    accounts: { named: true, server },
+    permission: { events: "plaud.events_list", operations: ["list_files"] },
+    cost: { class: "free" },
+  })
+
+  test("a per-account server holds {account} once, in lowercase words", () => {
+    for (const server of ["plaud-{account}", "plaud_{account}_v2"]) assert.deepEqual(problemsOf(declarationOf(plaud(server))), [], server)
+    for (const server of ["plaud", "Plaud-{account}", "plaud-{account}-{account}", "plaud {account}", "{account}", `${"p".repeat(60)}-{account}`]) {
+      assert.ok(problemsOf(declarationOf(plaud(server))).length > 0, server)
+    }
+  })
+
+  test("the server begins with the plugin's namespace, as every action of a source does", () => {
+    assert.deepEqual(declarationProblems(declarationOf(plaud("plaud-{account}"))), [])
+    assert.deepEqual(declarationProblems(declarationOf(plaud("mcp-{account}"))), [
+      'items[0] (plaud.recordings).accounts.server "mcp-{account}" does not begin with the plugin\'s namespace "plaud": every action of a source begins with it',
+    ])
+  })
+
+  test("the namespace is a whole word: plaudx-{account} is refused for a plaud source", () => {
+    for (const server of ["plaud-{account}", "plaud_{account}", "plaud{account}"]) assert.deepEqual(declarationProblems(declarationOf(plaud(server))), [], server)
+    assert.equal(declarationProblems(declarationOf(plaud("plaudx-{account}"))).length, 1)
+  })
+
+  test("the kit follows the template for a named account: the page, the probe and its identity grants", async () => {
+    const source = sourceOf({
+      ...plaud("plaud-{account}"),
+      permission: { events: "plaud.events_list", operations: ["get_current_user", "list_files"], identity: ["get_current_user"], readsIdentity: true },
+    })
+    const page = validPage({ source: "plaud", plugin: "@joe-broadhead/opencode-plaud", account: "work", owner: { id: "plaud:user-1", label: "Fixture" }, asOf: ISO, trust: "untrusted", events: [], cursor: "c1", more: false, refused: [], failed: [] })
+    const run = (account: string, prefix: string) =>
+      sourceConformance({
+        plugin: "@joe-broadhead/opencode-plaud",
+        source,
+        sources: { probe: { action: "plaud.probe" } },
+        tools: [{ id: "events_list", readOnly: true }],
+        account,
+        cases: [{ name: "a page", input: {} }],
+        noExpiry: { reason: "this fake has no expired cursor" },
+        atomicPages: { reason: "this fake answers a page in one call" },
+        calls: {
+          list: async (_input, context) => {
+            await context.permission.assert({ action: "plaud.events_list" })
+            await context.permission.assert({ action: `${prefix}_list_files` })
+            await context.permission.assert({ action: `${prefix}_get_current_user` })
+            return { ...page, account }
+          },
+          probe: async (_input, context) => {
+            await context.permission.assert({ action: "plaud.probe" })
+            await context.permission.assert({ action: `${prefix}_get_current_user` })
+            return { source: "plaud", account, owner: { id: "plaud:user-1", label: "Fixture" }, trust: "untrusted" }
+          },
+        },
+      })
+    for (const [account, prefix] of [["work", "plaud-work"], ["default", "plaud"]] as const) {
+      const report = await run(account, prefix)
+      const failing = report.checks.filter((check) => check.problems.length > 0).map((check) => `${check.name}: ${check.problems.join("; ")}`)
+      assert.deepEqual(failing, [], account)
+    }
+    // The default server's tool, asserted for a named account, is outside the grants.
+    const wrong = await run("work", "plaud")
+    assert.ok(wrong.problems.length > 0)
+  })
+
+  test("a source without it is unchanged", () => {
+    const { accounts: _accounts, ...rest } = plaud("plaud-{account}")
+    assert.deepEqual(problemsOf(declarationOf({ ...rest, accounts: { named: true } })), [])
+  })
+})
