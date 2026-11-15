@@ -144,8 +144,20 @@ export interface PluginMethod {
    * path asserts (`work:gmail.users.messages.get`); `null` when the input names none, which is refused. The rule is
    * resolved on this resource before dispatch, and `run` receives it as `call.resource`. Without it, the method
    * resolves on `*`, as in v2.
+   *
+   * A resolver may refuse with its own code and next step: a throw the plugin's `pluginError` maps, or any error that
+   * carries `code`, `what` (or a message) and `next`, such as `events`' `SourceError`, reaches the caller as that
+   * failure (source-contract#22). `null`, a malformed resource, or an error with no code is RESOURCE_UNRESOLVED.
    */
   resource?(input: unknown): string | null
+  /**
+   * (Opt-in, source-contract#22) What the resolver may name. `"read"`, the default: a `class: "read"` method's
+   * operation must be a read operation (`readOperation`). `"any"`: the method may resolve a change's operation, as gws's
+   * `schema` and `plan` do (they read a change's parameters or dry-run it, and write nothing). Either way the session's
+   * rules are evaluated on the exact `<account>:<operation>`; the read-verb rule is a heuristic about names, not a grant,
+   * so `"any"` widens nothing. Only a method with a `resource` may set it.
+   */
+  readonly resourceKind?: "read" | "any"
 }
 
 /** Every method: an MCP tool or a plugin-owned tool, each with a class. */
@@ -531,6 +543,12 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
     if (!CLASSES.includes(method.class)) throw new Error(`registerToolsRpc: ${method.name} has the class "${String(method.class)}"; use one of ${CLASSES.join(", ")}`)
     if (method.kind === "plugin" && (typeof method.run !== "function" || method.action === "")) throw new Error(`registerToolsRpc: the plugin method ${method.name} needs a run function and an action`)
     if (method.kind === "plugin" && method.resource !== undefined && typeof method.resource !== "function") throw new Error(`registerToolsRpc: the plugin method ${method.name}'s resource must be a function of its input`)
+    if (method.kind === "plugin" && method.resourceKind !== undefined && method.resourceKind !== "read" && method.resourceKind !== "any") {
+      throw new Error(`registerToolsRpc: the plugin method ${method.name}'s resourceKind must be "read" or "any"`)
+    }
+    if (method.kind === "plugin" && method.resourceKind !== undefined && method.resource === undefined) {
+      throw new Error(`registerToolsRpc: the plugin method ${method.name} sets resourceKind but has no resource resolver`)
+    }
     if (method.kind === "mcp" && "resource" in method) throw new Error(`registerToolsRpc: the MCP method ${method.name} cannot have a resource resolver; only a plugin method can`)
   }
 
@@ -563,22 +581,25 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
 
   /**
    * (v2.3) The resource a call resolves on: `*` without a resolver, as in v2; with one, the `<account>:<operation>` it
-   * names. A resolver that names none, throws, or names a malformed resource is RESOURCE_UNRESOLVED; a read method
-   * whose operation is not a read is PERMISSION_DENIED. Both refuse with no tool call.
+   * names. A resolver's coded refusal reaches the caller as it is (`codedRefusal`). A resolver that names none, throws
+   * with no code, or names a malformed resource is RESOURCE_UNRESOLVED; a read method whose operation is not a read is
+   * PERMISSION_DENIED, unless it declares `resourceKind: "any"`. Every refusal comes with no tool call.
    */
   const resourceOf = (method: MethodSpec, envelope: Envelope): string => {
     if (method.kind !== "plugin" || method.resource === undefined) return "*"
     let resource: string | null
     try {
       resource = method.resource(envelope.input)
-    } catch {
+    } catch (error) {
+      const coded = codedRefusal(error)
+      if (coded) throw new ScriptError(coded)
       resource = null
     }
     const unresolved = (what: string) => new ScriptError({ code: "RESOURCE_UNRESOLVED", what, next: NEXT_STEPS.RESOURCE_UNRESOLVED ?? RESOURCE_NEXT })
     if (resource === null || resource === undefined) throw unresolved(`${method.name}'s input names no account and operation for ${method.action} to be resolved on`)
     if (typeof resource !== "string" || !RESOURCE_PATTERN.test(resource)) throw unresolved(`${method.name}'s input resolves to a resource that is not <account>:<operation>`)
     const operation = resource.slice(resource.indexOf(":") + 1)
-    if (method.class === "read" && !readOperation(operation)) {
+    if (method.class === "read" && method.resourceKind !== "any" && !readOperation(operation)) {
       throw new ScriptError({
         code: "PERMISSION_DENIED",
         what: `${method.name} is a read, and ${operation} is not a read operation`,
@@ -586,6 +607,24 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
       })
     }
     return resource
+  }
+
+  /**
+   * A resolver's own refusal, when it says what happened and what to do: the plugin's `pluginError` mapping first (as a
+   * spec's failure is mapped), then any error carrying a code (`CODE` words), a next step, and `what` or a message. A
+   * message in the family's form `CODE: what. Next step: …` gives its `what` without the code. Undefined otherwise.
+   */
+  const codedRefusal = (error: unknown): Failure | undefined => {
+    const own = pluginError(error)
+    if (own) return own
+    if (!record(error)) return undefined
+    const code = error["code"]
+    const next = error["next"]
+    if (typeof code !== "string" || !/^[A-Z][A-Z0-9_]*$/.test(code) || typeof next !== "string" || next.trim() === "") return undefined
+    const message = typeof error["message"] === "string" ? error["message"].split(/\r?\n/, 1)[0]! : ""
+    const what = typeof error["what"] === "string" && error["what"].trim() !== "" ? error["what"] : message.replace(new RegExp(`^${code}:\\s*`), "").replace(/\s*Next step:.*$/, "")
+    if (what.trim() === "") return undefined
+    return { code, what: upstreamText(what), next }
   }
 
   /** The session's agent and the rules that decide what its model sees: the agent's, then the session's. */

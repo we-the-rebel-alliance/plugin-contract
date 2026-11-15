@@ -1,7 +1,7 @@
 // @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
 import {
   isToolsRpcId
-} from "./chunk-KWEWSZ4V.js";
+} from "./chunk-N4LAUCF3.js";
 import {
   isEventKind
 } from "./chunk-SCRRTLIA.js";

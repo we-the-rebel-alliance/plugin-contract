@@ -126,6 +126,8 @@ The rules:
 
 The descriptor comes from the installed package, its version checked against the install, and **every read runs in a session limited to exact allow rules from the grant** (`permission.sessionRules`): a deny of everything, then the method's action and each operation's rule. OpenCode checks each inner tool call against the calling session's rules, and the last matching rule wins, so the session is a real sandbox whatever the agent allows. A broker or a project may only narrow these rules, and the plugin's own `access` setting stays final.
 
+**On the plugin side** (`tools-rpc`), a method with a resource resolver is resolved before dispatch on the exact `<account>:<operation>` it names, never on `*`. A `class: "read"` method must resolve a read operation unless it declares `resourceKind: "any"` (a method such as gws's `plan`, which dry-runs a change and writes nothing). A resolver's coded refusal reaches the caller with its own code and next step; `null` or an uncoded failure is `RESOURCE_UNRESOLVED` ([#22](https://github.com/we-the-rebel-alliance/source-contract/issues/22), `docs/tools-rpc.md`).
+
 `read` refuses before any call when the grant is another consumer's, the source is off, the descriptor changed since consent or the scope is wider than granted; it then checks the answer's account, its `trust` marker, its size and, for a snapshot, its output. Grants are per consumer, source, account and scope. A cached answer serves only a consumer whose own grant covers the same source, account and scope, never another person or viewer.
 
 ## Versions

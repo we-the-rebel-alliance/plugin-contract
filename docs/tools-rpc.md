@@ -39,7 +39,9 @@ pass on `node --test` and `bun test`. `test/tools-rpc-resource.test.ts` (13 test
 | 14 | `RESOURCE_PATTERN` | `<account>:<operation>`. The account is `permission`'s `ACCOUNT_PATTERN`: no `:`, whitespace or wildcard, at most 320 characters. The operation is dotted words. A wildcard or a malformed resource from a resolver is `RESOURCE_UNRESOLVED`, so a resolver can never widen a grant to `*`. |
 | 15 | `ToolCall.resource` | The resolved resource, passed to `run`, so the spec can assert exactly what was resolved. Absent without a resolver. |
 | 16 | `describe` | A method with a resolver carries `operationScoped: true`. The `DESCRIBED` schema gains that optional boolean. `permission` stays the effect on `*`, since a resolver needs an input. |
-| 17 | Registration | A `resource` that is not a function is refused. So is a resolver on an MCP method: an MCP tool is asserted by OpenCode's executor on `*`, so a resolver there would promise a check nothing makes. |
+| 12a | A resolver's coded refusal passes through ([#22](https://github.com/we-the-rebel-alliance/source-contract/issues/22)) | A resolver that throws an error the plugin's `pluginError` maps, or one carrying `code` (`CODE` words), `next`, and `what` or a message (such as `events`' `SourceError`), refuses with that code and next step: gws's `ACCOUNT_REQUIRED` and `OPERATION_UNKNOWN` reach the caller as gws wrote them. The `what` goes through `upstreamText` (first line, secrets redacted). `null`, a malformed resource, an error with no code or no next step stay `RESOURCE_UNRESOLVED`. Nothing runs either way. |
+| 13a | `resourceKind: "any"` ([#22](https://github.com/we-the-rebel-alliance/source-contract/issues/22)) | Opt-in, per method, only beside a `resource`: the read-verb rule (#13) is skipped, so a `class: "read"` method may resolve a change's operation. gws's `schema` (a change's parameters) and `plan` (a `--dry-run` that writes nothing and returns a single-use `planId`) need it. The session's rules are still evaluated on the exact resource, so it widens nothing: the read-verb rule is a heuristic about an operation's name, not a grant. The default, `"read"`, keeps #13 for every method that does not set it. |
+| 17 | Registration | A `resource` that is not a function is refused, as is a `resourceKind` other than `"read"` or `"any"`, or one with no `resource`. So is a resolver on an MCP method: an MCP tool is asserted by OpenCode's executor on `*`, so a resolver there would promise a check nothing makes. |
 
 Without a resolver nothing changes: no method in the 24 plugins has one today, so adopting the package changes no
 behaviour until a plugin adds a resolver.
@@ -82,6 +84,7 @@ unknown until that file is shared.
   `INPUT_INVALID`?
 - **T2.** The read-verb rule applies to `class: "read"` methods only, so a write method (gws's commit methods under
   `rpcCommits`) can resolve a write operation. Agreed?
+  *Refined by #22:* a read method may opt out with `resourceKind: "any"` when it reads or dry-runs a change (gws's `schema`, `plan`), since reclassifying those as `write` would change `describe` and gws's default method table.
 - **T3.** "Starts with a read verb": `getProfile` and `lookup_by_id` pass; `getaway`, `listing` and `batchGet` are
   refused. Gmail's `users.messages.batchGet`-style reads would need the list to grow.
 - **T4.** Memory's kit and README pin `tools-rpc.ts` v2.3 by hash `9210d0a5…`. With the package, the prerequisite

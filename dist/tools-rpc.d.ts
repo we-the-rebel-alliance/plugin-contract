@@ -86,8 +86,20 @@ export interface PluginMethod {
      * path asserts (`work:gmail.users.messages.get`); `null` when the input names none, which is refused. The rule is
      * resolved on this resource before dispatch, and `run` receives it as `call.resource`. Without it, the method
      * resolves on `*`, as in v2.
+     *
+     * A resolver may refuse with its own code and next step: a throw the plugin's `pluginError` maps, or any error that
+     * carries `code`, `what` (or a message) and `next`, such as `events`' `SourceError`, reaches the caller as that
+     * failure (source-contract#22). `null`, a malformed resource, or an error with no code is RESOURCE_UNRESOLVED.
      */
     resource?(input: unknown): string | null;
+    /**
+     * (Opt-in, source-contract#22) What the resolver may name. `"read"`, the default: a `class: "read"` method's
+     * operation must be a read operation (`readOperation`). `"any"`: the method may resolve a change's operation, as gws's
+     * `schema` and `plan` do (they read a change's parameters or dry-run it, and write nothing). Either way the session's
+     * rules are evaluated on the exact `<account>:<operation>`; the read-verb rule is a heuristic about names, not a grant,
+     * so `"any"` widens nothing. Only a method with a `resource` may set it.
+     */
+    readonly resourceKind?: "read" | "any";
 }
 /** Every method: an MCP tool or a plugin-owned tool, each with a class. */
 export type MethodSpec = McpMethod | PluginMethod;
