@@ -178,7 +178,7 @@ var ERROR_CODES = [
   "SOURCE_UNKNOWN"
 ];
 var PROPOSED_CODES = [];
-var ERROR_ALIASES = { AUTH_REQUIRED: "NEEDS_SIGN_IN" };
+var ERROR_ALIASES = { AUTH_REQUIRED: "NEEDS_SIGN_IN", ACCOUNT_UNKNOWN: "ACCOUNT_MISMATCH" };
 var CONTRACT1_CODES = {
   EVENTS_INVALID_INPUT: "INPUT_INVALID",
   EVENTS_CURSOR_INVALID: "CURSOR_INVALID",
@@ -415,6 +415,8 @@ function probeResultProblems(result, expected = {}) {
   const owner = result["owner"];
   if (!plainObject(owner) || !line(owner["id"], EVENT_LIMITS.ownerId) || !line(owner["label"], EVENT_LIMITS.ownerLabel) || Object.keys(owner).some((key) => key !== "id" && key !== "label")) {
     problems.push("the probe answer's owner must be { id, label }, two non-empty lines");
+  } else if (!SCHEMED.test(owner["id"])) {
+    problems.push("the probe answer's owner.id must be a scheme-qualified id such as mailto:someone@example.com or slack:U0123");
   }
   const scopes = result["scopes"];
   if (scopes !== void 0 && (!Array.isArray(scopes) || scopes.length > PROBE_LIMITS.scopes || scopes.some((scope) => !line(scope, PROBE_LIMITS.scope)) || new Set(scopes).size !== scopes.length)) {
