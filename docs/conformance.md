@@ -51,6 +51,12 @@ await sourceConformance({ ...options, atomicPages: { reason: "events.list answer
 `failed-holds-cursor` is then not applicable, the reason is shown in the report's check, and the report can be ok. An
 empty reason is no reason: the check applies, and the report is incomplete.
 
+## Restarting an expired cursor
+
+When a source answers `CURSOR_EXPIRED` or a `gap` with reason `expired`, the kit restarts the listing with the cursor
+or `since` hint the source gave, and keeps the source's own `input`: `{ ...input, cursor }` or `{ ...input, since }`. A
+plugin with several sources is therefore restarted for the same source, not its default ([#30](https://github.com/we-the-rebel-alliance/source-contract/issues/30) item 3).
+
 ## Proving the secret screening
 
 `refused-is-final` is mandatory for every events source, because the contract screens every result for secrets. A

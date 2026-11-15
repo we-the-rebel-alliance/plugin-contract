@@ -625,6 +625,8 @@
         {
           "name": "the restarted window reads on",
           "input": {
+            "source": "slack",
+            "account": "T0PILOT01",
             "cursor": "slack:C0PILOT001:C0PILOT003:1761998000.000100:restarted"
           },
           "expect": "page",

@@ -154,6 +154,8 @@
         {
           "name": "the restarted window reads on",
           "input": {
+            "source": "github",
+            "account": "octo@example.test",
             "cursor": "github:2"
           },
           "expect": "page",
