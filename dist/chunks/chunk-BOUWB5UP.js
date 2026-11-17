@@ -1,4 +1,4 @@
-// @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
+// @we-the-rebel-alliance/source-contract 0.2.0. Built by scripts/build.mjs; do not edit.
 import {
   _enum,
   _null,
@@ -13,7 +13,7 @@ import {
   string,
   union,
   validator
-} from "./chunk-W5SHR7DQ.js";
+} from "./chunk-JUWIMDGF.js";
 
 // src/registry.ts
 var text = (max) => string().max(max);

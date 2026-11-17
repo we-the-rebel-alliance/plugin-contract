@@ -1,4 +1,4 @@
-// @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
+// @we-the-rebel-alliance/source-contract 0.2.0. Built by scripts/build.mjs; do not edit.
 import {
   CURSOR_V1,
   CURSOR_V2,
@@ -10,8 +10,8 @@ import {
   decodeCursor,
   encodeBoundCursor,
   encodeCursor
-} from "./chunks/chunk-I2RXJJJM.js";
-import "./chunks/chunk-HLVAKAYG.js";
+} from "./chunks/chunk-NUEROZNU.js";
+import "./chunks/chunk-T4QM7B3S.js";
 export {
   CURSOR_V1,
   CURSOR_V2,

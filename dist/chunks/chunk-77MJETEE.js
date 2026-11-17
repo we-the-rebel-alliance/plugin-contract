@@ -1,35 +1,35 @@
-// @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
+// @we-the-rebel-alliance/source-contract 0.2.0. Built by scripts/build.mjs; do not edit.
 import {
   findSource,
   maxBytesOf
-} from "./chunk-R5V2HYBN.js";
+} from "./chunk-EHIOPXPL.js";
 import {
   ERROR_CODES,
   PAGE,
   canonicalCode,
   probeResultProblems,
   resultProblems
-} from "./chunk-JT3SATQH.js";
+} from "./chunk-YH323FAZ.js";
 import {
   canonicalScope
-} from "./chunk-I2RXJJJM.js";
+} from "./chunk-NUEROZNU.js";
 import {
   resolveParams,
   resolveSince
-} from "./chunk-RYNKNCPP.js";
+} from "./chunk-F4K2Y64D.js";
 import {
   detailRules,
   grantCovers,
   probeRules,
   sessionRules
-} from "./chunk-IAXJCLVR.js";
+} from "./chunk-OZMX7VR7.js";
 import {
   pick,
   pickProblemsForOutput
-} from "./chunk-4ERCA4TK.js";
+} from "./chunk-XVA6H6OO.js";
 import {
   checkOutput
-} from "./chunk-6HDIB2SA.js";
+} from "./chunk-BOUWB5UP.js";
 
 // src/internal/failure.ts
 var FAILURE_CODES = ERROR_CODES;

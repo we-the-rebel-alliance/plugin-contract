@@ -1,15 +1,15 @@
-// @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
+// @we-the-rebel-alliance/source-contract 0.2.0. Built by scripts/build.mjs; do not edit.
 import {
   MAX_BYTES_DEFAULT,
   MAX_BYTES_LIMIT,
   SOURCES_SCHEMA
-} from "./chunks/chunk-VIKGHAOJ.js";
-import "./chunks/chunk-5N64VVBX.js";
-import "./chunks/chunk-JT3SATQH.js";
-import "./chunks/chunk-I2RXJJJM.js";
-import "./chunks/chunk-IAXJCLVR.js";
-import "./chunks/chunk-W5SHR7DQ.js";
-import "./chunks/chunk-HLVAKAYG.js";
+} from "./chunks/chunk-HVBOAYBO.js";
+import "./chunks/chunk-X6XP7YK2.js";
+import "./chunks/chunk-YH323FAZ.js";
+import "./chunks/chunk-NUEROZNU.js";
+import "./chunks/chunk-OZMX7VR7.js";
+import "./chunks/chunk-JUWIMDGF.js";
+import "./chunks/chunk-T4QM7B3S.js";
 export {
   MAX_BYTES_DEFAULT,
   MAX_BYTES_LIMIT,

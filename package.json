@@ -1,6 +1,6 @@
 {
   "name": "@we-the-rebel-alliance/source-contract",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "One source contract for every plugin and every project: the data model, the descriptor, the protocol, the library and the conformance kit.",
   "license": "MIT",
   "private": true,
