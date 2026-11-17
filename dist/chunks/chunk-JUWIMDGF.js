@@ -1,7 +1,7 @@
-// @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
+// @we-the-rebel-alliance/source-contract 0.2.0. Built by scripts/build.mjs; do not edit.
 import {
   __export
-} from "./chunk-HLVAKAYG.js";
+} from "./chunk-T4QM7B3S.js";
 
 // node_modules/zod/v4/classic/schemas.js
 var schemas_exports2 = {};

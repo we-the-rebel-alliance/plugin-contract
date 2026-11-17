@@ -44,7 +44,7 @@ This package holds the contract only: the data model, the descriptor schema, the
 
 Each module is its own entry point: `import { read } from "@we-the-rebel-alliance/source-contract/read"`.
 
-Wave 0 is in progress. No Release is tagged until the owner has reviewed v0.1.0. Docs: [the contract](docs/contract.md) and [conformance](docs/conformance.md). How to build and check the package: [CONTRIBUTING.md](CONTRIBUTING.md).
+What each Release carries, and what a consumer must do to upgrade, is in [CHANGELOG.md](CHANGELOG.md). Docs: [the contract](docs/contract.md) and [conformance](docs/conformance.md). How to build and check the package: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Credits
 

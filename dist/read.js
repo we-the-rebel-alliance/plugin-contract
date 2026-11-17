@@ -1,4 +1,4 @@
-// @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
+// @we-the-rebel-alliance/source-contract 0.2.0. Built by scripts/build.mjs; do not edit.
 import {
   acceptAnswer,
   checkReadRequest,
@@ -6,19 +6,19 @@ import {
   probe,
   read,
   readDetail
-} from "./chunks/chunk-L3JGLTHN.js";
-import "./chunks/chunk-R5V2HYBN.js";
-import "./chunks/chunk-VIKGHAOJ.js";
-import "./chunks/chunk-5N64VVBX.js";
-import "./chunks/chunk-ELPJD3ND.js";
-import "./chunks/chunk-JT3SATQH.js";
-import "./chunks/chunk-I2RXJJJM.js";
-import "./chunks/chunk-RYNKNCPP.js";
-import "./chunks/chunk-IAXJCLVR.js";
-import "./chunks/chunk-4ERCA4TK.js";
-import "./chunks/chunk-6HDIB2SA.js";
-import "./chunks/chunk-W5SHR7DQ.js";
-import "./chunks/chunk-HLVAKAYG.js";
+} from "./chunks/chunk-77MJETEE.js";
+import "./chunks/chunk-EHIOPXPL.js";
+import "./chunks/chunk-HVBOAYBO.js";
+import "./chunks/chunk-X6XP7YK2.js";
+import "./chunks/chunk-IL565TRX.js";
+import "./chunks/chunk-YH323FAZ.js";
+import "./chunks/chunk-NUEROZNU.js";
+import "./chunks/chunk-F4K2Y64D.js";
+import "./chunks/chunk-OZMX7VR7.js";
+import "./chunks/chunk-XVA6H6OO.js";
+import "./chunks/chunk-BOUWB5UP.js";
+import "./chunks/chunk-JUWIMDGF.js";
+import "./chunks/chunk-T4QM7B3S.js";
 export {
   acceptAnswer,
   checkReadRequest,

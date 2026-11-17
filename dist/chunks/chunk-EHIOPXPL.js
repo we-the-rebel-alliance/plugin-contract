@@ -1,20 +1,20 @@
-// @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
+// @we-the-rebel-alliance/source-contract 0.2.0. Built by scripts/build.mjs; do not edit.
 import {
   SOURCES_SCHEMA
-} from "./chunk-VIKGHAOJ.js";
+} from "./chunk-HVBOAYBO.js";
 import {
   SUPPORTED_CONTRACT_VERSIONS
-} from "./chunk-ELPJD3ND.js";
+} from "./chunk-IL565TRX.js";
 import {
   EVENT_KINDS,
   MAX_BYTES,
   isEventKind
-} from "./chunk-JT3SATQH.js";
+} from "./chunk-YH323FAZ.js";
 import {
   OUTPUT_NAMES,
   isExtensionOutput,
   isOutputName
-} from "./chunk-6HDIB2SA.js";
+} from "./chunk-BOUWB5UP.js";
 import {
   _enum,
   array,
@@ -26,7 +26,7 @@ import {
   record,
   string,
   unknown
-} from "./chunk-W5SHR7DQ.js";
+} from "./chunk-JUWIMDGF.js";
 
 // src/descriptor.ts
 import { createHash } from "node:crypto";

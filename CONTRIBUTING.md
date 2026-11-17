@@ -33,3 +33,5 @@ npm run check
 ## Releases
 
 Releases are tagged GitHub Releases, not npm. A tag `v<package.json version>` on a main commit whose CI passed runs [the release workflow](.github/workflows/release.yml), which attaches the packed package, the conformance kit as one file, the schema bundle and `SHA256SUMS`. Only the owner decides a Release; an agent never pushes a tag on its own.
+
+A Release is prepared in one pull request, `chore(release): prepare vX.Y.Z`: it sets the version in `package.json` and `package-lock.json` (`npm version X.Y.Z --no-git-tag-version`), adds the `CHANGELOG.md` section with every change since the last tag by pull request and what a consumer must do, and commits `dist/` rebuilt by `npm run build` (its banner carries the version). The tag goes on the merged commit once main's CI has passed.

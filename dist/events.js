@@ -1,4 +1,4 @@
-// @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
+// @we-the-rebel-alliance/source-contract 0.2.0. Built by scripts/build.mjs; do not edit.
 import {
   CONTRACT1_CODES,
   ERROR_ALIASES,
@@ -49,14 +49,14 @@ import {
   sinceTime,
   sourceNamespace,
   startTime
-} from "./chunks/chunk-JT3SATQH.js";
+} from "./chunks/chunk-YH323FAZ.js";
 import {
   decodeBoundCursor,
   decodeCursor,
   encodeBoundCursor,
   encodeCursor
-} from "./chunks/chunk-I2RXJJJM.js";
-import "./chunks/chunk-HLVAKAYG.js";
+} from "./chunks/chunk-NUEROZNU.js";
+import "./chunks/chunk-T4QM7B3S.js";
 
 // src/internal/events-conformance.ts
 var describeError = (error) => error instanceof Error ? error.message.split("\n", 1)[0] : String(error);

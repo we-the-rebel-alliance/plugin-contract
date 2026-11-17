@@ -1,4 +1,4 @@
-// @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
+// @we-the-rebel-alliance/source-contract 0.2.0. Built by scripts/build.mjs; do not edit.
 import {
   MAX_RELATIVE_DAYS,
   ME,
@@ -8,8 +8,8 @@ import {
   resolveRelativeTime,
   resolveSince,
   resolveWindow
-} from "./chunks/chunk-RYNKNCPP.js";
-import "./chunks/chunk-HLVAKAYG.js";
+} from "./chunks/chunk-F4K2Y64D.js";
+import "./chunks/chunk-T4QM7B3S.js";
 export {
   MAX_RELATIVE_DAYS,
   ME,
