@@ -36,6 +36,8 @@ export interface RecordedSource {
   readonly identity?: readonly string[] | undefined
   readonly atomicPages?: { readonly reason: string } | undefined
   readonly noExpiry?: { readonly reason: string } | undefined
+  /** The actor ids the plugin knows are an agent, a bot or a service (#45 §1). */
+  readonly machineActors?: readonly string[] | undefined
   readonly rpc?: string | undefined
   readonly probeAction?: { readonly action: string } | undefined
 }
@@ -155,6 +157,13 @@ export async function runExamples({ root, schema, conformance, events }: Example
         plugin: pkg.name,
         source,
         tools,
+        // The plugin's own package, as a consumer finds it on disk: its hint and routine files, and every source id.
+        ownSources: sources.map((item) => item.id),
+        files: (path) => {
+          const file = join(root, "examples", example.name, path)
+          return existsSync(file) ? readFileSync(file, "utf8") : undefined
+        },
+        ...(recorded.machineActors === undefined ? {} : { machineActors: recorded.machineActors }),
         ...declaredPlugin(pkg.sources),
         ...(fixture.account === undefined ? {} : { account: fixture.account }),
         ...(recorded.identity === undefined ? {} : { identityOperations: recorded.identity }),

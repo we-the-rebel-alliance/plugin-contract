@@ -1,12 +1,23 @@
 // The final design's additions to contract 1 (CHANGES.md): kinds, scope, the page result's refused, failed, gap, cost,
 // plugin and asOf, the error table, the secret-pattern refusal, and the conformance's opt-in checks.
+import { createHash } from "node:crypto"
 import { describe, test } from "node:test"
 import { expect } from "./support/expect.ts"
 import { failureFromError } from "../src/internal/failure.ts"
 import { encodeBoundCursor, decodeBoundCursor, type CursorBinding } from "../src/cursor.ts"
 import {
+  ACTOR_KINDS,
+  ACTOR_ROLES,
+  ATTENDANCE_RESPONSES,
+  AUDIENCES,
+  AUTHOR_ROLES,
+  COMMITMENT_STATES,
+  FACT_TYPES,
+  factProblems,
+  IDENTITY_STRENGTHS,
   canonicalCode,
   EVENT_KINDS,
+  eventHash,
   eventProblems,
   eventsListConformance,
   eventsListResult,
@@ -432,5 +443,209 @@ describe("the conformance's opt-in checks", () => {
     expect(problems).toEqual(["walked 2 pages; whole lists 3"])
     expect(calls.map((call) => call.what)).toContain("another account's bound cursor")
     expect(calls.filter((call) => call.error !== undefined).length).toBe(8)
+  })
+})
+
+// ── v0.3 (#45) ────────────────────────────────────────────────────────────
+
+/** The hash contract 1 and v0.2 write: the fields in their fixed order, and nothing else. */
+const v02Hash = (e: SourceEvent): string => {
+  const fields = [e.source, e.account, e.external_id, e.kind, e.occurred_at, e.thread, e.actors.map((actor) => [actor.role, actor.id, actor.name ?? null]), e.title, e.text, e.url, e.labels]
+  return `sha256:${createHash("sha256").update(JSON.stringify(fields)).digest("hex")}`
+}
+
+/** An event with one actor, so an actor's metadata can be read in place. */
+const withActor = (actor: Record<string, unknown>): SourceEvent => makeEvent({ source: "demo", account: "work", external_id: "item-1", kind: "message", occurred_at: T0, actors: [actor as never] })
+
+describe("actor metadata (#45 §1)", () => {
+  test("an actor may say what kind it is: a person, an agent, a bot or a service", () => {
+    expect(ACTOR_KINDS).toEqual(["person", "agent", "bot", "service"])
+    for (const kind of ACTOR_KINDS) expect(eventProblems(withActor({ role: "from", id: "slack:U01", kind })), kind).toEqual([])
+    expect(eventProblems(withActor({ role: "from", id: "slack:U01", kind: "robot" }))).toEqual(["event.actors[0].kind must be person, agent, bot or service"])
+    expect(eventProblems(withActor({ role: "from", id: "slack:U01", kind: "Agent" }))).toHaveLength(1)
+  })
+
+  test("the roles are a vocabulary, and an unknown role is read as involved", () => {
+    expect(ACTOR_ROLES).toEqual(["from", "author", "to", "cc", "bcc", "mentioned", "assignee", "creator", "reviewer", "organizer", "attendee", "owner", "speaker", "agent"])
+    expect(AUTHOR_ROLES).toEqual(["from", "author"])
+    for (const role of ACTOR_ROLES) expect(eventProblems(withActor({ role, id: "slack:U01" })), role).toEqual([])
+    expect(eventProblems(withActor({ role: "stakeholder", id: "slack:U01" }))).toEqual([])
+  })
+
+  test("an event has at most one author: from, or its alias author", () => {
+    const two = makeEvent({ source: "demo", account: "work", external_id: "item-1", kind: "message", occurred_at: T0, actors: [{ role: "from", id: "mailto:a@example.com" }, { role: "from", id: "mailto:b@example.com" }] })
+    expect(eventProblems(two)).toEqual(["event.actors lists more than one author: from, or its alias author, names at most one actor"])
+    const alias = makeEvent({ source: "demo", account: "work", external_id: "item-1", kind: "message", occurred_at: T0, actors: [{ role: "author", id: "mailto:a@example.com" }, { role: "to", id: "mailto:b@example.com" }] })
+    expect(eventProblems(alias)).toEqual([])
+    const mixed = makeEvent({ source: "demo", account: "work", external_id: "item-1", kind: "message", occurred_at: T0, actors: [{ role: "author", id: "mailto:a@example.com" }, { role: "from", id: "mailto:b@example.com" }] })
+    expect(eventProblems(mixed)).toHaveLength(1)
+  })
+
+  test("identities say where each id comes from: a strength, and the provider field that is its basis", () => {
+    expect(IDENTITY_STRENGTHS).toEqual(["strong", "weak"])
+    expect(eventProblems(withActor({ role: "from", id: "mailto:sam@example.com", identities: [
+      { id: "slack:U01", strength: "strong", basis: "slack.profile.email" },
+      { id: "gmail:reply-to", strength: "weak", basis: "gmail.header.reply-to" },
+    ] }))).toEqual([])
+    expect(eventProblems(withActor({ role: "from", id: "slack:U01", self: true }))).toEqual([])
+    expect(eventProblems(withActor({ role: "from", id: "slack:U01", self: false }))).toEqual([])
+  })
+
+  test("finds each way an actor's identities break the contract", () => {
+    const actor = (identities: unknown, extra: Record<string, unknown> = {}) => eventProblems(withActor({ role: "from", id: "slack:U01", identities, ...extra }))
+    expect(actor([{ id: "U02", strength: "weak", basis: "slack.profile.name" }])).toEqual(["event.actors[0].identities[0].id must be a scheme-qualified id such as mailto:someone@example.com"])
+    expect(actor([{ id: "slack:U01", strength: "weak", basis: "slack.profile.name" }])).toEqual(["event.actors[0].identities[0].id is the actor's own id: an identity is another id for the same actor"])
+    expect(actor([{ id: "slack:U02", strength: "weak", basis: "slack.profile.name" }, { id: "slack:U02", strength: "strong", basis: "slack.profile.email" }])).toEqual(["event.actors[0].identities[1] repeats an identity"])
+    expect(actor([{ id: "slack:U02", strength: "certain", basis: "slack.profile.name" }])).toEqual(["event.actors[0].identities[0].strength must be strong or weak"])
+    expect(actor([{ id: "slack:U02", strength: "weak" }])).toEqual([expect.stringContaining("event.actors[0].identities[0].basis")])
+    expect(actor([{ id: "slack:U02", strength: "weak", basis: "" }])).toHaveLength(1)
+    expect(actor([{ id: "slack:U02", strength: "weak", basis: "a".repeat(65) }])).toEqual(["event.actors[0].identities[0].basis must be one line of at most 64 characters naming the provider field it came from"])
+    expect(actor([{ id: "slack:U02", strength: "weak", basis: "slack.profile.name", claim: "person" }])).toEqual(['event.actors[0].identities[0] has the field "claim", which the contract does not define'])
+    expect(actor(Array.from({ length: 11 }, (_, index) => ({ id: `slack:U${index}`, strength: "weak", basis: "slack.profile.name" })))).toEqual(["event.actors[0].identities must be a list of at most 10"])
+    expect(actor(undefined, { self: "yes" })).toEqual(["event.actors[0].self must be true or false"])
+  })
+})
+
+describe("event metadata (#45 §2)", () => {
+  /** An event with a field replaced, hashed as it is: the checks see what a plugin sent, not what `makeEvent` tidies. */
+  const withEvent = (extra: Record<string, unknown>): Record<string, unknown> => {
+    const { hash: _hash, ...built } = { ...event(1), ...extra } as Record<string, unknown>
+    return { ...built, hash: eventHash(built as never) }
+  }
+
+  test("a reply names its parent, and an audience says who the item was for", () => {
+    expect(AUDIENCES).toEqual(["dm", "group", "channel", "email", "public"])
+    expect(eventProblems(event(1, { reply_to: "gmail-message:<CAF=abc@mail.example.com>", audience: "email" }))).toEqual([])
+    for (const audience of AUDIENCES) expect(eventProblems(event(1, { audience })), audience).toEqual([])
+    expect(eventProblems(withEvent({ audience: "team" }))).toEqual(["event.audience must be dm, group, channel, email or public"])
+    expect(eventProblems(withEvent({ reply_to: "" }))).toEqual(["event.reply_to must be a non-empty id of at most 512 characters"])
+    expect(eventProblems(withEvent({ reply_to: "a".repeat(513) }))).toEqual(["event.reply_to must be a non-empty id of at most 512 characters"])
+    // `makeEvent` keeps a reply on one line and cuts it to the limit, as it does a title.
+    expect(event(1, { reply_to: "  gmail-message:1  " }).reply_to).toBe("gmail-message:1")
+  })
+
+  test("domains are the recipients' lowercase domains, at most 20", () => {
+    expect(eventProblems(event(1, { domains: ["example.com", "mail.example.org"] }))).toEqual([])
+    expect(eventProblems(withEvent({ domains: ["Example.com"] }))).toEqual(["event.domains[0] must be a lowercase domain such as example.com"])
+    expect(eventProblems(withEvent({ domains: ["example"] }))).toHaveLength(1)
+    expect(eventProblems(withEvent({ domains: ["example.com", "example.com"] }))).toEqual(["event.domains repeats a domain"])
+    expect(eventProblems(withEvent({ domains: Array.from({ length: 21 }, (_, index) => `example${index}.com`) }))).toEqual(["event.domains must be at most 20 lowercase domains"])
+    expect(eventProblems(withEvent({ domains: "example.com" }))).toHaveLength(1)
+    // `makeEvent` lowercases and de-duplicates what a plugin gives it.
+    expect(event(1, { domains: ["Example.com", "example.com"] }).domains).toEqual(["example.com"])
+  })
+
+  test("sections hold meeting notes by heading, each text past the event's own 4,096", () => {
+    expect(eventProblems(event(1, { sections: [{ heading: "Summary", text: "We agreed the date." }, { heading: "Action items", text: "a".repeat(4096) }] }))).toEqual([])
+    expect(eventProblems(withEvent({ sections: [{ heading: "Summary", text: "", extra: true }] }))).toEqual(['event.sections[0] has the field "extra", which the contract does not define'])
+    expect(eventProblems(withEvent({ sections: [{ heading: "", text: "We agreed." }] }))).toEqual(["event.sections[0].heading must be one line of at most 300 characters"])
+    expect(eventProblems(withEvent({ sections: [{ heading: "a".repeat(301), text: "" }] }))).toHaveLength(1)
+    expect(eventProblems(withEvent({ sections: [{ heading: "Summary", text: "a".repeat(4097) }] }))).toEqual(["event.sections[0].text must be at most 4096 characters"])
+    expect(eventProblems(withEvent({ sections: Array.from({ length: 21 }, () => ({ heading: "Summary", text: "x" })) }))).toEqual(["event.sections must be a list of at most 20"])
+    expect(eventProblems(withEvent({ sections: [{ heading: "Summary" }] }))).toHaveLength(1)
+    // An event's own text is cut at 4,096, so long notes go in sections, and a section keeps its own 4,096.
+    expect(event(1, { sections: [{ heading: "Minutes", text: "a".repeat(5000) }] }).sections?.[0]?.text).toHaveLength(4096)
+  })
+
+  test("parts list a growing item, and a part's actor names an actor on the same event", () => {
+    const parts = [{ id: "turn-1", text: "Hello", actor: "mailto:sam@example.com" }, { id: "turn-2", text: "Hi" }]
+    const actors = [{ role: "from", id: "mailto:sam@example.com" }]
+    const withParts = (value: unknown) => eventProblems({ ...withEvent({ kind: "session", actors, parts: value }), actors })
+    expect(eventProblems(makeEvent({ source: "demo", account: "work", external_id: "item-1", kind: "session", occurred_at: T0, actors: actors as never, parts }))).toEqual([])
+    expect(withParts([{ id: "turn-1", text: "Hello", actor: "mailto:nobody@example.com" }])).toEqual(["event.parts[0].actor is not an actor of the same event"])
+    expect(withParts([{ id: "turn-1", text: "Hello", extra: true }])).toEqual(['event.parts[0] has the field "extra", which the contract does not define'])
+    expect(withParts([{ id: "", text: "Hello" }])).toEqual(["event.parts[0].id must be a non-empty id of at most 512 characters"])
+    expect(withParts([{ id: "turn-1", text: "a".repeat(4097) }])).toEqual(["event.parts[0].text must be at most 4096 characters"])
+    expect(withParts([{ id: "turn-1", text: "Hello" }, { id: "turn-1", text: "Hello again" }])).toEqual(["event.parts[1].id repeats a part"])
+    expect(withParts(Array.from({ length: 51 }, (_, index) => ({ id: `turn-${index}`, text: "x" })))).toEqual(["event.parts must be a list of at most 50"])
+  })
+})
+
+describe("facts[] (#45 §3)", () => {
+  const ACTORS = [{ role: "assignee", id: "linear:4f1c2e9a-0000-4000-8000-000000000001" }, { role: "creator", id: "linear:4f1c2e9a-0000-4000-8000-000000000002" }]
+  const COMMITMENT = { type: "commitment", key: "issue-42", title: "Send the report", owner: "linear:4f1c2e9a-0000-4000-8000-000000000001", due: "2026-11-30", state: "open", url: "https://linear.app/example/issue/EX-1" }
+  const withFacts = (facts: unknown) => eventProblems(makeEvent({ source: "demo", account: "work", external_id: "item-1", kind: "issue", occurred_at: T0, actors: ACTORS as never, facts: facts as never }))
+
+  test("the three core fact types, with no plugin-defined type in v0.3", () => {
+    expect(FACT_TYPES).toEqual(["commitment", "person.attribute", "meeting.attended"])
+    expect(COMMITMENT_STATES).toEqual(["open", "done", "cancelled"])
+    expect(ATTENDANCE_RESPONSES).toEqual(["accepted", "declined", "tentative", "needs_action"])
+    expect(withFacts([
+      COMMITMENT,
+      { type: "person.attribute", actor: "linear:4f1c2e9a-0000-4000-8000-000000000001", org: "Example", role: "Engineer" },
+      { type: "meeting.attended", actor: "linear:4f1c2e9a-0000-4000-8000-000000000002", response: "accepted", organizer: true },
+    ])).toEqual([])
+  })
+
+  test("every actor reference names an actor on the same event", () => {
+    expect(withFacts([{ ...COMMITMENT, owner: "linear:nobody" }])).toEqual(["event.facts[0].owner is not an actor of the same event"])
+    expect(withFacts([{ ...COMMITMENT, counterparty: "linear:nobody" }])).toEqual(["event.facts[0].counterparty is not an actor of the same event"])
+    expect(withFacts([{ ...COMMITMENT, counterparty: "linear:4f1c2e9a-0000-4000-8000-000000000002" }])).toEqual([])
+    expect(withFacts([{ type: "meeting.attended", actor: "linear:nobody", response: "declined", organizer: false }])).toEqual(["event.facts[0].actor is not an actor of the same event"])
+  })
+
+  test("each fact's shape is closed, and no fact has a field for a version or a sensitive trait", () => {
+    expect(withFacts([{ ...COMMITMENT, version: "0.3.0" }])).toEqual(['event.facts[0] has the field "version", which the contract does not define'])
+    expect(withFacts([{ ...COMMITMENT, health: "fine" }])).toHaveLength(1)
+    expect(withFacts([{ type: "commitment", key: "issue-42", title: "Send", owner: "linear:4f1c2e9a-0000-4000-8000-000000000001" }])).toEqual([expect.stringContaining("state")])
+    expect(withFacts([{ ...COMMITMENT, state: "paused" }])).toEqual(["event.facts[0].state must be open, done or cancelled"])
+    expect(withFacts([{ ...COMMITMENT, due: "30 November" }])).toEqual(["event.facts[0].due must be a date such as 2026-11-30"])
+    expect(withFacts([{ ...COMMITMENT, url: "http://linear.app/x" }])).toEqual(["event.facts[0].url must be an https URL"])
+    expect(withFacts([{ type: "person.attribute", actor: ACTORS[0]!.id }])).toEqual(["event.facts[0] must name org, team or role: a person's attribute comes from structured profile or directory data"])
+    expect(withFacts([{ type: "meeting.attended", actor: ACTORS[0]!.id, response: "maybe", organizer: false }])).toEqual(["event.facts[0].response must be accepted, declined, tentative or needs_action"])
+    expect(withFacts([{ type: "meeting.attended", actor: ACTORS[0]!.id, response: "accepted" }])).toEqual([expect.stringContaining("organizer")])
+    expect(withFacts([{ type: "x-demo/guess", actor: ACTORS[0]!.id }])).toEqual(["event.facts[0].type must be commitment, person.attribute or meeting.attended"])
+    expect(withFacts(Array.from({ length: 21 }, () => COMMITMENT))).toEqual(["event.facts must be a list of at most 20"])
+    expect(withFacts(["a fact"])).toEqual(["event.facts[0] is not an object"])
+  })
+
+  test("factProblems reads one fact against the event's actors", () => {
+    const ids = new Set(ACTORS.map((actor) => actor.id))
+    expect(factProblems(COMMITMENT, ids)).toEqual([])
+    expect(factProblems({ ...COMMITMENT, owner: "linear:nobody" }, ids)).toEqual(["fact.owner is not an actor of the same event"])
+    expect(factProblems(COMMITMENT, ids, "events[0].facts[1]")).toEqual([])
+  })
+})
+
+describe("the event hash covers a new field only when it is present (#45 §6)", () => {
+  test("an event without the new fields hashes as contract 1 and v0.2 do", () => {
+    for (const index of [0, 1]) {
+      const built = event(index)
+      expect(built.hash).toBe(v02Hash(built))
+      expect(Object.hasOwn(built, "audience")).toBe(false)
+      expect(eventProblems(built)).toEqual([])
+    }
+  })
+
+  test("a present field changes the hash, and an absent one leaves it as it was", () => {
+    const plain = event(1)
+    const withAudience = event(1, { audience: "dm" })
+    expect(withAudience.hash).not.toBe(plain.hash)
+    expect(eventProblems(withAudience)).toEqual([])
+    const fields = [plain.source, plain.account, plain.external_id, plain.kind, plain.occurred_at, plain.thread, plain.actors.map((actor) => [actor.role, actor.id, actor.name ?? null]), plain.title, plain.text, plain.url, plain.labels]
+    expect(withAudience.hash).toBe(`sha256:${createHash("sha256").update(JSON.stringify([...fields, ["audience", "dm"]])).digest("hex")}`)
+  })
+
+  test("the order a plugin builds a new field in does not change its hash", () => {
+    const facts = (ordered: boolean): Record<string, unknown> => ordered
+      ? { type: "commitment", key: "issue-42", title: "Send the report", owner: "slack:U01", state: "open" }
+      : { state: "open", owner: "slack:U01", title: "Send the report", key: "issue-42", type: "commitment" }
+    const actors = [{ role: "assignee", id: "slack:U01" }]
+    const one = makeEvent({ source: "demo", account: "work", external_id: "item-1", kind: "issue", occurred_at: T0, actors, facts: [facts(true) as never] })
+    const other = makeEvent({ source: "demo", account: "work", external_id: "item-1", kind: "issue", occurred_at: T0, actors, facts: [facts(false) as never] })
+    expect(other.hash).toBe(one.hash)
+    expect(eventProblems(one)).toEqual([])
+    expect(eventProblems(other)).toEqual([])
+  })
+
+  test("an actor's kind and identities are covered too", () => {
+    const plain = withActor({ role: "from", id: "slack:U01" })
+    const known = withActor({ role: "from", id: "slack:U01", kind: "bot" })
+    const identity = withActor({ role: "from", id: "slack:U01", identities: [{ id: "mailto:sam@example.com", strength: "strong", basis: "slack.profile.email" }] })
+    expect(known.hash).not.toBe(plain.hash)
+    expect(identity.hash).not.toBe(plain.hash)
+    expect(known.hash).toBe(withActor({ kind: "bot", id: "slack:U01", role: "from" }).hash)
+    expect(eventProblems(known)).toEqual([])
+    expect(eventProblems(identity)).toEqual([])
   })
 })

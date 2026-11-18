@@ -1,4 +1,4 @@
-// @we-the-rebel-alliance/source-contract 0.2.0. Built by scripts/build.mjs; do not edit.
+// @we-the-rebel-alliance/source-contract 0.3.0. Built by scripts/build.mjs; do not edit.
 
 // src/index.ts
 var CONTRACT_VERSION = 1;

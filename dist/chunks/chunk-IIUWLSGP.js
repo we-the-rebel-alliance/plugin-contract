@@ -1,8 +1,8 @@
-// @we-the-rebel-alliance/source-contract 0.2.0. Built by scripts/build.mjs; do not edit.
+// @we-the-rebel-alliance/source-contract 0.3.0. Built by scripts/build.mjs; do not edit.
 import {
   isExtensionOutput,
   outputValidator
-} from "./chunk-BOUWB5UP.js";
+} from "./chunk-GDBKZBG7.js";
 
 // src/pick.ts
 var MAX_PICK_PATHS = 50;

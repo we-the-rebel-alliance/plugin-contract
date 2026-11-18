@@ -384,6 +384,18 @@ export function declarationProblems(sources: unknown, options: DeclarationOption
       const problem = urlHostProblem(host)
       if (problem !== null) problems.push(`${at}.urlHosts has ${JSON.stringify(host)}, which ${problem}`)
     }
+
+    // (#45) A fact type, a hint file and a routine file are each named once: a list that repeats one says nothing more.
+    const factTypes = item.kind === "events" ? (item.facts ?? []) : []
+    for (const type of unique(factTypes)) {
+      if (factTypes.filter((entry) => entry === type).length > 1) problems.push(`${at}.facts lists "${type}" twice: a fact type is declared once`)
+    }
+    for (const key of ["hints", "routines"] as const) {
+      const paths = item[key] ?? []
+      for (const path of unique(paths)) {
+        if (paths.filter((entry) => entry === path).length > 1) problems.push(`${at}.${key} lists "${path}" twice: one file is declared once`)
+      }
+    }
   }
   return problems
 }

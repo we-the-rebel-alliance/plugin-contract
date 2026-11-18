@@ -35,6 +35,7 @@ import {
   type SessionContext,
 } from "./permission.ts"
 import { removalProblems } from "../events.ts"
+import { hintProblems, routineProblems } from "../../hints.ts"
 import { sessionRules } from "../../permission.ts"
 import { toolsRpcIdProblems } from "../../tools-rpc.ts"
 import { pageChecks, type PageOptions } from "./page.ts"
@@ -120,6 +121,23 @@ export interface SourceConformanceOptions {
    * for `failed-holds-cursor`. The reason must be non-empty; an empty one is ignored.
    */
   readonly noExpiry?: { readonly reason: string } | undefined
+  /**
+   * The actors the plugin knows are an agent, a bot or a service (#45 §1): each must carry a `kind` of one of those on
+   * every page that lists it. The kit cannot tell a person from a bot itself, so the fixture says; without it the
+   * `actor-kind` check does not apply.
+   */
+  readonly machineActors?: readonly string[] | undefined
+  /**
+   * A hint or routine file's text, from the plugin's own package, by the path its descriptor declares (#45 §4, §5):
+   * `(path) => readFileSync(join(here, path), "utf8")`. Undefined when the package holds no such file. Without it, the
+   * `hints` and `routines` checks cannot run, and a source that declares a file is not ok.
+   */
+  readonly files?: ((path: string) => string | undefined) | undefined
+  /**
+   * Every source id the plugin declares, for the own-source rule of a hint and a routine (#45 §4, §5). Default: the
+   * source under test.
+   */
+  readonly ownSources?: readonly string[] | undefined
 }
 
 /** One named check: whether it ran, whether it applies at all, and what it found. */
@@ -158,12 +176,18 @@ const RECOVERY_SINCE = "2026-01-01T00:00:00.000Z"
 
 const CHECKS = [
   "declaration",
+  "hints",
+  "routines",
   "page-result",
   "failed-holds-cursor",
   "gap-and-cursor-expired",
   "gap-once-per-read",
   "refused-is-final",
   "removals-are-final",
+  "actor-kind",
+  "facts",
+  "commitment-key",
+  "parts-stable",
   "billed-cost",
   "identity-grants",
   "probe",
@@ -207,6 +231,33 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
 
   add("declaration", declarationProblems({ contractVersion: 1, items: [source] }, { tools }))
 
+  // A hint and a routine are files the package ships beside the source (#45 §4, §5): each is read, checked and named
+  // in the report. Without a reader, or without the file, the declaration names something nothing can prove.
+  const ownSources = options.ownSources ?? [source.id]
+  const readFile = options.files
+  const fileCheck = (paths: readonly string[], kind: "hints" | "routines"): string[] => {
+    const problems: string[] = []
+    for (const path of paths) {
+      const where = `${kind}("${path}")`
+      if (readFile === undefined) {
+        problems.push(`${where} is declared and the kit has no file reader: pass files, (path) => the file's text`)
+        continue
+      }
+      const text = readFile(path)
+      if (text === undefined) {
+        problems.push(`${where} is declared and the package holds no such file`)
+        continue
+      }
+      const found = kind === "hints" ? hintProblems(text, { sources: ownSources }) : routineProblems(text, { sources: ownSources })
+      problems.push(...found.map((problem) => `${where}: ${problem}`))
+    }
+    return problems
+  }
+  const declaredHints = source.hints ?? []
+  const declaredRoutines = source.routines ?? []
+  add("hints", fileCheck(declaredHints, "hints"), declaredHints.length > 0, declaredHints.length === 0)
+  add("routines", fileCheck(declaredRoutines, "routines"), declaredRoutines.length > 0, declaredRoutines.length === 0)
+
   const shape: string[] = []
   const cursor: string[] = []
   const gap: string[] = []
@@ -219,6 +270,12 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
   let sawGap = false
   const gapOnce: string[] = []
   let sawAnyGap = false
+  // The v0.3 additions (#45 §1, §3): what a fixture names, and what it holds across pages.
+  const version = versionState(source, options.machineActors)
+  const actorKind: string[] = []
+  const facts: string[] = []
+  const commitmentKey: string[] = []
+  const partsStable: string[] = []
 
   if (cases.length > 0 && calls.list === undefined) shape.push("events_list cases are declared and the kit has no list call")
 
@@ -271,6 +328,12 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
       sawRemovals = true
       removals.push(...removalProblems(answer).map((problem) => `${where}: ${problem}`))
     }
+    // The v0.3 additions (#45): an actor's kind, a fact's declared type, a commitment's key and a part's text.
+    const versionFound = versionProblems(answer, where, version)
+    actorKind.push(...versionFound.actorKind)
+    facts.push(...versionFound.facts)
+    commitmentKey.push(...versionFound.commitmentKey)
+    partsStable.push(...versionFound.partsStable)
     sawFailed ||= hasEntries(answer, "failed")
     sawRefused ||= hasEntries(answer, "refused")
     if (expect === "empty" && plain(answer) && Array.isArray(answer["events"]) && (answer["events"] as unknown[]).length > 0) {
@@ -292,6 +355,15 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
   add("refused-is-final", refused, isEvents && sawRefused, !isEvents)
   // A removal is final (#27): checked whenever an answer carries removals[]; a source that never removes has none.
   add("removals-are-final", removals, isEvents && sawRemovals, !isEvents || !sawRemovals)
+  // (#45 §8) An actor the plugin knows is a machine carries its kind; a fact's type is declared; a commitment keeps one
+  // key and a part one text across pages. Each applies only where there is something to check.
+  for (const id of version.machine) {
+    if (!version.seenMachine.has(id)) actorKind.push(`the fixture names ${id} as an agent, a bot or a service, and no page lists it`)
+  }
+  add("actor-kind", actorKind, isEvents && version.machine.size > 0, !isEvents || version.machine.size === 0)
+  add("facts", facts, isEvents && version.sawFacts, !isEvents || !version.sawFacts)
+  add("commitment-key", commitmentKey, isEvents && version.sawCommitment, !isEvents || !version.sawCommitment)
+  add("parts-stable", partsStable, isEvents && version.sawParts, !isEvents || !version.sawParts)
   add("billed-cost", cost, source.cost.class === "billed" && isEvents, source.cost.class !== "billed")
 
   for (const operation of identityOperations) {
@@ -634,3 +706,100 @@ function identityProblems(
   }
   return problems
 }
+
+/** What the v0.3 checks hold between pages (#45 §8): a commitment's key and a part's text are stable across pages. */
+interface VersionState {
+  /** The actor ids the fixture knows are an agent, a bot or a service. */
+  readonly machine: ReadonlySet<string>
+  /** Those of them a page has listed. */
+  readonly seenMachine: Set<string>
+  /** The fact types the descriptor declares. */
+  readonly declaredFacts: ReadonlySet<string>
+  /** A commitment key, and the title and owner it names. */
+  readonly keys: Map<string, string>
+  /** An event and a commitment's title and owner, and the key it was listed under. */
+  readonly items: Map<string, string>
+  /** An event and a part id, and the text and actor it was listed with. */
+  readonly parts: Map<string, string>
+  sawFacts: boolean
+  sawCommitment: boolean
+  sawParts: boolean
+}
+
+/** The state the v0.3 checks start from, for one source. */
+function versionState(source: SourceItem, machineActors: readonly string[] | undefined): VersionState {
+  return {
+    machine: new Set(machineActors ?? []),
+    seenMachine: new Set(),
+    declaredFacts: new Set(source.kind === "events" ? (source.facts ?? []) : []),
+    keys: new Map(),
+    items: new Map(),
+    parts: new Map(),
+    sawFacts: false,
+    sawCommitment: false,
+    sawParts: false,
+  }
+}
+
+/**
+ * One page's v0.3 problems ({#45} §1, §3, §8), by concern: an actor the plugin knows is a machine carries its kind; a
+ * fact's type is declared by the source; a commitment keeps one key, and the same item one key; a part's id keeps its
+ * text. Each is remembered in `state`, so a later page is held to what an earlier one said.
+ */
+function versionProblems(answer: unknown, where: string, state: VersionState): { actorKind: string[]; facts: string[]; commitmentKey: string[]; partsStable: string[] } {
+  const actorKind: string[] = []
+  const facts: string[] = []
+  const commitmentKey: string[] = []
+  const partsStable: string[] = []
+  if (!plain(answer) || !Array.isArray(answer["events"])) return { actorKind, facts, commitmentKey, partsStable }
+  for (const event of answer["events"] as unknown[]) {
+    if (!plain(event)) continue
+    const id = typeof event["external_id"] === "string" ? event["external_id"] : ""
+    if (Array.isArray(event["actors"])) {
+      for (const actor of event["actors"]) {
+        if (!plain(actor) || typeof actor["id"] !== "string" || !state.machine.has(actor["id"])) continue
+        state.seenMachine.add(actor["id"])
+        if (!MACHINE_KINDS.includes(String(actor["kind"]))) {
+          actorKind.push(`${where}: the actor ${actor["id"]} is an agent, a bot or a service, and says no kind: an agent, a bot and a service each carry one`)
+        }
+      }
+    }
+    if (Array.isArray(event["facts"])) {
+      for (const fact of event["facts"]) {
+        if (!plain(fact)) continue
+        state.sawFacts = true
+        const type = String(fact["type"])
+        if (!state.declaredFacts.has(type)) facts.push(`${where}: the event ${id} carries a ${type} fact, and the descriptor does not declare that type`)
+        if (type !== "commitment") continue
+        state.sawCommitment = true
+        const key = fact["key"]
+        const title = fact["title"]
+        const owner = fact["owner"]
+        if (typeof key !== "string" || typeof title !== "string" || typeof owner !== "string") continue
+        const identity = `${title}\u0000${owner}`
+        const named = state.keys.get(key)
+        if (named !== undefined && named !== identity) commitmentKey.push(`${where}: the commitment key ${key} names another commitment (another title and owner) than on an earlier page`)
+        else state.keys.set(key, identity)
+        const item = `${id}\u0000${identity}`
+        const before = state.items.get(item)
+        if (before !== undefined && before !== key) commitmentKey.push(`${where}: the event ${id} lists one commitment (title ${title}, owner ${owner}) under two keys: a key is stable for one item`)
+        else state.items.set(item, key)
+      }
+    }
+    if (Array.isArray(event["parts"])) {
+      for (const part of event["parts"]) {
+        if (!plain(part) || typeof part["id"] !== "string" || typeof part["text"] !== "string") continue
+        state.sawParts = true
+        const at = `${id}\u0000${part["id"]}`
+        const text = `${part["text"]}\u0000${typeof part["actor"] === "string" ? part["actor"] : ""}`
+        const before = state.parts.get(at)
+        if (before !== undefined && before !== text) partsStable.push(`${where}: the event ${id} re-lists the part ${part["id"]} with another text: a part's id and text never change once listed`)
+        else state.parts.set(at, text)
+      }
+    }
+  }
+  return { actorKind, facts, commitmentKey, partsStable }
+}
+
+/** The actor kinds that make an actor an agent, a bot or a service (#45 §1). */
+const MACHINE_KINDS: readonly string[] = ["agent", "bot", "service"]

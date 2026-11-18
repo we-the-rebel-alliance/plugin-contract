@@ -108,6 +108,23 @@ export interface SourceConformanceOptions {
     readonly noExpiry?: {
         readonly reason: string;
     } | undefined;
+    /**
+     * The actors the plugin knows are an agent, a bot or a service (#45 §1): each must carry a `kind` of one of those on
+     * every page that lists it. The kit cannot tell a person from a bot itself, so the fixture says; without it the
+     * `actor-kind` check does not apply.
+     */
+    readonly machineActors?: readonly string[] | undefined;
+    /**
+     * A hint or routine file's text, from the plugin's own package, by the path its descriptor declares (#45 §4, §5):
+     * `(path) => readFileSync(join(here, path), "utf8")`. Undefined when the package holds no such file. Without it, the
+     * `hints` and `routines` checks cannot run, and a source that declares a file is not ok.
+     */
+    readonly files?: ((path: string) => string | undefined) | undefined;
+    /**
+     * Every source id the plugin declares, for the own-source rule of a hint and a routine (#45 §4, §5). Default: the
+     * source under test.
+     */
+    readonly ownSources?: readonly string[] | undefined;
 }
 /** One named check: whether it ran, whether it applies at all, and what it found. */
 export interface ConformanceCheck {

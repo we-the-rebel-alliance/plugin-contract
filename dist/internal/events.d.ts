@@ -60,6 +60,22 @@ export declare const EVENT_LIMITS: {
     readonly failed: 500;
     readonly detail: 200;
     readonly costUnits: 8;
+    /** #45 §1: the identities one actor may carry, and the lengths of each part of one. */
+    readonly identities: 10;
+    readonly identityBasis: 64;
+    /** #45 §2: the metadata one event may carry. */
+    readonly replyTo: 512;
+    readonly domains: 20;
+    readonly domain: 253;
+    readonly sections: 20;
+    readonly sectionHeading: 300;
+    readonly parts: 50;
+    readonly partId: 512;
+    /** #45 §3: the facts one event may carry, and the lengths of their fields. */
+    readonly facts: 20;
+    readonly factKey: 200;
+    readonly factTitle: 300;
+    readonly factAttribute: 120;
 };
 /** `limit`'s default and inclusive range. */
 export declare const PAGE: {
@@ -81,12 +97,107 @@ export declare const MAX_BYTES: {
 /** Where a listing starts when the call has neither cursor nor since: this many hours before now. */
 export declare const FIRST_RUN_HOURS = 24;
 export declare const TRUST: "untrusted";
-/** Someone or something an event involves. `id` is a stable, scheme-qualified id: `mailto:…`, `slack:U…`, `github:…`. */
+/**
+ * What kind of actor an actor is (#45 §1): a person, an agent, a bot or a service. Absent means "not known to be one",
+ * never a confirmed person. `kind` is required for every agent, bot and service actor a plugin can recognise.
+ */
+export declare const ACTOR_KINDS: readonly ["person", "agent", "bot", "service"];
+export type ActorKind = (typeof ACTOR_KINDS)[number];
+/**
+ * The roles the contract gives a meaning (#45 §1): `from` is the author, at most one per event, and `author` is read as
+ * its alias; `to`, `cc` and `bcc` are recipients, `mentioned` an actor the provider resolves from a mention, and the
+ * rest keep their meaning. An unknown role is read as "involved", so a plugin may name its own.
+ */
+export declare const ACTOR_ROLES: readonly ["from", "author", "to", "cc", "bcc", "mentioned", "assignee", "creator", "reviewer", "organizer", "attendee", "owner", "speaker", "agent"];
+export type ActorRole = (typeof ACTOR_ROLES)[number];
+/** The roles that name an event's author: `from`, and its alias `author`. An event has at most one such actor. */
+export declare const AUTHOR_ROLES: readonly ["from", "author"];
+/** How strong an identity is (#45 §1): `strong` from an authenticated source, `weak` as observed. */
+export declare const IDENTITY_STRENGTHS: readonly ["strong", "weak"];
+export type IdentityStrength = (typeof IDENTITY_STRENGTHS)[number];
+/**
+ * Another id the plugin knows for one actor (#45 §1). `id` is scheme-qualified and never the actor's own `id`;
+ * `strength` says whether an authenticated source gave it; `basis` names the provider field it came from, such as
+ * `slack.profile.email`. Only a strong identity merges people automatically, and never without the person's word.
+ */
+export interface EventIdentity {
+    readonly id: string;
+    readonly strength: IdentityStrength;
+    /** The provider field it came from, at most 64 characters, such as `slack.profile.email`. */
+    readonly basis: string;
+}
+/**
+ * Someone or something an event involves. `id` is a stable, scheme-qualified id: `mailto:…`, `slack:U…`, `github:…`.
+ * `kind` says what it is, `identities` lists every other id the plugin knows for it, and `self` is a hint that it is
+ * the signed-in person, which Memory alone decides (#45 §1, §7).
+ */
 export interface EventActor {
     readonly role: string;
     readonly id: string;
     readonly name?: string;
+    readonly kind?: ActorKind;
+    readonly identities?: EventIdentity[];
+    readonly self?: boolean;
 }
+/** Who an item was for (#45 §2): a direct message, a group, a channel, mail, or a public place. Absent means unknown. */
+export declare const AUDIENCES: readonly ["dm", "group", "channel", "email", "public"];
+export type Audience = (typeof AUDIENCES)[number];
+/** One heading of a long item, such as a meeting's notes (#45 §2). Its `text` is up to 4,096 characters of its own. */
+export interface EventSection {
+    readonly heading: string;
+    readonly text: string;
+}
+/**
+ * One part of a growing item, such as one turn of a session or of a transcript (#45 §2). A part's `id` and `text`
+ * never change once listed, so a consumer may add the new parts only. `actor` names an actor id on the same event.
+ */
+export interface EventPart {
+    readonly id: string;
+    readonly text: string;
+    readonly actor?: string;
+}
+/** The core fact types (#45 §3). v0.3 has no plugin-defined type, and no fact has a field for a sensitive trait. */
+export declare const FACT_TYPES: readonly ["commitment", "person.attribute", "meeting.attended"];
+export type FactType = (typeof FACT_TYPES)[number];
+/** What a commitment is doing (#45 §3). */
+export declare const COMMITMENT_STATES: readonly ["open", "done", "cancelled"];
+export type CommitmentState = (typeof COMMITMENT_STATES)[number];
+/** How someone answered a meeting invitation (#45 §3). */
+export declare const ATTENDANCE_RESPONSES: readonly ["accepted", "declined", "tentative", "needs_action"];
+export type AttendanceResponse = (typeof ATTENDANCE_RESPONSES)[number];
+/**
+ * A commitment the source already holds in code (#45 §3): `key` is a stable id within the source and account, so two
+ * pages that list one item give one key; `owner` and `counterparty` are actor ids on the same event; `state` is what
+ * the provider says now. Memory stamps the installed package's version on each fact it files, so a fact carries none.
+ */
+export interface FactCommitment {
+    readonly type: "commitment";
+    readonly key: string;
+    readonly title: string;
+    readonly owner: string;
+    readonly counterparty?: string;
+    /** `YYYY-MM-DD`. */
+    readonly due?: string;
+    readonly state: CommitmentState;
+    readonly url?: string;
+}
+/** An attribute of a person, from structured profile or directory data only (#45 §3): at least one of the three. */
+export interface FactPersonAttribute {
+    readonly type: "person.attribute";
+    readonly actor: string;
+    readonly org?: string;
+    readonly team?: string;
+    readonly role?: string;
+}
+/** Who attended a meeting, and how they answered (#45 §3). */
+export interface FactMeetingAttended {
+    readonly type: "meeting.attended";
+    readonly actor: string;
+    readonly response: AttendanceResponse;
+    readonly organizer: boolean;
+}
+/** A typed fact on an event (#45 §3): derived in the plugin's code from provider fields, never from free text. */
+export type EventFact = FactCommitment | FactPersonAttribute | FactMeetingAttended;
 /** One normalised event, as a source lists it. A consumer adds its own id. */
 export interface SourceEvent {
     readonly source: string;
@@ -104,6 +215,18 @@ export interface SourceEvent {
     readonly labels: string[];
     /** `sha256:<hex>` of every other field, from `eventHash`. */
     readonly hash: string;
+    /** (#45 §2) The parent's `external_id`, or a source-scoped key such as `gmail-message:<Message-ID>`. */
+    readonly reply_to?: string;
+    /** (#45 §2) Who the item was for. Absent means unknown. */
+    readonly audience?: Audience;
+    /** (#45 §2) The recipients' lowercase domains, for mail and shared channels, at most 20. */
+    readonly domains?: string[];
+    /** (#45 §2) A long item by heading, at most 20, each text of its own 4,096 characters. */
+    readonly sections?: EventSection[];
+    /** (#45 §2) A growing item's parts, at most 50, whose ids and texts never change once listed. */
+    readonly parts?: EventPart[];
+    /** (#45 §3) Typed facts the source derives in code, at most 20, each of a type the descriptor declares. */
+    readonly facts?: EventFact[];
 }
 /** The signed-in source account. */
 export interface EventsOwner {
@@ -288,7 +411,11 @@ export declare function parseEventsListInput(input: unknown, options?: ParseOpti
 export declare function startTime(request: Pick<EventsListRequest, "since">, now: number): number;
 /** At most `max` characters, ending in `…` when cut, never splitting a surrogate pair. */
 export declare function cut(text: string, max: number): string;
-/** `sha256:` and the hex digest of every field but the hash, in a fixed order. */
+/**
+ * `sha256:` and the hex digest of every field but the hash, in a fixed order. Contract 1's fields hash as they always
+ * have; each new field is appended, with its name, only when it is present (#45 §6), so an event without them hashes
+ * as it did in v0.2.
+ */
 export declare function eventHash(event: Omit<SourceEvent, "hash">): string;
 /** What a source fills in for `makeEvent`; it normalises the rest. */
 export interface EventDraft {
@@ -303,16 +430,33 @@ export interface EventDraft {
         readonly role: string;
         readonly id: string;
         readonly name?: string | null;
+        readonly kind?: ActorKind;
+        readonly identities?: readonly EventIdentity[];
+        readonly self?: boolean;
     }[];
     readonly title?: string | null;
     readonly text?: string | null;
     readonly url?: string | null;
     readonly labels?: readonly string[];
+    readonly reply_to?: string | null;
+    readonly audience?: Audience | null;
+    readonly domains?: readonly string[];
+    readonly sections?: readonly {
+        readonly heading: string;
+        readonly text: string;
+    }[];
+    readonly parts?: readonly {
+        readonly id: string;
+        readonly text: string;
+        readonly actor?: string;
+    }[];
+    readonly facts?: readonly EventFact[];
 }
 /**
  * A `SourceEvent` from a draft: the time in UTC ISO form, the title on one line and cut to 300 characters, the text cut
- * to 4096, actors without blanks or repeats and at most 20, labels likewise, a url only when it is https, and the hash.
- * Throws when the time is not a real time.
+ * to 4096, actors without blanks or repeats and at most 20, labels likewise, a url only when it is https, the metadata
+ * of #45 §2 normalised, and the hash. An actor's `kind`, identities and `self` are kept as the plugin gave them, and so
+ * are an event's facts: `eventProblems` is where a wrong one is refused. Throws when the time is not a real time.
  */
 export declare function makeEvent(draft: EventDraft): SourceEvent;
 /** Events oldest first; events at the same time keep their order. */
@@ -406,6 +550,12 @@ export interface PageExtras {
 }
 /** A result, with its source, account, owner and trust marker, and the extras given. Without extras, contract 1's. */
 export declare function eventsListResult(identity: EventsListIdentity, events: readonly SourceEvent[], cursor: string, more: boolean, extras?: PageExtras): EventsListResult;
+/**
+ * One fact's problems (#45 §3), one sentence each; none when it keeps the contract. Each actor reference must be an
+ * actor id on the same event, which is `actors`. The shape is closed: a fact carries no version (Memory stamps the
+ * installed package's) and no field for a sensitive trait.
+ */
+export declare function factProblems(fact: unknown, actors: ReadonlySet<string>, where?: string): string[];
 /** One event's problems, one sentence each; none when it keeps the contract. */
 export declare function eventProblems(event: unknown, where?: string): string[];
 /**

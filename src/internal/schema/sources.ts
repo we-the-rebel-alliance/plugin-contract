@@ -10,7 +10,7 @@
  * `internal/conformance/rules.ts`.
  */
 import * as z from "zod"
-import { isEventKind } from "../events.ts"
+import { FACT_TYPES, isEventKind } from "../events.ts"
 import { isToolsRpcId } from "../../tools-rpc.ts"
 import { MAX_BYTES_DEFAULT, MAX_BYTES_LIMIT } from "./types.ts"
 
@@ -36,6 +36,14 @@ const isOutputName = (name: string): boolean => REGISTRY_NAME.test(name) || isEv
 const PRICE_PER = /^[a-z][a-z0-9-]{0,31}$/
 /** An exact host, or `*.` and a registrable domain. */
 const HOST = /^(?:\*\.)?[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/
+/** A file a plugin ships beside its sources: a relative, lowercase path ending in `.md` (#45 §4, §5). */
+const FILE_PATH = /^[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)*\.md$/
+
+/** A file a source declares: a path inside the installed package, such as `hints/mail.md`. */
+const filePath = z
+  .string()
+  .max(200)
+  .regex(FILE_PATH, { error: "must be a relative path in the package ending in .md, such as hints/mail.md" })
 
 const price = z
   .object({
@@ -256,6 +264,23 @@ const events = z
       .refine(isEventKind, { error: "must be a core kind such as message, or x-<namespace>/<name>" })
       .describe("The thing it reads: a core kind, or x-<namespace>/<name>, whose namespace is the source's."),
     details: z.array(detail).optional(),
+    facts: z
+      .array(z.enum(FACT_TYPES, { error: "must be a core fact type (commitment, person.attribute, meeting.attended)" }))
+      .min(1, "must name at least one fact type")
+      .optional()
+      .describe(
+        "The fact types this source's events carry (#45 §3), each a core type. An event may carry a fact of a declared type and of no other; Memory stamps the installed package's version on each fact it files.",
+      ),
+    hints: z
+      .array(filePath)
+      .min(1, "must name at least one hint file")
+      .optional()
+      .describe("The hint files the package ships for this source (#45 §4): how to read one kind of item, at most 1,500 characters each."),
+    routines: z
+      .array(filePath)
+      .min(1, "must name at least one routine file")
+      .optional()
+      .describe("The routine files the package ships for this source (#45 §5). Memory's first engine runs only its own core routines, so a plugin ships one only later."),
     permission: permissionEvents,
     output: z.never({ error: "an events source has no output: output belongs to a snapshot" }).optional(),
     maxAgeSec: z.never({ error: "an events source has no maxAgeSec: a snapshot may be reused, an events page is read once" }).optional(),
@@ -278,8 +303,19 @@ const snapshot = z
       .optional()
       .describe("An x- output's schema, inline: JSON Schema draft 2020-12. Required for x-, absent for a registry name."),
     params: z.looseObject({}).optional().describe("The parameters a consumer may pass, resolved by the library at read time."),
+    hints: z
+      .array(filePath)
+      .min(1, "must name at least one hint file")
+      .optional()
+      .describe("The hint files the package ships for this source (#45 §4): how to read one kind of item, at most 1,500 characters each."),
+    routines: z
+      .array(filePath)
+      .min(1, "must name at least one routine file")
+      .optional()
+      .describe("The routine files the package ships for this source (#45 §5). Memory's first engine runs only its own core routines, so a plugin ships one only later."),
     permission: permissionTool,
     maxAgeSec: z.int().min(1).optional().describe("How long a result may be reused before it is read again."),
+    facts: z.never({ error: "a snapshot has no facts: a fact is derived from an event's provider fields" }).optional(),
     reads: z.never({ error: "a snapshot has no reads: it is state, not a feed" }).optional(),
     details: z.never({ error: "a snapshot has no details: it has no events to read one of" }).optional(),
   })
