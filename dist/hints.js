@@ -1,4 +1,4 @@
-// @we-the-rebel-alliance/source-contract 0.2.0. Built by scripts/build.mjs; do not edit.
+// @we-the-rebel-alliance/source-contract 0.3.0. Built by scripts/build.mjs; do not edit.
 import {
   FORBIDDEN_HINT_KEYS,
   FORBIDDEN_ROUTINE_KEYS,
@@ -12,11 +12,11 @@ import {
   hintProblems,
   parseFrontmatter,
   routineProblems
-} from "./chunks/chunk-JVV75SYB.js";
-import "./chunks/chunk-JUWIMDGF.js";
-import "./chunks/chunk-G47BVCHT.js";
-import "./chunks/chunk-NUEROZNU.js";
-import "./chunks/chunk-T4QM7B3S.js";
+} from "./chunks/chunk-ITQZIF2U.js";
+import "./chunks/chunk-6ZSJSJMV.js";
+import "./chunks/chunk-LJL3EALP.js";
+import "./chunks/chunk-NUBUQFLH.js";
+import "./chunks/chunk-CUITXC5J.js";
 export {
   FORBIDDEN_HINT_KEYS,
   FORBIDDEN_ROUTINE_KEYS,

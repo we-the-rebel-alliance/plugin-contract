@@ -1,22 +1,22 @@
-// @we-the-rebel-alliance/source-contract 0.2.0. Built by scripts/build.mjs; do not edit.
+// @we-the-rebel-alliance/source-contract 0.3.0. Built by scripts/build.mjs; do not edit.
 import {
   maxBytesOf
-} from "./chunks/chunk-NBZUASF6.js";
-import "./chunks/chunk-BOUWB5UP.js";
+} from "./chunks/chunk-HR22TL23.js";
+import "./chunks/chunk-GDBKZBG7.js";
 import {
   SOURCES_SCHEMA
-} from "./chunks/chunk-ZBWHG7IS.js";
+} from "./chunks/chunk-BEU3WWNO.js";
 import {
   toolsRpcIdProblems
-} from "./chunks/chunk-X6XP7YK2.js";
-import "./chunks/chunk-IL565TRX.js";
+} from "./chunks/chunk-IGPRJ63D.js";
+import "./chunks/chunk-KXQYSM2Z.js";
 import {
   hintProblems,
   routineProblems
-} from "./chunks/chunk-JVV75SYB.js";
+} from "./chunks/chunk-ITQZIF2U.js";
 import {
   fromJSONSchema
-} from "./chunks/chunk-JUWIMDGF.js";
+} from "./chunks/chunk-6ZSJSJMV.js";
 import {
   AUTHOR_ROLES,
   PAGE,
@@ -27,13 +27,13 @@ import {
   resultProblems,
   secretKinds,
   sourceNamespace
-} from "./chunks/chunk-G47BVCHT.js";
-import "./chunks/chunk-NUEROZNU.js";
+} from "./chunks/chunk-LJL3EALP.js";
+import "./chunks/chunk-NUBUQFLH.js";
 import {
   operationRule,
   sessionRules
-} from "./chunks/chunk-OZMX7VR7.js";
-import "./chunks/chunk-T4QM7B3S.js";
+} from "./chunks/chunk-EOS4LD6F.js";
+import "./chunks/chunk-CUITXC5J.js";
 
 // src/internal/conformance/public-suffix-list.ts
 var RULES = `ac
