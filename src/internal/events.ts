@@ -735,7 +735,8 @@ export function makeEvent(draft: EventDraft): SourceEvent {
       id,
       ...(name ? { name } : {}),
       ...(actor.kind === undefined ? {} : { kind: actor.kind }),
-      ...(actor.identities === undefined ? {} : { identities: [...actor.identities] }),
+      // An empty list says nothing, and is left out so the actor hashes as if it had none.
+      ...(actor.identities === undefined || actor.identities.length === 0 ? {} : { identities: [...actor.identities] }),
       ...(actor.self === undefined ? {} : { self: actor.self }),
     })
   }

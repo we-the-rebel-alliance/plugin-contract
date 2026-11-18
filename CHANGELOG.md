@@ -13,7 +13,7 @@ The v0.3 proposal ([#45](https://github.com/we-the-rebel-alliance/source-contrac
 - **The conformance report has six more checks**: `hints`, `routines`, `actor-kind`, `facts`, `commitment-key` and `parts-stable`. Each is not applicable unless the source carries what it checks, so a v0.2 plugin's report stays ok; a plugin that lists checks by name sees them. A source that declares hints or routines passes `files` to the kit, and a declared file the kit cannot read fails, so nothing passes by leaving a file unread.
 - **A v0.2 event hashes as it did.** A new field joins the hash only when it is present, so no recorded page changes and no consumer re-reads history.
 - **TypeScript only: `EventActor` gains `kind`, `identities` and `self`, and `SourceEvents` gains `facts`, `hints` and `routines`.** Optional throughout, so code that builds an actor or reads an item is unchanged.
-- **`makeEvent` normalises the new metadata**: a reply on one line and cut to 512 characters, domains lowercased and de-duplicated, sections and parts cut to their own limits, and an actor's `kind`, identities and facts kept as the plugin gave them for `eventProblems` to judge.
+- **`makeEvent` normalises the new metadata**: a reply on one line and cut to 512 characters, domains lowercased and de-duplicated, sections and parts cut to their own limits, an empty `identities` list left out so the actor hashes as if it had none, and an actor's `kind`, identities and facts kept as the plugin gave them for `eventProblems` to judge.
 
 ### Added
 

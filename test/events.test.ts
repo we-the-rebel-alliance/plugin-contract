@@ -632,6 +632,14 @@ describe("the event hash covers a new field only when it is present (#45 §6)", 
     expect(withAudience.hash).toBe(`sha256:${createHash("sha256").update(JSON.stringify([...fields, ["audience", "dm"]])).digest("hex")}`)
   })
 
+  test("an empty identities list is left out, so the actor hashes as if it had none", () => {
+    const plain = withActor({ role: "from", id: "slack:U01" })
+    const empty = withActor({ role: "from", id: "slack:U01", identities: [] })
+    expect(Object.hasOwn(empty.actors[0]!, "identities")).toBe(false)
+    expect(empty).toEqual(plain)
+    expect(empty.hash).toBe(plain.hash)
+  })
+
   test("the order a plugin builds a new field in does not change its hash", () => {
     const facts = (ordered: boolean): Record<string, unknown> => ordered
       ? { type: "commitment", key: "issue-42", title: "Send the report", owner: "slack:U01", state: "open" }
