@@ -36,7 +36,8 @@ This package holds the contract only: the data model, the descriptor schema, the
 | `broker-client` | a host's broker when one is offered, `read` embedded otherwise | the app | in `main` |
 | `schema` | the full descriptor and result schemas in zod, with JSON Schema generated | Memory | in `main` (#13) |
 | `conformance` | the kit: the draft's ten checks, the recording permission context, the tokenised verb rule and the screening | Memory | in `main` (#13) |
-| `events` | the one normaliser and hash, the error table and the secret-pattern refusal | the plugin family | in `main` (#7) |
+| `events` | the one normaliser and hash, the error table and the secret-pattern refusal, and the actor, event and fact metadata of v0.3 | the plugin family | in `main` (#7, #45) |
+| `hints` | the hint and routine file formats, their frontmatter schemas and their checks | the plugin family | in `main` (#45) |
 | `cursor` | the versioned codec, bound to plugin, source, account and scope | the plugin family | in `main` (#7) |
 | `tools-rpc` | the transport, version 2 with the version 2.3 per-method resource resolver | the plugin family | in `main` (#7) |
 
@@ -44,7 +45,7 @@ This package holds the contract only: the data model, the descriptor schema, the
 
 Each module is its own entry point: `import { read } from "@we-the-rebel-alliance/source-contract/read"`.
 
-What each Release carries, and what a consumer must do to upgrade, is in [CHANGELOG.md](CHANGELOG.md). Docs: [the contract](docs/contract.md) and [conformance](docs/conformance.md). How to build and check the package: [CONTRIBUTING.md](CONTRIBUTING.md).
+What each Release carries, and what a consumer must do to upgrade, is in [CHANGELOG.md](CHANGELOG.md). Docs: [the contract](docs/contract.md) and [conformance](docs/conformance.md). A plugin adopts v0.3 one step at a time: [the guide for plugin authors](docs/adopting-v0.3.md). How to build and check the package: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Credits
 

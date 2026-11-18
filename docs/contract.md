@@ -12,7 +12,7 @@ Every result is marked `trust: "untrusted"`: its text is data, never instruction
 
 ### Events
 
-An **event** is one thing a source recorded: `source`, `account`, `external_id` (at most 512 characters, stable within the source and account), `kind`, `occurred_at` (UTC ISO 8601), `thread` (a stable key or null; first-class), `actors` (at most 20, each `{ role, id, name? }`), `title` (at most 300), `text` (at most 4096), `url` (https or null), `labels` (at most 20) and `hash` (`sha256:` of every other field).
+An **event** is one thing a source recorded: `source`, `account`, `external_id` (at most 512 characters, stable within the source and account), `kind`, `occurred_at` (UTC ISO 8601), `thread` (a stable key or null; first-class), `actors` (at most 20, each `{ role, id, name? }` and, since v0.3, `kind?`, `identities?`, `self?`), `title` (at most 300), `text` (at most 4096), `url` (https or null), `labels` (at most 20), `hash` (`sha256:` of every other field) and, since v0.3, the optional `reply_to`, `audience`, `domains`, `sections`, `parts` and `facts` described below.
 
 **Kinds:** `message`, `meeting`, `session`, `bookmark`, `issue`, `pr`, `commit`, `doc`, `event`, `task`, `file`, and `x-<plugin>/<kind>` for a plugin's own.
 
@@ -36,6 +36,48 @@ An **event** is one thing a source recorded: `source`, `account`, `external_id` 
 **A cursor** is opaque and versioned, bound to the plugin, source, account and scope. A foreign cursor is refused with `CURSOR_INVALID`; lost history is `CURSOR_EXPIRED` with `gap`. A consumer saves its cursor in the same transaction as the page it accepts.
 
 The `events` and `cursor` modules hold the normaliser, the hash, the secret-pattern refusal and the codec (the plugin family's part).
+
+### Actors ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §1)
+
+An actor may say **what kind of actor** it is: `kind` is `person`, `agent`, `bot` or `service`. Absent means "not known to be one", never a confirmed person, and every agent, bot and service a plugin can recognise carries one. The kit's `actor-kind` check holds a fixture to that: each actor the fixture names in `machineActors` carries a machine kind on every page that lists it.
+
+An actor may carry up to 10 **identities**: `{ id, strength, basis }`, another scheme-qualified id for the same actor, never the actor's own `id`. `strength` is `strong` (from an authenticated source: a workspace directory, a chat profile's email, a code host's verified email) or `weak` (observed: a `From` or `Reply-To` header, a display name, a signature), and `basis` names the provider field it came from, up to 64 characters, such as `slack.profile.email`. Only a strong identity merges people automatically; a weak one is a proposal the person confirms ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §7). `self: true` is a hint that the actor is the signed-in person, and Memory alone decides who the person is; `self: false` only downgrades.
+
+**Roles** are a vocabulary. `from` is the author, at most one per event, and `author` is read as its alias. `to`, `cc` and `bcc` are recipients, and `mentioned` is an actor the provider resolves from a mention, never a parsed name. `assignee`, `creator`, `reviewer`, `organizer`, `attendee`, `owner`, `speaker` and `agent` keep their meaning, and an unknown role is read as "involved". Whether an item was addressed to or mentions a person is Memory's decision, from `to`, `cc`, `bcc`, `mentioned` and `audience: dm`: a plugin lists them and decides nothing.
+
+### Event metadata ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §2)
+
+| Field | Rule |
+|---|---|
+| `reply_to` | The parent's `external_id`, or a source-scoped key such as `gmail-message:<Message-ID>`: one line, at most 512 characters. |
+| `audience` | `dm`, `group`, `channel`, `email` or `public`. A work item visible to a team is `group`, and one in a public place is `public`. Absent means unknown. |
+| `domains` | At most 20 lowercase domains of the recipients, for mail and shared channels. |
+| `sections` | At most 20 `{ heading, text }`: a long item by heading. Each `text` takes its own 4,096 characters, so long notes are not cut at the event's 4,096. A heading is one line of at most 300. |
+| `parts` | At most 50 `{ id, text, actor? }`: a growing item such as a session or a transcript. A part's `id` and `text` never change once listed, and a re-listed item may list only its new parts. `actor` names an actor id on the same event. |
+
+**`thread`** is normative for every source with conversations or series, and stable across pages.
+
+### Facts ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §3)
+
+An event may carry up to 20 **facts**: what the source already knows in code, such as an issue's assignee, due date and state, derived in the plugin's code from provider fields and never from free text. A fact is one of three core types, and each schema is closed (`additionalProperties: false`):
+
+| Type | Fields |
+|---|---|
+| `commitment` | `key` (a stable id within the source and account, at most 200), `title` (at most 300), `owner` (an actor id on the same event), `counterparty?` (likewise), `due?` (`YYYY-MM-DD`), `state` (`open`, `done` or `cancelled`) and `url?` (https). Two pages that list the same commitment give the same key. |
+| `person.attribute` | `actor`, and at least one of `org`, `team` or `role`, each at most 120, from structured profile or directory data only. |
+| `meeting.attended` | `actor`, `response` (`accepted`, `declined`, `tentative` or `needs_action`) and `organizer` (a boolean). |
+
+A source **declares its fact types** in its descriptor (`"facts": ["commitment"]`), and a fact of an undeclared type fails the kit's `facts` check. No fact has a field for a version: Memory stamps the installed package's version, read from disk, on each fact it files, so the page cannot set one, and a new plugin version's facts are proposed until the person confirms that version. No schema has a field for a sensitive trait (health, religion, politics and the like), and v0.3 has no plugin-defined type. The three schemas are published as `dist/schemas/fact.commitment.json`, `fact.person.attribute.json` and `fact.meeting.attended.json`.
+
+### Hints and routines ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §4, §5)
+
+A source may list **hint** files (`"hints": ["hints/mail.md"]`): a hint says how to read one kind of item, in at most 1,500 characters. Its frontmatter is `source` (one of the plugin's own source ids), `kinds` (at least one kind) and, optionally, `produces` (core fact types), and its body holds the guidance. A hint is data, quoted inside Memory's prompt and never an instruction to it, so a forbidden key — `apply`, `stated_by`, `space`, `budget` or `priority` — makes the file invalid, as any other unknown key does.
+
+A source may list **routine** files (`"routines": ["routines/meeting-actions.md"]`): a routine is for a meaning Memory's core extractor cannot find even with hints. Its frontmatter is `id`, `title`, `reads: { sources, kinds }` (the plugin's own sources only) and `produces` (core fact types), and its body holds instructions of at most 4,000 characters. A tier, a schedule, a budget, a priority, an apply mode, a `stated_by` or a namespace makes the file invalid: the namespace is the installed package's, and the rest are Memory's decisions. Memory's first engine runs only its own core routines, with plugin hints and facts, so the format is defined now to be stable; a plugin ships a routine only later, and only when hints prove insufficient. The `hints` module checks both (`hintProblems`, `routineProblems`), and its frontmatter schemas are published as `dist/schemas/hint.json` and `routine.json`.
+
+### Versioning and the digest ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §6)
+
+The package's minor release carries every addition, and `sources.contractVersion` stays 1: within a version the contract only grows. The event `hash` covers a new field only when it is present, so an event without them hashes exactly as in v0.2, and the order a plugin builds a new field in does not change its hash. Memory computes a `sha256:` digest over each whole hint file, each routine file and each facts declaration; a version written in a file is a label only.
 
 ### Snapshots
 
@@ -107,7 +149,9 @@ The rules:
 - `maxBytes` defaults to 64 KB and may go up to 1 MB;
 - a snapshot's `output` names a registered schema;
 - optional `urlHosts`: the hosts a source's `url` may point at, for display (Memory's rules);
-- optional `scope.suggest`: `{ tool, operations }`, a read-only tool that lists choices at consent, run only at bind in its own session, and never stored.
+- optional `scope.suggest`: `{ tool, operations }`, a read-only tool that lists choices at consent, run only at bind in its own session, and never stored;
+- optional `facts` (an events source only): the fact types its events carry, each a core type and each declared once ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §3);
+- optional `hints` and `routines`: the paths of the files the package ships for this source, each a relative lowercase `.md` path inside the package and each declared once ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §4, §5). The keys are additive to the contract, but Memory's descriptor schema is strict and `readInstalledDescriptor` runs it first, so a consumer re-vendors before a plugin declares one, as for `removals[]`.
 
 `readInstalledDescriptor` reads, validates and hashes it (`sha256:` of canonical JSON). The package exports one `SourceItem`, Memory's schema type, from `descriptor` and `schema` alike, so an item read from disk goes to `read`, `acceptAnswer` and the conformance kit as it is ([#30](https://github.com/we-the-rebel-alliance/source-contract/issues/30) item 8). A grant stores the hash; a changed descriptor asks the person again. Memory's schema admits three optional keys agreed in [issue #4](https://github.com/we-the-rebel-alliance/source-contract/issues/4): `sources.rpc` (the plugin's tools-RPC id, which `read` then calls), `sources.probe.action` (the probe tool's permission action) and per-source `permission.identity` (the identity operations `probe` asserts, each among `permission.operations`). With the last two declared, `probe` is fenced from the descriptor alone; until then a consumer passes the identity operations. `permission.identity` may be empty: the probe then asserts only `sources.probe.action`; absent still means undeclared, so a consumer uses its fallback ([#30](https://github.com/we-the-rebel-alliance/source-contract/issues/30) item 1). A source whose content reads assert an identity operation declares `permission.readsIdentity: true`, and the kit then allows that overlap for that source only; every identity operation must still be among `permission.operations` ([#30](https://github.com/we-the-rebel-alliance/source-contract/issues/30) item 4). A source that states its grants verbatim (`permission.rules`, GitHub's `github_api` on `GET /user`) declares its probe's grants as `permission.identityRules: [{ action, resource }]`, each among its `rules`, instead of `identity`; `probe` is then fenced to `sources.probe.action` and those rules exactly, and `[]` means the probe asserts only its action ([#30](https://github.com/we-the-rebel-alliance/source-contract/issues/30) item 10). `identityRules` is additive to the contract, but Memory's permission schema is strict and `readInstalledDescriptor` runs it first, so a consumer on an older package refuses a descriptor that carries it: it ships in a minor release, consumers re-vendor first, and only then does a plugin (GitHub) declare it, the same order as `removals[]`.
 
@@ -139,3 +183,5 @@ The descriptor comes from the installed package, its version checked against the
 ## Versions
 
 Semver. `sources.contractVersion` is the contract version; projects read the current and the previous one. Within a version the contract only grows.
+
+`0.3.0` is a minor release of the package and leaves `sources.contractVersion` at 1 ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §6). Order matters, as it did for `removals[]`: consumers re-vendor first, then plugins emit the new fields and declare the new files. Every v0.2 page and descriptor stays valid, and every v0.2 recorded fixture passes the kit unchanged. [The guide for plugin authors](adopting-v0.3.md) takes the adoption one step at a time.

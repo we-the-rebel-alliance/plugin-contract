@@ -2,6 +2,37 @@
 
 Releases are tagged GitHub Releases, not npm: pin `github:we-the-rebel-alliance/source-contract#v<version>`. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/) as it applies before 1.0: a minor version may carry what an older consumer refuses. Every change names its pull request.
 
+## [0.3.0] - 2026-11-18
+
+The v0.3 proposal ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45)): what an actor is and which ids it has across sources, who an item was for and where it sits, the facts a source already holds in code, and the hint and routine file formats. `contractVersion` stays 1, no error code, method or cursor format changes, and every v0.2 page and descriptor stays valid.
+
+### Upgrading from 0.2.x
+
+- **Consumers (Memory, jelly) re-vendor first.** A consumer on 0.2.x refuses a page that carries any of the new fields, a descriptor that declares `facts`, `hints` or `routines`, and a fact of a new type, because its schemas are strict: a page is `SCHEMA_VIOLATION`. Pin `#v0.3.0`, check the new `SHA256SUMS`, and run your own checks before any plugin sends a new key.
+- **Plugins send a new field or declare a file only after both consumers are on 0.3.0.** [The guide for plugin authors](docs/adopting-v0.3.md) takes it one step at a time.
+- **The conformance report has six more checks**: `hints`, `routines`, `actor-kind`, `facts`, `commitment-key` and `parts-stable`. Each is not applicable unless the source carries what it checks, so a v0.2 plugin's report stays ok; a plugin that lists checks by name sees them. A source that declares hints or routines passes `files` to the kit, and a declared file the kit cannot read fails, so nothing passes by leaving a file unread.
+- **A v0.2 event hashes as it did.** A new field joins the hash only when it is present, so no recorded page changes and no consumer re-reads history.
+- **TypeScript only: `EventActor` gains `kind`, `identities` and `self`, and `SourceEvents` gains `facts`, `hints` and `routines`.** Optional throughout, so code that builds an actor or reads an item is unchanged.
+- **`makeEvent` normalises the new metadata**: a reply on one line and cut to 512 characters, domains lowercased and de-duplicated, sections and parts cut to their own limits, and an actor's `kind`, identities and facts kept as the plugin gave them for `eventProblems` to judge.
+
+### Added
+
+- Actor metadata on a page ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §1): `kind` (`person`, `agent`, `bot` or `service`), up to 10 `identities` of `{ id, strength, basis }` with `strength` `strong` or `weak`, and `self` as a hint. `ACTOR_KINDS`, `ACTOR_ROLES`, `AUTHOR_ROLES`, `IDENTITY_STRENGTHS` and `EventIdentity`; an event has at most one author, `from` or its alias `author`, and an unknown role is read as involved.
+- Event metadata ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §2): `reply_to` (at most 512 characters), `audience` (`dm`, `group`, `channel`, `email` or `public`), `domains` (at most 20 lowercase), `sections` (at most 20 `{ heading, text }`, each text with its own 4,096 characters) and `parts` (at most 50 `{ id, text, actor? }`, whose ids and texts never change once listed). `AUDIENCES`, `EventSection`, `EventPart`.
+- `facts[]` on an event ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §3): up to 20 typed facts of `commitment`, `person.attribute` or `meeting.attended`, each a closed schema (`additionalProperties: false`), every actor reference an actor on the same event. `FACT_TYPES`, `COMMITMENT_STATES`, `ATTENDANCE_RESPONSES`, `EventFact`, `factProblems`, and `FACT_SCHEMAS` with `dist/schemas/fact.commitment.json`, `fact.person.attribute.json` and `fact.meeting.attended.json`.
+- The descriptor's `facts`, `hints` and `routines` ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §3, §4, §5): a fact type declared by name on an events source only, and relative `.md` paths into the package, each declared once.
+- The `hints` module: the hint and routine file formats, `HINT_MAX` (1,500 characters), `ROUTINE_BODY_MAX` (4,000), the forbidden keys, `parseFrontmatter`, `hintProblems` and `routineProblems`, and the frontmatter schemas `dist/schemas/hint.json` and `routine.json`.
+- The kit's `hints` and `routines` checks, with the `files` and `ownSources` options ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §8): a file over its size, with a forbidden or unknown key, or naming another plugin's source, fails.
+- The kit's `actor-kind` check and its `machineActors` option: an actor the fixture names as an agent, a bot or a service carries a machine kind on every page that lists it.
+- The kit's `facts` check: every fact type a page carries is declared by the descriptor.
+- The kit's `commitment-key` and `parts-stable` checks ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §8): a key names one title and owner, an item keeps one key, and a re-listed part keeps its text.
+- [The guide for plugin authors](docs/adopting-v0.3.md): adopting v0.3 one step at a time.
+
+### Changed
+
+- `eventHash` covers a new field only when it is present, with the field's object keys sorted, so an event without the new fields hashes exactly as in v0.2 and the order a plugin builds a field in does not change its hash ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §6).
+- `declarationProblems` refuses a fact type, a hint file or a routine file declared twice ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §3, §4, §5).
+
 ## [0.2.0] - 2026-11-17
 
 The Wave 1 and Wave 4 adoption feedback ([#30](https://github.com/we-the-rebel-alliance/source-contract/issues/30)), plus [#22](https://github.com/we-the-rebel-alliance/source-contract/issues/22), [#27](https://github.com/we-the-rebel-alliance/source-contract/issues/27) and [#28](https://github.com/we-the-rebel-alliance/source-contract/issues/28). `contractVersion` stays 1, and no error code, method or cursor format changes.
@@ -43,5 +74,6 @@ The Wave 1 and Wave 4 adoption feedback ([#30](https://github.com/we-the-rebel-a
 
 The first Release: the data model, the descriptor, the protocol, the library and the conformance kit (Wave 0).
 
+[0.3.0]: https://github.com/we-the-rebel-alliance/source-contract/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/we-the-rebel-alliance/source-contract/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/we-the-rebel-alliance/source-contract/releases/tag/v0.1.0
