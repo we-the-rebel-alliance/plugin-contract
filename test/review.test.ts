@@ -1607,6 +1607,36 @@ describe("the v0.3 checks (#45 §8)", () => {
     assert.deepEqual(await checkOf("actor-kind", [without]), { name: "actor-kind", ran: false, notApplicable: true, problems: [] })
   })
 
+  test("one-author: an event with more than one author is flagged for a plugin adopting v0.3", async () => {
+    const one = page({ events: [{ external_id: "C0PILOT001:1", actors: [human] }] })
+    const two = page({ events: [{ external_id: "C0PILOT001:1", actors: [human, { ...human, id: "slack:U0PILOT02", name: "Other sender" }] }] })
+    const mixed = page({ events: [{ external_id: "C0PILOT001:1", actors: [{ ...human, role: "author" }, human] }] })
+    assert.deepEqual(await checkOf("one-author", [one]), { name: "one-author", ran: true, notApplicable: false, problems: [] })
+    assert.deepEqual((await checkOf("one-author", [two]))?.problems, ["events_list(page 1): the event C0PILOT001:1 lists more than one author: from, or its alias author, names at most one actor"])
+    assert.deepEqual((await checkOf("one-author", [mixed]))?.problems, ["events_list(page 1): the event C0PILOT001:1 lists more than one author: from, or its alias author, names at most one actor"])
+    // A page that lists no author says nothing about authorship, so the check does not apply.
+    assert.deepEqual(await checkOf("one-author", [page()]), { name: "one-author", ran: false, notApplicable: true, problems: [] })
+  })
+
+  test("event-within-max-bytes: one event alone fits the source's maxBytes", async () => {
+    const big = page({ events: [{ external_id: "C0PILOT001:9", sections: Array.from({ length: 20 }, (_, index) => ({ heading: `Notes ${index}`, text: "a".repeat(4096) })) }] })
+    const found = await checkOf("event-within-max-bytes", [big])
+    assert.equal(found?.ran, true)
+    assert.equal(found?.notApplicable, false)
+    assert.equal(found?.problems.length, 1)
+    assert.match(found?.problems[0] ?? "", /over the source's maxBytes of 65536/)
+    assert.match(found?.problems[0] ?? "", /C0PILOT001:9/)
+    // A source that declares more room passes the same event.
+    assert.deepEqual((await checkOf("event-within-max-bytes", [big], { item: itemOf({ maxBytes: 1048576 }) }))?.problems, [])
+    // An ordinary event fits.
+    assert.deepEqual(await checkOf("event-within-max-bytes", [page({ events: [{ external_id: "C0PILOT001:1" }] })]), {
+      name: "event-within-max-bytes",
+      ran: true,
+      notApplicable: false,
+      problems: [],
+    })
+  })
+
   test("facts: every fact type a page carries is declared by the source", async () => {
     const commitment = { type: "commitment", key: "EX-1", title: "Send the report", owner: human.id, state: "open" }
     const declared = itemOf({ facts: ["commitment"] })

@@ -34,7 +34,7 @@ import {
   type Grant,
   type SessionContext,
 } from "./permission.ts"
-import { removalProblems } from "../events.ts"
+import { AUTHOR_ROLES, removalProblems } from "../events.ts"
 import { hintProblems, routineProblems } from "../../hints.ts"
 import { sessionRules } from "../../permission.ts"
 import { toolsRpcIdProblems } from "../../tools-rpc.ts"
@@ -185,6 +185,7 @@ const CHECKS = [
   "refused-is-final",
   "removals-are-final",
   "actor-kind",
+  "one-author",
   "facts",
   "commitment-key",
   "parts-stable",
@@ -273,6 +274,7 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
   // The v0.3 additions (#45 §1, §3): what a fixture names, and what it holds across pages.
   const version = versionState(source, options.machineActors)
   const actorKind: string[] = []
+  const oneAuthor: string[] = []
   const facts: string[] = []
   const commitmentKey: string[] = []
   const partsStable: string[] = []
@@ -331,6 +333,7 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
     // The v0.3 additions (#45): an actor's kind, a fact's declared type, a commitment's key and a part's text.
     const versionFound = versionProblems(answer, where, version)
     actorKind.push(...versionFound.actorKind)
+    oneAuthor.push(...versionFound.oneAuthor)
     facts.push(...versionFound.facts)
     commitmentKey.push(...versionFound.commitmentKey)
     partsStable.push(...versionFound.partsStable)
@@ -361,6 +364,9 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
     if (!version.seenMachine.has(id)) actorKind.push(`the fixture names ${id} as an agent, a bot or a service, and no page lists it`)
   }
   add("actor-kind", actorKind, isEvents && version.machine.size > 0, !isEvents || version.machine.size === 0)
+  // (#45 §1, §8) A page may list several `from` actors, so a consumer reads the first as the author; the kit asks a
+  // plugin adopting v0.3 to list one, and applies only to a page that lists an author at all.
+  add("one-author", oneAuthor, isEvents && version.sawAuthor, !isEvents || !version.sawAuthor)
   add("facts", facts, isEvents && version.sawFacts, !isEvents || !version.sawFacts)
   add("commitment-key", commitmentKey, isEvents && version.sawCommitment, !isEvents || !version.sawCommitment)
   add("parts-stable", partsStable, isEvents && version.sawParts, !isEvents || !version.sawParts)
@@ -721,6 +727,8 @@ interface VersionState {
   readonly items: Map<string, string>
   /** An event and a part id, and the text and actor it was listed with. */
   readonly parts: Map<string, string>
+  /** True when a page lists an actor in an author's role. */
+  sawAuthor: boolean
   sawFacts: boolean
   sawCommitment: boolean
   sawParts: boolean
@@ -735,6 +743,7 @@ function versionState(source: SourceItem, machineActors: readonly string[] | und
     keys: new Map(),
     items: new Map(),
     parts: new Map(),
+    sawAuthor: false,
     sawFacts: false,
     sawCommitment: false,
     sawParts: false,
@@ -746,16 +755,20 @@ function versionState(source: SourceItem, machineActors: readonly string[] | und
  * fact's type is declared by the source; a commitment keeps one key, and the same item one key; a part's id keeps its
  * text. Each is remembered in `state`, so a later page is held to what an earlier one said.
  */
-function versionProblems(answer: unknown, where: string, state: VersionState): { actorKind: string[]; facts: string[]; commitmentKey: string[]; partsStable: string[] } {
+function versionProblems(answer: unknown, where: string, state: VersionState): { actorKind: string[]; oneAuthor: string[]; facts: string[]; commitmentKey: string[]; partsStable: string[] } {
   const actorKind: string[] = []
+  const oneAuthor: string[] = []
   const facts: string[] = []
   const commitmentKey: string[] = []
   const partsStable: string[] = []
-  if (!plain(answer) || !Array.isArray(answer["events"])) return { actorKind, facts, commitmentKey, partsStable }
+  if (!plain(answer) || !Array.isArray(answer["events"])) return { actorKind, oneAuthor, facts, commitmentKey, partsStable }
   for (const event of answer["events"] as unknown[]) {
     if (!plain(event)) continue
     const id = typeof event["external_id"] === "string" ? event["external_id"] : ""
     if (Array.isArray(event["actors"])) {
+      const authors = event["actors"].filter((actor) => plain(actor) && (AUTHOR_ROLES as readonly unknown[]).includes(actor["role"]))
+      if (authors.length > 0) state.sawAuthor = true
+      if (authors.length > 1) oneAuthor.push(`${where}: the event ${id} lists more than one author: from, or its alias author, names at most one actor`)
       for (const actor of event["actors"]) {
         if (!plain(actor) || typeof actor["id"] !== "string" || !state.machine.has(actor["id"])) continue
         state.seenMachine.add(actor["id"])
@@ -798,7 +811,7 @@ function versionProblems(answer: unknown, where: string, state: VersionState): {
       }
     }
   }
-  return { actorKind, facts, commitmentKey, partsStable }
+  return { actorKind, oneAuthor, facts, commitmentKey, partsStable }
 }
 
 /** The actor kinds that make an actor an agent, a bot or a service (#45 §1). */

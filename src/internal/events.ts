@@ -176,7 +176,11 @@ export type ActorKind = (typeof ACTOR_KINDS)[number]
 export const ACTOR_ROLES = ["from", "author", "to", "cc", "bcc", "mentioned", "assignee", "creator", "reviewer", "organizer", "attendee", "owner", "speaker", "agent"] as const
 export type ActorRole = (typeof ACTOR_ROLES)[number]
 
-/** The roles that name an event's author: `from`, and its alias `author`. An event has at most one such actor. */
+/**
+ * The roles that name an event's author: `from`, and its alias `author`. A page may list several (#45 §1) — a `From`
+ * header carries several addresses, and gws lists one `from` actor for each — so a consumer reads the first `from`, or
+ * else the first `author`, as the author. The kit's `one-author` is a plugin's authoring-time check, not a page rule.
+ */
 export const AUTHOR_ROLES = ["from", "author"] as const
 
 /** How strong an identity is (#45 §1): `strong` from an authenticated source, `weak` as observed. */
@@ -1174,7 +1178,6 @@ export function eventProblems(event: unknown, where = "event"): string[] {
     problems.push(`${where}.labels must be at most ${EVENT_LIMITS.labels} labels of at most ${EVENT_LIMITS.label} characters without spaces`)
   } else if (new Set(e.labels).size !== e.labels.length) problems.push(`${where}.labels repeats a label`)
   const actorIds = new Set<string>()
-  let authors = 0
   if (!Array.isArray(e.actors) || e.actors.length > EVENT_LIMITS.actors) problems.push(`${where}.actors must be a list of at most ${EVENT_LIMITS.actors}`)
   else {
     const seen = new Set<string>()
@@ -1186,13 +1189,11 @@ export function eventProblems(event: unknown, where = "event"): string[] {
       }
       problems.push(...actorProblems(actor, at))
       if (typeof actor.id === "string") actorIds.add(actor.id)
-      if ((AUTHOR_ROLES as readonly unknown[]).includes(actor.role)) authors++
       const key = `${String(actor.role)}\u0000${String(actor.id)}`
       if (seen.has(key)) problems.push(`${at} repeats an actor`)
       seen.add(key)
     }
   }
-  if (authors > 1) problems.push(`${where}.actors lists more than one author: from, or its alias author, names at most one actor`)
   problems.push(...targetProblems(e, where), ...partProblems(e, where, actorIds), ...factsProblems(e, where, actorIds))
   if (typeof e.hash !== "string" || !HASH.test(e.hash)) problems.push(`${where}.hash must be sha256: and 64 hex digits`)
   else if (problems.length === 0) {

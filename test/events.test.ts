@@ -472,13 +472,19 @@ describe("actor metadata (#45 §1)", () => {
     expect(eventProblems(withActor({ role: "stakeholder", id: "slack:U01" }))).toEqual([])
   })
 
-  test("an event has at most one author: from, or its alias author", () => {
+  test("several `from` actors stay valid: a consumer reads the first, or else the first `author`", () => {
+    // A `From` header may carry several addresses, and gws lists one `from` actor for each. That page is valid under
+    // v0.2 and stays valid, so neither `read` nor the page checks refuse it; the kit's `one-author` is a plugin's
+    // authoring-time check instead.
     const two = makeEvent({ source: "demo", account: "work", external_id: "item-1", kind: "message", occurred_at: T0, actors: [{ role: "from", id: "mailto:a@example.com" }, { role: "from", id: "mailto:b@example.com" }] })
-    expect(eventProblems(two)).toEqual(["event.actors lists more than one author: from, or its alias author, names at most one actor"])
+    expect(eventProblems(two)).toEqual([])
+    expect(two.actors.map((actor) => actor.id)).toEqual(["mailto:a@example.com", "mailto:b@example.com"])
     const alias = makeEvent({ source: "demo", account: "work", external_id: "item-1", kind: "message", occurred_at: T0, actors: [{ role: "author", id: "mailto:a@example.com" }, { role: "to", id: "mailto:b@example.com" }] })
     expect(eventProblems(alias)).toEqual([])
     const mixed = makeEvent({ source: "demo", account: "work", external_id: "item-1", kind: "message", occurred_at: T0, actors: [{ role: "author", id: "mailto:a@example.com" }, { role: "from", id: "mailto:b@example.com" }] })
-    expect(eventProblems(mixed)).toHaveLength(1)
+    expect(eventProblems(mixed)).toEqual([])
+    // The order the page lists them in is the order a consumer reads: from first, and author as its alias.
+    expect(AUTHOR_ROLES).toEqual(["from", "author"])
   })
 
   test("identities say where each id comes from: a strength, and the provider field that is its basis", () => {

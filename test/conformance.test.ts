@@ -312,11 +312,11 @@ describe("sourceConformance", () => {
     assert.equal(report.incomplete, false)
     assert.deepEqual(
       report.checks.map((check) => check.name),
-      ["declaration", "hints", "routines", "page-result", "failed-holds-cursor", "gap-and-cursor-expired", "gap-once-per-read", "refused-is-final", "removals-are-final", "actor-kind", "facts", "commitment-key", "parts-stable", "billed-cost", "probe", "details", "suggest", "identity-grants", "output-schema", "rpc-id", "unused-grants"],
+      ["declaration", "hints", "routines", "page-result", "failed-holds-cursor", "gap-and-cursor-expired", "gap-once-per-read", "refused-is-final", "removals-are-final", "actor-kind", "one-author", "facts", "commitment-key", "parts-stable", "billed-cost", "probe", "details", "suggest", "identity-grants", "output-schema", "rpc-id", "unused-grants"],
     )
     assert.deepEqual(
       report.checks.filter((check) => !check.ran).map((check) => check.name),
-      ["hints", "routines", "removals-are-final", "actor-kind", "facts", "commitment-key", "parts-stable", "billed-cost", "output-schema", "rpc-id"],
+      ["hints", "routines", "removals-are-final", "actor-kind", "one-author", "facts", "commitment-key", "parts-stable", "billed-cost", "output-schema", "rpc-id"],
     )
   })
 
