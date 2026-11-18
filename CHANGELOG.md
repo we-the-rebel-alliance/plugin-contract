@@ -2,16 +2,19 @@
 
 Releases are tagged GitHub Releases, not npm: pin `github:we-the-rebel-alliance/source-contract#v<version>`. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/) as it applies before 1.0: a minor version may carry what an older consumer refuses. Every change names its pull request.
 
-## Unreleased
+## [0.3.0] - 2026-11-18
 
-The v0.3 proposal ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45), [#46](https://github.com/we-the-rebel-alliance/source-contract/pull/46)): what an actor is and which ids it has across sources, who an item was for and where it sits, the facts a source already holds in code, and the hint and routine file formats. `contractVersion` stays 1, no error code, method or cursor format changes, and every v0.2 page and descriptor stays valid.
+Everything since v0.2.0: the v0.3 proposal ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45)) in [#46](https://github.com/we-the-rebel-alliance/source-contract/pull/46), with its review's three fixes in the same pull request. What an actor is and which ids it has across sources, who an item was for and where it sits, the facts a source already holds in code, and the hint and routine file formats. `contractVersion` stays 1, no error code, method or cursor format changes, and every v0.2 page and descriptor stays valid.
 
 ### Upgrading from 0.2.x
 
 - **Consumers (Memory, jelly) re-vendor first.** A consumer on 0.2.x refuses a page that carries any of the new fields, a descriptor that declares `facts`, `hints` or `routines`, and a fact of a new type, because its schemas are strict: a page is `SCHEMA_VIOLATION`. Pin `#v0.3.0`, check the new `SHA256SUMS`, and run your own checks before any plugin sends a new key.
-- **Plugins send a new field or declare a file only after both consumers are on 0.3.0.** [The guide for plugin authors](docs/adopting-v0.3.md) takes it one step at a time.
-- **The conformance report has six more checks**: `hints`, `routines`, `actor-kind`, `facts`, `commitment-key` and `parts-stable`. Each is not applicable unless the source carries what it checks, so a v0.2 plugin's report stays ok; a plugin that lists checks by name sees them. A source that declares hints or routines passes `files` to the kit, and a declared file the kit cannot read fails, so nothing passes by leaving a file unread.
+- **Plugins send a new field or declare a file only after both consumers are on 0.3.0.** [The guide for plugin authors](docs/adopting-v0.3.md) takes it one step at a time: an actor's `kind`, then its identities, then the event metadata, then `sections` and `parts`, then `facts[]`, then a hint, and a routine only later.
+- **A plugin runs the kit's new checks as it adopts each step.** They are `hints` and `routines` (with `files` and `ownSources`), `event-within-max-bytes`, `actor-kind` (with `machineActors`), `one-author`, `facts`, `commitment-key` and `parts-stable`. Each is not applicable until the source carries what it checks, so a v0.2 plugin's report stays ok.
+- **A plugin keeps each event inside its source's `maxBytes`.** A page always carries at least one event, so an event that alone is over the limit cannot be paged around, and a consumer would refuse the page as `TOO_LARGE`. A growing item lists only the parts it has not listed yet, and long notes are split across pages, or cut to the section that matters.
+- **The conformance report has eight more checks**: `hints`, `routines`, `event-within-max-bytes`, `actor-kind`, `one-author`, `facts`, `commitment-key` and `parts-stable` (the list above says when each applies). A plugin that lists checks by name sees them. A source that declares hints or routines passes `files` to the kit, and a declared file the kit cannot read fails, so nothing passes by leaving a file unread.
 - **A v0.2 event hashes as it did.** A new field joins the hash only when it is present, so no recorded page changes and no consumer re-reads history.
+- **A page with several `from` actors stays valid.** A consumer reads the first `from`, or else the first `author`, as the author; `read` refuses nothing it accepted on 0.2.x. `one-author` is a plugin's authoring-time check, not a page rule.
 - **TypeScript only: `EventActor` gains `kind`, `identities` and `self`, and `SourceEvents` gains `facts`, `hints` and `routines`.** Optional throughout, so code that builds an actor or reads an item is unchanged.
 - **`makeEvent` normalises the new metadata**: a reply on one line and cut to 512 characters, domains lowercased and de-duplicated, sections and parts cut to their own limits, an empty `identities` list left out so the actor hashes as if it had none, and an actor's `kind`, identities and facts kept as the plugin gave them for `eventProblems` to judge.
 
@@ -76,5 +79,6 @@ The Wave 1 and Wave 4 adoption feedback ([#30](https://github.com/we-the-rebel-a
 
 The first Release: the data model, the descriptor, the protocol, the library and the conformance kit (Wave 0).
 
+[0.3.0]: https://github.com/we-the-rebel-alliance/source-contract/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/we-the-rebel-alliance/source-contract/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/we-the-rebel-alliance/source-contract/releases/tag/v0.1.0

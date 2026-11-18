@@ -1,4 +1,4 @@
-// @we-the-rebel-alliance/source-contract 0.2.0. Built by scripts/build.mjs; do not edit.
+// @we-the-rebel-alliance/source-contract 0.3.0. Built by scripts/build.mjs; do not edit.
 var __defProp = Object.defineProperty;
 var __export = (target, all) => {
   for (var name in all)

@@ -1,4 +1,4 @@
-// @we-the-rebel-alliance/source-contract 0.2.0. Built by scripts/build.mjs; do not edit.
+// @we-the-rebel-alliance/source-contract 0.3.0. Built by scripts/build.mjs; do not edit.
 import {
   CLASSES,
   LOCATION_HEADER,
@@ -16,11 +16,11 @@ import {
   toolsRpcId,
   toolsRpcIdProblems,
   upstreamText
-} from "./chunks/chunk-X6XP7YK2.js";
+} from "./chunks/chunk-IGPRJ63D.js";
 import {
   evaluate
-} from "./chunks/chunk-OZMX7VR7.js";
-import "./chunks/chunk-T4QM7B3S.js";
+} from "./chunks/chunk-EOS4LD6F.js";
+import "./chunks/chunk-CUITXC5J.js";
 export {
   CLASSES,
   LOCATION_HEADER,

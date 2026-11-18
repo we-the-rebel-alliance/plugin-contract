@@ -1,8 +1,8 @@
-// @we-the-rebel-alliance/source-contract 0.2.0. Built by scripts/build.mjs; do not edit.
+// @we-the-rebel-alliance/source-contract 0.3.0. Built by scripts/build.mjs; do not edit.
 import {
   MAX_CURSOR_LENGTH,
   canonicalScope
-} from "./chunk-NUEROZNU.js";
+} from "./chunk-NUBUQFLH.js";
 
 // src/internal/secrets.ts
 var PRIVATE_KEY_BLOCK = /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----[\s\S]*?(?:-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----|$)/g;

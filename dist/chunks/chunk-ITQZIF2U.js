@@ -1,14 +1,14 @@
-// @we-the-rebel-alliance/source-contract 0.2.0. Built by scripts/build.mjs; do not edit.
+// @we-the-rebel-alliance/source-contract 0.3.0. Built by scripts/build.mjs; do not edit.
 import {
   _enum,
   array,
   object,
   string,
   validator
-} from "./chunk-JUWIMDGF.js";
+} from "./chunk-6ZSJSJMV.js";
 import {
   isEventKind
-} from "./chunk-G47BVCHT.js";
+} from "./chunk-LJL3EALP.js";
 
 // src/hints.ts
 var HINT_MAX = 1500;
