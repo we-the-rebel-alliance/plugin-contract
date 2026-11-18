@@ -35,6 +35,7 @@ import {
   type SessionContext,
 } from "./permission.ts"
 import { AUTHOR_ROLES, removalProblems } from "../events.ts"
+import { maxBytesOf } from "../../descriptor.ts"
 import { hintProblems, routineProblems } from "../../hints.ts"
 import { sessionRules } from "../../permission.ts"
 import { toolsRpcIdProblems } from "../../tools-rpc.ts"
@@ -179,6 +180,7 @@ const CHECKS = [
   "hints",
   "routines",
   "page-result",
+  "event-within-max-bytes",
   "failed-holds-cursor",
   "gap-and-cursor-expired",
   "gap-once-per-read",
@@ -271,6 +273,9 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
   let sawGap = false
   const gapOnce: string[] = []
   let sawAnyGap = false
+  const fitsMaxBytes: string[] = []
+  let sawEvents = false
+  const maxBytes = maxBytesOf(source)
   // The v0.3 additions (#45 §1, §3): what a fixture names, and what it holds across pages.
   const version = versionState(source, options.machineActors)
   const actorKind: string[] = []
@@ -330,6 +335,18 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
       sawRemovals = true
       removals.push(...removalProblems(answer).map((problem) => `${where}: ${problem}`))
     }
+    // (#45 §2, §8) A page always carries at least one event, so an event that alone exceeds the source's `maxBytes`
+    // cannot be paged around: a consumer would refuse the page as TOO_LARGE. A plugin is told which one, and how.
+    if (plain(answer) && Array.isArray(answer["events"])) {
+      for (const event of answer["events"] as unknown[]) {
+        sawEvents = true
+        const bytes = Buffer.byteLength(JSON.stringify(event))
+        if (bytes > maxBytes) {
+          const id = plain(event) && typeof event["external_id"] === "string" ? event["external_id"] : "an event"
+          fitsMaxBytes.push(`${where}: the event ${id} is ${bytes} bytes of JSON, over the source's maxBytes of ${maxBytes}: split its sections, or list only the parts it has not listed`)
+        }
+      }
+    }
     // The v0.3 additions (#45): an actor's kind, a fact's declared type, a commitment's key and a part's text.
     const versionFound = versionProblems(answer, where, version)
     actorKind.push(...versionFound.actorKind)
@@ -344,6 +361,7 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
     }
   }
   add("page-result", shape, isEvents && cases.length > 0, !isEvents)
+  add("event-within-max-bytes", fitsMaxBytes, isEvents && sawEvents, !isEvents || !sawEvents)
   // A page fetched in one call can never have a per-item failure, so the source may say so; an empty reason is no
   // reason at all, and the check applies as it does by default.
   const atomicReason = options.atomicPages?.reason.trim() ?? ""

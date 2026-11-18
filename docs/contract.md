@@ -57,6 +57,8 @@ An actor may carry up to 10 **identities**: `{ id, strength, basis }`, another s
 
 **`thread`** is normative for every source with conversations or series, and stable across pages.
 
+**One event fits the source's `maxBytes`.** A page always carries at least one event (`fitPage` keeps at least one, and truncation is never a page's answer), so an event whose own JSON is over the source's `maxBytes` (64 KB by default, at most 1 MB) cannot be paged around: a consumer refuses the page as `TOO_LARGE`. So a growing item lists only the parts it has not listed yet, and long notes are split across pages, or cut to the section that matters. The kit's `event-within-max-bytes` names the event that is too large and how to make it fit ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §2, §8).
+
 ### Facts ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §3)
 
 An event may carry up to 20 **facts**: what the source already knows in code, such as an issue's assignee, due date and state, derived in the plugin's code from provider fields and never from free text. A fact is one of three core types, and each schema is closed (`additionalProperties: false`):

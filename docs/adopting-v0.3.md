@@ -70,6 +70,8 @@ An event's own `text` stops at 4,096 characters. Two fields carry what is longer
 
 The kit's `parts-stable` check holds a part id to its text across the pages of one run, which no single page can.
 
+**Keep one event inside the source's `maxBytes`** (64 KB by default). A page always carries at least one event, so an event that alone is over the limit cannot be paged around and a consumer would refuse the page as `TOO_LARGE`. Twenty sections of 4,096 characters are about 80 KB, so list only the sections a reader needs, split long notes across pages, or cut each to the section that matters; for a growing item, list only the parts it has not listed yet. The kit's `event-within-max-bytes` names the event that is too large.
+
 ## Step 5: facts the source already holds in code
 
 A fact is what your plugin knows from provider fields, never from free text: an issue's assignee, due date and state, a person's team from the directory, who attended a meeting. An event may carry up to 20.
