@@ -1,4 +1,4 @@
-// @we-the-rebel-alliance/source-contract 0.3.0. Built by scripts/build.mjs; do not edit.
+// @we-the-rebel-alliance/source-contract 0.2.0. Built by scripts/build.mjs; do not edit.
 import {
   DEFAULT_MAX_BYTES,
   DETAIL_FIELDS,
@@ -10,16 +10,16 @@ import {
   findSource,
   maxBytesOf,
   readInstalledDescriptor
-} from "./chunks/chunk-WNC34IMN.js";
-import "./chunks/chunk-GDBKZBG7.js";
-import "./chunks/chunk-XJEDNL75.js";
-import "./chunks/chunk-IGPRJ63D.js";
-import "./chunks/chunk-KXQYSM2Z.js";
-import "./chunks/chunk-6ZSJSJMV.js";
-import "./chunks/chunk-SBDN3WRN.js";
-import "./chunks/chunk-NUBUQFLH.js";
-import "./chunks/chunk-EOS4LD6F.js";
-import "./chunks/chunk-CUITXC5J.js";
+} from "./chunks/chunk-NBZUASF6.js";
+import "./chunks/chunk-BOUWB5UP.js";
+import "./chunks/chunk-ZBWHG7IS.js";
+import "./chunks/chunk-X6XP7YK2.js";
+import "./chunks/chunk-IL565TRX.js";
+import "./chunks/chunk-JUWIMDGF.js";
+import "./chunks/chunk-G47BVCHT.js";
+import "./chunks/chunk-NUEROZNU.js";
+import "./chunks/chunk-OZMX7VR7.js";
+import "./chunks/chunk-T4QM7B3S.js";
 export {
   DEFAULT_MAX_BYTES,
   DETAIL_FIELDS,

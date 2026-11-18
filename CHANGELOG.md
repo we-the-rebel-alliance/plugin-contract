@@ -2,7 +2,7 @@
 
 Releases are tagged GitHub Releases, not npm: pin `github:we-the-rebel-alliance/source-contract#v<version>`. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/) as it applies before 1.0: a minor version may carry what an older consumer refuses. Every change names its pull request.
 
-## [0.3.0] - 2026-11-18
+## Unreleased
 
 The v0.3 proposal ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45), [#46](https://github.com/we-the-rebel-alliance/source-contract/pull/46)): what an actor is and which ids it has across sources, who an item was for and where it sits, the facts a source already holds in code, and the hint and routine file formats. `contractVersion` stays 1, no error code, method or cursor format changes, and every v0.2 page and descriptor stays valid.
 
@@ -76,6 +76,5 @@ The Wave 1 and Wave 4 adoption feedback ([#30](https://github.com/we-the-rebel-a
 
 The first Release: the data model, the descriptor, the protocol, the library and the conformance kit (Wave 0).
 
-[0.3.0]: https://github.com/we-the-rebel-alliance/source-contract/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/we-the-rebel-alliance/source-contract/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/we-the-rebel-alliance/source-contract/releases/tag/v0.1.0

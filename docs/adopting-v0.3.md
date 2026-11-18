@@ -1,6 +1,6 @@
 # Adopting v0.3, a step at a time
 
-v0.3.0 is a minor release of the package and leaves `sources.contractVersion` at 1 ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45)). Every field it adds is optional: a v0.2 plugin passes the kit as it is, and every v0.2 recorded fixture passes unchanged. So adopt one step at a time, and keep `npm run check` green after each.
+The v0.3 rules ship as `0.3.0`, a minor release of the package, and leave `sources.contractVersion` at 1 ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45)). Every field it adds is optional: a v0.2 plugin passes the kit as it is, and every v0.2 recorded fixture passes unchanged. So adopt one step at a time, and keep `npm run check` green after each.
 
 **Order.** A consumer (Memory, jelly) re-vendors first. A consumer on 0.2.x refuses a page that carries a new page field, a descriptor that declares `facts`, `hints` or `routines`, and any new key at all, because its schemas are strict. Pin `#v0.3.0` there, run its own checks, and only then send the first new field. This is the order `removals[]` took.
 

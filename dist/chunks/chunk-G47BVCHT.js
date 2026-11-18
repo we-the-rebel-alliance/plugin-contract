@@ -1,8 +1,8 @@
-// @we-the-rebel-alliance/source-contract 0.3.0. Built by scripts/build.mjs; do not edit.
+// @we-the-rebel-alliance/source-contract 0.2.0. Built by scripts/build.mjs; do not edit.
 import {
   MAX_CURSOR_LENGTH,
   canonicalScope
-} from "./chunk-NUBUQFLH.js";
+} from "./chunk-NUEROZNU.js";
 
 // src/internal/secrets.ts
 var PRIVATE_KEY_BLOCK = /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----[\s\S]*?(?:-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----|$)/g;
@@ -376,7 +376,8 @@ function makeEvent(draft) {
       id,
       ...name ? { name } : {},
       ...actor.kind === void 0 ? {} : { kind: actor.kind },
-      ...actor.identities === void 0 ? {} : { identities: [...actor.identities] },
+      // An empty list says nothing, and is left out so the actor hashes as if it had none.
+      ...actor.identities === void 0 || actor.identities.length === 0 ? {} : { identities: [...actor.identities] },
       ...actor.self === void 0 ? {} : { self: actor.self }
     });
   }
@@ -699,7 +700,6 @@ function eventProblems(event, where = "event") {
     problems.push(`${where}.labels must be at most ${EVENT_LIMITS.labels} labels of at most ${EVENT_LIMITS.label} characters without spaces`);
   } else if (new Set(e.labels).size !== e.labels.length) problems.push(`${where}.labels repeats a label`);
   const actorIds = /* @__PURE__ */ new Set();
-  let authors = 0;
   if (!Array.isArray(e.actors) || e.actors.length > EVENT_LIMITS.actors) problems.push(`${where}.actors must be a list of at most ${EVENT_LIMITS.actors}`);
   else {
     const seen = /* @__PURE__ */ new Set();
@@ -711,13 +711,11 @@ function eventProblems(event, where = "event") {
       }
       problems.push(...actorProblems(actor, at));
       if (typeof actor.id === "string") actorIds.add(actor.id);
-      if (AUTHOR_ROLES.includes(actor.role)) authors++;
       const key = `${String(actor.role)}\0${String(actor.id)}`;
       if (seen.has(key)) problems.push(`${at} repeats an actor`);
       seen.add(key);
     }
   }
-  if (authors > 1) problems.push(`${where}.actors lists more than one author: from, or its alias author, names at most one actor`);
   problems.push(...targetProblems(e, where), ...partProblems(e, where, actorIds), ...factsProblems(e, where, actorIds));
   if (typeof e.hash !== "string" || !HASH.test(e.hash)) problems.push(`${where}.hash must be sha256: and 64 hex digits`);
   else if (problems.length === 0) {

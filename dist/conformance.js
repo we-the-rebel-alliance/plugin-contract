@@ -1,23 +1,24 @@
-// @we-the-rebel-alliance/source-contract 0.3.0. Built by scripts/build.mjs; do not edit.
+// @we-the-rebel-alliance/source-contract 0.2.0. Built by scripts/build.mjs; do not edit.
 import {
   maxBytesOf
-} from "./chunks/chunk-WNC34IMN.js";
-import "./chunks/chunk-GDBKZBG7.js";
+} from "./chunks/chunk-NBZUASF6.js";
+import "./chunks/chunk-BOUWB5UP.js";
 import {
   SOURCES_SCHEMA
-} from "./chunks/chunk-XJEDNL75.js";
+} from "./chunks/chunk-ZBWHG7IS.js";
 import {
   toolsRpcIdProblems
-} from "./chunks/chunk-IGPRJ63D.js";
-import "./chunks/chunk-KXQYSM2Z.js";
+} from "./chunks/chunk-X6XP7YK2.js";
+import "./chunks/chunk-IL565TRX.js";
 import {
   hintProblems,
   routineProblems
-} from "./chunks/chunk-GNRZQ5WT.js";
+} from "./chunks/chunk-JVV75SYB.js";
 import {
   fromJSONSchema
-} from "./chunks/chunk-6ZSJSJMV.js";
+} from "./chunks/chunk-JUWIMDGF.js";
 import {
+  AUTHOR_ROLES,
   PAGE,
   REFUSAL_REASONS,
   isEventKindIn,
@@ -26,13 +27,13 @@ import {
   resultProblems,
   secretKinds,
   sourceNamespace
-} from "./chunks/chunk-SBDN3WRN.js";
-import "./chunks/chunk-NUBUQFLH.js";
+} from "./chunks/chunk-G47BVCHT.js";
+import "./chunks/chunk-NUEROZNU.js";
 import {
   operationRule,
   sessionRules
-} from "./chunks/chunk-EOS4LD6F.js";
-import "./chunks/chunk-CUITXC5J.js";
+} from "./chunks/chunk-OZMX7VR7.js";
+import "./chunks/chunk-T4QM7B3S.js";
 
 // src/internal/conformance/public-suffix-list.ts
 var RULES = `ac
@@ -11116,8 +11117,12 @@ async function sourceConformance(options) {
   let sawGap = false;
   const gapOnce = [];
   let sawAnyGap = false;
+  const fitsMaxBytes = [];
+  let sawEvents = false;
+  const maxBytes = maxBytesOf(source);
   const version = versionState(source, options.machineActors);
   const actorKind = [];
+  const oneAuthor = [];
   const facts = [];
   const commitmentKey = [];
   const partsStable = [];
@@ -11171,8 +11176,19 @@ async function sourceConformance(options) {
       sawRemovals = true;
       removals.push(...removalProblems(answer).map((problem) => `${where}: ${problem}`));
     }
+    if (plain5(answer) && Array.isArray(answer["events"])) {
+      for (const event of answer["events"]) {
+        sawEvents = true;
+        const bytes = Buffer.byteLength(JSON.stringify(event));
+        if (bytes > maxBytes) {
+          const id = plain5(event) && typeof event["external_id"] === "string" ? event["external_id"] : "an event";
+          fitsMaxBytes.push(`${where}: the event ${id} is ${bytes} bytes of JSON, over the source's maxBytes of ${maxBytes}: split its sections, or list only the parts it has not listed`);
+        }
+      }
+    }
     const versionFound = versionProblems(answer, where, version);
     actorKind.push(...versionFound.actorKind);
+    oneAuthor.push(...versionFound.oneAuthor);
     facts.push(...versionFound.facts);
     commitmentKey.push(...versionFound.commitmentKey);
     partsStable.push(...versionFound.partsStable);
@@ -11183,6 +11199,7 @@ async function sourceConformance(options) {
     }
   }
   add("page-result", shape, isEvents && cases.length > 0, !isEvents);
+  add("event-within-max-bytes", fitsMaxBytes, isEvents && sawEvents, !isEvents || !sawEvents);
   const atomicReason = options.atomicPages?.reason.trim() ?? "";
   const atomic = isEvents && atomicReason !== "";
   add("failed-holds-cursor", cursor, atomic ? false : isEvents && sawFailed, !isEvents || atomic, atomic ? atomicReason : void 0);
@@ -11196,6 +11213,7 @@ async function sourceConformance(options) {
     if (!version.seenMachine.has(id)) actorKind.push(`the fixture names ${id} as an agent, a bot or a service, and no page lists it`);
   }
   add("actor-kind", actorKind, isEvents && version.machine.size > 0, !isEvents || version.machine.size === 0);
+  add("one-author", oneAuthor, isEvents && version.sawAuthor, !isEvents || !version.sawAuthor);
   add("facts", facts, isEvents && version.sawFacts, !isEvents || !version.sawFacts);
   add("commitment-key", commitmentKey, isEvents && version.sawCommitment, !isEvents || !version.sawCommitment);
   add("parts-stable", partsStable, isEvents && version.sawParts, !isEvents || !version.sawParts);
@@ -11476,6 +11494,7 @@ function versionState(source, machineActors) {
     keys: /* @__PURE__ */ new Map(),
     items: /* @__PURE__ */ new Map(),
     parts: /* @__PURE__ */ new Map(),
+    sawAuthor: false,
     sawFacts: false,
     sawCommitment: false,
     sawParts: false
@@ -11483,14 +11502,18 @@ function versionState(source, machineActors) {
 }
 function versionProblems(answer, where, state) {
   const actorKind = [];
+  const oneAuthor = [];
   const facts = [];
   const commitmentKey = [];
   const partsStable = [];
-  if (!plain5(answer) || !Array.isArray(answer["events"])) return { actorKind, facts, commitmentKey, partsStable };
+  if (!plain5(answer) || !Array.isArray(answer["events"])) return { actorKind, oneAuthor, facts, commitmentKey, partsStable };
   for (const event of answer["events"]) {
     if (!plain5(event)) continue;
     const id = typeof event["external_id"] === "string" ? event["external_id"] : "";
     if (Array.isArray(event["actors"])) {
+      const authors = event["actors"].filter((actor) => plain5(actor) && AUTHOR_ROLES.includes(actor["role"]));
+      if (authors.length > 0) state.sawAuthor = true;
+      if (authors.length > 1) oneAuthor.push(`${where}: the event ${id} lists more than one author: from, or its alias author, names at most one actor`);
       for (const actor of event["actors"]) {
         if (!plain5(actor) || typeof actor["id"] !== "string" || !state.machine.has(actor["id"])) continue;
         state.seenMachine.add(actor["id"]);
@@ -11533,7 +11556,7 @@ function versionProblems(answer, where, state) {
       }
     }
   }
-  return { actorKind, facts, commitmentKey, partsStable };
+  return { actorKind, oneAuthor, facts, commitmentKey, partsStable };
 }
 var MACHINE_KINDS = ["agent", "bot", "service"];
 export {

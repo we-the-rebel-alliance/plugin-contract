@@ -110,7 +110,11 @@ export type ActorKind = (typeof ACTOR_KINDS)[number];
  */
 export declare const ACTOR_ROLES: readonly ["from", "author", "to", "cc", "bcc", "mentioned", "assignee", "creator", "reviewer", "organizer", "attendee", "owner", "speaker", "agent"];
 export type ActorRole = (typeof ACTOR_ROLES)[number];
-/** The roles that name an event's author: `from`, and its alias `author`. An event has at most one such actor. */
+/**
+ * The roles that name an event's author: `from`, and its alias `author`. A page may list several (#45 §1) — a `From`
+ * header carries several addresses, and gws lists one `from` actor for each — so a consumer reads the first `from`, or
+ * else the first `author`, as the author. The kit's `one-author` is a plugin's authoring-time check, not a page rule.
+ */
 export declare const AUTHOR_ROLES: readonly ["from", "author"];
 /** How strong an identity is (#45 §1): `strong` from an authenticated source, `weak` as observed. */
 export declare const IDENTITY_STRENGTHS: readonly ["strong", "weak"];
