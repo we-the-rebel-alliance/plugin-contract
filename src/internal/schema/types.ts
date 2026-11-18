@@ -1,7 +1,9 @@
 /**
- * The plain types of the §2.2 `sources` descriptor, and its constants. No import: a published declaration reaches this
- * file, and must reach nothing outside the package (`npm run check:dist`).
+ * The plain types of the §2.2 `sources` descriptor, and its constants. Its one import is the package's own: a
+ * published declaration reaches this file, and must reach nothing outside the package (`npm run check:dist`).
  */
+import type { FactType } from "../events.ts"
+
 /** `maxBytes`: the default and the ceiling (§2.2). */
 export const MAX_BYTES_DEFAULT = 65536
 export const MAX_BYTES_LIMIT = 1048576
@@ -52,6 +54,12 @@ export interface SourceEvents extends SourceCommon {
   readonly reads: string
   /** Reads of one event's detail, called only with the event fields they name. */
   readonly details?: readonly Detail[] | undefined
+  /** The fact types this source's events carry (#45 §3), each a core type. */
+  readonly facts?: readonly FactType[] | undefined
+  /** The hint files the package ships for this source (#45 §4). */
+  readonly hints?: readonly string[] | undefined
+  /** The routine files the package ships for this source (#45 §5). */
+  readonly routines?: readonly string[] | undefined
   /** The action `events_list` asserts. */
   readonly permission: PermissionEvents
   /** Not allowed on an events source. */
@@ -71,10 +79,16 @@ export interface SourceSnapshot extends SourceCommon {
   readonly outputSchema?: Readonly<Record<string, unknown>> | boolean | undefined
   /** The parameters a consumer may pass, resolved by the library at read time. */
   readonly params?: Readonly<Record<string, unknown>> | undefined
+  /** The hint files the package ships for this source (#45 §4). */
+  readonly hints?: readonly string[] | undefined
+  /** The routine files the package ships for this source (#45 §5). */
+  readonly routines?: readonly string[] | undefined
   /** The action its read tool asserts. */
   readonly permission: PermissionTool
   /** How long a result may be reused before it is read again. */
   readonly maxAgeSec?: number | undefined
+  /** Not allowed on a snapshot. */
+  readonly facts?: undefined
   /** Not allowed on a snapshot. */
   readonly reads?: undefined
   /** Not allowed on a snapshot. */

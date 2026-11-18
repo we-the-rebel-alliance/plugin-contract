@@ -1,15 +1,24 @@
 // @we-the-rebel-alliance/source-contract 0.2.0. Built by scripts/build.mjs; do not edit.
 import {
   maxBytesOf
-} from "./chunks/chunk-EHIOPXPL.js";
+} from "./chunks/chunk-NBZUASF6.js";
+import "./chunks/chunk-BOUWB5UP.js";
 import {
   SOURCES_SCHEMA
-} from "./chunks/chunk-HVBOAYBO.js";
+} from "./chunks/chunk-ZBWHG7IS.js";
 import {
   toolsRpcIdProblems
 } from "./chunks/chunk-X6XP7YK2.js";
 import "./chunks/chunk-IL565TRX.js";
 import {
+  hintProblems,
+  routineProblems
+} from "./chunks/chunk-JVV75SYB.js";
+import {
+  fromJSONSchema
+} from "./chunks/chunk-JUWIMDGF.js";
+import {
+  AUTHOR_ROLES,
   PAGE,
   REFUSAL_REASONS,
   isEventKindIn,
@@ -18,16 +27,12 @@ import {
   resultProblems,
   secretKinds,
   sourceNamespace
-} from "./chunks/chunk-YH323FAZ.js";
+} from "./chunks/chunk-G47BVCHT.js";
 import "./chunks/chunk-NUEROZNU.js";
 import {
   operationRule,
   sessionRules
 } from "./chunks/chunk-OZMX7VR7.js";
-import "./chunks/chunk-BOUWB5UP.js";
-import {
-  fromJSONSchema
-} from "./chunks/chunk-JUWIMDGF.js";
 import "./chunks/chunk-T4QM7B3S.js";
 
 // src/internal/conformance/public-suffix-list.ts
@@ -10759,6 +10764,16 @@ function declarationProblems(sources, options = {}) {
       const problem = urlHostProblem(host);
       if (problem !== null) problems.push(`${at}.urlHosts has ${JSON.stringify(host)}, which ${problem}`);
     }
+    const factTypes = item.kind === "events" ? item.facts ?? [] : [];
+    for (const type of unique(factTypes)) {
+      if (factTypes.filter((entry) => entry === type).length > 1) problems.push(`${at}.facts lists "${type}" twice: a fact type is declared once`);
+    }
+    for (const key2 of ["hints", "routines"]) {
+      const paths = item[key2] ?? [];
+      for (const path of unique(paths)) {
+        if (paths.filter((entry) => entry === path).length > 1) problems.push(`${at}.${key2} lists "${path}" twice: one file is declared once`);
+      }
+    }
   }
   return problems;
 }
@@ -11066,6 +11081,30 @@ async function sourceConformance(options) {
   };
   const isEvents = source.kind === "events";
   add("declaration", declarationProblems({ contractVersion: 1, items: [source] }, { tools }));
+  const ownSources = options.ownSources ?? [source.id];
+  const readFile = options.files;
+  const fileCheck = (paths, kind) => {
+    const problems2 = [];
+    for (const path of paths) {
+      const where = `${kind}("${path}")`;
+      if (readFile === void 0) {
+        problems2.push(`${where} is declared and the kit has no file reader: pass files, (path) => the file's text`);
+        continue;
+      }
+      const text = readFile(path);
+      if (text === void 0) {
+        problems2.push(`${where} is declared and the package holds no such file`);
+        continue;
+      }
+      const found = kind === "hints" ? hintProblems(text, { sources: ownSources }) : routineProblems(text, { sources: ownSources });
+      problems2.push(...found.map((problem) => `${where}: ${problem}`));
+    }
+    return problems2;
+  };
+  const declaredHints = source.hints ?? [];
+  const declaredRoutines = source.routines ?? [];
+  add("hints", fileCheck(declaredHints, "hints"), declaredHints.length > 0, declaredHints.length === 0);
+  add("routines", fileCheck(declaredRoutines, "routines"), declaredRoutines.length > 0, declaredRoutines.length === 0);
   const shape = [];
   const cursor = [];
   const gap = [];
@@ -11078,6 +11117,15 @@ async function sourceConformance(options) {
   let sawGap = false;
   const gapOnce = [];
   let sawAnyGap = false;
+  const fitsMaxBytes = [];
+  let sawEvents = false;
+  const maxBytes = maxBytesOf(source);
+  const version = versionState(source, options.machineActors);
+  const actorKind = [];
+  const oneAuthor = [];
+  const facts = [];
+  const commitmentKey = [];
+  const partsStable = [];
   if (cases.length > 0 && calls.list === void 0) shape.push("events_list cases are declared and the kit has no list call");
   for (const item of cases) {
     const where = `events_list(${item.name})`;
@@ -11128,6 +11176,22 @@ async function sourceConformance(options) {
       sawRemovals = true;
       removals.push(...removalProblems(answer).map((problem) => `${where}: ${problem}`));
     }
+    if (plain5(answer) && Array.isArray(answer["events"])) {
+      for (const event of answer["events"]) {
+        sawEvents = true;
+        const bytes = Buffer.byteLength(JSON.stringify(event));
+        if (bytes > maxBytes) {
+          const id = plain5(event) && typeof event["external_id"] === "string" ? event["external_id"] : "an event";
+          fitsMaxBytes.push(`${where}: the event ${id} is ${bytes} bytes of JSON, over the source's maxBytes of ${maxBytes}: split its sections, or list only the parts it has not listed`);
+        }
+      }
+    }
+    const versionFound = versionProblems(answer, where, version);
+    actorKind.push(...versionFound.actorKind);
+    oneAuthor.push(...versionFound.oneAuthor);
+    facts.push(...versionFound.facts);
+    commitmentKey.push(...versionFound.commitmentKey);
+    partsStable.push(...versionFound.partsStable);
     sawFailed ||= hasEntries(answer, "failed");
     sawRefused ||= hasEntries(answer, "refused");
     if (expect === "empty" && plain5(answer) && Array.isArray(answer["events"]) && answer["events"].length > 0) {
@@ -11135,6 +11199,7 @@ async function sourceConformance(options) {
     }
   }
   add("page-result", shape, isEvents && cases.length > 0, !isEvents);
+  add("event-within-max-bytes", fitsMaxBytes, isEvents && sawEvents, !isEvents || !sawEvents);
   const atomicReason = options.atomicPages?.reason.trim() ?? "";
   const atomic = isEvents && atomicReason !== "";
   add("failed-holds-cursor", cursor, atomic ? false : isEvents && sawFailed, !isEvents || atomic, atomic ? atomicReason : void 0);
@@ -11144,6 +11209,14 @@ async function sourceConformance(options) {
   add("gap-once-per-read", gapOnce, isEvents && sawAnyGap, !isEvents || !sawAnyGap);
   add("refused-is-final", refused, isEvents && sawRefused, !isEvents);
   add("removals-are-final", removals, isEvents && sawRemovals, !isEvents || !sawRemovals);
+  for (const id of version.machine) {
+    if (!version.seenMachine.has(id)) actorKind.push(`the fixture names ${id} as an agent, a bot or a service, and no page lists it`);
+  }
+  add("actor-kind", actorKind, isEvents && version.machine.size > 0, !isEvents || version.machine.size === 0);
+  add("one-author", oneAuthor, isEvents && version.sawAuthor, !isEvents || !version.sawAuthor);
+  add("facts", facts, isEvents && version.sawFacts, !isEvents || !version.sawFacts);
+  add("commitment-key", commitmentKey, isEvents && version.sawCommitment, !isEvents || !version.sawCommitment);
+  add("parts-stable", partsStable, isEvents && version.sawParts, !isEvents || !version.sawParts);
   add("billed-cost", cost, source.cost.class === "billed" && isEvents, source.cost.class !== "billed");
   for (const operation of identityOperations) {
     if (!(source.permission.operations ?? []).includes(operation)) {
@@ -11413,6 +11486,79 @@ function identityProblems(assertions, source, identityGrants, probeAction) {
   }
   return problems;
 }
+function versionState(source, machineActors) {
+  return {
+    machine: new Set(machineActors ?? []),
+    seenMachine: /* @__PURE__ */ new Set(),
+    declaredFacts: new Set(source.kind === "events" ? source.facts ?? [] : []),
+    keys: /* @__PURE__ */ new Map(),
+    items: /* @__PURE__ */ new Map(),
+    parts: /* @__PURE__ */ new Map(),
+    sawAuthor: false,
+    sawFacts: false,
+    sawCommitment: false,
+    sawParts: false
+  };
+}
+function versionProblems(answer, where, state) {
+  const actorKind = [];
+  const oneAuthor = [];
+  const facts = [];
+  const commitmentKey = [];
+  const partsStable = [];
+  if (!plain5(answer) || !Array.isArray(answer["events"])) return { actorKind, oneAuthor, facts, commitmentKey, partsStable };
+  for (const event of answer["events"]) {
+    if (!plain5(event)) continue;
+    const id = typeof event["external_id"] === "string" ? event["external_id"] : "";
+    if (Array.isArray(event["actors"])) {
+      const authors = event["actors"].filter((actor) => plain5(actor) && AUTHOR_ROLES.includes(actor["role"]));
+      if (authors.length > 0) state.sawAuthor = true;
+      if (authors.length > 1) oneAuthor.push(`${where}: the event ${id} lists more than one author: from, or its alias author, names at most one actor`);
+      for (const actor of event["actors"]) {
+        if (!plain5(actor) || typeof actor["id"] !== "string" || !state.machine.has(actor["id"])) continue;
+        state.seenMachine.add(actor["id"]);
+        if (!MACHINE_KINDS.includes(String(actor["kind"]))) {
+          actorKind.push(`${where}: the actor ${actor["id"]} is an agent, a bot or a service, and says no kind: an agent, a bot and a service each carry one`);
+        }
+      }
+    }
+    if (Array.isArray(event["facts"])) {
+      for (const fact of event["facts"]) {
+        if (!plain5(fact)) continue;
+        state.sawFacts = true;
+        const type = String(fact["type"]);
+        if (!state.declaredFacts.has(type)) facts.push(`${where}: the event ${id} carries a ${type} fact, and the descriptor does not declare that type`);
+        if (type !== "commitment") continue;
+        state.sawCommitment = true;
+        const key2 = fact["key"];
+        const title = fact["title"];
+        const owner = fact["owner"];
+        if (typeof key2 !== "string" || typeof title !== "string" || typeof owner !== "string") continue;
+        const identity = `${title}\0${owner}`;
+        const named = state.keys.get(key2);
+        if (named !== void 0 && named !== identity) commitmentKey.push(`${where}: the commitment key ${key2} names another commitment (another title and owner) than on an earlier page`);
+        else state.keys.set(key2, identity);
+        const item = `${id}\0${identity}`;
+        const before = state.items.get(item);
+        if (before !== void 0 && before !== key2) commitmentKey.push(`${where}: the event ${id} lists one commitment (title ${title}, owner ${owner}) under two keys: a key is stable for one item`);
+        else state.items.set(item, key2);
+      }
+    }
+    if (Array.isArray(event["parts"])) {
+      for (const part of event["parts"]) {
+        if (!plain5(part) || typeof part["id"] !== "string" || typeof part["text"] !== "string") continue;
+        state.sawParts = true;
+        const at = `${id}\0${part["id"]}`;
+        const text = `${part["text"]}\0${typeof part["actor"] === "string" ? part["actor"] : ""}`;
+        const before = state.parts.get(at);
+        if (before !== void 0 && before !== text) partsStable.push(`${where}: the event ${id} re-lists the part ${part["id"]} with another text: a part's id and text never change once listed`);
+        else state.parts.set(at, text);
+      }
+    }
+  }
+  return { actorKind, oneAuthor, facts, commitmentKey, partsStable };
+}
+var MACHINE_KINDS = ["agent", "bot", "service"];
 export {
   DETAIL_FIELDS,
   EVENT_FIELDS,

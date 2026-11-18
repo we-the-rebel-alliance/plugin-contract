@@ -25,6 +25,13 @@ The draft's ten checks, and Memory's additions:
 | + | **Refused is final**, and the secret screening is proven from a fixture: an event whose `title` or `text` holds a secret (`secretKinds`) fails, and it belongs in `refused[]` with `reason: "secret"`. | the family's `events`, Memory's `conformance` |
 | + | **Removals are final** (`removals-are-final`, [#27](https://github.com/we-the-rebel-alliance/source-contract/issues/27)): whenever an answer carries `removals[]`, each entry is `{ external_id, at, reason }`, no id repeats or is also in `failed[]`, and no `at` is later than the page's `asOf`. It is not one of the features every events source must exercise: a source that never removes anything has nothing to record, so the check is not applicable to it. | the family's `events` (`removalProblems`), the kit |
 | + | `urlHosts` are exact hosts or `*.` with a registrable domain: no public suffix, shared hosting or punycode. | Memory's `schema`, `conformance` |
+| + | **An actor says what it is** (`actor-kind`, [#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §1, §8). `kind` is `person`, `agent`, `bot` or `service`, and every actor the fixture names in `machineActors` carries a machine kind on every page that lists it. The kit cannot tell a person from a bot itself, so the fixture says; without it the check does not apply. The shape rules go with the page: `kind` is one of the four, and an identity is scheme-qualified, unique within its actor, never the actor's own id, and carries `strength` and `basis`; those are `page-result`'s, since they are the page's shape. | the family's `events` (`eventProblems`), the kit |
+| + | **One event fits the source's `maxBytes`** (`event-within-max-bytes`, [#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §2, §8): a recorded event whose own JSON is over the source's `maxBytes` fails, since a page always carries at least one event and a consumer would refuse it as `TOO_LARGE` (`fitPage` cannot page around it). The message names the event's bytes, the source's `maxBytes`, and what to do: split its sections, or list only the parts it has not listed. It applies when a page carries an event. | the kit |
+| + | **One author** (`one-author`, [#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §1, §8): an event that lists more than one `from` or `author` actor is flagged for a plugin adopting v0.3. It is an authoring-time check, not a page rule: a page may validly list several (a `From` header carries several addresses, and gws lists one `from` actor for each), and a consumer reads the first `from`, or else the first `author`. It applies when a page lists an author, and a page with none says nothing about authorship. | the kit |
+| + | **A fact's type is declared** (`facts`, [#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §3, §8): every fact a page carries is a type the descriptor's `facts` declares. The rest of a fact is `page-result`'s, since it is the page's shape: the closed schema (so a `version` or a sensitive field fails), the enum values, and every actor reference naming an actor on the same event. It applies when a page carries a fact; a source that declares a type and sends none has nothing to check. | the family's `events` (`factProblems`), the kit |
+| + | **A commitment keeps one key** (`commitment-key`, [#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §3, §8): a key names one title and owner across the run, and an event that lists one commitment (one title and owner) under two keys fails, so a key built from a counter or a timestamp is caught. It applies when a page carries a commitment. | the kit |
+| + | **A part keeps its text** (`parts-stable`, [#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §2, §8): a part listed again, on a later page of the same event, carries the same text and actor. A re-listed item may list only its new parts, so a shorter list is fine. It applies when a page carries parts. | the kit |
+| + | **A hint and a routine are files of the plugin's own** (`hints`, `routines`, [#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §4, §5, §8): each declared path is read (`files`), and a file over its size, with a forbidden or unknown key, with no frontmatter or a malformed one, or naming a source the plugin does not own, fails. The hint is at most 1,500 characters, and a routine's body at most 4,000. `produces` names one of the seven knowledge types Memory's core extractor finds (`commitment`, `decision`, `fact`, `preference`, `constraint`, `person`, `project`), not a structured fact type; Memory ignores one the person has not consented to. Each applies when the source declares one. | the `hints` module (`hintProblems`, `routineProblems`), the kit |
 
 ## Running it
 
@@ -39,6 +46,41 @@ import { assertDeclaration, assertConformance } from "@we-the-rebel-alliance/sou
 
 Every check that applies must run: a source that never exercises `failed[]`, `gap`, `refused[]` or `details` has an
 *incomplete* report, which is not ok.
+
+## A source that ships hints or routines
+
+A source that declares `hints` or `routines` is checked against the files themselves, so the kit is given a reader for
+the plugin's own package:
+
+```js
+await sourceConformance({ ...options, files: (path) => readFileSync(join(here, path), "utf8"), ownSources: ["granola.meetings", "granola.notes"] })
+```
+
+`files` returns the file's text, or `undefined` when the package holds no such file, and `ownSources` is every source id
+the plugin declares, for the own-source rule (it defaults to the source under test). A declared file that the kit cannot
+read fails `hints` or `routines`, so a report never passes by leaving a file unread. The formats, the sizes and the
+forbidden keys are the `hints` module's ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §4,
+§5), and a plugin may call `hintProblems` and `routineProblems` in its own tests as well.
+
+## A fixture whose actors are machines
+
+The kit cannot tell a person from an agent, a bot or a service, so a fixture says which actor ids are machines:
+
+```js
+await sourceConformance({ ...options, machineActors: ["slack:B0PILOT01"] })
+```
+
+Every actor the fixture names there must carry a `kind` of `agent`, `bot` or `service` on every page that lists it, and
+an id no page lists fails, so a fixture cannot pass by naming nothing that appears. Without `machineActors` the
+`actor-kind` check does not apply ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §1).
+
+## The v0.3 additions to a page
+
+The actor metadata (`kind`, `identities`, `self`), the event metadata (`reply_to`, `audience`, `domains`, `sections`,
+`parts`) and `facts[]` are checked by `page-result`, which is the same `eventProblems` that `read` runs, so a shape rule
+holds whoever reads the page. The `commitment-key` and `parts-stable` checks hold a value across the pages of one run,
+which no single page can. Every one of them is optional: a v0.2 page passes unchanged, and the nine recorded fixtures
+do.
 
 ## A source that states its rules verbatim
 

@@ -125,6 +125,22 @@ export const EVENT_LIMITS = {
   failed: 500,
   detail: 200,
   costUnits: 8,
+  /** #45 §1: the identities one actor may carry, and the lengths of each part of one. */
+  identities: 10,
+  identityBasis: 64,
+  /** #45 §2: the metadata one event may carry. */
+  replyTo: 512,
+  domains: 20,
+  domain: 253,
+  sections: 20,
+  sectionHeading: 300,
+  parts: 50,
+  partId: 512,
+  /** #45 §3: the facts one event may carry, and the lengths of their fields. */
+  facts: 20,
+  factKey: 200,
+  factTitle: 300,
+  factAttribute: 120,
 } as const
 
 /** `limit`'s default and inclusive range. */
@@ -145,12 +161,126 @@ export const FIRST_RUN_HOURS = 24
 
 export const TRUST = "untrusted" as const
 
-/** Someone or something an event involves. `id` is a stable, scheme-qualified id: `mailto:…`, `slack:U…`, `github:…`. */
+/**
+ * What kind of actor an actor is (#45 §1): a person, an agent, a bot or a service. Absent means "not known to be one",
+ * never a confirmed person. `kind` is required for every agent, bot and service actor a plugin can recognise.
+ */
+export const ACTOR_KINDS = ["person", "agent", "bot", "service"] as const
+export type ActorKind = (typeof ACTOR_KINDS)[number]
+
+/**
+ * The roles the contract gives a meaning (#45 §1): `from` is the author, at most one per event, and `author` is read as
+ * its alias; `to`, `cc` and `bcc` are recipients, `mentioned` an actor the provider resolves from a mention, and the
+ * rest keep their meaning. An unknown role is read as "involved", so a plugin may name its own.
+ */
+export const ACTOR_ROLES = ["from", "author", "to", "cc", "bcc", "mentioned", "assignee", "creator", "reviewer", "organizer", "attendee", "owner", "speaker", "agent"] as const
+export type ActorRole = (typeof ACTOR_ROLES)[number]
+
+/**
+ * The roles that name an event's author: `from`, and its alias `author`. A page may list several (#45 §1) — a `From`
+ * header carries several addresses, and gws lists one `from` actor for each — so a consumer reads the first `from`, or
+ * else the first `author`, as the author. The kit's `one-author` is a plugin's authoring-time check, not a page rule.
+ */
+export const AUTHOR_ROLES = ["from", "author"] as const
+
+/** How strong an identity is (#45 §1): `strong` from an authenticated source, `weak` as observed. */
+export const IDENTITY_STRENGTHS = ["strong", "weak"] as const
+export type IdentityStrength = (typeof IDENTITY_STRENGTHS)[number]
+
+/**
+ * Another id the plugin knows for one actor (#45 §1). `id` is scheme-qualified and never the actor's own `id`;
+ * `strength` says whether an authenticated source gave it; `basis` names the provider field it came from, such as
+ * `slack.profile.email`. Only a strong identity merges people automatically, and never without the person's word.
+ */
+export interface EventIdentity {
+  readonly id: string
+  readonly strength: IdentityStrength
+  /** The provider field it came from, at most 64 characters, such as `slack.profile.email`. */
+  readonly basis: string
+}
+
+/**
+ * Someone or something an event involves. `id` is a stable, scheme-qualified id: `mailto:…`, `slack:U…`, `github:…`.
+ * `kind` says what it is, `identities` lists every other id the plugin knows for it, and `self` is a hint that it is
+ * the signed-in person, which Memory alone decides (#45 §1, §7).
+ */
 export interface EventActor {
   readonly role: string
   readonly id: string
   readonly name?: string
+  readonly kind?: ActorKind
+  readonly identities?: EventIdentity[]
+  readonly self?: boolean
 }
+
+/** Who an item was for (#45 §2): a direct message, a group, a channel, mail, or a public place. Absent means unknown. */
+export const AUDIENCES = ["dm", "group", "channel", "email", "public"] as const
+export type Audience = (typeof AUDIENCES)[number]
+
+/** One heading of a long item, such as a meeting's notes (#45 §2). Its `text` is up to 4,096 characters of its own. */
+export interface EventSection {
+  readonly heading: string
+  readonly text: string
+}
+
+/**
+ * One part of a growing item, such as one turn of a session or of a transcript (#45 §2). A part's `id` and `text`
+ * never change once listed, so a consumer may add the new parts only. `actor` names an actor id on the same event.
+ */
+export interface EventPart {
+  readonly id: string
+  readonly text: string
+  readonly actor?: string
+}
+
+/** The core fact types (#45 §3). v0.3 has no plugin-defined type, and no fact has a field for a sensitive trait. */
+export const FACT_TYPES = ["commitment", "person.attribute", "meeting.attended"] as const
+export type FactType = (typeof FACT_TYPES)[number]
+
+/** What a commitment is doing (#45 §3). */
+export const COMMITMENT_STATES = ["open", "done", "cancelled"] as const
+export type CommitmentState = (typeof COMMITMENT_STATES)[number]
+
+/** How someone answered a meeting invitation (#45 §3). */
+export const ATTENDANCE_RESPONSES = ["accepted", "declined", "tentative", "needs_action"] as const
+export type AttendanceResponse = (typeof ATTENDANCE_RESPONSES)[number]
+
+/**
+ * A commitment the source already holds in code (#45 §3): `key` is a stable id within the source and account, so two
+ * pages that list one item give one key; `owner` and `counterparty` are actor ids on the same event; `state` is what
+ * the provider says now. Memory stamps the installed package's version on each fact it files, so a fact carries none.
+ */
+export interface FactCommitment {
+  readonly type: "commitment"
+  readonly key: string
+  readonly title: string
+  readonly owner: string
+  readonly counterparty?: string
+  /** `YYYY-MM-DD`. */
+  readonly due?: string
+  readonly state: CommitmentState
+  readonly url?: string
+}
+
+/** An attribute of a person, from structured profile or directory data only (#45 §3): at least one of the three. */
+export interface FactPersonAttribute {
+  readonly type: "person.attribute"
+  readonly actor: string
+  readonly org?: string
+  readonly team?: string
+  readonly role?: string
+}
+
+/** Who attended a meeting, and how they answered (#45 §3). */
+export interface FactMeetingAttended {
+  readonly type: "meeting.attended"
+  readonly actor: string
+  readonly response: AttendanceResponse
+  readonly organizer: boolean
+}
+
+/** A typed fact on an event (#45 §3): derived in the plugin's code from provider fields, never from free text. */
+export type EventFact = FactCommitment | FactPersonAttribute | FactMeetingAttended
 
 /** One normalised event, as a source lists it. A consumer adds its own id. */
 export interface SourceEvent {
@@ -169,6 +299,18 @@ export interface SourceEvent {
   readonly labels: string[]
   /** `sha256:<hex>` of every other field, from `eventHash`. */
   readonly hash: string
+  /** (#45 §2) The parent's `external_id`, or a source-scoped key such as `gmail-message:<Message-ID>`. */
+  readonly reply_to?: string
+  /** (#45 §2) Who the item was for. Absent means unknown. */
+  readonly audience?: Audience
+  /** (#45 §2) The recipients' lowercase domains, for mail and shared channels, at most 20. */
+  readonly domains?: string[]
+  /** (#45 §2) A long item by heading, at most 20, each text of its own 4,096 characters. */
+  readonly sections?: EventSection[]
+  /** (#45 §2) A growing item's parts, at most 50, whose ids and texts never change once listed. */
+  readonly parts?: EventPart[]
+  /** (#45 §3) Typed facts the source derives in code, at most 20, each of a type the descriptor declares. */
+  readonly facts?: EventFact[]
 }
 
 /** The signed-in source account. */
@@ -493,21 +635,55 @@ export function cut(text: string, max: number): string {
   return `${text.slice(0, end)}…`
 }
 
-/** `sha256:` and the hex digest of every field but the hash, in a fixed order. */
+/**
+ * A value with object keys sorted at every depth, so the order a plugin built it in does not change the hash. Arrays
+ * keep their order.
+ */
+function stable(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stable)
+  if (typeof value === "object" && value !== null) {
+    const entries = Object.keys(value as Record<string, unknown>).filter((key) => (value as Record<string, unknown>)[key] !== undefined)
+    return Object.fromEntries(entries.sort().map((key) => [key, stable((value as Record<string, unknown>)[key])]))
+  }
+  return value
+}
+
+/** The new event fields a hash covers, in the one order they are hashed in (#45 §6). */
+const HASHED_EVENT_FIELDS = ["reply_to", "audience", "domains", "sections", "parts", "facts"] as const
+
+/**
+ * One actor as the hash sees it: the role, id and name of contract 1, and, only when the actor carries one, its new
+ * metadata (#45 §1) in a sorted object. An actor without metadata hashes exactly as it did before v0.3.
+ */
+function actorFields(actor: EventActor): unknown[] {
+  const base: unknown[] = [actor.role, actor.id, actor.name ?? null]
+  const extra = stable({ kind: actor.kind, identities: actor.identities, self: actor.self })
+  return Object.keys(extra as Record<string, unknown>).length === 0 ? base : [...base, extra]
+}
+
+/**
+ * `sha256:` and the hex digest of every field but the hash, in a fixed order. Contract 1's fields hash as they always
+ * have; each new field is appended, with its name, only when it is present (#45 §6), so an event without them hashes
+ * as it did in v0.2.
+ */
 export function eventHash(event: Omit<SourceEvent, "hash">): string {
-  const fields = [
+  const fields: unknown[] = [
     event.source,
     event.account,
     event.external_id,
     event.kind,
     event.occurred_at,
     event.thread,
-    event.actors.map((actor) => [actor.role, actor.id, actor.name ?? null]),
+    event.actors.map(actorFields),
     event.title,
     event.text,
     event.url,
     event.labels,
   ]
+  for (const key of HASHED_EVENT_FIELDS) {
+    const value = event[key]
+    if (value !== undefined) fields.push([key, stable(value)])
+  }
   return `sha256:${createHash("sha256").update(JSON.stringify(fields)).digest("hex")}`
 }
 
@@ -520,11 +696,17 @@ export interface EventDraft {
   /** A Date, epoch milliseconds, or a string `Date.parse` reads. */
   readonly occurred_at: Date | number | string
   readonly thread?: string | null
-  readonly actors?: readonly { readonly role: string; readonly id: string; readonly name?: string | null }[]
+  readonly actors?: readonly { readonly role: string; readonly id: string; readonly name?: string | null; readonly kind?: ActorKind; readonly identities?: readonly EventIdentity[]; readonly self?: boolean }[]
   readonly title?: string | null
   readonly text?: string | null
   readonly url?: string | null
   readonly labels?: readonly string[]
+  readonly reply_to?: string | null
+  readonly audience?: Audience | null
+  readonly domains?: readonly string[]
+  readonly sections?: readonly { readonly heading: string; readonly text: string }[]
+  readonly parts?: readonly { readonly id: string; readonly text: string; readonly actor?: string }[]
+  readonly facts?: readonly EventFact[]
 }
 
 const clean = (text: string) => text.replaceAll("\u0000", "")
@@ -532,8 +714,9 @@ const oneLine = (text: string) => clean(text).replace(/\s+/g, " ").trim()
 
 /**
  * A `SourceEvent` from a draft: the time in UTC ISO form, the title on one line and cut to 300 characters, the text cut
- * to 4096, actors without blanks or repeats and at most 20, labels likewise, a url only when it is https, and the hash.
- * Throws when the time is not a real time.
+ * to 4096, actors without blanks or repeats and at most 20, labels likewise, a url only when it is https, the metadata
+ * of #45 §2 normalised, and the hash. An actor's `kind`, identities and `self` are kept as the plugin gave them, and so
+ * are an event's facts: `eventProblems` is where a wrong one is refused. Throws when the time is not a real time.
  */
 export function makeEvent(draft: EventDraft): SourceEvent {
   const time = draft.occurred_at instanceof Date ? draft.occurred_at.getTime() : typeof draft.occurred_at === "number" ? draft.occurred_at : Date.parse(draft.occurred_at)
@@ -547,11 +730,31 @@ export function makeEvent(draft: EventDraft): SourceEvent {
     if (!role || !id || seen.has(key) || actors.length >= EVENT_LIMITS.actors) continue
     seen.add(key)
     const name = actor.name ? cut(oneLine(actor.name), EVENT_LIMITS.actorName) : ""
-    actors.push(name ? { role, id, name } : { role, id })
+    actors.push({
+      role,
+      id,
+      ...(name ? { name } : {}),
+      ...(actor.kind === undefined ? {} : { kind: actor.kind }),
+      // An empty list says nothing, and is left out so the actor hashes as if it had none.
+      ...(actor.identities === undefined || actor.identities.length === 0 ? {} : { identities: [...actor.identities] }),
+      ...(actor.self === undefined ? {} : { self: actor.self }),
+    })
   }
   const labels = [...new Set((draft.labels ?? []).map((label) => oneLine(label).replace(/\s/g, "-")).filter((label) => label.length > 0 && label.length <= EVENT_LIMITS.label))].slice(0, EVENT_LIMITS.labels)
   const url = draft.url && /^https:\/\/\S+$/.test(draft.url) && draft.url.length <= EVENT_LIMITS.url ? draft.url : null
   const thread = draft.thread ? oneLine(draft.thread) || null : null
+  const replyTo = draft.reply_to ? cut(oneLine(draft.reply_to), EVENT_LIMITS.replyTo) : undefined
+  const domains = draft.domains === undefined ? undefined : [...new Set(draft.domains.map((domain) => oneLine(domain).toLowerCase()))].filter((domain) => domain.length > 0)
+  const sections = draft.sections
+    ?.map((section) => ({ heading: cut(oneLine(section.heading), EVENT_LIMITS.sectionHeading), text: cut(clean(section.text), EVENT_LIMITS.text) }))
+    .filter((section) => section.heading.length > 0)
+  const parts = draft.parts
+    ?.map((part) => {
+      const id = cut(oneLine(part.id), EVENT_LIMITS.partId)
+      const actor = part.actor === undefined ? "" : oneLine(part.actor)
+      return { id, text: cut(clean(part.text), EVENT_LIMITS.text), ...(actor ? { actor } : {}) }
+    })
+    .filter((part) => part.id.length > 0)
   const event = {
     source: draft.source,
     account: draft.account,
@@ -564,6 +767,12 @@ export function makeEvent(draft: EventDraft): SourceEvent {
     text: cut(clean(draft.text ?? "").trim(), EVENT_LIMITS.text),
     url,
     labels,
+    ...(replyTo === undefined ? {} : { reply_to: replyTo }),
+    ...(draft.audience === undefined || draft.audience === null ? {} : { audience: draft.audience }),
+    ...(domains === undefined || domains.length === 0 ? {} : { domains }),
+    ...(sections === undefined || sections.length === 0 ? {} : { sections }),
+    ...(parts === undefined || parts.length === 0 ? {} : { parts }),
+    ...(draft.facts === undefined || draft.facts.length === 0 ? {} : { facts: [...draft.facts] }),
   }
   return { ...event, hash: eventHash(event) }
 }
@@ -770,19 +979,192 @@ const SCHEMED = /^[a-z][a-z0-9+.-]*:\S+$/
 const HASH = /^sha256:[0-9a-f]{64}$/
 const CODE = /^[A-Z][A-Z0-9_]*$/
 const UNIT = /^[a-z][a-z0-9_-]*$/
+/** A lowercase domain: at least two labels, each one a letter or digit at either end (#45 §2). */
+const DOMAIN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/
+/** A calendar date, `YYYY-MM-DD` (#45 §3). */
+const DATE = /^\d{4}-\d{2}-\d{2}$/
+
+/** A list as a sentence reads it: `a, b or c`. */
+const listOf = (items: readonly string[]): string => (items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} or ${items.at(-1)}`)
 
 const text = (value: unknown, max: number, empty = false): value is string =>
   typeof value === "string" && value.length <= max && (empty || value.length > 0) && !value.includes("\u0000")
 const line = (value: unknown, max: number, empty = false): value is string => text(value, max, empty) && !hasControl(value)
 const isoUtc = (value: unknown): value is string => typeof value === "string" && ISO_UTC.test(value) && Number.isFinite(Date.parse(value))
 
+/** One actor's problems (#45 §1), one sentence each; none when it keeps the contract. */
+function actorProblems(actor: Record<string, unknown>, at: string): string[] {
+  const problems: string[] = []
+  for (const key of Object.keys(actor)) if (!["role", "id", "name", "kind", "identities", "self"].includes(key)) problems.push(`${at} has the field "${key}", which the contract does not define`)
+  const role = actor.role
+  const id = actor.id
+  if (!line(role, EVENT_LIMITS.actorRole) || !ROLE.test(role)) problems.push(`${at}.role must be a lowercase word such as from`)
+  if (!line(id, EVENT_LIMITS.actorId) || !SCHEMED.test(id)) problems.push(`${at}.id must be a scheme-qualified id such as mailto:someone@example.com`)
+  if (actor.name !== undefined && !line(actor.name, EVENT_LIMITS.actorName)) problems.push(`${at}.name must be one non-empty line of at most ${EVENT_LIMITS.actorName} characters`)
+  if (actor.kind !== undefined && !(ACTOR_KINDS as readonly unknown[]).includes(actor.kind)) problems.push(`${at}.kind must be ${listOf(ACTOR_KINDS)}`)
+  if (actor.self !== undefined && typeof actor.self !== "boolean") problems.push(`${at}.self must be true or false`)
+  if (actor.identities !== undefined) {
+    if (!Array.isArray(actor.identities) || actor.identities.length > EVENT_LIMITS.identities) problems.push(`${at}.identities must be a list of at most ${EVENT_LIMITS.identities}`)
+    else {
+      const seen = new Set<string>()
+      for (const [index, identity] of (actor.identities as unknown[]).entries()) {
+        const here = `${at}.identities[${index}]`
+        if (!plainObject(identity)) {
+          problems.push(`${here} is not an object`)
+          continue
+        }
+        for (const key of Object.keys(identity)) if (!["id", "strength", "basis"].includes(key)) problems.push(`${here} has the field "${key}", which the contract does not define`)
+        const own = identity.id
+        if (!line(own, EVENT_LIMITS.actorId) || !SCHEMED.test(own)) problems.push(`${here}.id must be a scheme-qualified id such as mailto:someone@example.com`)
+        else if (own === id) problems.push(`${here}.id is the actor's own id: an identity is another id for the same actor`)
+        else if (seen.has(own)) problems.push(`${here} repeats an identity`)
+        else seen.add(own)
+        if (!(IDENTITY_STRENGTHS as readonly unknown[]).includes(identity.strength)) problems.push(`${here}.strength must be ${listOf(IDENTITY_STRENGTHS)}`)
+        if (!line(identity.basis, EVENT_LIMITS.identityBasis)) {
+          problems.push(`${here}.basis must be one line of at most ${EVENT_LIMITS.identityBasis} characters naming the provider field it came from`)
+        }
+      }
+    }
+  }
+  return problems
+}
+
+/** One event metadata field's problems (#45 §2), for each of `reply_to`, `audience` and `domains`. */
+function targetProblems(e: Record<string, unknown>, where: string): string[] {
+  const problems: string[] = []
+  if (e.reply_to !== undefined && !line(e.reply_to, EVENT_LIMITS.replyTo)) {
+    problems.push(`${where}.reply_to must be a non-empty id of at most ${EVENT_LIMITS.replyTo} characters`)
+  }
+  if (e.audience !== undefined && !(AUDIENCES as readonly unknown[]).includes(e.audience)) {
+    problems.push(`${where}.audience must be ${listOf(AUDIENCES)}`)
+  }
+  if (e.domains !== undefined) {
+    if (!Array.isArray(e.domains) || e.domains.length > EVENT_LIMITS.domains) problems.push(`${where}.domains must be at most ${EVENT_LIMITS.domains} lowercase domains`)
+    else {
+      const seen = new Set<string>()
+      for (const [index, domain] of (e.domains as unknown[]).entries()) {
+        if (!line(domain, EVENT_LIMITS.domain) || !DOMAIN.test(domain)) problems.push(`${where}.domains[${index}] must be a lowercase domain such as example.com`)
+        else if (seen.has(domain)) problems.push(`${where}.domains repeats a domain`)
+        else seen.add(domain)
+      }
+    }
+  }
+  return problems
+}
+
+/** One event's long parts (#45 §2): its sections by heading, and the parts of a growing item. */
+function partProblems(e: Record<string, unknown>, where: string, actorIds: ReadonlySet<string>): string[] {
+  const problems: string[] = []
+  if (e.sections !== undefined) {
+    if (!Array.isArray(e.sections) || e.sections.length > EVENT_LIMITS.sections) problems.push(`${where}.sections must be a list of at most ${EVENT_LIMITS.sections}`)
+    else {
+      for (const [index, section] of (e.sections as unknown[]).entries()) {
+        const at = `${where}.sections[${index}]`
+        if (!plainObject(section)) {
+          problems.push(`${at} is not an object`)
+          continue
+        }
+        for (const key of Object.keys(section)) if (!["heading", "text"].includes(key)) problems.push(`${at} has the field "${key}", which the contract does not define`)
+        if (!line(section.heading, EVENT_LIMITS.sectionHeading)) problems.push(`${at}.heading must be one line of at most ${EVENT_LIMITS.sectionHeading} characters`)
+        if (!text(section.text, EVENT_LIMITS.text, true)) problems.push(`${at}.text must be at most ${EVENT_LIMITS.text} characters`)
+      }
+    }
+  }
+  if (e.parts !== undefined) {
+    if (!Array.isArray(e.parts) || e.parts.length > EVENT_LIMITS.parts) problems.push(`${where}.parts must be a list of at most ${EVENT_LIMITS.parts}`)
+    else {
+      const seen = new Set<string>()
+      for (const [index, part] of (e.parts as unknown[]).entries()) {
+        const at = `${where}.parts[${index}]`
+        if (!plainObject(part)) {
+          problems.push(`${at} is not an object`)
+          continue
+        }
+        for (const key of Object.keys(part)) if (!["id", "text", "actor"].includes(key)) problems.push(`${at} has the field "${key}", which the contract does not define`)
+        const id = part.id
+        if (!line(id, EVENT_LIMITS.partId)) problems.push(`${at}.id must be a non-empty id of at most ${EVENT_LIMITS.partId} characters`)
+        else if (seen.has(id)) problems.push(`${at}.id repeats a part`)
+        else seen.add(id)
+        if (!text(part.text, EVENT_LIMITS.text, true)) problems.push(`${at}.text must be at most ${EVENT_LIMITS.text} characters`)
+        if (part.actor !== undefined) {
+          if (!line(part.actor, EVENT_LIMITS.actorId)) problems.push(`${at}.actor must be an actor id of the same event`)
+          else if (!actorIds.has(part.actor)) problems.push(`${at}.actor is not an actor of the same event`)
+        }
+      }
+    }
+  }
+  return problems
+}
+
+/**
+ * One fact's problems (#45 §3), one sentence each; none when it keeps the contract. Each actor reference must be an
+ * actor id on the same event, which is `actors`. The shape is closed: a fact carries no version (Memory stamps the
+ * installed package's) and no field for a sensitive trait.
+ */
+export function factProblems(fact: unknown, actors: ReadonlySet<string>, where = "fact"): string[] {
+  if (!plainObject(fact)) return [`${where} is not an object`]
+  const type = fact.type
+  if (!(FACT_TYPES as readonly unknown[]).includes(type)) return [`${where}.type must be ${listOf(FACT_TYPES)}`]
+  const allowed: Readonly<Record<FactType, readonly string[]>> = {
+    commitment: ["type", "key", "title", "owner", "counterparty", "due", "state", "url"],
+    "person.attribute": ["type", "actor", "org", "team", "role"],
+    "meeting.attended": ["type", "actor", "response", "organizer"],
+  }
+  const problems: string[] = []
+  for (const key of Object.keys(fact)) {
+    if (!allowed[type as FactType].includes(key)) problems.push(`${where} has the field "${key}", which the contract does not define`)
+  }
+  const reference = (key: string): void => {
+    const id = fact[key]
+    if (!line(id, EVENT_LIMITS.actorId)) problems.push(`${where}.${key} must be an actor id of the same event`)
+    else if (!actors.has(id)) problems.push(`${where}.${key} is not an actor of the same event`)
+  }
+  if (type === "commitment") {
+    if (!line(fact.key, EVENT_LIMITS.factKey)) problems.push(`${where}.key must be a stable id of at most ${EVENT_LIMITS.factKey} characters`)
+    if (!line(fact.title, EVENT_LIMITS.factTitle)) problems.push(`${where}.title must be one line of at most ${EVENT_LIMITS.factTitle} characters`)
+    reference("owner")
+    if (fact.counterparty !== undefined) reference("counterparty")
+    if (fact.due !== undefined && !(typeof fact.due === "string" && DATE.test(fact.due) && Number.isFinite(Date.parse(fact.due)))) problems.push(`${where}.due must be a date such as 2026-11-30`)
+    if (!(COMMITMENT_STATES as readonly unknown[]).includes(fact.state)) problems.push(`${where}.state must be ${listOf(COMMITMENT_STATES)}`)
+    if (fact.url !== undefined && !(typeof fact.url === "string" && fact.url.length <= EVENT_LIMITS.url && /^https:\/\/\S+$/.test(fact.url))) problems.push(`${where}.url must be an https URL`)
+  }
+  if (type === "person.attribute") {
+    reference("actor")
+    if (fact.org === undefined && fact.team === undefined && fact.role === undefined) {
+      problems.push(`${where} must name org, team or role: a person's attribute comes from structured profile or directory data`)
+    }
+    for (const key of ["org", "team", "role"] as const) {
+      if (fact[key] !== undefined && !line(fact[key], EVENT_LIMITS.factAttribute)) {
+        problems.push(`${where}.${key} must be one line of at most ${EVENT_LIMITS.factAttribute} characters`)
+      }
+    }
+  }
+  if (type === "meeting.attended") {
+    reference("actor")
+    if (!(ATTENDANCE_RESPONSES as readonly unknown[]).includes(fact.response)) problems.push(`${where}.response must be ${listOf(ATTENDANCE_RESPONSES)}`)
+    if (typeof fact.organizer !== "boolean") problems.push(`${where}.organizer must be true or false`)
+  }
+  return problems
+}
+
+/** One event's facts (#45 §3): at most 20, each a core type, each actor reference an actor of the same event. */
+function factsProblems(e: Record<string, unknown>, where: string, actorIds: ReadonlySet<string>): string[] {
+  if (e.facts === undefined) return []
+  if (!Array.isArray(e.facts) || e.facts.length > EVENT_LIMITS.facts) return [`${where}.facts must be a list of at most ${EVENT_LIMITS.facts}`]
+  return (e.facts as unknown[]).flatMap((fact, index) => factProblems(fact, actorIds, `${where}.facts[${index}]`))
+}
+
+/** The event fields the contract defines, then those v0.3 adds (`#45`). */
+const EVENT_KEYS: readonly string[] = ["source", "account", "external_id", "kind", "occurred_at", "thread", "actors", "title", "text", "url", "labels", "hash"]
+const EVENT_METADATA_KEYS: readonly string[] = ["reply_to", "audience", "domains", "sections", "parts", "facts"]
+
 /** One event's problems, one sentence each; none when it keeps the contract. */
 export function eventProblems(event: unknown, where = "event"): string[] {
   if (!plainObject(event)) return [`${where} is not an object`]
   const problems: string[] = []
-  const keys = ["source", "account", "external_id", "kind", "occurred_at", "thread", "actors", "title", "text", "url", "labels", "hash"]
+  const keys = [...EVENT_KEYS, ...EVENT_METADATA_KEYS]
   for (const key of Object.keys(event)) if (!keys.includes(key)) problems.push(`${where} has the field "${key}", which the contract does not define`)
-  for (const key of keys) if (!Object.hasOwn(event, key)) problems.push(`${where} has no "${key}"`)
+  for (const key of EVENT_KEYS) if (!Object.hasOwn(event, key)) problems.push(`${where} has no "${key}"`)
   const e = event as Record<string, unknown>
   if (!line(e.source, EVENT_LIMITS.source) || !SOURCE_PATTERN.test(e.source)) problems.push(`${where}.source must be a lowercase name such as gmail`)
   if (!line(e.account, EVENT_LIMITS.account)) problems.push(`${where}.account must be a non-empty name of at most ${EVENT_LIMITS.account} characters`)
@@ -796,6 +1178,7 @@ export function eventProblems(event: unknown, where = "event"): string[] {
   if (!Array.isArray(e.labels) || e.labels.length > EVENT_LIMITS.labels || e.labels.some((label) => !line(label, EVENT_LIMITS.label) || /\s/.test(label))) {
     problems.push(`${where}.labels must be at most ${EVENT_LIMITS.labels} labels of at most ${EVENT_LIMITS.label} characters without spaces`)
   } else if (new Set(e.labels).size !== e.labels.length) problems.push(`${where}.labels repeats a label`)
+  const actorIds = new Set<string>()
   if (!Array.isArray(e.actors) || e.actors.length > EVENT_LIMITS.actors) problems.push(`${where}.actors must be a list of at most ${EVENT_LIMITS.actors}`)
   else {
     const seen = new Set<string>()
@@ -805,15 +1188,14 @@ export function eventProblems(event: unknown, where = "event"): string[] {
         problems.push(`${at} is not an object`)
         continue
       }
-      for (const key of Object.keys(actor)) if (!["role", "id", "name"].includes(key)) problems.push(`${at} has the field "${key}", which the contract does not define`)
-      if (!line(actor.role, EVENT_LIMITS.actorRole) || !ROLE.test(actor.role)) problems.push(`${at}.role must be a lowercase word such as from`)
-      if (!line(actor.id, EVENT_LIMITS.actorId) || !SCHEMED.test(actor.id)) problems.push(`${at}.id must be a scheme-qualified id such as mailto:someone@example.com`)
-      if (actor.name !== undefined && !line(actor.name, EVENT_LIMITS.actorName)) problems.push(`${at}.name must be one non-empty line of at most ${EVENT_LIMITS.actorName} characters`)
+      problems.push(...actorProblems(actor, at))
+      if (typeof actor.id === "string") actorIds.add(actor.id)
       const key = `${String(actor.role)}\u0000${String(actor.id)}`
       if (seen.has(key)) problems.push(`${at} repeats an actor`)
       seen.add(key)
     }
   }
+  problems.push(...targetProblems(e, where), ...partProblems(e, where, actorIds), ...factsProblems(e, where, actorIds))
   if (typeof e.hash !== "string" || !HASH.test(e.hash)) problems.push(`${where}.hash must be sha256: and 64 hex digits`)
   else if (problems.length === 0) {
     const { hash, ...rest } = e as unknown as SourceEvent

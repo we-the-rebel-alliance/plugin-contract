@@ -1,5 +1,11 @@
 // @we-the-rebel-alliance/source-contract 0.2.0. Built by scripts/build.mjs; do not edit.
 import {
+  ACTOR_KINDS,
+  ACTOR_ROLES,
+  ATTENDANCE_RESPONSES,
+  AUDIENCES,
+  AUTHOR_ROLES,
+  COMMITMENT_STATES,
   CONTRACT1_CODES,
   ERROR_ALIASES,
   ERROR_CODES,
@@ -9,8 +15,10 @@ import {
   EXTENSION_KIND,
   EXTENSION_NAME,
   EXTENSION_SEGMENT_MAX,
+  FACT_TYPES,
   FIRST_RUN_HOURS,
   GAP_REASONS,
+  IDENTITY_STRENGTHS,
   MAX_BYTES,
   MAX_PAGE_BYTES,
   PAGE,
@@ -30,6 +38,7 @@ import {
   eventProblems,
   eventsListResult,
   extensionNamespace,
+  factProblems,
   fitPage,
   isEventKind,
   isEventKindIn,
@@ -49,7 +58,7 @@ import {
   sinceTime,
   sourceNamespace,
   startTime
-} from "./chunks/chunk-YH323FAZ.js";
+} from "./chunks/chunk-G47BVCHT.js";
 import {
   decodeBoundCursor,
   decodeCursor,
@@ -205,6 +214,12 @@ async function assertEventsListConformance(list, fixtures) {
 - ${problems.join("\n- ")}`);
 }
 export {
+  ACTOR_KINDS,
+  ACTOR_ROLES,
+  ATTENDANCE_RESPONSES,
+  AUDIENCES,
+  AUTHOR_ROLES,
+  COMMITMENT_STATES,
   CONTRACT1_CODES,
   ERROR_ALIASES,
   ERROR_CODES,
@@ -214,8 +229,10 @@ export {
   EXTENSION_KIND,
   EXTENSION_NAME,
   EXTENSION_SEGMENT_MAX,
+  FACT_TYPES,
   FIRST_RUN_HOURS,
   GAP_REASONS,
+  IDENTITY_STRENGTHS,
   MAX_BYTES,
   MAX_PAGE_BYTES,
   PAGE,
@@ -239,6 +256,7 @@ export {
   eventsListConformance,
   eventsListResult,
   extensionNamespace,
+  factProblems,
   fitPage,
   isEventKind,
   isEventKindIn,

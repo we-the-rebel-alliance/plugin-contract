@@ -152,13 +152,37 @@ var EVENT_LIMITS = {
   refused: 500,
   failed: 500,
   detail: 200,
-  costUnits: 8
+  costUnits: 8,
+  /** #45 §1: the identities one actor may carry, and the lengths of each part of one. */
+  identities: 10,
+  identityBasis: 64,
+  /** #45 §2: the metadata one event may carry. */
+  replyTo: 512,
+  domains: 20,
+  domain: 253,
+  sections: 20,
+  sectionHeading: 300,
+  parts: 50,
+  partId: 512,
+  /** #45 §3: the facts one event may carry, and the lengths of their fields. */
+  facts: 20,
+  factKey: 200,
+  factTitle: 300,
+  factAttribute: 120
 };
 var PAGE = { default: 100, min: 1, max: 500 };
 var MAX_PAGE_BYTES = 65536;
 var MAX_BYTES = { default: 65536, max: 1048576 };
 var FIRST_RUN_HOURS = 24;
 var TRUST = "untrusted";
+var ACTOR_KINDS = ["person", "agent", "bot", "service"];
+var ACTOR_ROLES = ["from", "author", "to", "cc", "bcc", "mentioned", "assignee", "creator", "reviewer", "organizer", "attendee", "owner", "speaker", "agent"];
+var AUTHOR_ROLES = ["from", "author"];
+var IDENTITY_STRENGTHS = ["strong", "weak"];
+var AUDIENCES = ["dm", "group", "channel", "email", "public"];
+var FACT_TYPES = ["commitment", "person.attribute", "meeting.attended"];
+var COMMITMENT_STATES = ["open", "done", "cancelled"];
+var ATTENDANCE_RESPONSES = ["accepted", "declined", "tentative", "needs_action"];
 function ownerShapeProblems(owner, what) {
   if (!plainObject(owner) || !line(owner["id"], EVENT_LIMITS.ownerId) || !line(owner["label"], EVENT_LIMITS.ownerLabel) || Object.keys(owner).some((key) => key !== "id" && key !== "label" && key !== "verified")) {
     return [`${what} must be { id, label }, two non-empty lines`];
@@ -299,6 +323,20 @@ function cut(text2, max) {
   if (end > 0 && code >= 55296 && code <= 56319) end--;
   return `${text2.slice(0, end)}\u2026`;
 }
+function stable(value) {
+  if (Array.isArray(value)) return value.map(stable);
+  if (typeof value === "object" && value !== null) {
+    const entries = Object.keys(value).filter((key) => value[key] !== void 0);
+    return Object.fromEntries(entries.sort().map((key) => [key, stable(value[key])]));
+  }
+  return value;
+}
+var HASHED_EVENT_FIELDS = ["reply_to", "audience", "domains", "sections", "parts", "facts"];
+function actorFields(actor) {
+  const base = [actor.role, actor.id, actor.name ?? null];
+  const extra = stable({ kind: actor.kind, identities: actor.identities, self: actor.self });
+  return Object.keys(extra).length === 0 ? base : [...base, extra];
+}
 function eventHash(event) {
   const fields = [
     event.source,
@@ -307,12 +345,16 @@ function eventHash(event) {
     event.kind,
     event.occurred_at,
     event.thread,
-    event.actors.map((actor) => [actor.role, actor.id, actor.name ?? null]),
+    event.actors.map(actorFields),
     event.title,
     event.text,
     event.url,
     event.labels
   ];
+  for (const key of HASHED_EVENT_FIELDS) {
+    const value = event[key];
+    if (value !== void 0) fields.push([key, stable(value)]);
+  }
   return `sha256:${createHash("sha256").update(JSON.stringify(fields)).digest("hex")}`;
 }
 var clean = (text2) => text2.replaceAll("\0", "");
@@ -329,11 +371,27 @@ function makeEvent(draft) {
     if (!role || !id || seen.has(key) || actors.length >= EVENT_LIMITS.actors) continue;
     seen.add(key);
     const name = actor.name ? cut(oneLine(actor.name), EVENT_LIMITS.actorName) : "";
-    actors.push(name ? { role, id, name } : { role, id });
+    actors.push({
+      role,
+      id,
+      ...name ? { name } : {},
+      ...actor.kind === void 0 ? {} : { kind: actor.kind },
+      // An empty list says nothing, and is left out so the actor hashes as if it had none.
+      ...actor.identities === void 0 || actor.identities.length === 0 ? {} : { identities: [...actor.identities] },
+      ...actor.self === void 0 ? {} : { self: actor.self }
+    });
   }
   const labels = [...new Set((draft.labels ?? []).map((label) => oneLine(label).replace(/\s/g, "-")).filter((label) => label.length > 0 && label.length <= EVENT_LIMITS.label))].slice(0, EVENT_LIMITS.labels);
   const url = draft.url && /^https:\/\/\S+$/.test(draft.url) && draft.url.length <= EVENT_LIMITS.url ? draft.url : null;
   const thread = draft.thread ? oneLine(draft.thread) || null : null;
+  const replyTo = draft.reply_to ? cut(oneLine(draft.reply_to), EVENT_LIMITS.replyTo) : void 0;
+  const domains = draft.domains === void 0 ? void 0 : [...new Set(draft.domains.map((domain) => oneLine(domain).toLowerCase()))].filter((domain) => domain.length > 0);
+  const sections = draft.sections?.map((section) => ({ heading: cut(oneLine(section.heading), EVENT_LIMITS.sectionHeading), text: cut(clean(section.text), EVENT_LIMITS.text) })).filter((section) => section.heading.length > 0);
+  const parts = draft.parts?.map((part) => {
+    const id = cut(oneLine(part.id), EVENT_LIMITS.partId);
+    const actor = part.actor === void 0 ? "" : oneLine(part.actor);
+    return { id, text: cut(clean(part.text), EVENT_LIMITS.text), ...actor ? { actor } : {} };
+  }).filter((part) => part.id.length > 0);
   const event = {
     source: draft.source,
     account: draft.account,
@@ -345,7 +403,13 @@ function makeEvent(draft) {
     title: cut(oneLine(draft.title ?? ""), EVENT_LIMITS.title),
     text: cut(clean(draft.text ?? "").trim(), EVENT_LIMITS.text),
     url,
-    labels
+    labels,
+    ...replyTo === void 0 ? {} : { reply_to: replyTo },
+    ...draft.audience === void 0 || draft.audience === null ? {} : { audience: draft.audience },
+    ...domains === void 0 || domains.length === 0 ? {} : { domains },
+    ...sections === void 0 || sections.length === 0 ? {} : { sections },
+    ...parts === void 0 || parts.length === 0 ? {} : { parts },
+    ...draft.facts === void 0 || draft.facts.length === 0 ? {} : { facts: [...draft.facts] }
   };
   return { ...event, hash: eventHash(event) };
 }
@@ -460,15 +524,168 @@ var SCHEMED = /^[a-z][a-z0-9+.-]*:\S+$/;
 var HASH = /^sha256:[0-9a-f]{64}$/;
 var CODE = /^[A-Z][A-Z0-9_]*$/;
 var UNIT = /^[a-z][a-z0-9_-]*$/;
+var DOMAIN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/;
+var DATE = /^\d{4}-\d{2}-\d{2}$/;
+var listOf = (items) => items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} or ${items.at(-1)}`;
 var text = (value, max, empty = false) => typeof value === "string" && value.length <= max && (empty || value.length > 0) && !value.includes("\0");
 var line = (value, max, empty = false) => text(value, max, empty) && !hasControl(value);
 var isoUtc = (value) => typeof value === "string" && ISO_UTC.test(value) && Number.isFinite(Date.parse(value));
+function actorProblems(actor, at) {
+  const problems = [];
+  for (const key of Object.keys(actor)) if (!["role", "id", "name", "kind", "identities", "self"].includes(key)) problems.push(`${at} has the field "${key}", which the contract does not define`);
+  const role = actor.role;
+  const id = actor.id;
+  if (!line(role, EVENT_LIMITS.actorRole) || !ROLE.test(role)) problems.push(`${at}.role must be a lowercase word such as from`);
+  if (!line(id, EVENT_LIMITS.actorId) || !SCHEMED.test(id)) problems.push(`${at}.id must be a scheme-qualified id such as mailto:someone@example.com`);
+  if (actor.name !== void 0 && !line(actor.name, EVENT_LIMITS.actorName)) problems.push(`${at}.name must be one non-empty line of at most ${EVENT_LIMITS.actorName} characters`);
+  if (actor.kind !== void 0 && !ACTOR_KINDS.includes(actor.kind)) problems.push(`${at}.kind must be ${listOf(ACTOR_KINDS)}`);
+  if (actor.self !== void 0 && typeof actor.self !== "boolean") problems.push(`${at}.self must be true or false`);
+  if (actor.identities !== void 0) {
+    if (!Array.isArray(actor.identities) || actor.identities.length > EVENT_LIMITS.identities) problems.push(`${at}.identities must be a list of at most ${EVENT_LIMITS.identities}`);
+    else {
+      const seen = /* @__PURE__ */ new Set();
+      for (const [index, identity] of actor.identities.entries()) {
+        const here = `${at}.identities[${index}]`;
+        if (!plainObject(identity)) {
+          problems.push(`${here} is not an object`);
+          continue;
+        }
+        for (const key of Object.keys(identity)) if (!["id", "strength", "basis"].includes(key)) problems.push(`${here} has the field "${key}", which the contract does not define`);
+        const own = identity.id;
+        if (!line(own, EVENT_LIMITS.actorId) || !SCHEMED.test(own)) problems.push(`${here}.id must be a scheme-qualified id such as mailto:someone@example.com`);
+        else if (own === id) problems.push(`${here}.id is the actor's own id: an identity is another id for the same actor`);
+        else if (seen.has(own)) problems.push(`${here} repeats an identity`);
+        else seen.add(own);
+        if (!IDENTITY_STRENGTHS.includes(identity.strength)) problems.push(`${here}.strength must be ${listOf(IDENTITY_STRENGTHS)}`);
+        if (!line(identity.basis, EVENT_LIMITS.identityBasis)) {
+          problems.push(`${here}.basis must be one line of at most ${EVENT_LIMITS.identityBasis} characters naming the provider field it came from`);
+        }
+      }
+    }
+  }
+  return problems;
+}
+function targetProblems(e, where) {
+  const problems = [];
+  if (e.reply_to !== void 0 && !line(e.reply_to, EVENT_LIMITS.replyTo)) {
+    problems.push(`${where}.reply_to must be a non-empty id of at most ${EVENT_LIMITS.replyTo} characters`);
+  }
+  if (e.audience !== void 0 && !AUDIENCES.includes(e.audience)) {
+    problems.push(`${where}.audience must be ${listOf(AUDIENCES)}`);
+  }
+  if (e.domains !== void 0) {
+    if (!Array.isArray(e.domains) || e.domains.length > EVENT_LIMITS.domains) problems.push(`${where}.domains must be at most ${EVENT_LIMITS.domains} lowercase domains`);
+    else {
+      const seen = /* @__PURE__ */ new Set();
+      for (const [index, domain] of e.domains.entries()) {
+        if (!line(domain, EVENT_LIMITS.domain) || !DOMAIN.test(domain)) problems.push(`${where}.domains[${index}] must be a lowercase domain such as example.com`);
+        else if (seen.has(domain)) problems.push(`${where}.domains repeats a domain`);
+        else seen.add(domain);
+      }
+    }
+  }
+  return problems;
+}
+function partProblems(e, where, actorIds) {
+  const problems = [];
+  if (e.sections !== void 0) {
+    if (!Array.isArray(e.sections) || e.sections.length > EVENT_LIMITS.sections) problems.push(`${where}.sections must be a list of at most ${EVENT_LIMITS.sections}`);
+    else {
+      for (const [index, section] of e.sections.entries()) {
+        const at = `${where}.sections[${index}]`;
+        if (!plainObject(section)) {
+          problems.push(`${at} is not an object`);
+          continue;
+        }
+        for (const key of Object.keys(section)) if (!["heading", "text"].includes(key)) problems.push(`${at} has the field "${key}", which the contract does not define`);
+        if (!line(section.heading, EVENT_LIMITS.sectionHeading)) problems.push(`${at}.heading must be one line of at most ${EVENT_LIMITS.sectionHeading} characters`);
+        if (!text(section.text, EVENT_LIMITS.text, true)) problems.push(`${at}.text must be at most ${EVENT_LIMITS.text} characters`);
+      }
+    }
+  }
+  if (e.parts !== void 0) {
+    if (!Array.isArray(e.parts) || e.parts.length > EVENT_LIMITS.parts) problems.push(`${where}.parts must be a list of at most ${EVENT_LIMITS.parts}`);
+    else {
+      const seen = /* @__PURE__ */ new Set();
+      for (const [index, part] of e.parts.entries()) {
+        const at = `${where}.parts[${index}]`;
+        if (!plainObject(part)) {
+          problems.push(`${at} is not an object`);
+          continue;
+        }
+        for (const key of Object.keys(part)) if (!["id", "text", "actor"].includes(key)) problems.push(`${at} has the field "${key}", which the contract does not define`);
+        const id = part.id;
+        if (!line(id, EVENT_LIMITS.partId)) problems.push(`${at}.id must be a non-empty id of at most ${EVENT_LIMITS.partId} characters`);
+        else if (seen.has(id)) problems.push(`${at}.id repeats a part`);
+        else seen.add(id);
+        if (!text(part.text, EVENT_LIMITS.text, true)) problems.push(`${at}.text must be at most ${EVENT_LIMITS.text} characters`);
+        if (part.actor !== void 0) {
+          if (!line(part.actor, EVENT_LIMITS.actorId)) problems.push(`${at}.actor must be an actor id of the same event`);
+          else if (!actorIds.has(part.actor)) problems.push(`${at}.actor is not an actor of the same event`);
+        }
+      }
+    }
+  }
+  return problems;
+}
+function factProblems(fact, actors, where = "fact") {
+  if (!plainObject(fact)) return [`${where} is not an object`];
+  const type = fact.type;
+  if (!FACT_TYPES.includes(type)) return [`${where}.type must be ${listOf(FACT_TYPES)}`];
+  const allowed = {
+    commitment: ["type", "key", "title", "owner", "counterparty", "due", "state", "url"],
+    "person.attribute": ["type", "actor", "org", "team", "role"],
+    "meeting.attended": ["type", "actor", "response", "organizer"]
+  };
+  const problems = [];
+  for (const key of Object.keys(fact)) {
+    if (!allowed[type].includes(key)) problems.push(`${where} has the field "${key}", which the contract does not define`);
+  }
+  const reference = (key) => {
+    const id = fact[key];
+    if (!line(id, EVENT_LIMITS.actorId)) problems.push(`${where}.${key} must be an actor id of the same event`);
+    else if (!actors.has(id)) problems.push(`${where}.${key} is not an actor of the same event`);
+  };
+  if (type === "commitment") {
+    if (!line(fact.key, EVENT_LIMITS.factKey)) problems.push(`${where}.key must be a stable id of at most ${EVENT_LIMITS.factKey} characters`);
+    if (!line(fact.title, EVENT_LIMITS.factTitle)) problems.push(`${where}.title must be one line of at most ${EVENT_LIMITS.factTitle} characters`);
+    reference("owner");
+    if (fact.counterparty !== void 0) reference("counterparty");
+    if (fact.due !== void 0 && !(typeof fact.due === "string" && DATE.test(fact.due) && Number.isFinite(Date.parse(fact.due)))) problems.push(`${where}.due must be a date such as 2026-11-30`);
+    if (!COMMITMENT_STATES.includes(fact.state)) problems.push(`${where}.state must be ${listOf(COMMITMENT_STATES)}`);
+    if (fact.url !== void 0 && !(typeof fact.url === "string" && fact.url.length <= EVENT_LIMITS.url && /^https:\/\/\S+$/.test(fact.url))) problems.push(`${where}.url must be an https URL`);
+  }
+  if (type === "person.attribute") {
+    reference("actor");
+    if (fact.org === void 0 && fact.team === void 0 && fact.role === void 0) {
+      problems.push(`${where} must name org, team or role: a person's attribute comes from structured profile or directory data`);
+    }
+    for (const key of ["org", "team", "role"]) {
+      if (fact[key] !== void 0 && !line(fact[key], EVENT_LIMITS.factAttribute)) {
+        problems.push(`${where}.${key} must be one line of at most ${EVENT_LIMITS.factAttribute} characters`);
+      }
+    }
+  }
+  if (type === "meeting.attended") {
+    reference("actor");
+    if (!ATTENDANCE_RESPONSES.includes(fact.response)) problems.push(`${where}.response must be ${listOf(ATTENDANCE_RESPONSES)}`);
+    if (typeof fact.organizer !== "boolean") problems.push(`${where}.organizer must be true or false`);
+  }
+  return problems;
+}
+function factsProblems(e, where, actorIds) {
+  if (e.facts === void 0) return [];
+  if (!Array.isArray(e.facts) || e.facts.length > EVENT_LIMITS.facts) return [`${where}.facts must be a list of at most ${EVENT_LIMITS.facts}`];
+  return e.facts.flatMap((fact, index) => factProblems(fact, actorIds, `${where}.facts[${index}]`));
+}
+var EVENT_KEYS = ["source", "account", "external_id", "kind", "occurred_at", "thread", "actors", "title", "text", "url", "labels", "hash"];
+var EVENT_METADATA_KEYS = ["reply_to", "audience", "domains", "sections", "parts", "facts"];
 function eventProblems(event, where = "event") {
   if (!plainObject(event)) return [`${where} is not an object`];
   const problems = [];
-  const keys = ["source", "account", "external_id", "kind", "occurred_at", "thread", "actors", "title", "text", "url", "labels", "hash"];
+  const keys = [...EVENT_KEYS, ...EVENT_METADATA_KEYS];
   for (const key of Object.keys(event)) if (!keys.includes(key)) problems.push(`${where} has the field "${key}", which the contract does not define`);
-  for (const key of keys) if (!Object.hasOwn(event, key)) problems.push(`${where} has no "${key}"`);
+  for (const key of EVENT_KEYS) if (!Object.hasOwn(event, key)) problems.push(`${where} has no "${key}"`);
   const e = event;
   if (!line(e.source, EVENT_LIMITS.source) || !SOURCE_PATTERN.test(e.source)) problems.push(`${where}.source must be a lowercase name such as gmail`);
   if (!line(e.account, EVENT_LIMITS.account)) problems.push(`${where}.account must be a non-empty name of at most ${EVENT_LIMITS.account} characters`);
@@ -482,6 +699,7 @@ function eventProblems(event, where = "event") {
   if (!Array.isArray(e.labels) || e.labels.length > EVENT_LIMITS.labels || e.labels.some((label) => !line(label, EVENT_LIMITS.label) || /\s/.test(label))) {
     problems.push(`${where}.labels must be at most ${EVENT_LIMITS.labels} labels of at most ${EVENT_LIMITS.label} characters without spaces`);
   } else if (new Set(e.labels).size !== e.labels.length) problems.push(`${where}.labels repeats a label`);
+  const actorIds = /* @__PURE__ */ new Set();
   if (!Array.isArray(e.actors) || e.actors.length > EVENT_LIMITS.actors) problems.push(`${where}.actors must be a list of at most ${EVENT_LIMITS.actors}`);
   else {
     const seen = /* @__PURE__ */ new Set();
@@ -491,15 +709,14 @@ function eventProblems(event, where = "event") {
         problems.push(`${at} is not an object`);
         continue;
       }
-      for (const key2 of Object.keys(actor)) if (!["role", "id", "name"].includes(key2)) problems.push(`${at} has the field "${key2}", which the contract does not define`);
-      if (!line(actor.role, EVENT_LIMITS.actorRole) || !ROLE.test(actor.role)) problems.push(`${at}.role must be a lowercase word such as from`);
-      if (!line(actor.id, EVENT_LIMITS.actorId) || !SCHEMED.test(actor.id)) problems.push(`${at}.id must be a scheme-qualified id such as mailto:someone@example.com`);
-      if (actor.name !== void 0 && !line(actor.name, EVENT_LIMITS.actorName)) problems.push(`${at}.name must be one non-empty line of at most ${EVENT_LIMITS.actorName} characters`);
+      problems.push(...actorProblems(actor, at));
+      if (typeof actor.id === "string") actorIds.add(actor.id);
       const key = `${String(actor.role)}\0${String(actor.id)}`;
       if (seen.has(key)) problems.push(`${at} repeats an actor`);
       seen.add(key);
     }
   }
+  problems.push(...targetProblems(e, where), ...partProblems(e, where, actorIds), ...factsProblems(e, where, actorIds));
   if (typeof e.hash !== "string" || !HASH.test(e.hash)) problems.push(`${where}.hash must be sha256: and 64 hex digits`);
   else if (problems.length === 0) {
     const { hash, ...rest } = e;
@@ -659,6 +876,14 @@ export {
   MAX_BYTES,
   FIRST_RUN_HOURS,
   TRUST,
+  ACTOR_KINDS,
+  ACTOR_ROLES,
+  AUTHOR_ROLES,
+  IDENTITY_STRENGTHS,
+  AUDIENCES,
+  FACT_TYPES,
+  COMMITMENT_STATES,
+  ATTENDANCE_RESPONSES,
   REFUSAL_REASONS,
   REMOVAL_REASONS,
   GAP_REASONS,
@@ -688,6 +913,7 @@ export {
   probeResult,
   probeResultProblems,
   eventsListResult,
+  factProblems,
   eventProblems,
   removalProblems,
   resultProblems

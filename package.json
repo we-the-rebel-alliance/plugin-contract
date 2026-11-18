@@ -38,6 +38,10 @@
       "types": "./dist/events.d.ts",
       "default": "./dist/events.js"
     },
+    "./hints": {
+      "types": "./dist/hints.d.ts",
+      "default": "./dist/hints.js"
+    },
     "./params": {
       "types": "./dist/params.d.ts",
       "default": "./dist/params.js"

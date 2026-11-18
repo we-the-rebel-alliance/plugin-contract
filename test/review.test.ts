@@ -1,5 +1,6 @@
 // The review's cases, one test per finding: every check the reviewer defeated, and every false refusal.
 import assert from "node:assert/strict"
+import { expect } from "./support/expect.ts"
 import { validPage } from "./support/valid-page.ts"
 import { readFileSync } from "node:fs"
 import { describe, test } from "node:test"
@@ -1515,5 +1516,210 @@ describe("accounts.server (#30, item 9)", () => {
   test("a source without it is unchanged", () => {
     const { accounts: _accounts, ...rest } = plaud("plaud-{account}")
     assert.deepEqual(problemsOf(declarationOf({ ...rest, accounts: { named: true } })), [])
+  })
+})
+
+// ── v0.3 (#45) ────────────────────────────────────────────────────────────
+
+describe("the v0.3 checks (#45 §8)", () => {
+  const itemOf = (over: Record<string, unknown> = {}): Record<string, unknown> => validPage({
+    id: "slack.workspace",
+    kind: "events",
+    reads: "message",
+    tool: "events_list",
+    input: { source: "workspace" },
+    accounts: { named: true },
+    permission: { events: "slack.events_list", operations: ["slack_read_channel"] },
+    cost: { class: "free" },
+    ...over,
+  })
+  const page = (over: Record<string, unknown> = {}, events: Record<string, unknown>[] = []): Record<string, unknown> => validPage({
+    source: "workspace",
+    plugin: PLUGIN,
+    account: ACCOUNT,
+    owner: { id: "slack:U0PILOT01", label: "Sam Rivera" },
+    asOf: ISO,
+    trust: "untrusted",
+    events,
+    cursor: "c1",
+    more: false,
+    ...over,
+  })
+
+  interface Harness {
+    readonly item?: Record<string, unknown> | undefined
+    readonly machineActors?: readonly string[] | undefined
+    readonly files?: ((path: string) => string | undefined) | undefined
+    readonly ownSources?: readonly string[] | undefined
+  }
+
+  /** The kit over recorded pages: the case named `input.cursor` answers that page, and the first case answers the rest. */
+  const run = async (answers: readonly Record<string, unknown>[], harness: Harness = {}) => {
+    const item = harness.item ?? itemOf()
+    const source = sourceOf(item)
+    const cases = answers.map((answer, index) => ({ name: `page ${index + 1}`, input: index === 0 ? {} : { cursor: `c${index + 1}` } }))
+    return sourceConformance({
+      plugin: PLUGIN,
+      source,
+      tools: [{ id: "events_list", readOnly: true }],
+      account: ACCOUNT,
+      cases,
+      noExpiry: { reason: "this fake has no expired cursor" },
+      ...(harness.machineActors === undefined ? {} : { machineActors: harness.machineActors }),
+      ...(harness.files === undefined ? {} : { files: harness.files }),
+      ...(harness.ownSources === undefined ? {} : { ownSources: harness.ownSources }),
+      calls: {
+        list: async (input, context) => {
+          await context.permission.assert({ action: "slack.events_list" })
+          await context.permission.assert({ action: "slack_slack_read_channel" })
+          const cursor = input["cursor"]
+          const found = typeof cursor === "string" ? answers.find((answer) => answer["cursor"] !== undefined && `c${answers.indexOf(answer) + 1}` === cursor) : answers[0]
+          return found ?? page({ events: [] })
+        },
+        probe: async (_input, context) => {
+          await context.permission.assert({ action: "slack.events_list" })
+          return { source: "workspace", account: ACCOUNT, owner: { id: "slack:U0PILOT01", label: "Sam Rivera" }, trust: "untrusted" }
+        },
+      },
+    })
+  }
+  const checkOf = async (name: string, answers: readonly Record<string, unknown>[], harness: Harness = {}) =>
+    (await run(answers, harness)).checks.find((entry) => entry.name === name)
+
+  const agent = { id: "slack:B0PILOT01", role: "agent", name: "A bot" }
+  const human = { id: "slack:U0PILOT01", role: "from", name: "Sam Rivera" }
+
+  test("actor-kind: an actor the fixture names as an agent, a bot or a service carries its kind", async () => {
+    const without = page({ events: [{ external_id: "C0PILOT001:1", actors: [human, agent] }] })
+    const withKind = page({ events: [{ external_id: "C0PILOT001:1", actors: [human, { ...agent, kind: "agent" }] }] })
+    assert.deepEqual(await checkOf("actor-kind", [withKind], { machineActors: [agent.id] }), { name: "actor-kind", ran: true, notApplicable: false, problems: [] })
+    assert.deepEqual(await checkOf("actor-kind", [without], { machineActors: [agent.id] }), {
+      name: "actor-kind",
+      ran: true,
+      notApplicable: false,
+      problems: ["events_list(page 1): the actor slack:B0PILOT01 is an agent, a bot or a service, and says no kind: an agent, a bot and a service each carry one"],
+    })
+    // A fixture that names an actor no page lists says nothing about it, so the check applies and fails.
+    assert.deepEqual((await checkOf("actor-kind", [withKind], { machineActors: [agent.id, "slack:B0PILOT02"] }))?.problems, [
+      "the fixture names slack:B0PILOT02 as an agent, a bot or a service, and no page lists it",
+    ])
+    // Without the fixture's word, the check does not apply: Memory alone knows what a person is.
+    assert.deepEqual(await checkOf("actor-kind", [without]), { name: "actor-kind", ran: false, notApplicable: true, problems: [] })
+  })
+
+  test("one-author: an event with more than one author is flagged for a plugin adopting v0.3", async () => {
+    const one = page({ events: [{ external_id: "C0PILOT001:1", actors: [human] }] })
+    const two = page({ events: [{ external_id: "C0PILOT001:1", actors: [human, { ...human, id: "slack:U0PILOT02", name: "Other sender" }] }] })
+    const mixed = page({ events: [{ external_id: "C0PILOT001:1", actors: [{ ...human, role: "author" }, human] }] })
+    assert.deepEqual(await checkOf("one-author", [one]), { name: "one-author", ran: true, notApplicable: false, problems: [] })
+    assert.deepEqual((await checkOf("one-author", [two]))?.problems, ["events_list(page 1): the event C0PILOT001:1 lists more than one author: from, or its alias author, names at most one actor"])
+    assert.deepEqual((await checkOf("one-author", [mixed]))?.problems, ["events_list(page 1): the event C0PILOT001:1 lists more than one author: from, or its alias author, names at most one actor"])
+    // A page that lists no author says nothing about authorship, so the check does not apply.
+    assert.deepEqual(await checkOf("one-author", [page()]), { name: "one-author", ran: false, notApplicable: true, problems: [] })
+  })
+
+  test("event-within-max-bytes: one event alone fits the source's maxBytes", async () => {
+    const big = page({ events: [{ external_id: "C0PILOT001:9", sections: Array.from({ length: 20 }, (_, index) => ({ heading: `Notes ${index}`, text: "a".repeat(4096) })) }] })
+    const found = await checkOf("event-within-max-bytes", [big])
+    assert.equal(found?.ran, true)
+    assert.equal(found?.notApplicable, false)
+    assert.equal(found?.problems.length, 1)
+    assert.match(found?.problems[0] ?? "", /over the source's maxBytes of 65536/)
+    assert.match(found?.problems[0] ?? "", /C0PILOT001:9/)
+    // A source that declares more room passes the same event.
+    assert.deepEqual((await checkOf("event-within-max-bytes", [big], { item: itemOf({ maxBytes: 1048576 }) }))?.problems, [])
+    // An ordinary event fits.
+    assert.deepEqual(await checkOf("event-within-max-bytes", [page({ events: [{ external_id: "C0PILOT001:1" }] })]), {
+      name: "event-within-max-bytes",
+      ran: true,
+      notApplicable: false,
+      problems: [],
+    })
+  })
+
+  test("facts: every fact type a page carries is declared by the source", async () => {
+    const commitment = { type: "commitment", key: "EX-1", title: "Send the report", owner: human.id, state: "open" }
+    const declared = itemOf({ facts: ["commitment"] })
+    const answers = [page({ events: [{ external_id: "C0PILOT001:1", kind: "issue", actors: [human], facts: [commitment] }] })]
+    assert.deepEqual(await checkOf("facts", answers, { item: declared }), { name: "facts", ran: true, notApplicable: false, problems: [] })
+    assert.deepEqual(await checkOf("facts", answers), {
+      name: "facts",
+      ran: true,
+      notApplicable: false,
+      problems: ["events_list(page 1): the event C0PILOT001:1 carries a commitment fact, and the descriptor does not declare that type"],
+    })
+    assert.deepEqual(await checkOf("facts", [page({ events: [{ external_id: "C0PILOT001:1", kind: "issue", actors: [human] }] })]), {
+      name: "facts",
+      ran: false,
+      notApplicable: true,
+      problems: [],
+    })
+  })
+
+  test("commitment-key: one key names one commitment, and the same item keeps its key", async () => {
+    const commitment = { type: "commitment", key: "EX-1", title: "Send the report", owner: human.id, state: "open" }
+    const event = (facts: Record<string, unknown>[], cursor: string, more: boolean) => page({ cursor, more, events: [{ external_id: "C0PILOT001:1", kind: "issue", actors: [human], facts }] })
+    const stable = await checkOf("commitment-key", [event([commitment], "c2", true), event([commitment], "c3", false)], { item: itemOf({ facts: ["commitment"] }) })
+    assert.deepEqual(stable, { name: "commitment-key", ran: true, notApplicable: false, problems: [] })
+    // The same key names two commitments: a key that moves between items cannot be followed.
+    const moved = await checkOf("commitment-key", [event([commitment], "c2", true), event([{ ...commitment, title: "Send the slides" }], "c3", false)], { item: itemOf({ facts: ["commitment"] }) })
+    assert.deepEqual(moved?.problems, ["events_list(page 2): the commitment key EX-1 names another commitment (another title and owner) than on an earlier page"])
+    // The same item, listed twice, carries two keys: a key is stable for one item.
+    const rekeyed = await checkOf("commitment-key", [event([commitment], "c2", true), event([{ ...commitment, key: "EX-1@2026-11-18" }], "c3", false)], { item: itemOf({ facts: ["commitment"] }) })
+    assert.deepEqual(rekeyed?.problems, ["events_list(page 2): the event C0PILOT001:1 lists one commitment (title Send the report, owner slack:U0PILOT01) under two keys: a key is stable for one item"])
+  })
+
+  test("parts-stable: a re-listed part keeps its text, and may list only its new parts", async () => {
+    const parts = [{ id: "turn-1", text: "Hello" }, { id: "turn-2", text: "Hi" }]
+    const event = (value: Record<string, unknown>[], cursor: string, more: boolean) => page({ cursor, more, events: [{ external_id: "C0PILOT001:1", kind: "session", actors: [human], parts: value }] })
+    assert.deepEqual(await checkOf("parts-stable", [event(parts, "c2", true), event([parts[1]!, { id: "turn-3", text: "There" }], "c3", false)]), {
+      name: "parts-stable",
+      ran: true,
+      notApplicable: false,
+      problems: [],
+    })
+    assert.deepEqual((await checkOf("parts-stable", [event(parts, "c2", true), event([{ id: "turn-1", text: "Hello again" }], "c3", false)]))?.problems, [
+      "events_list(page 2): the event C0PILOT001:1 re-lists the part turn-1 with another text: a part's id and text never change once listed",
+    ])
+  })
+
+  test("hints: a declared hint is a well-formed file of the plugin's own", async () => {
+    const hint = "---\nsource: slack.workspace\nkinds: [message]\n---\nA thread is one conversation."
+    const item = itemOf({ hints: ["hints/thread.md"] })
+    const files = (text: string | undefined) => (path: string) => (path === "hints/thread.md" ? text : undefined)
+    assert.deepEqual(await checkOf("hints", [page()], { item, files: files(hint), ownSources: ["slack.workspace"] }), { name: "hints", ran: true, notApplicable: false, problems: [] })
+    assert.deepEqual((await checkOf("hints", [page()], { item, files: files(`${hint}\n${"a".repeat(1500)}`), ownSources: ["slack.workspace"] }))?.problems, [
+      `hints("hints/thread.md"): the hint is ${hint.length + 1501} characters, over the 1500 a hint may take`,
+    ])
+    assert.deepEqual((await checkOf("hints", [page()], { item, files: files(hint.replace("kinds: [message]", "kinds: [message]\napply: auto")), ownSources: ["slack.workspace"] }))?.problems, [
+      'hints("hints/thread.md"): the hint sets "apply", which a hint may not set: a hint is data, and Memory decides how its text is used',
+    ])
+    assert.deepEqual((await checkOf("hints", [page()], { item, files: files(hint), ownSources: ["other.source"] }))?.problems, [
+      'hints("hints/thread.md"): the hint names the source "slack.workspace", which is not one of the plugin\'s own',
+    ])
+    assert.deepEqual((await checkOf("hints", [page()], { item, files: files(undefined), ownSources: ["slack.workspace"] }))?.problems, [
+      'hints("hints/thread.md") is declared and the package holds no such file',
+    ])
+    assert.deepEqual((await checkOf("hints", [page()], { item }))?.problems, [
+      'hints("hints/thread.md") is declared and the kit has no file reader: pass files, (path) => the file\'s text',
+    ])
+    assert.deepEqual(await checkOf("hints", [page()]), { name: "hints", ran: false, notApplicable: true, problems: [] })
+  })
+
+  test("routines: a declared routine reads only its own sources, and sets nothing of Memory's", async () => {
+    const routine = "---\nid: thread-actions\ntitle: Read a thread's actions\nreads: { sources: [slack.workspace], kinds: [message] }\nproduces: [commitment]\n---\nRead each reply."
+    const item = itemOf({ routines: ["routines/thread.md"] })
+    const files = (text: string | undefined) => (path: string) => (path === "routines/thread.md" ? text : undefined)
+    assert.deepEqual(await checkOf("routines", [page()], { item, files: files(routine), ownSources: ["slack.workspace"] }), { name: "routines", ran: true, notApplicable: false, problems: [] })
+    assert.deepEqual((await checkOf("routines", [page()], { item, files: files(routine.replace("sources: [slack.workspace]", "sources: [elsewhere.source]")), ownSources: ["slack.workspace"] }))?.problems, [
+      'routines("routines/thread.md"): the routine reads the source "elsewhere.source", which is not one of the plugin\'s own',
+    ])
+    assert.deepEqual((await checkOf("routines", [page()], { item, files: files(routine.replace("produces: [commitment]", "produces: [commitment]\ntier: deep")), ownSources: ["slack.workspace"] }))?.problems, [
+      'routines("routines/thread.md"): the routine sets "tier", which a routine may not set: the namespace, the tier, the schedule, the budget, the priority and the apply mode are Memory\'s',
+    ])
+    assert.deepEqual((await checkOf("routines", [page()], { item, files: files(undefined), ownSources: ["slack.workspace"] }))?.problems, [
+      'routines("routines/thread.md") is declared and the package holds no such file',
+    ])
+    assert.deepEqual(await checkOf("routines", [page()]), { name: "routines", ran: false, notApplicable: true, problems: [] })
   })
 })

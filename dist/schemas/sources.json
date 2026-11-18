@@ -395,6 +395,39 @@
                   "description": "One read of an event's detail: the tool, and the event fields its input comes from."
                 }
               },
+              "facts": {
+                "description": "The fact types this source's events carry (#45 §3), each a core type. An event may carry a fact of a declared type and of no other; Memory stamps the installed package's version on each fact it files.",
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "commitment",
+                    "person.attribute",
+                    "meeting.attended"
+                  ]
+                }
+              },
+              "hints": {
+                "description": "The hint files the package ships for this source (#45 §4): how to read one kind of item, at most 1,500 characters each.",
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "pattern": "^[a-z0-9][a-z0-9._-]*(?:\\/[a-z0-9][a-z0-9._-]*)*\\.md$"
+                }
+              },
+              "routines": {
+                "description": "The routine files the package ships for this source (#45 §5). Memory's first engine runs only its own core routines, so a plugin ships one only later.",
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "pattern": "^[a-z0-9][a-z0-9._-]*(?:\\/[a-z0-9][a-z0-9._-]*)*\\.md$"
+                }
+              },
               "permission": {
                 "type": "object",
                 "properties": {
@@ -846,6 +879,26 @@
                 "properties": {},
                 "additionalProperties": {}
               },
+              "hints": {
+                "description": "The hint files the package ships for this source (#45 §4): how to read one kind of item, at most 1,500 characters each.",
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "pattern": "^[a-z0-9][a-z0-9._-]*(?:\\/[a-z0-9][a-z0-9._-]*)*\\.md$"
+                }
+              },
+              "routines": {
+                "description": "The routine files the package ships for this source (#45 §5). Memory's first engine runs only its own core routines, so a plugin ships one only later.",
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "pattern": "^[a-z0-9][a-z0-9._-]*(?:\\/[a-z0-9][a-z0-9._-]*)*\\.md$"
+                }
+              },
               "permission": {
                 "type": "object",
                 "properties": {
@@ -941,6 +994,9 @@
                 "type": "integer",
                 "minimum": 1,
                 "maximum": 9007199254740991
+              },
+              "facts": {
+                "not": {}
               },
               "reads": {
                 "not": {}

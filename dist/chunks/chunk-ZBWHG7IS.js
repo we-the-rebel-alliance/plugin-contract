@@ -3,9 +3,6 @@ import {
   isToolsRpcId
 } from "./chunk-X6XP7YK2.js";
 import {
-  isEventKind
-} from "./chunk-YH323FAZ.js";
-import {
   _enum,
   array,
   boolean,
@@ -20,6 +17,13 @@ import {
   union,
   validator
 } from "./chunk-JUWIMDGF.js";
+import {
+  ATTENDANCE_RESPONSES,
+  COMMITMENT_STATES,
+  EVENT_LIMITS,
+  FACT_TYPES,
+  isEventKind
+} from "./chunk-G47BVCHT.js";
 
 // src/internal/schema/types.ts
 var MAX_BYTES_DEFAULT = 65536;
@@ -35,6 +39,8 @@ var REGISTRY_NAME = /^[a-z][a-z0-9-]{0,31}$/;
 var isOutputName = (name) => REGISTRY_NAME.test(name) || isEventKind(name);
 var PRICE_PER = /^[a-z][a-z0-9-]{0,31}$/;
 var HOST = /^(?:\*\.)?[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
+var FILE_PATH = /^[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)*\.md$/;
+var filePath = string().max(200).regex(FILE_PATH, { error: "must be a relative path in the package ending in .md, such as hints/mail.md" });
 var price = object({
   per: string().max(32).regex(PRICE_PER, { error: "must be a lowercase word such as post, author or call" }),
   usd: number().min(0),
@@ -148,6 +154,11 @@ var events = object({
   kind: literal("events"),
   reads: string().max(64).refine(isEventKind, { error: "must be a core kind such as message, or x-<namespace>/<name>" }).describe("The thing it reads: a core kind, or x-<namespace>/<name>, whose namespace is the source's."),
   details: array(detail).optional(),
+  facts: array(_enum(FACT_TYPES, { error: "must be a core fact type (commitment, person.attribute, meeting.attended)" })).min(1, "must name at least one fact type").optional().describe(
+    "The fact types this source's events carry (#45 \xA73), each a core type. An event may carry a fact of a declared type and of no other; Memory stamps the installed package's version on each fact it files."
+  ),
+  hints: array(filePath).min(1, "must name at least one hint file").optional().describe("The hint files the package ships for this source (#45 \xA74): how to read one kind of item, at most 1,500 characters each."),
+  routines: array(filePath).min(1, "must name at least one routine file").optional().describe("The routine files the package ships for this source (#45 \xA75). Memory's first engine runs only its own core routines, so a plugin ships one only later."),
   permission: permissionEvents,
   output: never({ error: "an events source has no output: output belongs to a snapshot" }).optional(),
   maxAgeSec: never({ error: "an events source has no maxAgeSec: a snapshot may be reused, an events page is read once" }).optional(),
@@ -159,8 +170,11 @@ var snapshot = object({
   output: string().max(64).refine(isOutputName, { error: "must be a registry name such as agenda, or x-<namespace>/<name>" }).describe("A registry name, or x-<namespace>/<name>; an x- output carries its schema inline."),
   outputSchema: union([boolean(), looseObject({})]).optional().describe("An x- output's schema, inline: JSON Schema draft 2020-12. Required for x-, absent for a registry name."),
   params: looseObject({}).optional().describe("The parameters a consumer may pass, resolved by the library at read time."),
+  hints: array(filePath).min(1, "must name at least one hint file").optional().describe("The hint files the package ships for this source (#45 \xA74): how to read one kind of item, at most 1,500 characters each."),
+  routines: array(filePath).min(1, "must name at least one routine file").optional().describe("The routine files the package ships for this source (#45 \xA75). Memory's first engine runs only its own core routines, so a plugin ships one only later."),
   permission: permissionTool,
   maxAgeSec: int().min(1).optional().describe("How long a result may be reused before it is read again."),
+  facts: never({ error: "a snapshot has no facts: a fact is derived from an event's provider fields" }).optional(),
   reads: never({ error: "a snapshot has no reads: it is state, not a feed" }).optional(),
   details: never({ error: "a snapshot has no details: it has no events to read one of" }).optional()
 }).strict().describe("A snapshot source: the latest state, read on demand.").superRefine((value, ctx) => {
@@ -180,11 +194,50 @@ var sourcesSchema = object({
   items: array(source).min(1).describe("The plugin's sources. A source id is unique across the declaration.")
 }).strict();
 
+// src/internal/schema/facts.ts
+var actorId = string().min(1).max(EVENT_LIMITS.actorId).describe("An actor id on the same event.");
+var httpsUrl = string().max(EVENT_LIMITS.url).refine((value) => /^https:\/\/\S+$/.test(value), { error: "must be an https URL" });
+var commitment = object({
+  type: literal("commitment"),
+  key: string().min(1).max(EVENT_LIMITS.factKey).describe("A stable id of this commitment within the source and account."),
+  title: string().min(1).max(EVENT_LIMITS.factTitle),
+  owner: actorId,
+  counterparty: actorId.optional(),
+  due: string().regex(/^\d{4}-\d{2}-\d{2}$/, { error: "must be a date such as 2026-11-30" }).optional(),
+  state: _enum(COMMITMENT_STATES),
+  url: httpsUrl.optional()
+}).strict();
+var personAttribute = object({
+  type: literal("person.attribute"),
+  actor: actorId,
+  org: string().min(1).max(EVENT_LIMITS.factAttribute).optional(),
+  team: string().min(1).max(EVENT_LIMITS.factAttribute).optional(),
+  role: string().min(1).max(EVENT_LIMITS.factAttribute).optional()
+}).strict().refine((value) => value.org !== void 0 || value.team !== void 0 || value.role !== void 0, {
+  error: "must name org, team or role: a person's attribute comes from structured profile or directory data"
+}).describe("A person's attribute, from structured profile or directory data only: at least one of org, team or role.");
+var meetingAttended = object({
+  type: literal("meeting.attended"),
+  actor: actorId,
+  response: _enum(ATTENDANCE_RESPONSES),
+  organizer: boolean()
+}).strict();
+var FACT_SCHEMAS = {
+  commitment: validator("fact.commitment", commitment),
+  "person.attribute": validator("fact.person.attribute", personAttribute),
+  "meeting.attended": validator("fact.meeting.attended", meetingAttended)
+};
+function factSchema(type) {
+  return Object.hasOwn(FACT_SCHEMAS, type) ? FACT_SCHEMAS[type] : void 0;
+}
+
 // src/schema.ts
 var SOURCES_SCHEMA = validator("sources", sourcesSchema);
 
 export {
   MAX_BYTES_DEFAULT,
   MAX_BYTES_LIMIT,
+  FACT_SCHEMAS,
+  factSchema,
   SOURCES_SCHEMA
 };
