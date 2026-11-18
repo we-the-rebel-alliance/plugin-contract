@@ -32,6 +32,7 @@ The draft's ten checks, and Memory's additions:
 | + | **A commitment keeps one key** (`commitment-key`, [#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §3, §8): a key names one title and owner across the run, and an event that lists one commitment (one title and owner) under two keys fails, so a key built from a counter or a timestamp is caught. It applies when a page carries a commitment. | the kit |
 | + | **A part keeps its text** (`parts-stable`, [#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §2, §8): a part listed again, on a later page of the same event, carries the same text and actor. A re-listed item may list only its new parts, so a shorter list is fine. It applies when a page carries parts. | the kit |
 | + | **A hint and a routine are files of the plugin's own** (`hints`, `routines`, [#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §4, §5, §8): each declared path is read (`files`), and a file over its size, with a forbidden or unknown key, with no frontmatter or a malformed one, or naming a source the plugin does not own, fails. The hint is at most 1,500 characters, and a routine's body at most 4,000. `produces` names one of the seven knowledge types Memory's core extractor finds (`commitment`, `decision`, `fact`, `preference`, `constraint`, `person`, `project`), not a structured fact type; Memory ignores one the person has not consented to. Each applies when the source declares one. | the `hints` module (`hintProblems`, `routineProblems`), the kit |
+| + | **Every public tool is declared** (`declared-tools`). A tool in the table the plugin passes is a source's tool, a detail or suggest tool, an act's preview or commit, or excluded with a non-empty reason. It is a package check, not one of the per-source report: a source's report does not see the plugin's other tools. A preview named with a write verb fails `declaration` when the whole descriptor is checked. | `undeclaredToolProblems`, `declarationProblems` |
 
 ## Running it
 
@@ -139,6 +140,21 @@ plugin proves it with a fixture that carries a secret-shaped event the source re
 The kit runs the family's `secretKinds` over every page's `title` and `text`: an event that holds a secret fails the
 check, so a fixture that merely declares the screening cannot pass. `refused[]`'s `reason` is one of `instruction`,
 `secret` and `owner`, and `failed[]`'s is an error `code`, both as `events` defines them.
+
+## Every public tool is declared
+
+A plugin's CI fails when a public tool is neither a source, an act, nor explicitly excluded with a reason. The plugin passes the table. The contract does not know which tools a plugin has, and it does not read a product's method catalogue: pass the tools an agent can call, not the provider operations those tools call.
+
+```js
+import { assertDeclaredTools, assertDeclaration } from "@we-the-rebel-alliance/source-contract/conformance"
+
+assertDeclaration(pkg.sources, { tools })
+assertDeclaredTools(pkg.sources, tools)
+```
+
+Each entry is `{ id, readOnly?, exclude? }`. A table that already names tools with `name` (a jelly plugin's `tools` array in its package) can be passed as it is: `name` is the id when `id` is absent. A tool is covered when that id equals a source's `tool`, a detail's `tool`, a suggest `tool`, an act's `preview` or an act's `commit`. The match is exact. The contract does not strip a prefix.
+
+`exclude` is the reason the tool is outside the contract, such as a catalogue or a status tool that reads no source and commits no act. The reason must be non-empty. An empty reason is not an exclusion, and leaving a tool out of the table is not one either: CI passes the full public table. `assertDeclaration` on the whole `sources` object also checks that an act's preview is a read (`readOnly: true` when the tool table is passed, and no write verb in the name). The per-source kit does not see `acts`, so the package check is these two calls.
 
 ## In this repository
 

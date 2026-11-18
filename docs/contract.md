@@ -2,9 +2,9 @@
 
 The source contract has three layers: the data model (L0), the descriptor a plugin declares (L1) and the protocol it implements (L2). Each project builds its own features on top; nothing here needs a host. The design and its decisions: [app#2346](https://github.com/we-the-rebel-alliance/app/issues/2346#issuecomment-6853030617).
 
-**Three roles.** A **plugin** owns its sources: the declaration, the reads, the provider sign-in, truthful cost and conformance in its own CI. The **contract** (this package) owns the language. A **project** (Memory, Artifacts, jelly and any after them) owns its features, consent, cache, budgets and cursors, built from the library. No project restates a plugin's sources, calls a provider directly or depends on another project.
+**Three roles.** A **plugin** owns its sources and its acts: the declaration, the reads, the writes, the provider sign-in, truthful cost and conformance in its own CI. The **contract** (this package) owns the language. A **project** (Memory, Artifacts, jelly and any after them) owns its features, consent, cache, budgets and cursors, built from the library. No project restates a plugin's sources, calls a provider directly or depends on another project.
 
-**Reads only.** Writes stay where they are: plan, then commit in the plugin, with the project's own confirmation.
+**Reads, and writes as declared acts.** A read is a source. A write is an act in the same descriptor: the plugin declares it, a preview writes nothing, and a commit runs only after plan, then the host's own confirmation, when the effect is not local. The contract does not draw that confirm and does not issue the confirmation.
 
 ## L0: the data model
 
@@ -159,6 +159,44 @@ The rules:
 - optional `facts` (an events source only): the fact types its events carry, each a core type and each declared once ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §3);
 - optional `hints` and `routines`: the paths of the files the package ships for this source, each a relative lowercase `.md` path inside the package and each declared once ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §4, §5). The keys are additive to the contract, but Memory's descriptor schema is strict and `readInstalledDescriptor` runs it first, so a consumer re-vendors before a plugin declares one, as for `removals[]`.
 
+### Acts
+
+Acts sit beside sources in the same `sources` object, so the descriptor hash covers them. `contractVersion` stays 1. The key is additive: a descriptor with no `acts` is unchanged, and a consumer on an older package refuses `acts` because its schema is strict. Consumers re-vendor before any plugin declares one.
+
+```json
+{
+  "acts": [
+    {
+      "id": "demo.save",
+      "input": { "type": "object", "properties": { "text": { "type": "string" } }, "additionalProperties": false },
+      "output": { "type": "object", "properties": { "saved": { "type": "boolean" } }, "required": ["saved"] },
+      "effect": "notify",
+      "preview": "preview_note",
+      "commit": "save_note",
+      "permission": {
+        "preview": "demo.preview_note",
+        "commit": "demo.save_note",
+        "operations": ["notes.create"]
+      }
+    }
+  ]
+}
+```
+
+| Field | Means |
+|---|---|
+| `id` | `<plugin>.<action>`, the same shape as a source id, and unique across the plugin's sources and acts |
+| `input`, `output` | JSON Schema (draft 2020-12) objects. `input` is the caller's input. `output` is the answer's `output`. The library adds `account`; the input schema does not have to name it. |
+| `effect` | `local` (the person's own machine), `notify` (reaches someone), `spend` (costs money) or `irreversible` (cannot be undone) |
+| `preview` | the tool that previews the act. It writes nothing, and it is not the commit tool. |
+| `commit` | the tool that commits the act |
+| `permission.preview`, `permission.commit` | the actions the two tools assert, in the plugin's namespace, and different from each other, so a preview session cannot allow the commit |
+| `permission.operations` | the provider operations the act asserts, derived like a source's: a dotted operation as `<namespace>.read` on `<account>:<operation>`, a bare one as `<namespace>_<operation>` on `*` |
+
+A preview's answer is `{ trust: "untrusted", output, reaches?, changes?, cost? }`. `reaches` is who would be reached (`{ id, label? }`, at most 20). `changes` is what would change (at most 20 sentences). `cost` is what it would cost, in the plugin's own shape. A host reads those three fields and can render one confirm for every act. The contract does not draw the confirm. A commit answers the same shape.
+
+Plan, then commit, stays. `act` previews under the preview action, then commits under the commit action. A commit whose effect is not `local` is refused unless the caller passes a confirmation the host issued, and the host verifies it. A host with no issuer cannot confirm one: a token the caller made up is not a confirmation, and the contract does not issue one. A local commit needs no confirmation. A turned-off act answers `SOURCE_DISABLED`, the table's existing code.
+
 `readInstalledDescriptor` reads, validates and hashes it (`sha256:` of canonical JSON). The package exports one `SourceItem`, Memory's schema type, from `descriptor` and `schema` alike, so an item read from disk goes to `read`, `acceptAnswer` and the conformance kit as it is ([#30](https://github.com/we-the-rebel-alliance/source-contract/issues/30) item 8). A grant stores the hash; a changed descriptor asks the person again. Memory's schema admits three optional keys agreed in [issue #4](https://github.com/we-the-rebel-alliance/source-contract/issues/4): `sources.rpc` (the plugin's tools-RPC id, which `read` then calls), `sources.probe.action` (the probe tool's permission action) and per-source `permission.identity` (the identity operations `probe` asserts, each among `permission.operations`). With the last two declared, `probe` is fenced from the descriptor alone; until then a consumer passes the identity operations. `permission.identity` may be empty: the probe then asserts only `sources.probe.action`; absent still means undeclared, so a consumer uses its fallback ([#30](https://github.com/we-the-rebel-alliance/source-contract/issues/30) item 1). A source whose content reads assert an identity operation declares `permission.readsIdentity: true`, and the kit then allows that overlap for that source only; every identity operation must still be among `permission.operations` ([#30](https://github.com/we-the-rebel-alliance/source-contract/issues/30) item 4). A source that states its grants verbatim (`permission.rules`, GitHub's `github_api` on `GET /user`) declares its probe's grants as `permission.identityRules: [{ action, resource }]`, each among its `rules`, instead of `identity`; `probe` is then fenced to `sources.probe.action` and those rules exactly, and `[]` means the probe asserts only its action ([#30](https://github.com/we-the-rebel-alliance/source-contract/issues/30) item 10). `identityRules` is additive to the contract, but Memory's permission schema is strict and `readInstalledDescriptor` runs it first, so a consumer on an older package refuses a descriptor that carries it: it ships in a minor release, consumers re-vendor first, and only then does a plugin (GitHub) declare it, the same order as `removals[]`.
 
 ## L2: the protocol
@@ -169,6 +207,8 @@ The rules:
 | `snapshot_read` (the source's `tool`) | `source, account?, params?` | the snapshot |
 | `probe` | `source?, account?` | the owner and the granted scopes; reads no content |
 | `describe` | none | the descriptor, for diagnostics only |
+| the act's `preview` | the act's input, plus `account` | a preview: `trust`, `output`, and optionally `reaches`, `changes` and `cost`. Writes nothing. |
+| the act's `commit` | the same input. For an effect other than `local`, `act` refuses first unless the host verifies a confirmation it issued. The token is not an input the plugin receives. | the same shape. The write. |
 
 **Params are resolved by the library at read time** (`params`), so a plugin receives plain values:
 
@@ -180,14 +220,18 @@ The rules:
 
 ## The trust rule
 
-The descriptor comes from the installed package, its version checked against the install, and **every read runs in a session limited to exact allow rules from the grant** (`permission.sessionRules`): a deny of everything, then the method's action and each operation's rule. OpenCode checks each inner tool call against the calling session's rules, and the last matching rule wins, so the session is a real sandbox whatever the agent allows. A broker or a project may only narrow these rules, and the plugin's own `access` setting stays final.
+The descriptor comes from the installed package, its version checked against the install, and **every read runs in a session limited to exact allow rules from the grant** (`permission.sessionRules`): a deny of everything, then the method's action and each operation's rule. An act uses the same fence (`actSessionRules`): a preview session allows the preview action and not the commit action, and a commit session allows the commit action. OpenCode checks each inner tool call against the calling session's rules, and the last matching rule wins, so the session is a real sandbox whatever the agent allows. A broker or a project may only narrow these rules, and the plugin's own `access` setting stays final.
 
 **On the plugin side** (`tools-rpc`), a method with a resource resolver is resolved before dispatch on the exact `<account>:<operation>` it names, never on `*`. A `class: "read"` method must resolve a read operation unless it declares `resourceKind: "any"` (a method such as gws's `plan`, which dry-runs a change and writes nothing). A resolver's coded refusal reaches the caller with its own code and next step; `null` or an uncoded failure is `RESOURCE_UNRESOLVED` ([#22](https://github.com/we-the-rebel-alliance/source-contract/issues/22), `docs/tools-rpc.md`).
 
 `read` refuses before any call when the grant is another consumer's, the source is off, the descriptor changed since consent or the scope is wider than granted; it then checks the answer's account, its `trust` marker, its size and, for a snapshot, its output. Grants are per consumer, source, account and scope. A cached answer serves only a consumer whose own grant covers the same source, account and scope, never another person or viewer.
+
+`act` refuses the same way for an act grant: another consumer, a turned-off act, or a descriptor that changed since consent. A commit whose effect is not `local` is also refused without a confirmation the host issued. The preview is not that confirmation. It is the answer the host shows.
 
 ## Versions
 
 Semver. `sources.contractVersion` is the contract version; projects read the current and the previous one. Within a version the contract only grows.
 
 The v0.3 rules ship as `0.3.0`, a minor release of the package, and leave `sources.contractVersion` at 1 ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §6). Order matters, as it did for `removals[]`: consumers re-vendor first, then plugins emit the new fields and declare the new files. Every v0.2 page and descriptor stays valid, and every v0.2 recorded fixture passes the kit unchanged. [The guide for plugin authors](adopting-v0.3.md) takes the adoption one step at a time.
+
+Acts are the same kind of addition. `sources.contractVersion` stays 1, and a descriptor with no `acts` stays valid. A consumer on an older package refuses a descriptor that carries `acts`, because its schema is strict. Consumers re-vendor before any plugin declares an act. No plugin should emit the key until they have.

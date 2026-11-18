@@ -17,8 +17,12 @@ import type { Sources } from "./internal/schema/types.ts"
 
 export { MAX_BYTES_DEFAULT, MAX_BYTES_LIMIT } from "./internal/schema/types.ts"
 export { FACT_SCHEMAS, factSchema } from "./internal/schema/facts.ts"
+export { ACT_EFFECTS } from "./internal/schema/types.ts"
 export type {
   Accounts,
+  ActEffect,
+  ActItem,
+  ActPermission,
   Cadence,
   Cost,
   Detail,

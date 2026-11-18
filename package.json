@@ -22,6 +22,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./act": {
+      "types": "./dist/act.d.ts",
+      "default": "./dist/act.js"
+    },
     "./broker-client": {
       "types": "./dist/broker-client.d.ts",
       "default": "./dist/broker-client.js"
@@ -41,6 +45,10 @@
     "./hints": {
       "types": "./dist/hints.d.ts",
       "default": "./dist/hints.js"
+    },
+    "./list": {
+      "types": "./dist/list.d.ts",
+      "default": "./dist/list.js"
     },
     "./params": {
       "types": "./dist/params.d.ts",

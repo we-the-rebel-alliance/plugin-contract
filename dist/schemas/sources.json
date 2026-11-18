@@ -1019,6 +1019,97 @@
         ]
       },
       "description": "The plugin's sources. A source id is unique across the declaration."
+    },
+    "acts": {
+      "description": "The plugin's acts, beside its sources in the same descriptor. Absent when the plugin declares no write. Additive: an older consumer refuses the key.",
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+$"
+          },
+          "input": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": {},
+            "description": "JSON Schema for the caller's input. The library adds account; the schema need not name it."
+          },
+          "output": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": {},
+            "description": "JSON Schema for the answer's output."
+          },
+          "effect": {
+            "type": "string",
+            "enum": [
+              "local",
+              "notify",
+              "spend",
+              "irreversible"
+            ]
+          },
+          "preview": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "description": "The preview tool. It writes nothing."
+          },
+          "commit": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "description": "The commit tool. A different tool from preview."
+          },
+          "permission": {
+            "type": "object",
+            "properties": {
+              "preview": {
+                "type": "string",
+                "maxLength": 80,
+                "pattern": "^(?:[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*|[a-z][a-z0-9]*_[a-z][a-z0-9_]*)$"
+              },
+              "commit": {
+                "type": "string",
+                "maxLength": 80,
+                "pattern": "^(?:[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*|[a-z][a-z0-9]*_[a-z][a-z0-9_]*)$"
+              },
+              "operations": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,199}$"
+                },
+                "description": "Every operation the act asserts, derived like a source's permission.operations."
+              }
+            },
+            "required": [
+              "preview",
+              "commit",
+              "operations"
+            ],
+            "additionalProperties": false,
+            "description": "The preview action, the commit action, and the operations the act asserts."
+          }
+        },
+        "required": [
+          "id",
+          "input",
+          "output",
+          "effect",
+          "preview",
+          "commit",
+          "permission"
+        ],
+        "additionalProperties": false,
+        "description": "A declared write: preview, then commit. A non-local effect needs a confirmation the host issued before commit."
+      }
     }
   },
   "required": [

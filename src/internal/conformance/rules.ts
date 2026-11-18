@@ -17,6 +17,17 @@ export interface ToolDeclaration {
   readonly readOnly?: boolean | undefined
 }
 
+/**
+ * One public tool, as the plugin's own table lists it. `id` is the tool. A table that already uses `name` may pass
+ * that instead. `exclude` is a reason the tool is neither a source nor an act; empty is not a reason.
+ */
+export interface PublicTool {
+  readonly id?: string | undefined
+  readonly name?: string | undefined
+  readonly readOnly?: boolean | undefined
+  readonly exclude?: string | undefined
+}
+
 /** What `declarationProblems` needs beyond the declaration itself. */
 export interface DeclarationOptions {
   /** The plugin's declared tools, so a named tool can be checked. Omit it when the list is not at hand. */
@@ -397,7 +408,123 @@ export function declarationProblems(sources: unknown, options: DeclarationOption
       }
     }
   }
+  // An act's preview writes nothing. Its commit may be a write, so the read-verb rule is not applied to the commit.
+  // An act's operations may change something; the read-verb rule is for a source's reads.
+  problems.push(...actDeclarationProblems(sources, tools))
   return problems
+}
+
+/** Why an act's preview is not a read, or its schema is over the inline cap. A commit may be a write. */
+function actDeclarationProblems(sources: Record<string, unknown>, tools: readonly ToolDeclaration[] | undefined): string[] {
+  const acts = sources["acts"]
+  if (acts === undefined) return []
+  if (!Array.isArray(acts)) return ["acts must be a list"]
+  const problems: string[] = []
+  for (const [index, act] of acts.entries()) {
+    if (!plain(act)) continue
+    const at = `acts[${index}]${typeof act["id"] === "string" ? ` (${act["id"]})` : ""}`
+    const preview = act["preview"]
+    if (typeof preview === "string") {
+      const verb = nameProblem(preview)
+      if (verb !== undefined) problems.push(`${at}.preview: ${verb}: a preview writes nothing`)
+      if (tools !== undefined) {
+        const declared = tools.find((tool) => tool.id === preview)
+        if (declared === undefined) problems.push(`${at}.preview names "${preview}", which the plugin does not declare`)
+        else if (declared.readOnly !== true) problems.push(`${at}.preview names "${preview}", which is not declared readOnly: true: a preview writes nothing`)
+      }
+    }
+    const commit = act["commit"]
+    if (tools !== undefined && typeof commit === "string" && tools.every((tool) => tool.id !== commit)) {
+      problems.push(`${at}.commit names "${commit}", which the plugin does not declare`)
+    }
+    for (const key of ["input", "output"] as const) {
+      const schema = act[key]
+      if (schema === undefined) continue
+      const size = new TextEncoder().encode(JSON.stringify(schema)).length
+      if (size > MAX_OUTPUT_SCHEMA_BYTES) problems.push(`${at}.${key} is ${size} bytes of compact JSON, over the ${MAX_OUTPUT_SCHEMA_BYTES}-byte cap`)
+    }
+  }
+  return problems
+}
+
+/** The id a public tool is known by: `id`, or `name` when the table uses that. */
+function publicToolId(tool: PublicTool): string | undefined {
+  if (typeof tool.id === "string" && tool.id.length > 0) return tool.id
+  if (typeof tool.name === "string" && tool.name.length > 0) return tool.name
+  return undefined
+}
+
+/** A non-empty exclusion reason, or undefined when the tool is not excluded. */
+function exclusionReason(tool: PublicTool): string | undefined {
+  if (typeof tool.exclude !== "string") return undefined
+  const reason = tool.exclude.trim()
+  return reason.length === 0 ? undefined : reason
+}
+
+/**
+ * Every tool a declaration names: a source's tool, a detail's tool, a suggest tool, an act's preview and an act's
+ * commit. Exact ids. The contract does not guess a prefix or a product.
+ */
+export function declaredToolIds(declaration: unknown): readonly string[] {
+  if (!plain(declaration)) return []
+  const ids: string[] = []
+  const items = Array.isArray(declaration["items"]) ? declaration["items"] : []
+  for (const item of items) {
+    if (!plain(item)) continue
+    if (typeof item["tool"] === "string") ids.push(item["tool"])
+    if (Array.isArray(item["details"])) {
+      for (const detail of item["details"]) if (plain(detail) && typeof detail["tool"] === "string") ids.push(detail["tool"])
+    }
+    const scope = item["scope"]
+    const suggest = plain(scope) ? scope["suggest"] : undefined
+    if (plain(suggest) && typeof suggest["tool"] === "string") ids.push(suggest["tool"])
+  }
+  const acts = Array.isArray(declaration["acts"]) ? declaration["acts"] : []
+  for (const act of acts) {
+    if (!plain(act)) continue
+    if (typeof act["preview"] === "string") ids.push(act["preview"])
+    if (typeof act["commit"] === "string") ids.push(act["commit"])
+  }
+  return ids
+}
+
+/**
+ * Why a public tool is neither a source, an act, nor explicitly excluded with a reason.
+ *
+ * The plugin passes the table. This package does not read a product's catalogue and does not know which tools a
+ * plugin has. Pass the tools an agent can call, not the provider operations those tools call. A tool is covered when
+ * its id equals a declared tool id (`declaredToolIds`). `name` is accepted as the id when the table uses `name`.
+ * `exclude` must be a non-empty reason; an empty one is not an exclusion.
+ */
+export function undeclaredToolProblems(declaration: unknown, tools: readonly PublicTool[]): string[] {
+  const declared = new Set(declaredToolIds(declaration))
+  const problems: string[] = []
+  const seen = new Set<string>()
+  for (const [index, tool] of tools.entries()) {
+    const id = publicToolId(tool)
+    if (id === undefined) {
+      problems.push(`tools[${index}] has no id: pass id, or name when the table uses name`)
+      continue
+    }
+    if (seen.has(id)) continue
+    seen.add(id)
+    if (declared.has(id)) continue
+    if (tool.exclude !== undefined && exclusionReason(tool) === undefined) {
+      problems.push(`"${id}" is excluded with no reason: a reason says why it is neither a source nor an act`)
+      continue
+    }
+    if (exclusionReason(tool) !== undefined) continue
+    problems.push(`"${id}" is neither a source, an act, nor excluded with a reason`)
+  }
+  return problems
+}
+
+/** `undeclaredToolProblems`, for a plugin's CI: throws one error listing every undeclared tool. */
+export function assertDeclaredTools(declaration: unknown, tools: readonly PublicTool[]): void {
+  const problems = undeclaredToolProblems(declaration, tools)
+  if (problems.length > 0) {
+    throw new Error(`SCHEMA_VIOLATION: a public tool is not declared. Next step: declare it as a source or an act, or exclude it with a reason.\n- ${problems.join("\n- ")}`)
+  }
 }
 
 /** `declarationProblems`, for a test or a check: throws one error listing every problem. */

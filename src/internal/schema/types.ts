@@ -8,7 +8,16 @@ import type { FactType } from "../events.ts"
 export const MAX_BYTES_DEFAULT = 65536
 export const MAX_BYTES_LIMIT = 1048576
 
-/** The value of a plugin's top-level `sources` key: the contract version and its sources. */
+/**
+ * What an act does beyond the person's own machine. `local` does not. The others need a confirmation the host issued
+ * before commit.
+ */
+export const ACT_EFFECTS = ["local", "notify", "spend", "irreversible"] as const
+
+/** An act's effect: `local`, or one that reaches someone, spends, or cannot be undone. */
+export type ActEffect = (typeof ACT_EFFECTS)[number]
+
+/** The value of a plugin's top-level `sources` key: the contract version, its sources, and its acts once it declares any. */
 export interface Sources {
   readonly contractVersion: 1
   /** The plugin's tools-RPC id (#4, #8): the plugin id and `.tools`. */
@@ -16,6 +25,11 @@ export interface Sources {
   /** The plugin's one probe tool, and the permission action it asserts (#4, #8). */
   readonly probe?: { readonly action: string } | undefined
   readonly items: readonly SourceItem[]
+  /**
+   * The plugin's acts, beside its sources in the same descriptor. Absent when the plugin declares no write. Additive:
+   * a consumer on an older package refuses the key.
+   */
+  readonly acts?: readonly ActItem[] | undefined
 }
 
 /** An events feed or a snapshot. */
@@ -68,6 +82,37 @@ export interface SourceEvents extends SourceCommon {
   readonly maxAgeSec?: undefined
   /** Not allowed on an events source. */
   readonly params?: undefined
+}
+
+/**
+ * One write a plugin declares. Preview writes nothing. Commit is the write, and a non-local effect needs a confirmation
+ * the host issued. The id is `<plugin>.<action>`, the same shape as a source id.
+ */
+export interface ActItem {
+  /** The act id, such as `demo.save`. Its first segment is the plugin's namespace. */
+  readonly id: string
+  /** JSON Schema (draft 2020-12) for the caller's input. The library adds `account`; the schema does not have to name it. */
+  readonly input: Readonly<Record<string, unknown>>
+  /** JSON Schema (draft 2020-12) for the answer's `output`. */
+  readonly output: Readonly<Record<string, unknown>>
+  /** `local`, or an effect that reaches someone, spends, or cannot be undone. */
+  readonly effect: ActEffect
+  /** The tool that previews the act. It writes nothing, and it is not the commit tool. */
+  readonly preview: string
+  /** The tool that commits the act. A different tool from `preview`. */
+  readonly commit: string
+  /** The actions the two tools assert, and the provider operations the act asserts. */
+  readonly permission: ActPermission
+}
+
+/** An act's grants: a preview action, a commit action, and the operations, derived like a source's. */
+export interface ActPermission {
+  /** The action the preview tool asserts, in the plugin's namespace. A preview session allows this and not the commit. */
+  readonly preview: string
+  /** The action the commit tool asserts, in the plugin's namespace, and not the preview's action. */
+  readonly commit: string
+  /** Every provider operation the act asserts, and nothing else. Derived like a source's `permission.operations`. */
+  readonly operations: readonly string[]
 }
 
 /** A snapshot source: the latest state, read on demand. */

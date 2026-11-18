@@ -58,6 +58,15 @@ function sessionRules(source, grant) {
   if (server) return { ok: false, problems: [server] };
   return fenced([allow(method, "*"), ...operations.map((operation) => operationRule(source, operation, grant.account))]);
 }
+function actSessionRules(act, grant, phase) {
+  if (grant.act !== act.id) return { ok: false, problems: [`the grant is for ${grant.act}, not ${act.id}`] };
+  const problem = accountProblem(grant.account);
+  if (problem) return { ok: false, problems: [problem] };
+  const method = phase === "preview" ? act.permission.preview : act.permission.commit;
+  const operations = act.permission.operations;
+  if (operations.length === 0) return { ok: false, problems: [`${act.id} declares no operations`] };
+  return fenced([allow(method, "*"), ...operations.map((operation) => operationRule({ id: act.id }, operation, grant.account))]);
+}
 function detailRules(source, detailId, grant) {
   if (!source.details?.some((entry) => entry.id === detailId)) return { ok: false, problems: [`${source.id} declares no detail read ${detailId}`] };
   return sessionRules(source, grant);
@@ -97,6 +106,7 @@ export {
   serverOf,
   methodAction,
   sessionRules,
+  actSessionRules,
   detailRules,
   probeRules,
   evaluate,

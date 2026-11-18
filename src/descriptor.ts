@@ -33,8 +33,8 @@ export type SourcePermission = Permission
 export type SourceDetail = Detail
 
 /** One source a plugin declares: Memory's schema type, the one `SourceItem` the package exports (#30, item 8). */
-export type { SourceItem } from "./internal/schema/types.ts"
-import type { Detail, Permission, SourceItem } from "./internal/schema/types.ts"
+export type { ActItem, SourceItem } from "./internal/schema/types.ts"
+import type { ActItem, Detail, Permission, SourceItem } from "./internal/schema/types.ts"
 
 /** The `sources` key. */
 export interface SourcesDescriptor {
@@ -44,6 +44,8 @@ export interface SourcesDescriptor {
   /** The plugin's one `probe` tool: the permission action it asserts (#4, #8). Optional. */
   readonly probe?: { readonly action: string }
   readonly items: readonly SourceItem[]
+  /** Acts beside the sources, in the same hashed descriptor. Absent when the package declares none. */
+  readonly acts?: readonly ActItem[]
 }
 
 /** A descriptor as read from an installed package. */
@@ -221,6 +223,11 @@ export function findInstalledPackage(name: string, from: string): string | undef
 /** A source by id, from a descriptor. */
 export function findSource(descriptor: SourcesDescriptor, id: string): SourceItem | undefined {
   return descriptor.items.find((source) => source.id === id)
+}
+
+/** An act by id, from a descriptor. Absent when the package declares no acts, or none with this id. */
+export function findAct(descriptor: SourcesDescriptor, id: string): ActItem | undefined {
+  return descriptor.acts?.find((act) => act.id === id)
 }
 
 /** The most bytes one answer of this source may take: its `maxBytes`, or 64 KB. */

@@ -4,6 +4,16 @@ export interface ToolDeclaration {
     /** True when the tool reads and never changes anything. §2.2: every tool a source names is declared read-only. */
     readonly readOnly?: boolean | undefined;
 }
+/**
+ * One public tool, as the plugin's own table lists it. `id` is the tool. A table that already uses `name` may pass
+ * that instead. `exclude` is a reason the tool is neither a source nor an act; empty is not a reason.
+ */
+export interface PublicTool {
+    readonly id?: string | undefined;
+    readonly name?: string | undefined;
+    readonly readOnly?: boolean | undefined;
+    readonly exclude?: string | undefined;
+}
 /** What `declarationProblems` needs beyond the declaration itself. */
 export interface DeclarationOptions {
     /** The plugin's declared tools, so a named tool can be checked. Omit it when the list is not at hand. */
@@ -78,5 +88,21 @@ export declare function urlHostProblem(host: unknown): string | null;
  * @param options the plugin's declared tools, when they are at hand
  */
 export declare function declarationProblems(sources: unknown, options?: DeclarationOptions): string[];
+/**
+ * Every tool a declaration names: a source's tool, a detail's tool, a suggest tool, an act's preview and an act's
+ * commit. Exact ids. The contract does not guess a prefix or a product.
+ */
+export declare function declaredToolIds(declaration: unknown): readonly string[];
+/**
+ * Why a public tool is neither a source, an act, nor explicitly excluded with a reason.
+ *
+ * The plugin passes the table. This package does not read a product's catalogue and does not know which tools a
+ * plugin has. Pass the tools an agent can call, not the provider operations those tools call. A tool is covered when
+ * its id equals a declared tool id (`declaredToolIds`). `name` is accepted as the id when the table uses `name`.
+ * `exclude` must be a non-empty reason; an empty one is not an exclusion.
+ */
+export declare function undeclaredToolProblems(declaration: unknown, tools: readonly PublicTool[]): string[];
+/** `undeclaredToolProblems`, for a plugin's CI: throws one error listing every undeclared tool. */
+export declare function assertDeclaredTools(declaration: unknown, tools: readonly PublicTool[]): void;
 /** `declarationProblems`, for a test or a check: throws one error listing every problem. */
 export declare function assertDeclaration(sources: unknown, options?: DeclarationOptions): void;

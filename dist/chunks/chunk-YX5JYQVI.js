@@ -1,12 +1,12 @@
 // @we-the-rebel-alliance/source-contract 0.3.0. Built by scripts/build.mjs; do not edit.
 import {
+  SOURCES_SCHEMA
+} from "./chunk-BVHSZP7F.js";
+import {
   OUTPUT_NAMES,
   isExtensionOutput,
   isOutputName
 } from "./chunk-GDBKZBG7.js";
-import {
-  SOURCES_SCHEMA
-} from "./chunk-BEU3WWNO.js";
 import {
   SUPPORTED_CONTRACT_VERSIONS
 } from "./chunk-KXQYSM2Z.js";
@@ -165,6 +165,9 @@ function findInstalledPackage(name, from) {
 function findSource(descriptor, id) {
   return descriptor.items.find((source) => source.id === id);
 }
+function findAct(descriptor, id) {
+  return descriptor.acts?.find((act) => act.id === id);
+}
 function maxBytesOf(source) {
   return source.maxBytes ?? DEFAULT_MAX_BYTES;
 }
@@ -179,5 +182,6 @@ export {
   readInstalledDescriptor,
   findInstalledPackage,
   findSource,
+  findAct,
   maxBytesOf
 };

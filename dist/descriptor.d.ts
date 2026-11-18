@@ -7,8 +7,8 @@ export type SourcePermission = Permission;
 /** A detail read, a declared read per event whose inputs come only from the event's own fields: Memory's schema type (#30, item 8). */
 export type SourceDetail = Detail;
 /** One source a plugin declares: Memory's schema type, the one `SourceItem` the package exports (#30, item 8). */
-export type { SourceItem } from "./internal/schema/types.js";
-import type { Detail, Permission, SourceItem } from "./internal/schema/types.js";
+export type { ActItem, SourceItem } from "./internal/schema/types.js";
+import type { ActItem, Detail, Permission, SourceItem } from "./internal/schema/types.js";
 /** The `sources` key. */
 export interface SourcesDescriptor {
     readonly contractVersion: number;
@@ -19,6 +19,8 @@ export interface SourcesDescriptor {
         readonly action: string;
     };
     readonly items: readonly SourceItem[];
+    /** Acts beside the sources, in the same hashed descriptor. Absent when the package declares none. */
+    readonly acts?: readonly ActItem[];
 }
 /** A descriptor as read from an installed package. */
 export interface InstalledDescriptor {
@@ -53,6 +55,8 @@ export declare function readInstalledDescriptor(directory: string, options?: {
 export declare function findInstalledPackage(name: string, from: string): string | undefined;
 /** A source by id, from a descriptor. */
 export declare function findSource(descriptor: SourcesDescriptor, id: string): SourceItem | undefined;
+/** An act by id, from a descriptor. Absent when the package declares no acts, or none with this id. */
+export declare function findAct(descriptor: SourcesDescriptor, id: string): ActItem | undefined;
 /** The most bytes one answer of this source may take: its `maxBytes`, or 64 KB. */
 export declare function maxBytesOf(source: {
     readonly maxBytes?: number | undefined;
