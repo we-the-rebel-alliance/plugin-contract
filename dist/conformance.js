@@ -1,19 +1,23 @@
 // @we-the-rebel-alliance/source-contract 0.3.0. Built by scripts/build.mjs; do not edit.
 import {
-  maxBytesOf
-} from "./chunks/chunk-HR22TL23.js";
-import "./chunks/chunk-GDBKZBG7.js";
-import {
-  SOURCES_SCHEMA
-} from "./chunks/chunk-BEU3WWNO.js";
-import {
-  toolsRpcIdProblems
-} from "./chunks/chunk-IGPRJ63D.js";
-import "./chunks/chunk-KXQYSM2Z.js";
-import {
   hintProblems,
   routineProblems
 } from "./chunks/chunk-ITQZIF2U.js";
+import {
+  maxBytesOf
+} from "./chunks/chunk-YX5JYQVI.js";
+import {
+  SOURCES_SCHEMA
+} from "./chunks/chunk-BVHSZP7F.js";
+import "./chunks/chunk-GDBKZBG7.js";
+import {
+  toolsRpcIdProblems
+} from "./chunks/chunk-WOH6G62Y.js";
+import {
+  operationRule,
+  sessionRules
+} from "./chunks/chunk-DEXO7HMA.js";
+import "./chunks/chunk-KXQYSM2Z.js";
 import {
   fromJSONSchema
 } from "./chunks/chunk-6ZSJSJMV.js";
@@ -29,10 +33,6 @@ import {
   sourceNamespace
 } from "./chunks/chunk-LJL3EALP.js";
 import "./chunks/chunk-NUBUQFLH.js";
-import {
-  operationRule,
-  sessionRules
-} from "./chunks/chunk-EOS4LD6F.js";
 import "./chunks/chunk-CUITXC5J.js";
 
 // src/internal/conformance/public-suffix-list.ts
@@ -10775,7 +10775,100 @@ function declarationProblems(sources, options = {}) {
       }
     }
   }
+  problems.push(...actDeclarationProblems(sources, tools));
   return problems;
+}
+function actDeclarationProblems(sources, tools) {
+  const acts = sources["acts"];
+  if (acts === void 0) return [];
+  if (!Array.isArray(acts)) return ["acts must be a list"];
+  const problems = [];
+  for (const [index, act] of acts.entries()) {
+    if (!plain(act)) continue;
+    const at = `acts[${index}]${typeof act["id"] === "string" ? ` (${act["id"]})` : ""}`;
+    const preview = act["preview"];
+    if (typeof preview === "string") {
+      const verb = nameProblem(preview);
+      if (verb !== void 0) problems.push(`${at}.preview: ${verb}: a preview writes nothing`);
+      if (tools !== void 0) {
+        const declared = tools.find((tool) => tool.id === preview);
+        if (declared === void 0) problems.push(`${at}.preview names "${preview}", which the plugin does not declare`);
+        else if (declared.readOnly !== true) problems.push(`${at}.preview names "${preview}", which is not declared readOnly: true: a preview writes nothing`);
+      }
+    }
+    const commit = act["commit"];
+    if (tools !== void 0 && typeof commit === "string" && tools.every((tool) => tool.id !== commit)) {
+      problems.push(`${at}.commit names "${commit}", which the plugin does not declare`);
+    }
+    for (const key2 of ["input", "output"]) {
+      const schema = act[key2];
+      if (schema === void 0) continue;
+      const size = new TextEncoder().encode(JSON.stringify(schema)).length;
+      if (size > MAX_OUTPUT_SCHEMA_BYTES) problems.push(`${at}.${key2} is ${size} bytes of compact JSON, over the ${MAX_OUTPUT_SCHEMA_BYTES}-byte cap`);
+    }
+  }
+  return problems;
+}
+function publicToolId(tool) {
+  if (typeof tool.id === "string" && tool.id.length > 0) return tool.id;
+  if (typeof tool.name === "string" && tool.name.length > 0) return tool.name;
+  return void 0;
+}
+function exclusionReason(tool) {
+  if (typeof tool.exclude !== "string") return void 0;
+  const reason = tool.exclude.trim();
+  return reason.length === 0 ? void 0 : reason;
+}
+function declaredToolIds(declaration) {
+  if (!plain(declaration)) return [];
+  const ids = [];
+  const items = Array.isArray(declaration["items"]) ? declaration["items"] : [];
+  for (const item of items) {
+    if (!plain(item)) continue;
+    if (typeof item["tool"] === "string") ids.push(item["tool"]);
+    if (Array.isArray(item["details"])) {
+      for (const detail of item["details"]) if (plain(detail) && typeof detail["tool"] === "string") ids.push(detail["tool"]);
+    }
+    const scope = item["scope"];
+    const suggest = plain(scope) ? scope["suggest"] : void 0;
+    if (plain(suggest) && typeof suggest["tool"] === "string") ids.push(suggest["tool"]);
+  }
+  const acts = Array.isArray(declaration["acts"]) ? declaration["acts"] : [];
+  for (const act of acts) {
+    if (!plain(act)) continue;
+    if (typeof act["preview"] === "string") ids.push(act["preview"]);
+    if (typeof act["commit"] === "string") ids.push(act["commit"]);
+  }
+  return ids;
+}
+function undeclaredToolProblems(declaration, tools) {
+  const declared = new Set(declaredToolIds(declaration));
+  const problems = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const [index, tool] of tools.entries()) {
+    const id = publicToolId(tool);
+    if (id === void 0) {
+      problems.push(`tools[${index}] has no id: pass id, or name when the table uses name`);
+      continue;
+    }
+    if (seen.has(id)) continue;
+    seen.add(id);
+    if (declared.has(id)) continue;
+    if (tool.exclude !== void 0 && exclusionReason(tool) === void 0) {
+      problems.push(`"${id}" is excluded with no reason: a reason says why it is neither a source nor an act`);
+      continue;
+    }
+    if (exclusionReason(tool) !== void 0) continue;
+    problems.push(`"${id}" is neither a source, an act, nor excluded with a reason`);
+  }
+  return problems;
+}
+function assertDeclaredTools(declaration, tools) {
+  const problems = undeclaredToolProblems(declaration, tools);
+  if (problems.length > 0) {
+    throw new Error(`SCHEMA_VIOLATION: a public tool is not declared. Next step: declare it as a source or an act, or exclude it with a reason.
+- ${problems.join("\n- ")}`);
+  }
 }
 function assertDeclaration(sources, options = {}) {
   const problems = declarationProblems(sources, options);
@@ -11568,8 +11661,10 @@ export {
   WRITE_VERBS,
   assertConformance,
   assertDeclaration,
+  assertDeclaredTools,
   assertionMatches,
   declarationProblems,
+  declaredToolIds,
   detailInput,
   detailInputProblems,
   nameProblem,
@@ -11587,6 +11682,7 @@ export {
   suggestProblems,
   syntheticEvent,
   tokensOf,
+  undeclaredToolProblems,
   unusedGrants,
   urlHostProblem
 };

@@ -1,7 +1,7 @@
 // @we-the-rebel-alliance/source-contract 0.3.0. Built by scripts/build.mjs; do not edit.
 import {
   isToolsRpcId
-} from "./chunk-IGPRJ63D.js";
+} from "./chunk-WOH6G62Y.js";
 import {
   _enum,
   array,
@@ -28,6 +28,7 @@ import {
 // src/internal/schema/types.ts
 var MAX_BYTES_DEFAULT = 65536;
 var MAX_BYTES_LIMIT = 1048576;
+var ACT_EFFECTS = ["local", "notify", "spend", "irreversible"];
 
 // src/internal/schema/sources.ts
 var SOURCE_ID = /^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$/;
@@ -187,12 +188,56 @@ var snapshot = object({
   }
 });
 var source = discriminatedUnion("kind", [events, snapshot]);
+var jsonSchemaObject = looseObject({}).describe("JSON Schema draft 2020-12, as an object.");
+var act = object({
+  id: string().max(64).regex(SOURCE_ID, { error: "must be a dotted id such as demo.save" }),
+  input: jsonSchemaObject.describe("JSON Schema for the caller's input. The library adds account; the schema need not name it."),
+  output: jsonSchemaObject.describe("JSON Schema for the answer's output."),
+  effect: _enum(ACT_EFFECTS, { error: "must be local, notify, spend or irreversible" }),
+  preview: string().max(64).regex(TOOL_NAME, { error: "must be a tool name" }).describe("The preview tool. It writes nothing."),
+  commit: string().max(64).regex(TOOL_NAME, { error: "must be a tool name" }).describe("The commit tool. A different tool from preview."),
+  permission: object({
+    preview: string().max(80).regex(ACTION, { error: "must be a permission action such as demo.preview_note" }),
+    commit: string().max(80).regex(ACTION, { error: "must be a permission action such as demo.save_note" }),
+    operations: array(string().max(200).regex(OPERATION, { error: "must be a provider operation or an MCP tool name" })).min(1).describe("Every operation the act asserts, derived like a source's permission.operations.")
+  }).strict().describe("The preview action, the commit action, and the operations the act asserts.")
+}).strict().describe("A declared write: preview, then commit. A non-local effect needs a confirmation the host issued before commit.").superRefine((value, ctx) => {
+  const head = value.id.split(".")[0] ?? value.id;
+  const inNamespace = (action) => action.startsWith(`${head}.`) || action.startsWith(`${head}_`);
+  if (!inNamespace(value.permission.preview)) {
+    ctx.addIssue({ code: "custom", path: ["permission", "preview"], message: `must be in the plugin's namespace "${head}"` });
+  }
+  if (!inNamespace(value.permission.commit)) {
+    ctx.addIssue({ code: "custom", path: ["permission", "commit"], message: `must be in the plugin's namespace "${head}"` });
+  }
+  if (value.preview === value.commit) {
+    ctx.addIssue({ code: "custom", path: ["commit"], message: "must name a different tool from preview: a preview writes nothing, and the commit is the write" });
+  }
+  if (value.permission.preview === value.permission.commit) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["permission", "commit"],
+      message: "must be a different action from preview, so a preview session cannot allow the commit"
+    });
+  }
+});
 var sourcesSchema = object({
   contractVersion: literal(1),
   rpc: string().max(200).refine(isToolsRpcId, { error: "must be a tools-RPC id: the plugin id and .tools, such as google-workspace.gws.tools" }).optional().describe("The plugin's tools-RPC id (#4, #8), which a consumer calls instead of mapping the package."),
   probe: object({ action: string().max(80).regex(ACTION, { error: "must be a dotted action such as gws.probe" }) }).strict().optional().describe("The plugin's one probe tool, and the permission action it asserts (#4, #8)."),
-  items: array(source).min(1).describe("The plugin's sources. A source id is unique across the declaration.")
-}).strict();
+  items: array(source).min(1).describe("The plugin's sources. A source id is unique across the declaration."),
+  acts: array(act).min(1, "must name at least one act, or be left out").optional().describe("The plugin's acts, beside its sources in the same descriptor. Absent when the plugin declares no write. Additive: an older consumer refuses the key.")
+}).strict().superRefine((value, ctx) => {
+  const seen = /* @__PURE__ */ new Set();
+  for (const item of value.items) {
+    seen.add(item.id);
+    for (const detail2 of item.kind === "events" ? item.details ?? [] : []) seen.add(detail2.id);
+  }
+  for (const [index, declared] of (value.acts ?? []).entries()) {
+    if (seen.has(declared.id)) ctx.addIssue({ code: "custom", path: ["acts", index, "id"], message: `"${declared.id}" is declared twice` });
+    seen.add(declared.id);
+  }
+});
 
 // src/internal/schema/facts.ts
 var actorId = string().min(1).max(EVENT_LIMITS.actorId).describe("An actor id on the same event.");
@@ -237,6 +282,7 @@ var SOURCES_SCHEMA = validator("sources", sourcesSchema);
 export {
   MAX_BYTES_DEFAULT,
   MAX_BYTES_LIMIT,
+  ACT_EFFECTS,
   FACT_SCHEMAS,
   factSchema,
   SOURCES_SCHEMA

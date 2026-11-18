@@ -21,6 +21,7 @@
  */
 import type { Checked } from "./internal/checked.js";
 import type { SourceItem } from "./descriptor.js";
+import type { ActItem } from "./internal/schema/types.js";
 /** One OpenCode permission rule, as a session or an agent holds it. */
 export interface PermissionRule {
     readonly action: string;
@@ -45,6 +46,24 @@ export interface Grant {
     /** The person turned this binding off: a read answers SOURCE_DISABLED, which is not an error state. */
     readonly disabled?: boolean;
 }
+/**
+ * A person's grant for one act: one consumer may preview and commit one act, for one account, against the descriptor
+ * hash they consented to. The same shape as a read grant, for an act id.
+ */
+export interface ActGrant {
+    /** Who acts: a project's consumer, such as `memory` or an Artifacts app with its viewer. */
+    readonly consumer: string;
+    /** The act id. */
+    readonly act: string;
+    /** The account the person confirmed. */
+    readonly account: string;
+    /** The descriptor hash the person consented to; a changed descriptor asks again. */
+    readonly descriptorHash: string;
+    /** The person turned this binding off. An act then answers SOURCE_DISABLED, the table's existing code. */
+    readonly disabled?: boolean;
+}
+/** Which call a fenced act session allows. Preview never allows the commit action. */
+export type ActPhase = "preview" | "commit";
 /** The first rule of every fenced session: nothing is allowed that a later rule does not allow. */
 export declare const DENY_ALL: PermissionRule;
 /**
@@ -80,6 +99,12 @@ export declare function methodAction(source: SourceItem): string | undefined;
  * rule, or the source does not name its method's action.
  */
 export declare function sessionRules(source: SourceItem, grant: Pick<Grant, "source" | "account">): Checked<readonly PermissionRule[]>;
+/**
+ * The session rules for one phase of `act` under `grant`: deny everything, then allow that phase's action and each
+ * declared operation for the granted account. A preview session allows the preview action and not the commit action,
+ * so the commit tool cannot run while previewing. Operations are derived like a source's (`operationRule`).
+ */
+export declare function actSessionRules(act: Pick<ActItem, "id" | "permission">, grant: Pick<ActGrant, "act" | "account">, phase: ActPhase): Checked<readonly PermissionRule[]>;
 /**
  * The session rules for one detail read of `source` under `grant`: the source's own rules. A detail read is part of
  * the source's read (Slack's thread read is one of its declared operations), so it asserts nothing the source does not

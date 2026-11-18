@@ -12,7 +12,7 @@
 import * as z from "zod"
 import { FACT_TYPES, isEventKind } from "../events.ts"
 import { isToolsRpcId } from "../../tools-rpc.ts"
-import { MAX_BYTES_DEFAULT, MAX_BYTES_LIMIT } from "./types.ts"
+import { ACT_EFFECTS, MAX_BYTES_DEFAULT, MAX_BYTES_LIMIT } from "./types.ts"
 
 /** A source id: at least two dotted lowercase segments. */
 const SOURCE_ID = /^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$/
@@ -333,6 +333,56 @@ const snapshot = z
 
 const source = z.discriminatedUnion("kind", [events, snapshot])
 
+/** A JSON Schema object a plugin ships inline. A boolean schema is not enough: a host has to read the shape. */
+const jsonSchemaObject = z.looseObject({}).describe("JSON Schema draft 2020-12, as an object.")
+
+/**
+ * One act. Preview and commit are different tools and different actions, so a preview session cannot allow the commit.
+ * `permission.operations` is derived like a source's.
+ */
+const act = z
+  .object({
+    id: z.string().max(64).regex(SOURCE_ID, { error: "must be a dotted id such as demo.save" }),
+    input: jsonSchemaObject.describe("JSON Schema for the caller's input. The library adds account; the schema need not name it."),
+    output: jsonSchemaObject.describe("JSON Schema for the answer's output."),
+    effect: z.enum(ACT_EFFECTS, { error: "must be local, notify, spend or irreversible" }),
+    preview: z.string().max(64).regex(TOOL_NAME, { error: "must be a tool name" }).describe("The preview tool. It writes nothing."),
+    commit: z.string().max(64).regex(TOOL_NAME, { error: "must be a tool name" }).describe("The commit tool. A different tool from preview."),
+    permission: z
+      .object({
+        preview: z.string().max(80).regex(ACTION, { error: "must be a permission action such as demo.preview_note" }),
+        commit: z.string().max(80).regex(ACTION, { error: "must be a permission action such as demo.save_note" }),
+        operations: z
+          .array(z.string().max(200).regex(OPERATION, { error: "must be a provider operation or an MCP tool name" }))
+          .min(1)
+          .describe("Every operation the act asserts, derived like a source's permission.operations."),
+      })
+      .strict()
+      .describe("The preview action, the commit action, and the operations the act asserts."),
+  })
+  .strict()
+  .describe("A declared write: preview, then commit. A non-local effect needs a confirmation the host issued before commit.")
+  .superRefine((value, ctx) => {
+    const head = value.id.split(".")[0] ?? value.id
+    const inNamespace = (action: string) => action.startsWith(`${head}.`) || action.startsWith(`${head}_`)
+    if (!inNamespace(value.permission.preview)) {
+      ctx.addIssue({ code: "custom", path: ["permission", "preview"], message: `must be in the plugin's namespace "${head}"` })
+    }
+    if (!inNamespace(value.permission.commit)) {
+      ctx.addIssue({ code: "custom", path: ["permission", "commit"], message: `must be in the plugin's namespace "${head}"` })
+    }
+    if (value.preview === value.commit) {
+      ctx.addIssue({ code: "custom", path: ["commit"], message: "must name a different tool from preview: a preview writes nothing, and the commit is the write" })
+    }
+    if (value.permission.preview === value.permission.commit) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["permission", "commit"],
+        message: "must be a different action from preview, so a preview session cannot allow the commit",
+      })
+    }
+  })
+
 /** The `sources` key of a plugin's package.json, contract version 1. */
 export const sourcesSchema = z
   .object({
@@ -349,5 +399,21 @@ export const sourcesSchema = z
       .optional()
       .describe("The plugin's one probe tool, and the permission action it asserts (#4, #8)."),
     items: z.array(source).min(1).describe("The plugin's sources. A source id is unique across the declaration."),
+    acts: z
+      .array(act)
+      .min(1, "must name at least one act, or be left out")
+      .optional()
+      .describe("The plugin's acts, beside its sources in the same descriptor. Absent when the plugin declares no write. Additive: an older consumer refuses the key."),
   })
   .strict()
+  .superRefine((value, ctx) => {
+    const seen = new Set<string>()
+    for (const item of value.items) {
+      seen.add(item.id)
+      for (const detail of item.kind === "events" ? (item.details ?? []) : []) seen.add(detail.id)
+    }
+    for (const [index, declared] of (value.acts ?? []).entries()) {
+      if (seen.has(declared.id)) ctx.addIssue({ code: "custom", path: ["acts", index, "id"], message: `"${declared.id}" is declared twice` })
+      seen.add(declared.id)
+    }
+  })

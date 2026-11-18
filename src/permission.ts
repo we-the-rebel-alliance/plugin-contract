@@ -21,6 +21,7 @@
  */
 import type { Checked } from "./internal/checked.ts"
 import type { SourceItem } from "./descriptor.ts"
+import type { ActItem } from "./internal/schema/types.ts"
 
 /** One OpenCode permission rule, as a session or an agent holds it. */
 export interface PermissionRule {
@@ -47,6 +48,26 @@ export interface Grant {
   /** The person turned this binding off: a read answers SOURCE_DISABLED, which is not an error state. */
   readonly disabled?: boolean
 }
+
+/**
+ * A person's grant for one act: one consumer may preview and commit one act, for one account, against the descriptor
+ * hash they consented to. The same shape as a read grant, for an act id.
+ */
+export interface ActGrant {
+  /** Who acts: a project's consumer, such as `memory` or an Artifacts app with its viewer. */
+  readonly consumer: string
+  /** The act id. */
+  readonly act: string
+  /** The account the person confirmed. */
+  readonly account: string
+  /** The descriptor hash the person consented to; a changed descriptor asks again. */
+  readonly descriptorHash: string
+  /** The person turned this binding off. An act then answers SOURCE_DISABLED, the table's existing code. */
+  readonly disabled?: boolean
+}
+
+/** Which call a fenced act session allows. Preview never allows the commit action. */
+export type ActPhase = "preview" | "commit"
 
 /** The first rule of every fenced session: nothing is allowed that a later rule does not allow. */
 export const DENY_ALL: PermissionRule = { action: "*", resource: "*", effect: "deny" }
@@ -144,6 +165,21 @@ export function sessionRules(source: SourceItem, grant: Pick<Grant, "source" | "
   const server = serverAccountProblem(source, grant.account)
   if (server) return { ok: false, problems: [server] }
   return fenced([allow(method, "*"), ...operations.map((operation) => operationRule(source, operation, grant.account))])
+}
+
+/**
+ * The session rules for one phase of `act` under `grant`: deny everything, then allow that phase's action and each
+ * declared operation for the granted account. A preview session allows the preview action and not the commit action,
+ * so the commit tool cannot run while previewing. Operations are derived like a source's (`operationRule`).
+ */
+export function actSessionRules(act: Pick<ActItem, "id" | "permission">, grant: Pick<ActGrant, "act" | "account">, phase: ActPhase): Checked<readonly PermissionRule[]> {
+  if (grant.act !== act.id) return { ok: false, problems: [`the grant is for ${grant.act}, not ${act.id}`] }
+  const problem = accountProblem(grant.account)
+  if (problem) return { ok: false, problems: [problem] }
+  const method = phase === "preview" ? act.permission.preview : act.permission.commit
+  const operations = act.permission.operations
+  if (operations.length === 0) return { ok: false, problems: [`${act.id} declares no operations`] }
+  return fenced([allow(method, "*"), ...operations.map((operation) => operationRule({ id: act.id }, operation, grant.account))])
 }
 
 /**
