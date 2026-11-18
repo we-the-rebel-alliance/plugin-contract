@@ -23,8 +23,12 @@
         "type": "string",
         "enum": [
           "commitment",
-          "person.attribute",
-          "meeting.attended"
+          "decision",
+          "fact",
+          "preference",
+          "constraint",
+          "person",
+          "project"
         ]
       }
     }

@@ -1,5 +1,4 @@
 import type { Validator } from "./internal/checked.js";
-import { type FactType } from "./internal/events.js";
 /** The most characters a hint takes, frontmatter and body alike (#45 §4). */
 export declare const HINT_MAX = 1500;
 /** The most characters a routine's instructions take (#45 §5). */
@@ -18,14 +17,22 @@ export declare const FORBIDDEN_HINT_KEYS: readonly ["apply", "stated_by", "space
  * tier, schedule, budget, priority and apply mode are Memory's, as `stated_by` is.
  */
 export declare const FORBIDDEN_ROUTINE_KEYS: readonly ["tier", "schedule", "budget", "priority", "apply", "stated_by", "namespace"];
+/**
+ * The knowledge types `produces` may name (#45 §4, §5): what Memory's core extractor finds, which a hint helps it find.
+ * They are Memory's extractable types (design v3.1 §5.1), and a different list from the structured fact types of
+ * `facts[]`: a plugin derives a fact in code, while a hint only helps Memory find a piece of knowledge. Timeline, voice
+ * and voice samples are derived inside Memory and are never a `produces` value.
+ */
+export declare const PRODUCES_TYPES: readonly ["commitment", "decision", "fact", "preference", "constraint", "person", "project"];
+export type ProducesType = (typeof PRODUCES_TYPES)[number];
 /** What a hint's frontmatter is, once it keeps the contract (#45 §4). */
 export interface HintFrontmatter {
     /** One of the plugin's own source ids. */
     readonly source: string;
     /** The kinds of item it says how to read, each a core kind or `x-<namespace>/<name>`. */
     readonly kinds: readonly string[];
-    /** The core fact types its text produces. */
-    readonly produces?: readonly FactType[] | undefined;
+    /** The knowledge types its text helps Memory find, each one Memory's core extractor knows. */
+    readonly produces?: readonly ProducesType[] | undefined;
 }
 /** What a routine's frontmatter is, once it keeps the contract (#45 §5). */
 export interface RoutineFrontmatter {
@@ -37,7 +44,7 @@ export interface RoutineFrontmatter {
         readonly sources: readonly string[];
         readonly kinds: readonly string[];
     };
-    readonly produces: readonly FactType[];
+    readonly produces: readonly ProducesType[];
 }
 /** A hint's frontmatter schema, published as `dist/schemas/hint.json`. */
 export declare const HINT_SCHEMA: Validator<HintFrontmatter>;
@@ -68,12 +75,12 @@ export interface FileOptions {
 /**
  * A hint file's problems (#45 §4), one sentence each; none when it keeps the contract. A hint is at most 1,500
  * characters; its frontmatter has the known keys only and no key of Memory's; its `source` is one of the plugin's own;
- * and its `produces` names core fact types only.
+ * and its `produces` names a knowledge type Memory's core extractor finds and no other.
  */
 export declare function hintProblems(text: unknown, options: FileOptions): string[];
 /**
  * A routine file's problems (#45 §5), one sentence each; none when it keeps the contract. Its instructions are at most
  * 4,000 characters; its frontmatter has the known keys only and no key of Memory's; it reads only the plugin's own
- * sources; and its `produces` names core fact types only.
+ * sources; and its `produces` names a knowledge type Memory's core extractor finds and no other.
  */
 export declare function routineProblems(text: unknown, options: FileOptions): string[];

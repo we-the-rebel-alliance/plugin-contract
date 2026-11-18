@@ -7,7 +7,6 @@ import {
   validator
 } from "./chunk-6ZSJSJMV.js";
 import {
-  FACT_TYPES,
   isEventKind
 } from "./chunk-SBDN3WRN.js";
 
@@ -18,16 +17,18 @@ var HINT_KEYS = ["source", "kinds", "produces"];
 var ROUTINE_KEYS = ["id", "title", "reads", "produces"];
 var FORBIDDEN_HINT_KEYS = ["apply", "stated_by", "space", "budget", "priority"];
 var FORBIDDEN_ROUTINE_KEYS = ["tier", "schedule", "budget", "priority", "apply", "stated_by", "namespace"];
+var PRODUCES_TYPES = ["commitment", "decision", "fact", "preference", "constraint", "person", "project"];
+var PRODUCES_LIST = "commitment, decision, fact, preference, constraint, person or project";
 var SOURCE_ID = /^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$/;
 var ROUTINE_ID = /^[a-z][a-z0-9-]{0,63}$/;
 var KEY = /^[a-z][a-z0-9_]*$/;
-var factType = _enum(FACT_TYPES, { error: "must be a core fact type (commitment, person.attribute, meeting.attended)" });
+var producesType = _enum(PRODUCES_TYPES, { error: `must be a type Memory's core extractor finds (${PRODUCES_LIST})` });
 var kind = string().max(64).refine(isEventKind, { error: "must be an event kind, such as meeting or x-<namespace>/<name>" });
 var sourceId = string().max(64).regex(SOURCE_ID, { error: "must be a source id such as granola.meetings" });
 var hintFrontmatter = object({
   source: sourceId.describe("One of the plugin's own source ids."),
   kinds: array(kind, { error: "must be a list such as [meeting]" }).min(1, "must name at least one kind"),
-  produces: array(factType, { error: "must be a list such as [commitment]" }).min(1, "must name at least one core fact type").optional()
+  produces: array(producesType, { error: "must be a list such as [commitment]" }).min(1, "must name at least one type").optional()
 }).strict();
 var routineFrontmatter = object({
   id: string().max(64).regex(ROUTINE_ID, { error: "must be a lowercase word such as meeting-actions" }),
@@ -36,7 +37,7 @@ var routineFrontmatter = object({
     sources: array(sourceId, { error: "must be a list such as [granola.meetings]" }).min(1, "must name at least one source").describe("The plugin's own sources only."),
     kinds: array(kind, { error: "must be a list such as [meeting]" }).min(1, "must name at least one kind")
   }).strict(),
-  produces: array(factType, { error: "must be a list such as [commitment]" }).min(1, "must name at least one core fact type")
+  produces: array(producesType, { error: "must be a list such as [commitment]" }).min(1, "must name at least one type")
 }).strict();
 var HINT_SCHEMA = validator("hint", hintFrontmatter);
 var ROUTINE_SCHEMA = validator("routine", routineFrontmatter);
@@ -181,6 +182,7 @@ export {
   ROUTINE_KEYS,
   FORBIDDEN_HINT_KEYS,
   FORBIDDEN_ROUTINE_KEYS,
+  PRODUCES_TYPES,
   HINT_SCHEMA,
   ROUTINE_SCHEMA,
   parseFrontmatter,

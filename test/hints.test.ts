@@ -10,6 +10,7 @@ import {
   HINT_MAX,
   HINT_SCHEMA,
   hintProblems,
+  PRODUCES_TYPES,
   parseFrontmatter,
   ROUTINE_BODY_MAX,
   ROUTINE_SCHEMA,
@@ -21,7 +22,7 @@ const OURS = ["granola.meetings", "granola.notes"]
 const HINT = `---
 source: granola.meetings
 kinds: [meeting]
-produces: [commitment, person.attribute]
+produces: [commitment, decision]
 ---
 Owners are listed under "Action items" as "<name>: <task> (<date>)". "We agreed" lines in the Summary are decisions.`
 
@@ -52,7 +53,7 @@ describe("a hint file (#45 §4)", () => {
   test("reads its frontmatter and keeps the body as it is", () => {
     const parsed = parseFrontmatter(HINT)
     assert.ok(parsed.ok)
-    assert.deepEqual(parsed.value.frontmatter, { source: "granola.meetings", kinds: ["meeting"], produces: ["commitment", "person.attribute"] })
+    assert.deepEqual(parsed.value.frontmatter, { source: "granola.meetings", kinds: ["meeting"], produces: ["commitment", "decision"] })
     assert.ok(parsed.value.body.startsWith("Owners are listed"))
     expect(hint(HINT)).toEqual([])
   })
@@ -75,15 +76,17 @@ describe("a hint file (#45 §4)", () => {
     expect(hint(HINT.replace("kinds: [meeting]", "kinds: []"))).toEqual(["kinds: must name at least one kind"])
   })
 
-  test("produces core fact types only: v0.3 has no plugin-defined type", () => {
-    expect(hint(HINT.replace("produces: [commitment, person.attribute]", "produces: [meeting.attended]"))).toEqual([])
-    // §4's example names "decision", which is not a v0.3 core type (see the guide for plugin authors).
-    expect(hint(HINT.replace("produces: [commitment, person.attribute]", "produces: [decision]"))).toEqual([
-      "produces[0]: must be a core fact type (commitment, person.attribute, meeting.attended)",
-    ])
-    expect(hint(HINT.replace("produces: [commitment, person.attribute]", "produces: [x-granola/decision]"))).toEqual([
-      "produces[0]: must be a core fact type (commitment, person.attribute, meeting.attended)",
-    ])
+  test("produces names a type Memory's core extractor finds, and no other", () => {
+    // §4's own example, restored: a hint may name a decision as well as a commitment.
+    expect(PRODUCES_TYPES).toEqual(["commitment", "decision", "fact", "preference", "constraint", "person", "project"])
+    expect(hint(HINT)).toEqual([])
+    for (const type of PRODUCES_TYPES) expect(hint(`---\nsource: granola.meetings\nkinds: [meeting]\nproduces: [${type}]\n---\nOwners are listed.`), type).toEqual([])
+    // A structured fact type is not a knowledge type a hint helps Memory find, and a plugin's own name never is.
+    for (const type of ["person.attribute", "meeting.attended", "x.anything", "x-granola/decision", "timeline", "voice"]) {
+      expect(hint(`---\nsource: granola.meetings\nkinds: [meeting]\nproduces: [${type}]\n---\nOwners are listed.`), type).toEqual([
+        "produces[0]: must be a type Memory's core extractor finds (commitment, decision, fact, preference, constraint, person or project)",
+      ])
+    }
   })
 
   test("may not set a decision of Memory's: an unknown key or one of the forbidden ones fails", () => {
@@ -114,6 +117,7 @@ describe("a hint file (#45 §4)", () => {
     assert.equal(generated["type"], "object")
     assert.equal(generated["additionalProperties"], false)
     assert.deepEqual(generated["required"], ["source", "kinds"])
+    assert.deepEqual(generated["properties"]["produces"]["items"]["enum"], [...PRODUCES_TYPES])
     assert.equal(HINT_SCHEMA.check({ source: "granola.meetings", kinds: ["meeting"], apply: "auto" }).ok, false)
   })
 })
@@ -145,11 +149,12 @@ describe("a routine file (#45 §5)", () => {
     expect(routine(ROUTINE.replace("sources: [granola.meetings]", "sources: []"))).toEqual(["reads.sources: must name at least one source"])
   })
 
-  test("names a title and a routine id, and produces core types only", () => {
+  test("names a title and a routine id, and produces a type Memory finds", () => {
     assert.ok(routine(ROUTINE.replace("title: Read the action items of a meeting\n", "")).some((problem) => problem.startsWith("title:")))
     expect(routine(ROUTINE.replace("id: meeting-actions", "id: Meeting Actions"))).toEqual(["id: must be a lowercase word such as meeting-actions"])
-    expect(routine(ROUTINE.replace("produces: [commitment]", "produces: [decision]"))).toEqual([
-      "produces[0]: must be a core fact type (commitment, person.attribute, meeting.attended)",
+    expect(routine(ROUTINE.replace("produces: [commitment]", "produces: [decision, preference]"))).toEqual([])
+    expect(routine(ROUTINE.replace("produces: [commitment]", "produces: [person.attribute]"))).toEqual([
+      "produces[0]: must be a type Memory's core extractor finds (commitment, decision, fact, preference, constraint, person or project)",
     ])
   })
 
@@ -168,6 +173,7 @@ describe("a routine file (#45 §5)", () => {
     const generated = ROUTINE_SCHEMA.jsonSchema() as Record<string, any>
     assert.equal(generated["additionalProperties"], false)
     assert.deepEqual(generated["required"], ["id", "title", "reads", "produces"])
+    assert.deepEqual(generated["properties"]["produces"]["items"]["enum"], [...PRODUCES_TYPES])
     assert.equal(ROUTINE_SCHEMA.check({ id: "a", title: "b", reads: { sources: ["a.b"], kinds: ["meeting"] }, produces: ["commitment"], tier: 1 }).ok, false)
   })
 })

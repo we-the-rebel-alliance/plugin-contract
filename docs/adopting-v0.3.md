@@ -106,7 +106,9 @@ produces: [commitment]
 Owners are listed under "Action items" as "<name>: <task> (<date>)".
 ```
 
-The frontmatter has `source` (one of your own source ids), `kinds` (at least one) and, optionally, `produces` (core fact types). The body is the guidance, and a hint is quoted inside Memory's prompt as data: it never decides how its text is used, whose word it states, where it lands, or what it costs. So `apply`, `stated_by`, `space`, `budget` and `priority` make the file invalid, as any other unknown key does.
+The frontmatter has `source` (one of your own source ids), `kinds` (at least one) and, optionally, `produces`. `produces` names a knowledge type Memory's core extractor finds — `commitment`, `decision`, `fact`, `preference`, `constraint`, `person` or `project` — and not a structured fact type: `person.attribute` and `meeting.attended` are values your code derives in `facts[]`, and a hint only helps Memory find knowledge. Memory ignores a type the person has not consented to, so naming one is safe before it is on.
+
+The body is the guidance, and a hint is quoted inside Memory's prompt as data: it never decides how its text is used, whose word it states, where it lands, or what it costs. So `apply`, `stated_by`, `space`, `budget` and `priority` make the file invalid, as any other unknown key does.
 
 Tell the kit how to read your files, and it checks each one:
 
@@ -130,7 +132,7 @@ produces: [commitment]
 Read the section headed "Action items" and answer one commitment for each owner and task.
 ```
 
-`id`, `title`, `reads: { sources, kinds }` (your own sources only) and `produces` are required, and the body holds at most 4,000 characters of instructions. A tier, a schedule, a budget, a priority, an apply mode, a `stated_by` or a namespace makes the file invalid: the namespace is the installed package's, and the rest are Memory's decisions. When routines do run, each runs alone on its own source and is propose-only.
+`id`, `title`, `reads: { sources, kinds }` (your own sources only) and `produces` (the same seven knowledge types as a hint) are required, and the body holds at most 4,000 characters of instructions. A tier, a schedule, a budget, a priority, an apply mode, a `stated_by` or a namespace makes the file invalid: the namespace is the installed package's, and the rest are Memory's decisions. When routines do run, each runs alone on its own source and is propose-only.
 
 ## What Memory guarantees in return
 
