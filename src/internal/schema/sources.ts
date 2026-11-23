@@ -12,7 +12,7 @@
 import * as z from "zod"
 import { FACT_TYPES, isEventKind } from "../events.ts"
 import { isToolsRpcId } from "../../tools-rpc.ts"
-import { ACT_EFFECTS, MAX_BYTES_DEFAULT, MAX_BYTES_LIMIT } from "./types.ts"
+import { ACT_EFFECTS, MAX_BYTES_DEFAULT, MAX_BYTES_LIMIT, SERVICE_ID_MAX, SERVICE_LABEL_MAX } from "./types.ts"
 
 /** A source id: at least two dotted lowercase segments. */
 const SOURCE_ID = /^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$/
@@ -234,6 +234,20 @@ const urlHosts = z
   )
   .describe("The hosts an event's url may point at, for display. A consumer renders a url only when its host matches.")
 
+const service = z
+  .object({
+    id: z
+      .string()
+      .min(1)
+      .max(SERVICE_ID_MAX)
+      .describe("The service's id. Sources with the same id belong to one outside system that a person turns on or off as a unit."),
+    label: z.string().min(1).max(SERVICE_LABEL_MAX).describe("What a person sees, such as Gmail. Every source with the same service id has the same label."),
+  })
+  .strict()
+  .describe(
+    "The outside system this source belongs to (#44 item 1), such as Gmail or Calendar. Absent: the plugin is one service, named after the plugin. It is part of the descriptor, so moving a source to another service changes the hash.",
+  )
+
 const common = {
   id: z.string().max(64).regex(SOURCE_ID, { error: "must be a dotted source id such as gws.gmail" }),
   tool: z.string().max(64).regex(TOOL_NAME, { error: "must be a tool name" }),
@@ -252,6 +266,7 @@ const common = {
     .describe("The most bytes one result may take: default 65536 (64 KB), at most 1048576 (1 MB)."),
   retentionDays: z.int().min(1).optional().describe("How many days an events consumer keeps what it read."),
   urlHosts: urlHosts.optional(),
+  service: service.optional(),
 }
 
 const events = z
@@ -407,6 +422,20 @@ export const sourcesSchema = z
   })
   .strict()
   .superRefine((value, ctx) => {
+    // One label per service id (#44 item 1): a person turns a service on or off by the one name they see.
+    const labels = new Map<string, string>()
+    for (const [index, item] of value.items.entries()) {
+      if (item.service === undefined) continue
+      const first = labels.get(item.service.id)
+      if (first === undefined) labels.set(item.service.id, item.service.label)
+      else if (first !== item.service.label) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["items", index, "service", "label"],
+          message: `is "${item.service.label}", and another source of the service "${item.service.id}" says "${first}": every source of one service has the same label`,
+        })
+      }
+    }
     const seen = new Set<string>()
     for (const item of value.items) {
       seen.add(item.id)

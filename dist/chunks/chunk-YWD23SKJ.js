@@ -28,6 +28,8 @@ import {
 // src/internal/schema/types.ts
 var MAX_BYTES_DEFAULT = 65536;
 var MAX_BYTES_LIMIT = 1048576;
+var SERVICE_ID_MAX = 128;
+var SERVICE_LABEL_MAX = 64;
 var ACT_EFFECTS = ["local", "notify", "spend", "irreversible"];
 
 // src/internal/schema/sources.ts
@@ -137,6 +139,12 @@ var cadence = object({ providerMinMinutes: int().min(1).max(10080).optional() })
 var urlHosts = array(
   string().max(253).regex(HOST, { error: "must be a host such as slack.com, or *.slack.com" })
 ).describe("The hosts an event's url may point at, for display. A consumer renders a url only when its host matches.");
+var service = object({
+  id: string().min(1).max(SERVICE_ID_MAX).describe("The service's id. Sources with the same id belong to one outside system that a person turns on or off as a unit."),
+  label: string().min(1).max(SERVICE_LABEL_MAX).describe("What a person sees, such as Gmail. Every source with the same service id has the same label.")
+}).strict().describe(
+  "The outside system this source belongs to (#44 item 1), such as Gmail or Calendar. Absent: the plugin is one service, named after the plugin. It is part of the descriptor, so moving a source to another service changes the hash."
+);
 var common = {
   id: string().max(64).regex(SOURCE_ID, { error: "must be a dotted source id such as gws.gmail" }),
   tool: string().max(64).regex(TOOL_NAME, { error: "must be a tool name" }),
@@ -148,7 +156,8 @@ var common = {
   cadence: cadence.optional(),
   maxBytes: int().min(1).max(MAX_BYTES_LIMIT).optional().meta({ default: MAX_BYTES_DEFAULT }).describe("The most bytes one result may take: default 65536 (64 KB), at most 1048576 (1 MB)."),
   retentionDays: int().min(1).optional().describe("How many days an events consumer keeps what it read."),
-  urlHosts: urlHosts.optional()
+  urlHosts: urlHosts.optional(),
+  service: service.optional()
 };
 var events = object({
   ...common,
@@ -228,6 +237,19 @@ var sourcesSchema = object({
   items: array(source).min(1).describe("The plugin's sources. A source id is unique across the declaration."),
   acts: array(act).min(1, "must name at least one act, or be left out").optional().describe("The plugin's acts, beside its sources in the same descriptor. Absent when the plugin declares no write. Additive: an older consumer refuses the key.")
 }).strict().superRefine((value, ctx) => {
+  const labels = /* @__PURE__ */ new Map();
+  for (const [index, item] of value.items.entries()) {
+    if (item.service === void 0) continue;
+    const first = labels.get(item.service.id);
+    if (first === void 0) labels.set(item.service.id, item.service.label);
+    else if (first !== item.service.label) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["items", index, "service", "label"],
+        message: `is "${item.service.label}", and another source of the service "${item.service.id}" says "${first}": every source of one service has the same label`
+      });
+    }
+  }
   const seen = /* @__PURE__ */ new Set();
   for (const item of value.items) {
     seen.add(item.id);
@@ -282,6 +304,8 @@ var SOURCES_SCHEMA = validator("sources", sourcesSchema);
 export {
   MAX_BYTES_DEFAULT,
   MAX_BYTES_LIMIT,
+  SERVICE_ID_MAX,
+  SERVICE_LABEL_MAX,
   ACT_EFFECTS,
   FACT_SCHEMAS,
   factSchema,

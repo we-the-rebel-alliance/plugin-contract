@@ -225,6 +225,19 @@ describe("the declaration rules a JSON Schema cannot carry", () => {
     )
   })
 
+  test("a service's shape and one label per service id are checked with the declaration (#44 item 1)", () => {
+    const workspace = { id: "slack.workspace", label: "Slack" }
+    assert.deepEqual(problems(slackItem({ service: workspace })), [])
+    assert.ok(problems(slackItem({ service: { id: "", label: "Slack" } })).some((problem) => /service\.id/.test(problem)))
+    assert.ok(problems(slackItem({ service: { id: "slack.workspace", label: "S".repeat(65) } })).some((problem) => /service\.label/.test(problem)))
+    const mixed = declarationProblems(
+      { contractVersion: 1, items: [slackItem({ service: workspace }), slackItem({ id: "slack.mentions", details: undefined, service: { id: "slack.workspace", label: "Slack (work)" } })] },
+      { tools: TOOLS },
+    )
+    assert.ok(mixed.some((problem) => /service\.label/.test(problem) && /"slack\.workspace"/.test(problem)), mixed.join("; "))
+    assert.throws(() => assertDeclaration(declarationOf(slackItem({ service: { id: "slack.workspace" } })), { tools: TOOLS }), /^Error: SCHEMA_VIOLATION: [^]*items\[0\]\.service\.label/)
+  })
+
   test("assertDeclaration throws one error with a code and a next step", () => {
     assert.doesNotThrow(() => assertDeclaration(declarationOf(slackItem()), { tools: TOOLS }))
     assert.throws(() => assertDeclaration(declarationOf(slackItem({ tool: "slack_send_message" })), { tools: TOOLS }), /^Error: SCHEMA_VIOLATION: .*Next step: /)
@@ -318,6 +331,15 @@ describe("sourceConformance", () => {
       report.checks.filter((check) => !check.ran).map((check) => check.name),
       ["hints", "routines", "removals-are-final", "actor-kind", "one-author", "facts", "commitment-key", "parts-stable", "billed-cost", "output-schema", "rpc-id"],
     )
+  })
+
+  test("the declaration check reads a source's service (#44 item 1)", async () => {
+    const declared = await run(full(), { source: sourceOf(slackItem({ service: { id: "slack.workspace", label: "Slack" } })) })
+    assert.deepEqual(declared.problems, [])
+    const malformed = await run(full(), { source: { ...sourceOf(slackItem()), service: { id: "slack.workspace", label: "" } } as SourceItem })
+    const declaration = malformed.checks.find((check) => check.name === "declaration")
+    assert.ok(declaration?.problems.some((problem) => /service\.label/.test(problem)), JSON.stringify(declaration))
+    assert.equal(malformed.ok, false)
   })
 
   test("a report with a check that did not run is incomplete and not ok", async () => {

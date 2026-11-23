@@ -2,6 +2,18 @@
 
 Releases are tagged GitHub Releases, not npm: pin `github:we-the-rebel-alliance/source-contract#v<version>`. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/) as it applies before 1.0: a minor version may carry what an older consumer refuses. Every change names its pull request.
 
+## [Unreleased]
+
+### Upgrading
+
+- **Consumers re-vendor first.** A consumer on 0.3.0 refuses a descriptor whose source carries `service`, because its schema is strict (`Unrecognized key: "service"`). Pin the release that carries it before any plugin declares one.
+- **Plugins declare `service` only after their consumers are on that release.** A descriptor without `service` validates and hashes exactly as on 0.3.0, so nothing changes until a plugin adds it, and a grant stored against an unchanged descriptor stays valid.
+- **TypeScript only: `SourceCommon` gains an optional `service`.** Code that builds a source is unchanged.
+
+### Added
+
+- An optional `service` on each source ([#44](https://github.com/we-the-rebel-alliance/source-contract/issues/44) item 1): `{ id, label }`, the outside system the source belongs to. Sources with the same `service.id` are one service that a person turns on or off as a unit, and `label` is what they see. `id` is at most 128 characters and `label` at most 64, and every source with the same `service.id` has the same `label` (`checkSources`, `declarationProblems`). Absent, the plugin is one service, named after the plugin. It is hashed with the rest of the descriptor. `Service`, `SERVICE_ID_MAX` and `SERVICE_LABEL_MAX` from `schema`, and `dist/schemas/sources.json` carries it.
+
 ## [0.3.0] - 2026-11-18
 
 Everything since v0.2.0: the v0.3 proposal ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45)) in [#46](https://github.com/we-the-rebel-alliance/source-contract/pull/46), with its review's three fixes in the same pull request. What an actor is and which ids it has across sources, who an item was for and where it sits, the facts a source already holds in code, and the hint and routine file formats. `contractVersion` stays 1, no error code, method or cursor format changes, and every v0.2 page and descriptor stays valid.

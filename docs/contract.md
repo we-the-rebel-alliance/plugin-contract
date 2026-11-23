@@ -128,14 +128,16 @@ One top-level `sources` key in the plugin's `package.json`, read from the **inst
       "details": [{ "id": "gws.gmail.message", "tool": "read", "from": ["external_id"] }],
       "permission": { "events": "gws.events_list",
         "operations": ["gmail.users.history.list", "gmail.users.messages.list", "gmail.users.messages.get"] },
-      "private": true, "cost": { "class": "free" }, "maxBytes": 262144, "retentionDays": 30
+      "private": true, "cost": { "class": "free" }, "maxBytes": 262144, "retentionDays": 30,
+      "service": { "id": "gws.gmail", "label": "Gmail" }
     },
     {
       "id": "gws.calendar.today", "kind": "snapshot", "tool": "calendar_today",
       "output": "agenda", "params": { "window": { "relative": true } },
       "accounts": { "named": true },
       "permission": { "tool": "gws.calendar_today", "operations": ["calendar.events.list"] },
-      "private": true, "cost": { "class": "free" }, "maxAgeSec": 900, "maxBytes": 65536
+      "private": true, "cost": { "class": "free" }, "maxAgeSec": 900, "maxBytes": 65536,
+      "service": { "id": "gws.calendar", "label": "Calendar" }
     }
   ]
 }
@@ -155,6 +157,7 @@ The rules:
 - `maxBytes` defaults to 64 KB and may go up to 1 MB;
 - a snapshot's `output` names a registered schema;
 - optional `urlHosts`: the hosts a source's `url` may point at, for display (Memory's rules);
+- optional `service`: `{ id, label }`, the outside system the source belongs to ([#44](https://github.com/we-the-rebel-alliance/source-contract/issues/44) item 1). Sources with the same `service.id` are one service, which a person turns on or off as a unit, and `label` is what the person sees, such as Gmail or Calendar. `id` is at most 128 characters and `label` at most 64, neither empty, and every source with the same `service.id` has the same `label`. Absent, the plugin is one service, named after the plugin. It is part of the descriptor, so it is hashed: moving a source to another service, or renaming one, asks the person again. A descriptor without it hashes exactly as before. The key is additive to the contract, but Memory's descriptor schema is strict and `readInstalledDescriptor` runs it first, so a consumer re-vendors before a plugin declares one, as for `removals[]`;
 - optional `scope.suggest`: `{ tool, operations }`, a read-only tool that lists choices at consent, run only at bind in its own session, and never stored;
 - optional `facts` (an events source only): the fact types its events carry, each a core type and each declared once ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §3);
 - optional `hints` and `routines`: the paths of the files the package ships for this source, each a relative lowercase `.md` path inside the package and each declared once ([#45](https://github.com/we-the-rebel-alliance/source-contract/issues/45) §4, §5). The keys are additive to the contract, but Memory's descriptor schema is strict and `readInstalledDescriptor` runs it first, so a consumer re-vendors before a plugin declares one, as for `removals[]`.

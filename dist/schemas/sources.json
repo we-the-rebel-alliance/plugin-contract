@@ -343,6 +343,29 @@
                 },
                 "description": "The hosts an event's url may point at, for display. A consumer renders a url only when its host matches."
               },
+              "service": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "description": "The service's id. Sources with the same id belong to one outside system that a person turns on or off as a unit."
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "description": "What a person sees, such as Gmail. Every source with the same service id has the same label."
+                  }
+                },
+                "required": [
+                  "id",
+                  "label"
+                ],
+                "additionalProperties": false,
+                "description": "The outside system this source belongs to (#44 item 1), such as Gmail or Calendar. Absent: the plugin is one service, named after the plugin. It is part of the descriptor, so moving a source to another service changes the hash."
+              },
               "kind": {
                 "type": "string",
                 "const": "events"
@@ -850,6 +873,29 @@
                   "pattern": "^(?:\\*\\.)?[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$"
                 },
                 "description": "The hosts an event's url may point at, for display. A consumer renders a url only when its host matches."
+              },
+              "service": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "description": "The service's id. Sources with the same id belong to one outside system that a person turns on or off as a unit."
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "description": "What a person sees, such as Gmail. Every source with the same service id has the same label."
+                  }
+                },
+                "required": [
+                  "id",
+                  "label"
+                ],
+                "additionalProperties": false,
+                "description": "The outside system this source belongs to (#44 item 1), such as Gmail or Calendar. Absent: the plugin is one service, named after the plugin. It is part of the descriptor, so moving a source to another service changes the hash."
               },
               "kind": {
                 "type": "string",

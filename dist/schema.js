@@ -4,9 +4,11 @@ import {
   FACT_SCHEMAS,
   MAX_BYTES_DEFAULT,
   MAX_BYTES_LIMIT,
+  SERVICE_ID_MAX,
+  SERVICE_LABEL_MAX,
   SOURCES_SCHEMA,
   factSchema
-} from "./chunks/chunk-BVHSZP7F.js";
+} from "./chunks/chunk-YWD23SKJ.js";
 import "./chunks/chunk-WOH6G62Y.js";
 import "./chunks/chunk-DEXO7HMA.js";
 import "./chunks/chunk-6ZSJSJMV.js";
@@ -18,6 +20,8 @@ export {
   FACT_SCHEMAS,
   MAX_BYTES_DEFAULT,
   MAX_BYTES_LIMIT,
+  SERVICE_ID_MAX,
+  SERVICE_LABEL_MAX,
   SOURCES_SCHEMA,
   factSchema
 };

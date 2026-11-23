@@ -81,6 +81,22 @@ describe("the hash", () => {
     assert.notEqual(descriptorHash(withItem((item) => item.permission.operations.push("gmail.users.threads.get"))), descriptorHash(sources))
     assert.equal(canonicalJson({ b: 1, a: [2, { d: 3, c: 4 }] }), '{"a":[2,{"c":4,"d":3}],"b":1}')
   })
+
+  test("a descriptor that declares no service hashes exactly as before #44", () => {
+    // Pinned on main before service existed: a consumer's stored grants keep matching.
+    assert.equal(descriptorHash(exampleSources("gws")), "sha256:a7956cbe7dcfb9c41b8afb8ecbd188737d5e7441a4a9d80133c30214a7e9a45b")
+    assert.equal(descriptorHash(exampleSources("slack")), "sha256:b5d905adeffca4a97737886713848889bcbf5ea28e3572464e787ca8a378e8d0")
+  })
+
+  test("changes when a source gains, moves or renames its service", () => {
+    const bare = descriptorHash(exampleSources("gws"))
+    const gmail = withItem((item) => (item.service = { id: "gws.gmail", label: "Gmail" }))
+    const moved = withItem((item) => (item.service = { id: "gws.mail", label: "Gmail" }))
+    const renamed = withItem((item) => (item.service = { id: "gws.gmail", label: "Google Mail" }))
+    const hashes = [bare, descriptorHash(gmail), descriptorHash(moved), descriptorHash(renamed)]
+    assert.equal(new Set(hashes).size, hashes.length)
+    assert.deepEqual(problemsOf(gmail), [])
+  })
 })
 
 describe("the frame", () => {
@@ -123,6 +139,13 @@ describe("the frame", () => {
     assert.match(problemsOf({ ...exampleSources("gws"), contractVersion: 2 }).join("\n"), /sources\.contractVersion/)
     assert.match(problemsOf(withItem((item) => (item.id = "Gmail"))).join("\n"), /items\[0\]\.id: must be a dotted source id/)
     assert.deepEqual(problemsOf(undefined), ["sources: Invalid input: expected object, received undefined"])
+  })
+
+  test("refuses two sources that name one service with two labels", () => {
+    const mixed = exampleSources("gws")
+    mixed.items[0].service = { id: "gws.google", label: "Gmail" }
+    mixed.items[1].service = { id: "gws.google", label: "Calendar" }
+    assert.match(problemsOf(mixed).join("\n"), /sources\.items\[1\]\.service\.label: is "Calendar", .*"gws\.google" says "Gmail"/)
   })
 
   test("runs Memory's schema first, which refuses a key it does not define", () => {

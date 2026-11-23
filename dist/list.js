@@ -1,8 +1,8 @@
 // @we-the-rebel-alliance/source-contract 0.3.0. Built by scripts/build.mjs; do not edit.
 import {
   readInstalledDescriptor
-} from "./chunks/chunk-YX5JYQVI.js";
-import "./chunks/chunk-BVHSZP7F.js";
+} from "./chunks/chunk-UXBQEPWK.js";
+import "./chunks/chunk-YWD23SKJ.js";
 import "./chunks/chunk-GDBKZBG7.js";
 import "./chunks/chunk-WOH6G62Y.js";
 import "./chunks/chunk-DEXO7HMA.js";

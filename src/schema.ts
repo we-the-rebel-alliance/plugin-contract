@@ -15,7 +15,7 @@ import type { Validator } from "./internal/checked.ts"
 import { sourcesSchema } from "./internal/schema/sources.ts"
 import type { Sources } from "./internal/schema/types.ts"
 
-export { MAX_BYTES_DEFAULT, MAX_BYTES_LIMIT } from "./internal/schema/types.ts"
+export { MAX_BYTES_DEFAULT, MAX_BYTES_LIMIT, SERVICE_ID_MAX, SERVICE_LABEL_MAX } from "./internal/schema/types.ts"
 export { FACT_SCHEMAS, factSchema } from "./internal/schema/facts.ts"
 export { ACT_EFFECTS } from "./internal/schema/types.ts"
 export type {
@@ -32,6 +32,7 @@ export type {
   PermissionTool,
   Price,
   Scope,
+  Service,
   SourceCommon,
   SourceEvents,
   SourceItem,

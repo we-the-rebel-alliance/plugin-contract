@@ -242,6 +242,55 @@ describe("a source that declares facts, hints and routines (#45)", () => {
   })
 })
 
+describe("a source that declares its service (#44 item 1)", () => {
+  const gmail = { id: "gws.gmail", label: "Gmail" }
+  const service = (value: unknown): readonly string[] => problemsOf(declaration(eventItem({ service: value })))
+
+  test("a service is an id and a label, on an events source and a snapshot alike", () => {
+    assert.deepEqual(service(gmail), [])
+    assert.deepEqual(problemsOf(declaration(snapshotItem({ service: { id: "gws.calendar", label: "Calendar" } }))), [])
+    assert.deepEqual(service({ id: "a".repeat(128), label: "b".repeat(64) }), [])
+  })
+
+  test("an empty or over-long id or label is refused, and so is a missing one or an unknown key", () => {
+    assert.ok(service({ id: "", label: "Gmail" }).some((problem) => /service\.id/.test(problem)))
+    assert.ok(service({ id: "a".repeat(129), label: "Gmail" }).some((problem) => /service\.id/.test(problem)))
+    assert.ok(service({ id: "gws.gmail", label: "" }).some((problem) => /service\.label/.test(problem)))
+    assert.ok(service({ id: "gws.gmail", label: "b".repeat(65) }).some((problem) => /service\.label/.test(problem)))
+    assert.ok(service({ id: "gws.gmail" }).some((problem) => /service\.label/.test(problem)))
+    assert.ok(service({ label: "Gmail" }).some((problem) => /service\.id/.test(problem)))
+    assert.ok(service({ ...gmail, icon: "mail" }).some((problem) => /icon/.test(problem)))
+    assert.ok(service("gws.gmail").length > 0)
+  })
+
+  test("every source with the same service id has the same label", () => {
+    const unread = eventItem({ id: "gws.gmail.unread", service: gmail })
+    assert.deepEqual(problemsOf(declaration(eventItem({ service: gmail }), unread)), [])
+    const mixed = problemsOf(declaration(eventItem({ service: gmail }), eventItem({ id: "gws.gmail.unread", service: { id: "gws.gmail", label: "Mail" } })))
+    assert.ok(mixed.some((problem) => /items\[1\]\.service\.label/.test(problem) && /"Gmail"/.test(problem) && /"Mail"/.test(problem)), mixed.join("; "))
+    // Two services may each carry their own label, and a source may declare none beside one that does.
+    assert.deepEqual(problemsOf(declaration(eventItem({ service: gmail }), snapshotItem({ service: { id: "gws.calendar", label: "Calendar" } }))), [])
+    assert.deepEqual(problemsOf(declaration(eventItem({ service: gmail }), snapshotItem())), [])
+  })
+
+  test("nothing else changes: an item without a service still validates", () => {
+    assert.deepEqual(problemsOf(declaration(eventItem(), snapshotItem())), [])
+  })
+
+  test("the generated JSON Schema carries the service on both kinds, with its limits", () => {
+    const generated = SOURCES_SCHEMA.jsonSchema() as Record<string, any>
+    const branches = generated["properties"]["items"]["items"]["oneOf"] as Record<string, any>[]
+    for (const branch of branches) {
+      const declared = branch["properties"]["service"]
+      assert.equal(declared["properties"]["id"]["maxLength"], 128)
+      assert.equal(declared["properties"]["label"]["maxLength"], 64)
+      assert.deepEqual(declared["required"], ["id", "label"])
+      assert.equal(declared["additionalProperties"], false)
+      assert.ok(!(branch["required"] as string[]).includes("service"))
+    }
+  })
+})
+
 describe("the v0.3 schemas (#45 §8)", () => {
   test("every new schema is published, by the name its file takes", () => {
     const names = SCHEMAS.map((schema) => schema.name)

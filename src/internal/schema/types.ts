@@ -8,6 +8,21 @@ import type { FactType } from "../events.ts"
 export const MAX_BYTES_DEFAULT = 65536
 export const MAX_BYTES_LIMIT = 1048576
 
+/** A source's `service` (#44 item 1): the most characters its id and its label may take. */
+export const SERVICE_ID_MAX = 128
+export const SERVICE_LABEL_MAX = 64
+
+/**
+ * The outside system a source belongs to (#44 item 1). Sources with the same `id` are one service, which a person turns
+ * on or off as a unit; `label` is what they see, and is the same on every source of that service.
+ */
+export interface Service {
+  /** At most 128 characters, such as `gws.gmail`. */
+  readonly id: string
+  /** At most 64 characters, such as `Gmail`. */
+  readonly label: string
+}
+
 /**
  * What an act does beyond the person's own machine. `local` does not. The others need a confirmation the host issued
  * before commit.
@@ -59,6 +74,8 @@ export interface SourceCommon {
   readonly retentionDays?: number | undefined
   /** The hosts an event's `url` may point at, for display. */
   readonly urlHosts?: readonly string[] | undefined
+  /** The outside system this source belongs to (#44 item 1). Absent: the plugin is one service, named after the plugin. */
+  readonly service?: Service | undefined
 }
 
 /** An events source: append-only items read with a cursor. */
