@@ -140,7 +140,6 @@ export async function runRecord(
   return report.ok && !hasError(redaction.findings) ? 0 : 1
 }
 
-
 function isDirectory(path: string): boolean {
   try {
     return statSync(path).isDirectory()

@@ -176,4 +176,3 @@ export async function runForbidden(context: CommandContext): Promise<number> {
   print(context, findings, findings.length === 0 ? "forbidden: ok" : "forbidden: patterns found")
   return hasError(findings) ? 1 : 0
 }
-

@@ -3,8 +3,7 @@
  *
  * A plugin is host-neutral: its code, manifest and docs name no app, and an app-only hint is an `x-<app>` key. The names
  * here are the app's own identifiers, not ordinary words: its name in any case, its repository prefix, and its
- * alternative names. A word such as "memory" or "artifacts" is ordinary English and is not an app name unless it is
- * written as the app's identifier.
+ * alternative names. An ordinary English word is not an app name unless it is written as the app's own identifier.
  *
  * A false positive at a real site can be allowed in `.plugin-kit/forbidden-allow`, with a reason:
  *
