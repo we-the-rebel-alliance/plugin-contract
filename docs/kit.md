@@ -9,6 +9,11 @@ The kit calls the conformance module for every conformance check (`runConformanc
 repository rather than a plugin's runtime: generated documentation, the forbidden patterns, fixture redaction, the
 release guards and the host harness.
 
+> **Pre-#59 state.** This head predates the #59 conformance rebase. `check` still calls `t0` and `t1` separately, `docs`
+> still uses this kit's renderer, `record` still reads `test/conformance/`, and the harness is still under
+> `src/kit/host/`. The #59 pass replaces those with the shared conformance functions, `fixtures/conformance.json` and
+> `src/internal/host/`; the follow-ups are listed in the pull request.
+
 ```sh
 npx plugin-kit <command> [options]
 ```
@@ -108,8 +113,8 @@ The scan reads text files outside `node_modules`, `dist` and the other generated
 | `FORBIDDEN.main-branch` | a GitHub `blob/main`, `tree/main`, `raw/main` or `raw.githubusercontent.com/…/main` link. Every repository in the org uses `master`. |
 | `FORBIDDEN.secret` | a credential the contract's own detector (`secretKinds`) recognises. |
 
-The app list is `src/kit/forbidden-apps.ts`, the kit's one denylist. It targets the app's own identifiers (its name in
-any case, `hey-jelly`, `toqan` and the repository prefixes), not ordinary words such as "memory" or "artifacts".
+The app list is `src/kit/forbidden-apps.ts`, the kit's one denylist. It targets the app's own identifiers and
+repository prefixes, not ordinary words that happen to be product names.
 
 A real site that must name an app is allowed in `.plugin-kit/forbidden-allow`, one `<path>:<pattern-id> <reason>` per
 line, such as `docs/quote.md:app-name This page documents the product itself.` A used allowance removes that finding and
@@ -154,7 +159,7 @@ The harness handles the six OpenCode 2.4 behaviours in plugin standard §8. Each
    that still offers only `experimental.schedule` is a `KIT_API_GONE` refusal that names
    `/api/experimental/automation`. The harness never calls the removed method.
 4. **MCP `server/discover` first.** `connectMcpServer(config, transport)` probes a server with no `protocol`; a 2xx is
-   the connection, a 401 ends the attempt with no `initialize`, and another failure falls back to `initialize`. An
+   the connection, a 401 or 403 ends the attempt with no `initialize`, and another failure falls back to `initialize`. An
    explicit `legacy` protocol initializes directly; an explicit `2026-07-28` does not fall back. The returned `sent`
    list is the proof of what went over the wire.
 5. **Nested Code Mode calls.** `createCodeMode(session)` gives `topLevel` and `nested` calls. Every nested call has its
