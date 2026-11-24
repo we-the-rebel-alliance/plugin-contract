@@ -50,6 +50,10 @@
       "types": "./dist/events.d.ts",
       "default": "./dist/events.js"
     },
+    "./grant": {
+      "types": "./dist/grant.d.ts",
+      "default": "./dist/grant.js"
+    },
     "./hints": {
       "types": "./dist/hints.d.ts",
       "default": "./dist/hints.js"
