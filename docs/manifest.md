@@ -136,6 +136,7 @@ One table covers every callable, so a consumer knows how risky a call is before 
 
 Rules:
 
+- `status` is required on every plugin; `probe` is required on every plugin that declares `accounts` (§11).
 - A `commits` target exists, declares `plans: true`, and is not the method itself. A method cannot both plan and commit.
 - At most one method has `pinned: true`. None by default. A pin is allowed only when session data shows most of a
   plugin's sessions call it, and its signature stays within about 1,000 tokens.
