@@ -1,0 +1,9 @@
+{
+  "name": "unicode and an emoji",
+  "input": {
+    "name": "Zoë",
+    "city": "東京",
+    "emoji": "🙂"
+  },
+  "digest": "sha256:15a5d66beb3bbe7fa97de6f4b2779aa0d9689f61bd176936688bc9cce7a78bf7"
+}

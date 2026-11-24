@@ -1,0 +1,32 @@
+{
+  "name": "wrong-aud",
+  "token": "eyJhbGciOiJFZDI1NTE5Iiwia2lkIjoiaG9zdF8yMDI2XzExIiwidHlwIjoicGx1Z2luLWNvbnRyYWN0LWFjdCtqd3QifQ.eyJhdWQiOiJAd2UtdGhlLXJlYmVsLWFsbGlhbmNlL290aGVyLXBsdWdpbiIsImNvbnN1bWVyIjoiY29uc3VtZXI6ZGVtbyIsImNhcGFiaWxpdHkiOiJkZW1vLm1haWwuc2VuZCIsImFjY291bnQiOiJ3b3JrIiwic2NvcGUiOnsibGFiZWwiOlsiSU5CT1giXX0sImFjdCI6ImRlbW8ubWFpbC5zZW5kIiwiZGlnZXN0Ijoic2hhMjU2OjBlZjU4NmFkN2EzN2Y1MGRhNWJlMGQxNjJiNWQwMWJkMTJlZGFhZDc5NWFmMTA5NzEyZmVmMWQ5MzYwZDM5NTgiLCJtYW5pZmVzdCI6InNoYTI1NjphYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwiaWF0IjoxNzk5OTk5OTk1LCJleHAiOjE4MDAwMDAwNTUsImp0aSI6ImZpeHR1cmVfd3JvbmdfYXVkXzEiLCJjZm0iOnRydWV9.nUUyRb0LHtSEe4bgGJj0F4Yma6BJh6rWJZrpQFuuPWDOZYOhub74uziTr-bNMl6eSLjP68Qv80O0l6dc0DwsCA",
+  "input": {
+    "to": "person@example.com",
+    "body": "hello"
+  },
+  "request": {
+    "act": "demo.mail.send",
+    "actions": {
+      "demo.mail.send": "required"
+    },
+    "audience": "@we-the-rebel-alliance/demo-plugin",
+    "consumer": "consumer:demo",
+    "capability": "demo.mail.send",
+    "account": "work",
+    "scope": {
+      "label": [
+        "INBOX"
+      ]
+    },
+    "manifest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "now": 1800000000
+  },
+  "store": {
+    "used": []
+  },
+  "expect": {
+    "ok": false,
+    "code": "GRANT_AUDIENCE_MISMATCH"
+  }
+}

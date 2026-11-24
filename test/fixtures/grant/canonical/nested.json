@@ -1,0 +1,15 @@
+{
+  "name": "nested objects, a boolean and null",
+  "input": {
+    "user": {
+      "name": "Ada",
+      "roles": [
+        "admin",
+        "editor"
+      ]
+    },
+    "active": true,
+    "last": null
+  },
+  "digest": "sha256:d3162298931098f7f22ec06a6c0bc42b9687c2497e9c21ebefd96801984a5666"
+}
