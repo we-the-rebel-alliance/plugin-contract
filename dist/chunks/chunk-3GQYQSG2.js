@@ -1347,11 +1347,11 @@ var _safeParseAsync = (_Err) => async (schema, value, _ctx) => {
 var COMPILE_INVALID = /* @__PURE__ */ Symbol.for("zod.compile.invalid");
 var COMPILE_FALLBACK = /* @__PURE__ */ Symbol.for("zod.compile.fallback");
 var validate = ((schema, value, _ctx) => {
-  const validator2 = schema._zod.bag.validator;
-  if (validator2 !== void 0) {
-    if (validator2(value) !== COMPILE_INVALID)
+  const validator = schema._zod.bag.validator;
+  if (validator !== void 0) {
+    if (validator(value) !== COMPILE_INVALID)
       return true;
-    if (validator2.definite === true && _ctx === void 0)
+    if (validator.definite === true && _ctx === void 0)
       return false;
   }
   return validateFallback(schema, value, _ctx);
@@ -9424,37 +9424,8 @@ function fromJSONSchema(schema, params) {
   return convertSchema(normalized, ctx);
 }
 
-// src/internal/validator.ts
-function pathText(path) {
-  if (path.length === 0) return "the value";
-  return path.map((part, index) => typeof part === "number" ? `[${part}]` : index === 0 ? String(part) : `.${String(part)}`).join("");
-}
-function problemsOf(error2) {
-  return error2.issues.map((issue2) => `${pathText(issue2.path)}: ${issue2.message}`);
-}
-function validator(name, schema) {
-  let generated;
-  const check2 = (value) => {
-    const result = schema.safeParse(value);
-    return result.success ? { ok: true, value: result.data } : { ok: false, problems: problemsOf(result.error) };
-  };
-  return {
-    name,
-    check: check2,
-    parse(value) {
-      const checked = check2(value);
-      if (checked.ok) return checked.value;
-      throw new Error(`${name}: the value breaks the schema:
-- ${checked.problems.join("\n- ")}`);
-    },
-    jsonSchema() {
-      generated ??= toJSONSchema(schema, { target: "draft-2020-12", unrepresentable: "any" });
-      return structuredClone(generated);
-    }
-  };
-}
-
 export {
+  toJSONSchema,
   string2 as string,
   number2 as number,
   int,
@@ -9464,6 +9435,7 @@ export {
   never,
   array,
   object,
+  strictObject,
   looseObject,
   union,
   discriminatedUnion,
@@ -9471,7 +9443,5 @@ export {
   _enum,
   literal,
   iso_exports,
-  fromJSONSchema,
-  problemsOf,
-  validator
+  fromJSONSchema
 };

@@ -1,14 +1,16 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
+  validator
+} from "./chunk-S3ZVQTGH.js";
+import {
   _enum,
   array,
   object,
-  string,
-  validator
-} from "./chunk-BQEBNVNU.js";
+  string
+} from "./chunk-3GQYQSG2.js";
 import {
   isEventKind
-} from "./chunk-BMJJJDZ6.js";
+} from "./chunk-OKHHHVM5.js";
 
 // src/hints.ts
 var HINT_MAX = 1500;

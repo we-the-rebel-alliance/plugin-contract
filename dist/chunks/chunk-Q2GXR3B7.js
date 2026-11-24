@@ -1,7 +1,10 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   isToolsRpcId
-} from "./chunk-T2QSLHBQ.js";
+} from "./chunk-2BC7PGVU.js";
+import {
+  validator
+} from "./chunk-S3ZVQTGH.js";
 import {
   _enum,
   array,
@@ -14,16 +17,15 @@ import {
   number,
   object,
   string,
-  union,
-  validator
-} from "./chunk-BQEBNVNU.js";
+  union
+} from "./chunk-3GQYQSG2.js";
 import {
   ATTENDANCE_RESPONSES,
   COMMITMENT_STATES,
   EVENT_LIMITS,
   FACT_TYPES,
   isEventKind
-} from "./chunk-BMJJJDZ6.js";
+} from "./chunk-OKHHHVM5.js";
 
 // src/internal/schema/types.ts
 var MAX_BYTES_DEFAULT = 65536;

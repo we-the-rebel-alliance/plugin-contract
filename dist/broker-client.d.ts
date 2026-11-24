@@ -1,11 +1,11 @@
 import { type ReadHost, type ReadOutcome, type ReadRequest } from "./read.js";
 /** One read, as a consumer asks a host's broker for it. */
 export interface BrokerRequest {
-    /** The installed package and version the consumer read its descriptor from. */
+    /** The installed package and version the consumer read its manifest from. */
     readonly package: string;
     readonly version: string;
-    /** The descriptor hash the consumer consented under; a broker whose own copy differs refuses with PERMISSION_DENIED. */
-    readonly descriptorHash: string;
+    /** The manifest hash the consumer consented under; a broker whose own copy differs refuses with PERMISSION_DENIED. */
+    readonly manifestHash: string;
     /** Who reads, such as `notes`: for the broker's grant check and its audit line. */
     readonly consumer: string;
     readonly source: string;
@@ -15,8 +15,6 @@ export interface BrokerRequest {
     readonly cursor?: string;
     readonly since?: string;
     readonly limit?: number;
-    /** A snapshot read. Params may be relative or `$me`; the broker resolves them. */
-    readonly params?: Readonly<Record<string, unknown>>;
     /** A broker may apply it to send less; the client applies it again. */
     readonly pick?: readonly string[];
 }
@@ -50,7 +48,7 @@ export type ReaderOutcome = ReadOutcome & {
 export interface SourceReader {
     read(request: ReadRequest): Promise<ReaderOutcome>;
 }
-/** The request a broker receives for a consumer's read: references to the installed package, never its descriptor or the grant. */
+/** The request a broker receives for a consumer's read: references to the installed package, never its manifest or the grant. */
 export declare function brokerRequest(request: ReadRequest): BrokerRequest;
 /** True when `answer` has a broker answer's shape. */
 export declare function isBrokerAnswer(answer: unknown): answer is BrokerAnswer;

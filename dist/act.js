@@ -2,28 +2,27 @@
 import {
   failure,
   failureFromError
-} from "./chunks/chunk-P7PJT66U.js";
-import {
-  DEFAULT_MAX_BYTES,
-  findAct
-} from "./chunks/chunk-TYSWMQDX.js";
-import "./chunks/chunk-AFCXCE4V.js";
-import "./chunks/chunk-EMGW7BT2.js";
-import "./chunks/chunk-T2QSLHBQ.js";
+} from "./chunks/chunk-5X5476BS.js";
 import {
   actSessionRules
-} from "./chunks/chunk-2V4VLI45.js";
-import "./chunks/chunk-65FTIXYZ.js";
+} from "./chunks/chunk-IOB3DPAI.js";
 import {
-  fromJSONSchema,
+  findAction
+} from "./chunks/chunk-SC2WF2IE.js";
+import "./chunks/chunk-TLI6ZXDE.js";
+import {
   problemsOf
-} from "./chunks/chunk-BQEBNVNU.js";
-import "./chunks/chunk-BMJJJDZ6.js";
+} from "./chunks/chunk-S3ZVQTGH.js";
+import {
+  fromJSONSchema
+} from "./chunks/chunk-3GQYQSG2.js";
+import {
+  MAX_BYTES_DEFAULT
+} from "./chunks/chunk-OKHHHVM5.js";
 import "./chunks/chunk-7KJXMIQH.js";
 import "./chunks/chunk-WLRWVIVP.js";
 
 // src/act.ts
-var rpcOf = (installed) => installed.sources.rpc === void 0 ? {} : { rpc: installed.sources.rpc };
 var plain = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var refused = (code, what, next) => ({ ok: false, failure: failure(code, what, next) });
 var bytes = (value) => new TextEncoder().encode(JSON.stringify(value)).length;
@@ -68,7 +67,7 @@ function checkAnswer(act2, account, answer) {
   } catch {
     return failure("SCHEMA_VIOLATION", `${act2.id} answered a value that is not JSON`, "Report it to the plugin's maintainers.");
   }
-  const limit = DEFAULT_MAX_BYTES;
+  const limit = MAX_BYTES_DEFAULT;
   if (size > limit) return failure("TOO_LARGE", `${act2.id} answered ${size} bytes, over its ${limit}`, "Ask the plugin to answer a smaller preview.");
   if (!plain(answer)) return failure("SCHEMA_VIOLATION", `${act2.id} answered something that is not an object`, "Report it to the plugin's maintainers.");
   if (answer["trust"] !== "untrusted") return failure("SCHEMA_VIOLATION", `${act2.id}'s answer is not marked trust: "untrusted"`, "Report it to the plugin's maintainers.");
@@ -134,16 +133,16 @@ async function confirmationProblem(host, act2, request) {
 }
 async function act(host, request) {
   const { installed, grant } = request;
-  const declared = findAct(installed.sources, request.act);
-  if (!declared) return refused("UNAVAILABLE", `${installed.package} ${installed.version} declares no act ${request.act}`, "Check the act id against the installed plugin's sources.");
+  const declared = findAction(installed.manifest, request.act);
+  if (!declared) return refused("UNAVAILABLE", `${installed.package} ${installed.version} declares no act ${request.act}`, "Check the act id against the installed plugin's manifest.");
   if (request.phase !== "preview" && request.phase !== "commit") {
     return refused("SCHEMA_VIOLATION", "an act is previewed or committed", "Pass phase preview or commit.");
   }
   if (grant.disabled) return refused("SOURCE_DISABLED", `${declared.id} is turned off for ${grant.consumer}`, "Turn the act on again to preview or commit it.");
   if (grant.consumer !== request.consumer) return refused("PERMISSION_DENIED", `the grant is ${grant.consumer}'s, not ${request.consumer}'s`, "Ask the person to grant this consumer the act.");
   if (grant.act !== declared.id) return refused("PERMISSION_DENIED", `the grant is for ${grant.act}, not ${declared.id}`, "Use the grant for this act.");
-  if (grant.descriptorHash !== installed.hash) {
-    return refused("PERMISSION_DENIED", `${declared.id}'s declaration changed since the person consented`, "Ask the person to review the act and consent again.");
+  if (grant.manifestHash !== installed.hash) {
+    return refused("PERMISSION_DENIED", `${declared.id}'s manifest changed since the person consented`, "Ask the person to review the action and consent again.");
   }
   const confirmed = await confirmationProblem(host, declared, request);
   if (confirmed) return confirmed;
@@ -154,10 +153,9 @@ async function act(host, request) {
   if (inputProblems.length > 0) return refused("SCHEMA_VIOLATION", inputProblems.join("; "), "Pass only the input the act's schema describes.");
   const called = await fencedCall(
     host,
-    actSessionRules(declared, grant, request.phase),
+    actSessionRules(installed.manifest, declared, grant, request.phase),
     {
       package: installed.package,
-      ...rpcOf(installed),
       method: request.phase === "preview" ? declared.preview : declared.commit,
       input: { ...request.input ?? {}, account: grant.account },
       ...request.signal ? { signal: request.signal } : {}

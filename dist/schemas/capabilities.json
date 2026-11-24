@@ -1,0 +1,861 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "number",
+      "const": 1
+    },
+    "plugin": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9]{2,31}$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "vendor": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{0,31}$"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "domain": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$"
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "domain"
+          ],
+          "additionalProperties": false,
+          "description": "Who makes the provider the plugin talks to."
+        },
+        "icons": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "src": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "description": "A path inside the installed package, such as assets/icon.svg."
+              },
+              "type": {
+                "type": "string",
+                "pattern": "^image\\/[a-z0-9][a-z0-9.+-]*$"
+              }
+            },
+            "required": [
+              "src",
+              "type"
+            ],
+            "additionalProperties": false,
+            "description": "One icon the package ships."
+          },
+          "description": "At least one icon; a consumer picks the size it needs."
+        },
+        "host": {
+          "type": "object",
+          "properties": {
+            "opencode": {
+              "type": "string",
+              "const": ">=2.4.1 <2.5.0"
+            },
+            "tested": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40
+              },
+              "description": "The OpenCode releases CI ran. It includes 2.4.1."
+            }
+          },
+          "required": [
+            "opencode",
+            "tested"
+          ],
+          "additionalProperties": false,
+          "description": "The OpenCode range, and the releases the plugin was tested on."
+        }
+      },
+      "required": [
+        "name",
+        "title",
+        "summary",
+        "vendor",
+        "icons",
+        "host"
+      ],
+      "additionalProperties": false,
+      "description": "The plugin's identity, title, summary, vendor, icons and OpenCode range."
+    },
+    "accounts": {
+      "type": "object",
+      "properties": {
+        "via": {
+          "type": "string",
+          "enum": [
+            "integration",
+            "mcp",
+            "local"
+          ]
+        },
+        "profile": {
+          "type": "object",
+          "properties": {
+            "$ref": {
+              "type": "string",
+              "const": "#/options/properties/accounts/additionalProperties"
+            }
+          },
+          "required": [
+            "$ref"
+          ],
+          "additionalProperties": false,
+          "description": "A JSON-Schema $ref to the profile schema in options."
+        },
+        "owner": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9+.-]{0,31}$"
+        }
+      },
+      "required": [
+        "via",
+        "owner"
+      ],
+      "additionalProperties": false,
+      "description": "How accounts work. Absent: the plugin signs in to nothing."
+    },
+    "options": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {},
+      "description": "JSON Schema 2020-12 of the plugin's options. It must include access."
+    },
+    "methods": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "class": {
+            "type": "string",
+            "enum": [
+              "read",
+              "write",
+              "send",
+              "share",
+              "delete",
+              "export",
+              "admin"
+            ]
+          },
+          "accounts": {
+            "description": "optional when the method takes an account, none when it does not. Defaults to none.",
+            "type": "string",
+            "enum": [
+              "optional",
+              "none"
+            ]
+          },
+          "operations": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,199}$"
+            }
+          },
+          "plans": {
+            "description": "The method dry-runs a change and answers { planId, method }.",
+            "type": "boolean",
+            "const": true
+          },
+          "commits": {
+            "description": "The planning method this method commits. It then takes only { planId }.",
+            "type": "string"
+          },
+          "effect": {
+            "description": "An override of the access setting.",
+            "type": "string",
+            "enum": [
+              "allow",
+              "ask",
+              "deny"
+            ]
+          },
+          "agent": {
+            "description": "Leave the method out of agent prompts; it stays in Code Mode, automations and RPC.",
+            "type": "boolean",
+            "const": false
+          },
+          "pinned": {
+            "description": "The one method Code Mode sends on every turn. None by default.",
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "required": [
+          "class"
+        ],
+        "additionalProperties": false,
+        "description": "One callable: a contract method, a plugin tool or a pass-through MCP tool."
+      },
+      "description": "Every callable, including pass-through MCP tools."
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)+$"
+              },
+              "method": {
+                "type": "string",
+                "description": "The declared method that reads this source."
+              },
+              "input": {
+                "description": "The fixed input that selects this source.",
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              },
+              "service": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  }
+                },
+                "required": [
+                  "id",
+                  "label"
+                ],
+                "additionalProperties": false,
+                "description": "The outside system a source belongs to. Sources with the same id are one service with one label."
+              },
+              "operations": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,199}$"
+                }
+              },
+              "scope": {
+                "type": "object",
+                "properties": {
+                  "keys": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9_]{0,31}$"
+                    },
+                    "description": "The keys a person confirms: labels, channels, repositories."
+                  },
+                  "describe": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "suggest": {
+                    "type": "object",
+                    "properties": {
+                      "method": {
+                        "type": "string"
+                      },
+                      "operations": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,199}$"
+                        }
+                      }
+                    },
+                    "required": [
+                      "method"
+                    ],
+                    "additionalProperties": false,
+                    "description": "The read-only method that lists the values a person may pick."
+                  }
+                },
+                "required": [
+                  "keys",
+                  "describe"
+                ],
+                "additionalProperties": false,
+                "description": "What a person confirms at consent."
+              },
+              "cadence": {
+                "type": "object",
+                "properties": {
+                  "providerMinMinutes": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "suggestMinutes": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "additionalProperties": false,
+                "description": "The provider's floor between reads, and a suggested cadence, in minutes."
+              },
+              "signals": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "bus",
+                    "mcp-events",
+                    "webhook"
+                  ]
+                }
+              },
+              "private": {
+                "type": "boolean"
+              },
+              "cost": {
+                "type": "object",
+                "properties": {
+                  "class": {
+                    "type": "string",
+                    "enum": [
+                      "free",
+                      "metered",
+                      "billed"
+                    ]
+                  },
+                  "units": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "per": {
+                          "type": "string",
+                          "pattern": "^[a-z][a-z0-9-]{0,31}$"
+                        },
+                        "usd": {
+                          "type": "number",
+                          "minimum": 0
+                        }
+                      },
+                      "required": [
+                        "per",
+                        "usd"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "class"
+                ],
+                "additionalProperties": false,
+                "description": "What one read costs. A billed or metered source states its price units."
+              },
+              "maxBytes": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 1048576
+              },
+              "details": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)+$"
+                    },
+                    "method": {
+                      "type": "string"
+                    },
+                    "from": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "external_id",
+                          "kind",
+                          "occurred_at",
+                          "url",
+                          "thread",
+                          "actors",
+                          "labels",
+                          "hash"
+                        ]
+                      },
+                      "description": "The event fields the detail's input comes from: identifiers, never the event's prose."
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "method",
+                    "from"
+                  ],
+                  "additionalProperties": false,
+                  "description": "One follow-up read of an event's detail."
+                }
+              },
+              "facts": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "commitment",
+                    "person.attribute",
+                    "meeting.attended"
+                  ]
+                }
+              },
+              "hints": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "pattern": "^[a-z0-9][a-z0-9._-]*(?:\\/[a-z0-9][a-z0-9._-]*)*\\.md$"
+                }
+              },
+              "urlHosts": {
+                "description": "The hosts an event's url and thumbnail may point at.",
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(?:\\*\\.)?[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$"
+                }
+              },
+              "kind": {
+                "type": "string",
+                "const": "events"
+              },
+              "reads": {
+                "type": "string",
+                "description": "A core event kind, or x-<name>/<kind>."
+              },
+              "thumbnails": {
+                "description": "The source can answer an event's thumbnail (#42). Requires urlHosts.",
+                "type": "boolean",
+                "const": true
+              }
+            },
+            "required": [
+              "id",
+              "method",
+              "cost",
+              "kind",
+              "reads"
+            ],
+            "additionalProperties": false,
+            "description": "An events source: append-only items read with a cursor."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)+$"
+              },
+              "method": {
+                "type": "string",
+                "description": "The declared method that reads this source."
+              },
+              "input": {
+                "description": "The fixed input that selects this source.",
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              },
+              "service": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  }
+                },
+                "required": [
+                  "id",
+                  "label"
+                ],
+                "additionalProperties": false,
+                "description": "The outside system a source belongs to. Sources with the same id are one service with one label."
+              },
+              "operations": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,199}$"
+                }
+              },
+              "scope": {
+                "type": "object",
+                "properties": {
+                  "keys": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9_]{0,31}$"
+                    },
+                    "description": "The keys a person confirms: labels, channels, repositories."
+                  },
+                  "describe": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "suggest": {
+                    "type": "object",
+                    "properties": {
+                      "method": {
+                        "type": "string"
+                      },
+                      "operations": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,199}$"
+                        }
+                      }
+                    },
+                    "required": [
+                      "method"
+                    ],
+                    "additionalProperties": false,
+                    "description": "The read-only method that lists the values a person may pick."
+                  }
+                },
+                "required": [
+                  "keys",
+                  "describe"
+                ],
+                "additionalProperties": false,
+                "description": "What a person confirms at consent."
+              },
+              "cadence": {
+                "type": "object",
+                "properties": {
+                  "providerMinMinutes": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "suggestMinutes": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "additionalProperties": false,
+                "description": "The provider's floor between reads, and a suggested cadence, in minutes."
+              },
+              "signals": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "bus",
+                    "mcp-events",
+                    "webhook"
+                  ]
+                }
+              },
+              "private": {
+                "type": "boolean"
+              },
+              "cost": {
+                "type": "object",
+                "properties": {
+                  "class": {
+                    "type": "string",
+                    "enum": [
+                      "free",
+                      "metered",
+                      "billed"
+                    ]
+                  },
+                  "units": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "per": {
+                          "type": "string",
+                          "pattern": "^[a-z][a-z0-9-]{0,31}$"
+                        },
+                        "usd": {
+                          "type": "number",
+                          "minimum": 0
+                        }
+                      },
+                      "required": [
+                        "per",
+                        "usd"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "class"
+                ],
+                "additionalProperties": false,
+                "description": "What one read costs. A billed or metered source states its price units."
+              },
+              "maxBytes": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 1048576
+              },
+              "details": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)+$"
+                    },
+                    "method": {
+                      "type": "string"
+                    },
+                    "from": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "external_id",
+                          "kind",
+                          "occurred_at",
+                          "url",
+                          "thread",
+                          "actors",
+                          "labels",
+                          "hash"
+                        ]
+                      },
+                      "description": "The event fields the detail's input comes from: identifiers, never the event's prose."
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "method",
+                    "from"
+                  ],
+                  "additionalProperties": false,
+                  "description": "One follow-up read of an event's detail."
+                }
+              },
+              "facts": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "commitment",
+                    "person.attribute",
+                    "meeting.attended"
+                  ]
+                }
+              },
+              "hints": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "pattern": "^[a-z0-9][a-z0-9._-]*(?:\\/[a-z0-9][a-z0-9._-]*)*\\.md$"
+                }
+              },
+              "urlHosts": {
+                "description": "The hosts an event's url and thumbnail may point at.",
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(?:\\*\\.)?[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$"
+                }
+              },
+              "kind": {
+                "type": "string",
+                "const": "snapshot"
+              },
+              "output": {
+                "type": "string",
+                "description": "A registry output name such as agenda, or x-<namespace>/<name>."
+              }
+            },
+            "required": [
+              "id",
+              "method",
+              "cost",
+              "kind",
+              "output"
+            ],
+            "additionalProperties": false,
+            "description": "A snapshot source: the latest state, read on demand."
+          }
+        ],
+        "description": "A source: an events feed or a snapshot."
+      }
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)+$"
+          },
+          "effect": {
+            "type": "string",
+            "enum": [
+              "local",
+              "notify",
+              "spend",
+              "irreversible"
+            ]
+          },
+          "preview": {
+            "type": "string",
+            "description": "The declared method that previews the action. It writes nothing."
+          },
+          "commit": {
+            "type": "string",
+            "description": "The declared method that commits the action. A different method from preview."
+          },
+          "input": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {},
+            "description": "JSON Schema 2020-12 for the caller's input."
+          },
+          "output": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {},
+            "description": "JSON Schema 2020-12 for the answer's output."
+          }
+        },
+        "required": [
+          "id",
+          "effect",
+          "preview",
+          "commit",
+          "input",
+          "output"
+        ],
+        "additionalProperties": false,
+        "description": "One write an app can offer a person."
+      }
+    },
+    "events": {
+      "type": "object",
+      "properties": {
+        "changed": {
+          "description": "The plugin knows a source changed.",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "status": {
+          "description": "The plugin's state changed.",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "account": {
+          "description": "An account signed in, out, or needs sign-in.",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false,
+      "description": "The bus events the plugin emits. Each is declared with an empty object."
+    }
+  },
+  "required": [
+    "version",
+    "plugin",
+    "options",
+    "methods",
+    "sources",
+    "actions",
+    "events"
+  ],
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-[a-z][a-z0-9-]*$": {}
+  }
+}

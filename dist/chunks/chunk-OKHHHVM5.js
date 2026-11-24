@@ -4,6 +4,103 @@ import {
   canonicalScope
 } from "./chunk-7KJXMIQH.js";
 
+// src/manifest/types.ts
+var MANIFEST_VERSION = 1;
+var OPENCODE_RANGE = ">=2.4.1 <2.5.0";
+var TESTED_OPENCODE = "2.4.1";
+var PLUGIN_NAME = /^[a-z0-9]{2,31}$/;
+var EXTENSION_KEY = /^x-[a-z][a-z0-9-]*$/;
+var METHOD_CLASSES = ["read", "write", "send", "share", "delete", "export", "admin"];
+var METHOD_ACCOUNTS = ["optional", "none"];
+var METHOD_EFFECTS = ["allow", "ask", "deny"];
+var ACCOUNT_MECHANISMS = ["integration", "mcp", "local"];
+var SOURCE_KINDS = ["events", "snapshot"];
+var SOURCE_SIGNALS = ["bus", "mcp-events", "webhook"];
+var COST_CLASSES = ["free", "metered", "billed"];
+var ACTION_EFFECTS = ["local", "notify", "spend", "irreversible"];
+var BUS_EVENTS = ["changed", "status", "account"];
+var MAX_BYTES_LIMIT = 1048576;
+var MAX_BYTES_DEFAULT = 65536;
+var SERVICE_ID_MAX = 128;
+var SERVICE_LABEL_MAX = 64;
+var OWNER_ORGS_LIMIT = 5;
+var THUMBNAIL_URL_MAX = 2048;
+var DETAIL_FIELDS = ["external_id", "kind", "occurred_at", "url", "thread", "actors", "labels", "hash"];
+
+// src/manifest/owner.ts
+var SCHEME_QUALIFIED = /^[a-z][a-z0-9+.-]*:\S+$/;
+var line = (value, max, empty = false) => typeof value === "string" && value.length <= max && (empty || value.length > 0) && ![...value].some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127);
+var plainObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+function ownerOrgProblems(orgs, what = "owner.orgs") {
+  if (orgs === void 0) return [];
+  if (!Array.isArray(orgs)) return [`${what} must be a list of at most ${OWNER_ORGS_LIMIT} organizations`];
+  if (orgs.length > OWNER_ORGS_LIMIT) return [`${what} must name at most ${OWNER_ORGS_LIMIT} organizations`];
+  const problems = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const [index, org] of orgs.entries()) {
+    const at = `${what}[${index}]`;
+    if (!plainObject(org)) {
+      problems.push(`${at} is not an object`);
+      continue;
+    }
+    for (const key of Object.keys(org)) {
+      if (key !== "id" && key !== "label") problems.push(`${at} has the field "${key}", which an organization does not define`);
+    }
+    const id = org["id"];
+    if (typeof id !== "string" || !SCHEME_QUALIFIED.test(id)) problems.push(`${at}.id must be a scheme-qualified id such as domain:example.com or slack-team:T0123`);
+    else if (seen.has(id)) problems.push(`${at}.id repeats an organization`);
+    else seen.add(id);
+    if (!line(org["label"], 200)) problems.push(`${at}.label must be one non-empty line of at most 200 characters`);
+  }
+  return problems;
+}
+function ownerProblems(owner, what = "the owner") {
+  if (!plainObject(owner)) return [`${what} must be an object with an id and a label`];
+  const problems = [];
+  for (const key of Object.keys(owner)) {
+    if (!["id", "label", "verified", "orgs"].includes(key)) problems.push(`${what} has the field "${key}", which the contract does not define`);
+  }
+  const id = owner["id"];
+  if (typeof id !== "string" || id.length > 320) problems.push(`${what}.id must be 1 to 320 characters`);
+  else if (!SCHEME_QUALIFIED.test(id)) problems.push(`${what}.id must be a scheme-qualified id such as mailto:someone@example.com or slack:U0123`);
+  if (!line(owner["label"], 200)) problems.push(`${what}.label must be one non-empty line of at most 200 characters`);
+  if (owner["verified"] !== void 0 && owner["verified"] !== false) problems.push(`${what}.verified must be false, or left out for an owner the provider named`);
+  problems.push(...ownerOrgProblems(owner["orgs"], `${what}.orgs`));
+  return problems;
+}
+
+// src/manifest/thumbnail.ts
+var HOST = /^(?:\*\.)?[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
+function hostMatches(host, urlHosts) {
+  const wanted = host.toLowerCase();
+  return urlHosts.some((entry) => {
+    const allowed = entry.toLowerCase();
+    if (allowed.startsWith("*.")) {
+      const suffix = allowed.slice(1);
+      return wanted.length > suffix.length && wanted.endsWith(suffix);
+    }
+    return wanted === allowed;
+  });
+}
+function thumbnailUrlProblems(url, urlHosts) {
+  if (typeof url !== "string" || url.length === 0) return ["must be a non-empty https URL"];
+  if (url.length > THUMBNAIL_URL_MAX) return [`must be at most ${THUMBNAIL_URL_MAX} characters`];
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return ["must be an https URL"];
+  }
+  const problems = [];
+  if (parsed.protocol !== "https:") problems.push("must be an https URL");
+  if (parsed.username !== "" || parsed.password !== "") problems.push("must not carry user info");
+  if (parsed.search !== "") problems.push("must not carry a query string");
+  if (parsed.hash !== "") problems.push("must not carry a fragment");
+  if (!HOST.test(parsed.hostname)) problems.push("must name a domain");
+  else if (!hostMatches(parsed.hostname, urlHosts)) problems.push(`must be on a host the source declares in urlHosts (${urlHosts.join(", ") || "none declared"})`);
+  return problems;
+}
+
 // src/internal/secrets.ts
 var PRIVATE_KEY_BLOCK = /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----[\s\S]*?(?:-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----|$)/g;
 var SHAPED = Object.freeze([
@@ -63,9 +160,9 @@ var PROSE_WORDS = new Set(
   "a an the is are was were be been must should shall will can may not no never always every each at least most of to in on for and or with by from via see use uses used set stored managed rotated rotate required policy characters chars minimum maximum change changed expires expire reset same as one this that it its".split(" ")
 );
 function passphrase(rest) {
-  const line2 = String(rest ?? "").trim();
-  if (line2.length < 16 || /[.!?]$/.test(line2)) return false;
-  const words = line2.split(/\s+/);
+  const line3 = String(rest ?? "").trim();
+  if (line3.length < 16 || /[.!?]$/.test(line3)) return false;
+  const words = line3.split(/\s+/);
   return words.length >= 3 && words.length <= 8 && words.every((word) => /^[A-Za-z][A-Za-z'-]*$/.test(word) && !PROSE_WORDS.has(word.toLowerCase()));
 }
 function credentialValue(value, quoted, key, query) {
@@ -184,11 +281,7 @@ var FACT_TYPES = ["commitment", "person.attribute", "meeting.attended"];
 var COMMITMENT_STATES = ["open", "done", "cancelled"];
 var ATTENDANCE_RESPONSES = ["accepted", "declined", "tentative", "needs_action"];
 function ownerShapeProblems(owner, what) {
-  if (!plainObject(owner) || !line(owner["id"], EVENT_LIMITS.ownerId) || !line(owner["label"], EVENT_LIMITS.ownerLabel) || Object.keys(owner).some((key) => key !== "id" && key !== "label" && key !== "verified")) {
-    return [`${what} must be { id, label }, two non-empty lines`];
-  }
-  if (owner["verified"] !== void 0 && owner["verified"] !== false) return [`${what}.verified must be false, or left out for an owner the provider named`];
-  return [];
+  return ownerProblems(owner, what);
 }
 var REFUSAL_REASONS = ["instruction", "secret", "owner"];
 var REMOVAL_REASONS = ["deleted", "withheld", "expired"];
@@ -251,7 +344,7 @@ var SOURCE_PATTERN = /^[a-z][a-z0-9-]*$/;
 var SCOPE_KEY_PATTERN = /^[a-z][A-Za-z0-9_-]*$/;
 var INPUT_KEYS = ["since", "cursor", "limit", "account", "source"];
 var hasControl = (text2) => [...text2].some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127);
-var plainObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var plainObject2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 function sinceTime(since) {
   if (!SINCE_PATTERN.test(since)) return void 0;
   const time = Date.parse(since.length === 10 ? `${since}T00:00:00Z` : since);
@@ -259,7 +352,7 @@ function sinceTime(since) {
 }
 var scopeValue = (value) => typeof value === "string" && value.length > 0 && value.length <= EVENT_LIMITS.scopeValue && !hasControl(value);
 function scopeProblems(scope, keys) {
-  if (!plainObject(scope)) return [`"scope" must be an object of the source's scope keys`];
+  if (!plainObject2(scope)) return [`"scope" must be an object of the source's scope keys`];
   const problems = [];
   const entries = Object.entries(scope);
   if (entries.length > EVENT_LIMITS.scopeKeys) problems.push(`"scope" has more than ${EVENT_LIMITS.scopeKeys} keys`);
@@ -275,9 +368,10 @@ function scopeProblems(scope, keys) {
 }
 function parseEventsListInput(input, options = {}) {
   const value = input === void 0 || input === null ? {} : input;
-  if (!plainObject(value)) return { ok: false, problems: ["the input must be an object"] };
+  if (!plainObject2(value)) return { ok: false, problems: ["the input must be an object"] };
   const scoped = (options.scopeKeys?.length ?? 0) > 0;
-  const known = scoped ? [...INPUT_KEYS, "scope"] : INPUT_KEYS;
+  const thumbnails = options.thumbnails === true;
+  const known = [...INPUT_KEYS, ...scoped ? ["scope"] : [], ...thumbnails ? ["thumbnails"] : []];
   const problems = Object.keys(value).filter((key) => !known.includes(key)).map((key) => `"${key}" is not an input of events_list`);
   const { since, cursor, limit, account, source, scope } = value;
   let time;
@@ -297,6 +391,7 @@ function parseEventsListInput(input, options = {}) {
   if (source !== void 0 && (typeof source !== "string" || source.length > EVENT_LIMITS.source || !SOURCE_PATTERN.test(source))) {
     problems.push(`"source" must be a source's name, a lowercase word such as gmail`);
   }
+  if (value["thumbnails"] !== void 0 && value["thumbnails"] !== true) problems.push(`"thumbnails" must be true, or left out`);
   if (scoped && scope !== void 0) problems.push(...scopeProblems(scope, options.scopeKeys));
   if (problems.length > 0) return { ok: false, problems };
   return {
@@ -307,7 +402,8 @@ function parseEventsListInput(input, options = {}) {
       limit: limit ?? PAGE.default,
       ...account === void 0 ? {} : { account },
       ...source === void 0 ? {} : { source },
-      ...scoped && scope !== void 0 ? { scope: canonicalScope(scope) } : {}
+      ...scoped && scope !== void 0 ? { scope: canonicalScope(scope) } : {},
+      ...thumbnails && value["thumbnails"] === true ? { thumbnails: true } : {}
     }
   };
 }
@@ -390,6 +486,7 @@ function makeEvent(draft) {
     const actor = part.actor === void 0 ? "" : oneLine(part.actor);
     return { id, text: cut(clean(part.text), EVENT_LIMITS.text), ...actor ? { actor } : {} };
   }).filter((part) => part.id.length > 0);
+  const thumbnail = typeof draft.thumbnail === "string" && draft.thumbnail.length <= THUMBNAIL_URL_MAX && /^https:\/\/\S+$/.test(draft.thumbnail) ? draft.thumbnail : void 0;
   const event = {
     source: draft.source,
     account: draft.account,
@@ -407,7 +504,8 @@ function makeEvent(draft) {
     ...domains === void 0 || domains.length === 0 ? {} : { domains },
     ...sections === void 0 || sections.length === 0 ? {} : { sections },
     ...parts === void 0 || parts.length === 0 ? {} : { parts },
-    ...draft.facts === void 0 || draft.facts.length === 0 ? {} : { facts: [...draft.facts] }
+    ...draft.facts === void 0 || draft.facts.length === 0 ? {} : { facts: [...draft.facts] },
+    ...thumbnail === void 0 ? {} : { thumbnail }
   };
   return { ...event, hash: eventHash(event) };
 }
@@ -451,7 +549,7 @@ var PROBE = "probe";
 var PROBE_LIMITS = { scopes: 64, scope: 256 };
 function parseProbeInput(input) {
   const value = input === void 0 || input === null ? {} : input;
-  if (!plainObject(value)) return { ok: false, problems: ["the input must be an object"] };
+  if (!plainObject2(value)) return { ok: false, problems: ["the input must be an object"] };
   const problems = Object.keys(value).filter((key) => key !== "source" && key !== "account").map((key) => `"${key}" is not an input of probe`);
   const { source, account } = value;
   if (source !== void 0 && (typeof source !== "string" || source.length > EVENT_LIMITS.source || !SOURCE_PATTERN.test(source))) {
@@ -467,7 +565,12 @@ function probeResult(identity, extras = {}) {
   return {
     source: identity.source,
     account: identity.account,
-    owner: { id: identity.owner.id, label: identity.owner.label, ...identity.owner.verified === void 0 ? {} : { verified: identity.owner.verified } },
+    owner: {
+      id: identity.owner.id,
+      label: identity.owner.label,
+      ...identity.owner.verified === void 0 ? {} : { verified: identity.owner.verified },
+      ...identity.owner.orgs === void 0 ? {} : { orgs: identity.owner.orgs }
+    },
     ...extras.scopes === void 0 ? {} : { scopes: [...new Set(extras.scopes)] },
     ...extras.cost === void 0 ? {} : { cost: extras.cost },
     trust: TRUST
@@ -475,12 +578,12 @@ function probeResult(identity, extras = {}) {
 }
 var PROBE_KEYS = ["source", "account", "owner", "scopes", "cost", "trust"];
 function probeResultProblems(result, expected = {}) {
-  if (!plainObject(result)) return ["the probe answer is not an object"];
+  if (!plainObject2(result)) return ["the probe answer is not an object"];
   const problems = [];
   for (const key of Object.keys(result)) if (!PROBE_KEYS.includes(key)) problems.push(`the probe answer has the field "${key}": a probe reads no content, and the contract defines no such field`);
-  if (!line(result["source"], EVENT_LIMITS.source) || !SOURCE_PATTERN.test(result["source"])) problems.push("the probe answer's source must be a lowercase name such as gmail");
+  if (!line2(result["source"], EVENT_LIMITS.source) || !SOURCE_PATTERN.test(result["source"])) problems.push("the probe answer's source must be a lowercase name such as gmail");
   else if (expected.source !== void 0 && result["source"] !== expected.source) problems.push(`the probe answer names the source ${result["source"]}, not ${expected.source}`);
-  if (!line(result["account"], EVENT_LIMITS.account)) problems.push(`the probe answer's account must be a non-empty name of at most ${EVENT_LIMITS.account} characters`);
+  if (!line2(result["account"], EVENT_LIMITS.account)) problems.push(`the probe answer's account must be a non-empty name of at most ${EVENT_LIMITS.account} characters`);
   else if (expected.account !== void 0 && result["account"] !== expected.account) problems.push("the probe answer names another account than the one asked for");
   const owner = result["owner"];
   const ownerShape = ownerShapeProblems(owner, "the probe answer's owner");
@@ -490,7 +593,7 @@ function probeResultProblems(result, expected = {}) {
     problems.push("the probe answer's owner.id must be a scheme-qualified id such as mailto:someone@example.com or slack:U0123");
   }
   const scopes = result["scopes"];
-  if (scopes !== void 0 && (!Array.isArray(scopes) || scopes.length > PROBE_LIMITS.scopes || scopes.some((scope) => !line(scope, PROBE_LIMITS.scope)) || new Set(scopes).size !== scopes.length)) {
+  if (scopes !== void 0 && (!Array.isArray(scopes) || scopes.length > PROBE_LIMITS.scopes || scopes.some((scope) => !line2(scope, PROBE_LIMITS.scope)) || new Set(scopes).size !== scopes.length)) {
     problems.push(`the probe answer's scopes must be at most ${PROBE_LIMITS.scopes} different lines of at most ${PROBE_LIMITS.scope} characters`);
   }
   if (result["cost"] !== void 0) problems.push(...extraProblems({ cost: result["cost"] }, /* @__PURE__ */ new Set()).map((problem) => problem.replace("the result's cost", "the probe answer's cost")));
@@ -526,16 +629,16 @@ var DOMAIN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9]
 var DATE = /^\d{4}-\d{2}-\d{2}$/;
 var listOf = (items) => items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} or ${items.at(-1)}`;
 var text = (value, max, empty = false) => typeof value === "string" && value.length <= max && (empty || value.length > 0) && !value.includes("\0");
-var line = (value, max, empty = false) => text(value, max, empty) && !hasControl(value);
+var line2 = (value, max, empty = false) => text(value, max, empty) && !hasControl(value);
 var isoUtc = (value) => typeof value === "string" && ISO_UTC.test(value) && Number.isFinite(Date.parse(value));
 function actorProblems(actor, at) {
   const problems = [];
   for (const key of Object.keys(actor)) if (!["role", "id", "name", "kind", "identities", "self"].includes(key)) problems.push(`${at} has the field "${key}", which the contract does not define`);
   const role = actor.role;
   const id = actor.id;
-  if (!line(role, EVENT_LIMITS.actorRole) || !ROLE.test(role)) problems.push(`${at}.role must be a lowercase word such as from`);
-  if (!line(id, EVENT_LIMITS.actorId) || !SCHEMED.test(id)) problems.push(`${at}.id must be a scheme-qualified id such as mailto:someone@example.com`);
-  if (actor.name !== void 0 && !line(actor.name, EVENT_LIMITS.actorName)) problems.push(`${at}.name must be one non-empty line of at most ${EVENT_LIMITS.actorName} characters`);
+  if (!line2(role, EVENT_LIMITS.actorRole) || !ROLE.test(role)) problems.push(`${at}.role must be a lowercase word such as from`);
+  if (!line2(id, EVENT_LIMITS.actorId) || !SCHEMED.test(id)) problems.push(`${at}.id must be a scheme-qualified id such as mailto:someone@example.com`);
+  if (actor.name !== void 0 && !line2(actor.name, EVENT_LIMITS.actorName)) problems.push(`${at}.name must be one non-empty line of at most ${EVENT_LIMITS.actorName} characters`);
   if (actor.kind !== void 0 && !ACTOR_KINDS.includes(actor.kind)) problems.push(`${at}.kind must be ${listOf(ACTOR_KINDS)}`);
   if (actor.self !== void 0 && typeof actor.self !== "boolean") problems.push(`${at}.self must be true or false`);
   if (actor.identities !== void 0) {
@@ -544,18 +647,18 @@ function actorProblems(actor, at) {
       const seen = /* @__PURE__ */ new Set();
       for (const [index, identity] of actor.identities.entries()) {
         const here = `${at}.identities[${index}]`;
-        if (!plainObject(identity)) {
+        if (!plainObject2(identity)) {
           problems.push(`${here} is not an object`);
           continue;
         }
         for (const key of Object.keys(identity)) if (!["id", "strength", "basis"].includes(key)) problems.push(`${here} has the field "${key}", which the contract does not define`);
         const own = identity.id;
-        if (!line(own, EVENT_LIMITS.actorId) || !SCHEMED.test(own)) problems.push(`${here}.id must be a scheme-qualified id such as mailto:someone@example.com`);
+        if (!line2(own, EVENT_LIMITS.actorId) || !SCHEMED.test(own)) problems.push(`${here}.id must be a scheme-qualified id such as mailto:someone@example.com`);
         else if (own === id) problems.push(`${here}.id is the actor's own id: an identity is another id for the same actor`);
         else if (seen.has(own)) problems.push(`${here} repeats an identity`);
         else seen.add(own);
         if (!IDENTITY_STRENGTHS.includes(identity.strength)) problems.push(`${here}.strength must be ${listOf(IDENTITY_STRENGTHS)}`);
-        if (!line(identity.basis, EVENT_LIMITS.identityBasis)) {
+        if (!line2(identity.basis, EVENT_LIMITS.identityBasis)) {
           problems.push(`${here}.basis must be one line of at most ${EVENT_LIMITS.identityBasis} characters naming the provider field it came from`);
         }
       }
@@ -565,7 +668,7 @@ function actorProblems(actor, at) {
 }
 function targetProblems(e, where) {
   const problems = [];
-  if (e.reply_to !== void 0 && !line(e.reply_to, EVENT_LIMITS.replyTo)) {
+  if (e.reply_to !== void 0 && !line2(e.reply_to, EVENT_LIMITS.replyTo)) {
     problems.push(`${where}.reply_to must be a non-empty id of at most ${EVENT_LIMITS.replyTo} characters`);
   }
   if (e.audience !== void 0 && !AUDIENCES.includes(e.audience)) {
@@ -576,7 +679,7 @@ function targetProblems(e, where) {
     else {
       const seen = /* @__PURE__ */ new Set();
       for (const [index, domain] of e.domains.entries()) {
-        if (!line(domain, EVENT_LIMITS.domain) || !DOMAIN.test(domain)) problems.push(`${where}.domains[${index}] must be a lowercase domain such as example.com`);
+        if (!line2(domain, EVENT_LIMITS.domain) || !DOMAIN.test(domain)) problems.push(`${where}.domains[${index}] must be a lowercase domain such as example.com`);
         else if (seen.has(domain)) problems.push(`${where}.domains repeats a domain`);
         else seen.add(domain);
       }
@@ -591,12 +694,12 @@ function partProblems(e, where, actorIds) {
     else {
       for (const [index, section] of e.sections.entries()) {
         const at = `${where}.sections[${index}]`;
-        if (!plainObject(section)) {
+        if (!plainObject2(section)) {
           problems.push(`${at} is not an object`);
           continue;
         }
         for (const key of Object.keys(section)) if (!["heading", "text"].includes(key)) problems.push(`${at} has the field "${key}", which the contract does not define`);
-        if (!line(section.heading, EVENT_LIMITS.sectionHeading)) problems.push(`${at}.heading must be one line of at most ${EVENT_LIMITS.sectionHeading} characters`);
+        if (!line2(section.heading, EVENT_LIMITS.sectionHeading)) problems.push(`${at}.heading must be one line of at most ${EVENT_LIMITS.sectionHeading} characters`);
         if (!text(section.text, EVENT_LIMITS.text, true)) problems.push(`${at}.text must be at most ${EVENT_LIMITS.text} characters`);
       }
     }
@@ -607,18 +710,18 @@ function partProblems(e, where, actorIds) {
       const seen = /* @__PURE__ */ new Set();
       for (const [index, part] of e.parts.entries()) {
         const at = `${where}.parts[${index}]`;
-        if (!plainObject(part)) {
+        if (!plainObject2(part)) {
           problems.push(`${at} is not an object`);
           continue;
         }
         for (const key of Object.keys(part)) if (!["id", "text", "actor"].includes(key)) problems.push(`${at} has the field "${key}", which the contract does not define`);
         const id = part.id;
-        if (!line(id, EVENT_LIMITS.partId)) problems.push(`${at}.id must be a non-empty id of at most ${EVENT_LIMITS.partId} characters`);
+        if (!line2(id, EVENT_LIMITS.partId)) problems.push(`${at}.id must be a non-empty id of at most ${EVENT_LIMITS.partId} characters`);
         else if (seen.has(id)) problems.push(`${at}.id repeats a part`);
         else seen.add(id);
         if (!text(part.text, EVENT_LIMITS.text, true)) problems.push(`${at}.text must be at most ${EVENT_LIMITS.text} characters`);
         if (part.actor !== void 0) {
-          if (!line(part.actor, EVENT_LIMITS.actorId)) problems.push(`${at}.actor must be an actor id of the same event`);
+          if (!line2(part.actor, EVENT_LIMITS.actorId)) problems.push(`${at}.actor must be an actor id of the same event`);
           else if (!actorIds.has(part.actor)) problems.push(`${at}.actor is not an actor of the same event`);
         }
       }
@@ -627,7 +730,7 @@ function partProblems(e, where, actorIds) {
   return problems;
 }
 function factProblems(fact, actors, where = "fact") {
-  if (!plainObject(fact)) return [`${where} is not an object`];
+  if (!plainObject2(fact)) return [`${where} is not an object`];
   const type = fact.type;
   if (!FACT_TYPES.includes(type)) return [`${where}.type must be ${listOf(FACT_TYPES)}`];
   const allowed = {
@@ -641,12 +744,12 @@ function factProblems(fact, actors, where = "fact") {
   }
   const reference = (key) => {
     const id = fact[key];
-    if (!line(id, EVENT_LIMITS.actorId)) problems.push(`${where}.${key} must be an actor id of the same event`);
+    if (!line2(id, EVENT_LIMITS.actorId)) problems.push(`${where}.${key} must be an actor id of the same event`);
     else if (!actors.has(id)) problems.push(`${where}.${key} is not an actor of the same event`);
   };
   if (type === "commitment") {
-    if (!line(fact.key, EVENT_LIMITS.factKey)) problems.push(`${where}.key must be a stable id of at most ${EVENT_LIMITS.factKey} characters`);
-    if (!line(fact.title, EVENT_LIMITS.factTitle)) problems.push(`${where}.title must be one line of at most ${EVENT_LIMITS.factTitle} characters`);
+    if (!line2(fact.key, EVENT_LIMITS.factKey)) problems.push(`${where}.key must be a stable id of at most ${EVENT_LIMITS.factKey} characters`);
+    if (!line2(fact.title, EVENT_LIMITS.factTitle)) problems.push(`${where}.title must be one line of at most ${EVENT_LIMITS.factTitle} characters`);
     reference("owner");
     if (fact.counterparty !== void 0) reference("counterparty");
     if (fact.due !== void 0 && !(typeof fact.due === "string" && DATE.test(fact.due) && Number.isFinite(Date.parse(fact.due)))) problems.push(`${where}.due must be a date such as 2026-11-30`);
@@ -659,7 +762,7 @@ function factProblems(fact, actors, where = "fact") {
       problems.push(`${where} must name org, team or role: a person's attribute comes from structured profile or directory data`);
     }
     for (const key of ["org", "team", "role"]) {
-      if (fact[key] !== void 0 && !line(fact[key], EVENT_LIMITS.factAttribute)) {
+      if (fact[key] !== void 0 && !line2(fact[key], EVENT_LIMITS.factAttribute)) {
         problems.push(`${where}.${key} must be one line of at most ${EVENT_LIMITS.factAttribute} characters`);
       }
     }
@@ -678,23 +781,27 @@ function factsProblems(e, where, actorIds) {
 }
 var EVENT_KEYS = ["source", "account", "external_id", "kind", "occurred_at", "thread", "actors", "title", "text", "url", "labels", "hash"];
 var EVENT_METADATA_KEYS = ["reply_to", "audience", "domains", "sections", "parts", "facts"];
-function eventProblems(event, where = "event") {
-  if (!plainObject(event)) return [`${where} is not an object`];
+function eventProblems(event, where = "event", options = {}) {
+  if (!plainObject2(event)) return [`${where} is not an object`];
   const problems = [];
-  const keys = [...EVENT_KEYS, ...EVENT_METADATA_KEYS];
+  const keys = [...EVENT_KEYS, ...EVENT_METADATA_KEYS, ...options.thumbnails === true ? ["thumbnail"] : []];
   for (const key of Object.keys(event)) if (!keys.includes(key)) problems.push(`${where} has the field "${key}", which the contract does not define`);
   for (const key of EVENT_KEYS) if (!Object.hasOwn(event, key)) problems.push(`${where} has no "${key}"`);
   const e = event;
-  if (!line(e.source, EVENT_LIMITS.source) || !SOURCE_PATTERN.test(e.source)) problems.push(`${where}.source must be a lowercase name such as gmail`);
-  if (!line(e.account, EVENT_LIMITS.account)) problems.push(`${where}.account must be a non-empty name of at most ${EVENT_LIMITS.account} characters`);
-  if (!line(e.external_id, EVENT_LIMITS.externalId)) problems.push(`${where}.external_id must be a non-empty id of at most ${EVENT_LIMITS.externalId} characters`);
+  if (e.thumbnail !== void 0) {
+    if (e.thumbnail === null) problems.push(`${where}.thumbnail must be left out, never null`);
+    else problems.push(...thumbnailUrlProblems(e.thumbnail, options.urlHosts ?? []).map((problem) => `${where}.thumbnail ${problem}`));
+  }
+  if (!line2(e.source, EVENT_LIMITS.source) || !SOURCE_PATTERN.test(e.source)) problems.push(`${where}.source must be a lowercase name such as gmail`);
+  if (!line2(e.account, EVENT_LIMITS.account)) problems.push(`${where}.account must be a non-empty name of at most ${EVENT_LIMITS.account} characters`);
+  if (!line2(e.external_id, EVENT_LIMITS.externalId)) problems.push(`${where}.external_id must be a non-empty id of at most ${EVENT_LIMITS.externalId} characters`);
   if (!isEventKind(e.kind)) problems.push(`${where}.kind must be one of ${EVENT_KINDS.join(", ")}, or x-<plugin>/<kind>`);
   if (!isoUtc(e.occurred_at)) problems.push(`${where}.occurred_at must be a UTC ISO date-time ending in Z`);
-  if (e.thread !== null && !line(e.thread, EVENT_LIMITS.thread)) problems.push(`${where}.thread must be null or a non-empty id of at most ${EVENT_LIMITS.thread} characters`);
-  if (!line(e.title, EVENT_LIMITS.title, true)) problems.push(`${where}.title must be one line of at most ${EVENT_LIMITS.title} characters`);
+  if (e.thread !== null && !line2(e.thread, EVENT_LIMITS.thread)) problems.push(`${where}.thread must be null or a non-empty id of at most ${EVENT_LIMITS.thread} characters`);
+  if (!line2(e.title, EVENT_LIMITS.title, true)) problems.push(`${where}.title must be one line of at most ${EVENT_LIMITS.title} characters`);
   if (!text(e.text, EVENT_LIMITS.text, true)) problems.push(`${where}.text must be at most ${EVENT_LIMITS.text} characters`);
   if (e.url !== null && (typeof e.url !== "string" || e.url.length > EVENT_LIMITS.url || !/^https:\/\/\S+$/.test(e.url))) problems.push(`${where}.url must be null or an https URL`);
-  if (!Array.isArray(e.labels) || e.labels.length > EVENT_LIMITS.labels || e.labels.some((label) => !line(label, EVENT_LIMITS.label) || /\s/.test(label))) {
+  if (!Array.isArray(e.labels) || e.labels.length > EVENT_LIMITS.labels || e.labels.some((label) => !line2(label, EVENT_LIMITS.label) || /\s/.test(label))) {
     problems.push(`${where}.labels must be at most ${EVENT_LIMITS.labels} labels of at most ${EVENT_LIMITS.label} characters without spaces`);
   } else if (new Set(e.labels).size !== e.labels.length) problems.push(`${where}.labels repeats a label`);
   const actorIds = /* @__PURE__ */ new Set();
@@ -703,7 +810,7 @@ function eventProblems(event, where = "event") {
     const seen = /* @__PURE__ */ new Set();
     for (const [index, actor] of e.actors.entries()) {
       const at = `${where}.actors[${index}]`;
-      if (!plainObject(actor)) {
+      if (!plainObject2(actor)) {
         problems.push(`${at} is not an object`);
         continue;
       }
@@ -725,7 +832,7 @@ function eventProblems(event, where = "event") {
 var RESULT_KEYS = ["source", "account", "owner", "events", "cursor", "more", "trust"];
 var EXTRA_KEYS = ["scope", "refused", "failed", "removals", "gap", "cost", "plugin", "asOf"];
 function removalProblems(result) {
-  if (!plainObject(result) || result["removals"] === void 0) return [];
+  if (!plainObject2(result) || result["removals"] === void 0) return [];
   const list = result["removals"];
   if (!Array.isArray(list) || list.length > EVENT_LIMITS.refused) return [`the result's removals must be a list of at most ${EVENT_LIMITS.refused}`];
   const problems = [];
@@ -733,13 +840,13 @@ function removalProblems(result) {
   const seen = /* @__PURE__ */ new Set();
   for (const [index, entry] of list.entries()) {
     const at = `removals[${index}]`;
-    if (!plainObject(entry)) {
+    if (!plainObject2(entry)) {
       problems.push(`${at} is not an object`);
       continue;
     }
     for (const key of Object.keys(entry)) if (!["external_id", "at", "reason"].includes(key)) problems.push(`${at} has the field "${key}", which the contract does not define`);
     const id = entry["external_id"];
-    if (!line(id, EVENT_LIMITS.externalId)) problems.push(`${at}.external_id must be a non-empty id of at most ${EVENT_LIMITS.externalId} characters`);
+    if (!line2(id, EVENT_LIMITS.externalId)) problems.push(`${at}.external_id must be a non-empty id of at most ${EVENT_LIMITS.externalId} characters`);
     else if (seen.has(id)) problems.push("the result's removals lists one event twice");
     else seen.add(id);
     if (!isoUtc(entry["at"])) problems.push(`${at}.at must be a UTC ISO date-time ending in Z`);
@@ -747,7 +854,7 @@ function removalProblems(result) {
     if (!REMOVAL_REASONS.includes(entry["reason"])) problems.push(`${at}.reason must be one of ${REMOVAL_REASONS.join(", ")}`);
   }
   const failed = result["failed"];
-  if (Array.isArray(failed) && failed.some((entry) => plainObject(entry) && typeof entry["external_id"] === "string" && seen.has(entry["external_id"]))) {
+  if (Array.isArray(failed) && failed.some((entry) => plainObject2(entry) && typeof entry["external_id"] === "string" && seen.has(entry["external_id"]))) {
     problems.push("an event is both removed and failed: a removal is final, so nothing is retried");
   }
   return problems;
@@ -758,7 +865,7 @@ function extraProblems(result, ids) {
     const scope = result["scope"];
     let canonical = false;
     try {
-      canonical = plainObject(scope) && JSON.stringify(canonicalScope(scope)) === JSON.stringify(scope);
+      canonical = plainObject2(scope) && JSON.stringify(canonicalScope(scope)) === JSON.stringify(scope);
     } catch {
       canonical = false;
     }
@@ -773,11 +880,11 @@ function extraProblems(result, ids) {
     }
     for (const [index, entry] of list.entries()) {
       const at = `${name}[${index}]`;
-      if (!plainObject(entry)) {
+      if (!plainObject2(entry)) {
         problems.push(`${at} is not an object`);
         continue;
       }
-      if (!line(entry["external_id"], EVENT_LIMITS.externalId)) problems.push(`${at}.external_id must be a non-empty id of at most ${EVENT_LIMITS.externalId} characters`);
+      if (!line2(entry["external_id"], EVENT_LIMITS.externalId)) problems.push(`${at}.external_id must be a non-empty id of at most ${EVENT_LIMITS.externalId} characters`);
       else if (ids.has(entry["external_id"])) problems.push(`${at} is also among the result's events`);
       problems.push(...check(entry, at));
     }
@@ -785,7 +892,7 @@ function extraProblems(result, ids) {
   entries("refused", EVENT_LIMITS.refused, (entry, at) => [
     ...Object.keys(entry).filter((key) => !["external_id", "reason", "detail"].includes(key)).map((key) => `${at} has the field "${key}", which the contract does not define`),
     ...REFUSAL_REASONS.includes(entry["reason"]) ? [] : [`${at}.reason must be one of ${REFUSAL_REASONS.join(", ")}`],
-    ...entry["detail"] === void 0 || line(entry["detail"], EVENT_LIMITS.detail) ? [] : [`${at}.detail must be one line of at most ${EVENT_LIMITS.detail} characters`]
+    ...entry["detail"] === void 0 || line2(entry["detail"], EVENT_LIMITS.detail) ? [] : [`${at}.detail must be one line of at most ${EVENT_LIMITS.detail} characters`]
   ]);
   entries("failed", EVENT_LIMITS.failed, (entry, at) => [
     ...Object.keys(entry).filter((key) => !["external_id", "code", "retryAfterSec"].includes(key)).map((key) => `${at} has the field "${key}", which the contract does not define`),
@@ -795,43 +902,43 @@ function extraProblems(result, ids) {
   for (const name of ["refused", "failed"]) {
     const list = result[name];
     if (Array.isArray(list)) {
-      const listed = list.map((entry) => plainObject(entry) ? entry["external_id"] : void 0);
+      const listed = list.map((entry) => plainObject2(entry) ? entry["external_id"] : void 0);
       if (new Set(listed).size !== listed.length) problems.push(`the result's ${name} lists one event twice`);
     }
   }
   if (Array.isArray(result["refused"]) && Array.isArray(result["failed"])) {
-    const refused = new Set(result["refused"].map((entry) => plainObject(entry) ? entry["external_id"] : void 0));
-    if (result["failed"].some((entry) => plainObject(entry) && refused.has(entry["external_id"]))) problems.push("an event is both refused and failed");
+    const refused = new Set(result["refused"].map((entry) => plainObject2(entry) ? entry["external_id"] : void 0));
+    if (result["failed"].some((entry) => plainObject2(entry) && refused.has(entry["external_id"]))) problems.push("an event is both refused and failed");
   }
   problems.push(...removalProblems(result));
   if (result["gap"] !== void 0) {
     const gap = result["gap"];
-    if (!plainObject(gap) || Object.keys(gap).some((key) => key !== "reason" && key !== "since") || !GAP_REASONS.includes(gap["reason"]) || !isoUtc(gap["since"])) {
+    if (!plainObject2(gap) || Object.keys(gap).some((key) => key !== "reason" && key !== "since") || !GAP_REASONS.includes(gap["reason"]) || !isoUtc(gap["since"])) {
       problems.push(`the result's gap must be { reason: ${GAP_REASONS.join(" or ")}, since: a UTC ISO date-time }`);
     }
   }
   if (result["cost"] !== void 0) {
     const cost = result["cost"];
-    const units = plainObject(cost) ? cost["units"] : void 0;
-    const unitsOk = Array.isArray(units) && units.length <= EVENT_LIMITS.costUnits && units.every((unit) => plainObject(unit) && Object.keys(unit).every((key) => key === "per" || key === "count") && typeof unit["per"] === "string" && UNIT.test(unit["per"]) && typeof unit["count"] === "number" && Number.isInteger(unit["count"]) && unit["count"] >= 0);
-    const usd = plainObject(cost) ? cost["usd"] : void 0;
+    const units = plainObject2(cost) ? cost["units"] : void 0;
+    const unitsOk = Array.isArray(units) && units.length <= EVENT_LIMITS.costUnits && units.every((unit) => plainObject2(unit) && Object.keys(unit).every((key) => key === "per" || key === "count") && typeof unit["per"] === "string" && UNIT.test(unit["per"]) && typeof unit["count"] === "number" && Number.isInteger(unit["count"]) && unit["count"] >= 0);
+    const usd = plainObject2(cost) ? cost["usd"] : void 0;
     const usdOk = usd === void 0 || typeof usd === "number" && Number.isFinite(usd) && usd >= 0;
-    if (!plainObject(cost) || Object.keys(cost).some((key) => key !== "units" && key !== "usd") || !unitsOk || !usdOk) {
+    if (!plainObject2(cost) || Object.keys(cost).some((key) => key !== "units" && key !== "usd") || !unitsOk || !usdOk) {
       problems.push("the result's cost must be { units: [{ per, count }], usd? }, with whole counts and a non-negative usd");
     }
   }
-  if (result["plugin"] !== void 0 && !line(result["plugin"], 214)) problems.push("the result's plugin must be the plugin's package name or id");
+  if (result["plugin"] !== void 0 && !line2(result["plugin"], 214)) problems.push("the result's plugin must be the plugin's package name or id");
   if (result["asOf"] !== void 0 && !isoUtc(result["asOf"])) problems.push("the result's asOf must be a UTC ISO date-time ending in Z");
   return problems;
 }
-function resultProblems(result, limit = PAGE.max, maxBytes = MAX_PAGE_BYTES) {
-  if (!plainObject(result)) return ["the result is not an object"];
+function resultProblems(result, limit = PAGE.max, maxBytes = MAX_PAGE_BYTES, options = {}) {
+  if (!plainObject2(result)) return ["the result is not an object"];
   const problems = [];
   for (const key of Object.keys(result)) if (!RESULT_KEYS.includes(key) && !EXTRA_KEYS.includes(key)) problems.push(`the result has the field "${key}", which the contract does not define`);
   const { source, account } = result;
-  const named = line(source, EVENT_LIMITS.source) && SOURCE_PATTERN.test(source);
+  const named = line2(source, EVENT_LIMITS.source) && SOURCE_PATTERN.test(source);
   if (!named) problems.push("the result's source must be a lowercase name such as gmail");
-  if (!line(account, EVENT_LIMITS.account)) problems.push(`the result's account must be a non-empty name of at most ${EVENT_LIMITS.account} characters`);
+  if (!line2(account, EVENT_LIMITS.account)) problems.push(`the result's account must be a non-empty name of at most ${EVENT_LIMITS.account} characters`);
   const owner = result["owner"];
   problems.push(...ownerShapeProblems(owner, "the result's owner"));
   const cursor = result["cursor"];
@@ -842,21 +949,47 @@ function resultProblems(result, limit = PAGE.max, maxBytes = MAX_PAGE_BYTES) {
   if (!Array.isArray(events)) return [...problems, "the result's events must be a list"];
   if (events.length > limit) problems.push(`the result has ${events.length} events, over the limit of ${limit}`);
   for (const [index, event] of events.entries()) {
-    problems.push(...eventProblems(event, `events[${index}]`));
-    if (plainObject(event) && named && event["source"] !== source) problems.push(`events[${index}] names another source than the result`);
-    if (plainObject(event) && typeof account === "string" && event["account"] !== account) problems.push(`events[${index}] names another account than the result`);
+    problems.push(...eventProblems(event, `events[${index}]`, options));
+    if (plainObject2(event) && named && event["source"] !== source) problems.push(`events[${index}] names another source than the result`);
+    if (plainObject2(event) && typeof account === "string" && event["account"] !== account) problems.push(`events[${index}] names another account than the result`);
   }
-  const times = events.map((event) => Date.parse(plainObject(event) ? String(event["occurred_at"]) : ""));
+  const times = events.map((event) => Date.parse(plainObject2(event) ? String(event["occurred_at"]) : ""));
   if (times.some((time, index) => index > 0 && time < times[index - 1])) problems.push("the result's events are not oldest first");
-  const ids = events.map((event) => plainObject(event) ? `${String(event["source"])}:${String(event["account"])}:${String(event["external_id"])}` : "");
+  const ids = events.map((event) => plainObject2(event) ? `${String(event["source"])}:${String(event["account"])}:${String(event["external_id"])}` : "");
   if (new Set(ids).size !== ids.length) problems.push("the result lists one event twice");
-  problems.push(...extraProblems(result, new Set(events.map((event) => plainObject(event) ? String(event["external_id"]) : ""))));
+  problems.push(...extraProblems(result, new Set(events.map((event) => plainObject2(event) ? String(event["external_id"]) : ""))));
   const bytes = Buffer.byteLength(JSON.stringify(result));
   if (bytes > maxBytes) problems.push(`the result is ${bytes} bytes of JSON, over ${maxBytes}`);
   return problems;
 }
 
 export {
+  MANIFEST_VERSION,
+  OPENCODE_RANGE,
+  TESTED_OPENCODE,
+  PLUGIN_NAME,
+  EXTENSION_KEY,
+  METHOD_CLASSES,
+  METHOD_ACCOUNTS,
+  METHOD_EFFECTS,
+  ACCOUNT_MECHANISMS,
+  SOURCE_KINDS,
+  SOURCE_SIGNALS,
+  COST_CLASSES,
+  ACTION_EFFECTS,
+  BUS_EVENTS,
+  MAX_BYTES_LIMIT,
+  MAX_BYTES_DEFAULT,
+  SERVICE_ID_MAX,
+  SERVICE_LABEL_MAX,
+  OWNER_ORGS_LIMIT,
+  THUMBNAIL_URL_MAX,
+  DETAIL_FIELDS,
+  SCHEME_QUALIFIED,
+  ownerOrgProblems,
+  ownerProblems,
+  hostMatches,
+  thumbnailUrlProblems,
   secretKinds,
   EVENTS_LIST,
   EVENT_KINDS,

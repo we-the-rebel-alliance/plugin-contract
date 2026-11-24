@@ -1,51 +1,52 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
-  resolveParams,
   resolveSince
 } from "./chunk-6WEY3U6L.js";
 import {
   pick,
   pickProblemsForOutput
-} from "./chunk-V4BUIRFD.js";
+} from "./chunk-6DK55WUK.js";
 import {
   failure,
   failureFromError
-} from "./chunk-P7PJT66U.js";
-import {
-  findSource,
-  maxBytesOf
-} from "./chunk-TYSWMQDX.js";
-import {
-  checkOutput
-} from "./chunk-AFCXCE4V.js";
+} from "./chunk-5X5476BS.js";
 import {
   detailRules,
   grantCovers,
+  namespaceOf,
   probeRules,
   sessionRules
-} from "./chunk-2V4VLI45.js";
+} from "./chunk-IOB3DPAI.js";
+import {
+  findMethod,
+  findSource,
+  maxBytesOf
+} from "./chunk-SC2WF2IE.js";
+import {
+  checkOutput,
+  isOutputName
+} from "./chunk-TLI6ZXDE.js";
 import {
   PAGE,
   probeResultProblems,
   resultProblems
-} from "./chunk-BMJJJDZ6.js";
+} from "./chunk-OKHHHVM5.js";
 import {
   canonicalScope
 } from "./chunk-7KJXMIQH.js";
 
 // src/read.ts
-var rpcOf = (installed) => installed.sources.rpc === void 0 ? {} : { rpc: installed.sources.rpc };
 var plain = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var refused = (code, what, next) => ({ ok: false, failure: failure(code, what, next) });
 var bytes = (value) => new TextEncoder().encode(JSON.stringify(value)).length;
 function checkReadRequest(request) {
   const { installed, grant } = request;
-  const source = findSource(installed.sources, request.source);
-  if (!source) return refused("UNAVAILABLE", `${installed.package} ${installed.version} declares no source ${request.source}`, "Check the source id against the installed plugin's sources.");
+  const source = findSource(installed.manifest, request.source);
+  if (!source) return refused("UNAVAILABLE", `${installed.package} ${installed.version} declares no source ${request.source}`, "Check the source id against the installed plugin's manifest.");
   if (grant.disabled) return refused("SOURCE_DISABLED", `${source.id} is turned off for ${grant.consumer}`, "Turn the source on again to read it.");
   if (grant.consumer !== request.consumer) return refused("PERMISSION_DENIED", `the grant is ${grant.consumer}'s, not ${request.consumer}'s`, "Ask the person to grant this consumer the source.");
-  if (grant.descriptorHash !== installed.hash) {
-    return refused("PERMISSION_DENIED", `${source.id}'s declaration changed since the person consented`, "Ask the person to review the source and consent again.");
+  if (grant.manifestHash !== installed.hash) {
+    return refused("PERMISSION_DENIED", `${source.id}'s manifest changed since the person consented`, "Ask the person to review the source and consent again.");
   }
   const asked = request.scope ?? grant.scope;
   if (!grantCovers(grant, { source: source.id, account: grant.account, ...asked === void 0 ? {} : { scope: asked } })) {
@@ -53,13 +54,16 @@ function checkReadRequest(request) {
   }
   const scope = asked === void 0 ? void 0 : canonicalScope(asked);
   if (source.kind === "events") {
-    if (request.params !== void 0 || request.pick !== void 0) return refused("SCHEMA_VIOLATION", "params and pick are for a snapshot source", "Pass cursor, since and limit to an events source.");
+    if (request.pick !== void 0) return refused("SCHEMA_VIOLATION", "pick is for a snapshot source", "Pass cursor, since and limit to an events source.");
+    if (request.thumbnails === true && source.thumbnails !== true) {
+      return refused("SCHEMA_VIOLATION", `${source.id} does not declare thumbnails`, "Ask for thumbnails only from a source that declares them.");
+    }
   } else {
-    if (request.cursor !== void 0 || request.since !== void 0 || request.limit !== void 0) {
-      return refused("SCHEMA_VIOLATION", "cursor, since and limit are for an events source", "Pass params and pick to a snapshot source.");
+    if (request.cursor !== void 0 || request.since !== void 0 || request.limit !== void 0 || request.thumbnails !== void 0) {
+      return refused("SCHEMA_VIOLATION", "cursor, since, limit and thumbnails are for an events source", "Pass pick to a snapshot source.");
     }
     if (request.pick !== void 0) {
-      const problems = pickProblemsForOutput(source.output ?? "", request.pick, source.outputSchema);
+      const problems = isOutputName(source.output) ? pickProblemsForOutput(source.output, request.pick) : [];
       if (problems.length > 0) return refused("SCHEMA_VIOLATION", problems.join("; "), "Pick only paths of the source's output schema.");
     }
   }
@@ -79,11 +83,10 @@ function prepare(request) {
     }
     if (request.cursor !== void 0) input["cursor"] = request.cursor;
     if (request.limit !== void 0) input["limit"] = request.limit;
+    if (request.thumbnails === true) input["thumbnails"] = true;
     return { source, input };
   }
-  const params = resolveParams(source.params, request.params, request.context);
-  if (!params.ok) return refused("SCHEMA_VIOLATION", params.problems.join("; "), "Pass only the params the source declares, as its descriptor describes them.");
-  return { source, input: { ...input, ...params.value } };
+  return { source, input };
 }
 function checkAnswer(source, account, answer) {
   const size = bytes(answer);
@@ -114,13 +117,14 @@ async function read(host, request) {
   const called = await fencedCall(
     host,
     sessionRules(source, request.grant),
-    { package: request.installed.package, ...rpcOf(request.installed), method: source.tool, input, ...request.signal ? { signal: request.signal } : {} },
+    { package: request.installed.package, method: source.method, input, ...request.signal ? { signal: request.signal } : {} },
     `${request.consumer} reads ${source.id}`
   );
   if (!called.ok) return { ok: false, failure: called.failure };
   return acceptAnswer(source, request.grant.account, called.answer, {
     ...request.limit === void 0 ? {} : { limit: request.limit },
-    ...request.pick === void 0 ? {} : { pick: request.pick }
+    ...request.pick === void 0 ? {} : { pick: request.pick },
+    ...request.thumbnails === void 0 ? {} : { thumbnails: request.thumbnails }
   });
 }
 function acceptAnswer(source, account, answer, options = {}) {
@@ -128,14 +132,19 @@ function acceptAnswer(source, account, answer, options = {}) {
   if (problem) return { ok: false, failure: problem };
   const value = answer;
   if (source.kind === "events") {
-    const problems = resultProblems(value, options.limit ?? PAGE.max, maxBytesOf(source));
+    const problems = resultProblems(value, options.limit ?? PAGE.max, maxBytesOf(source), {
+      ...options.thumbnails === true ? { thumbnails: true } : {},
+      ...source.urlHosts === void 0 ? {} : { urlHosts: source.urlHosts }
+    });
     if (problems.length > 0) {
       return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s page breaks the events contract: ${problems.slice(0, 3).join("; ")}`, "Report it to the plugin's maintainers.") };
     }
     return { ok: true, kind: "events", page: value };
   }
-  const checked = checkOutput(source.output ?? "", value["data"], source.outputSchema);
-  if (!checked.ok) return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s data breaks the ${source.output} schema: ${checked.problems.slice(0, 3).join("; ")}`, "Report it to the plugin's maintainers.") };
+  if (isOutputName(source.output)) {
+    const checked = checkOutput(source.output, value["data"]);
+    if (!checked.ok) return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s data breaks the ${source.output} schema: ${checked.problems.slice(0, 3).join("; ")}`, "Report it to the plugin's maintainers.") };
+  }
   if (typeof value["asOf"] !== "string" || !Number.isFinite(Date.parse(value["asOf"]))) {
     return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s snapshot has no asOf time`, "Report it to the plugin's maintainers.") };
   }
@@ -163,10 +172,10 @@ function detailFields(source, detailId, event) {
 }
 async function readDetail(host, request) {
   const { installed, grant } = request;
-  const source = findSource(installed.sources, request.source);
+  const source = findSource(installed.manifest, request.source);
   if (!source) return { ok: false, failure: failure("UNAVAILABLE", `${installed.package} declares no source ${request.source}`, "Check the source id.") };
   if (grant.disabled) return { ok: false, failure: failure("SOURCE_DISABLED", `${source.id} is turned off for ${grant.consumer}`, "Turn the source on again to read it.") };
-  if (grant.consumer !== request.consumer || grant.descriptorHash !== installed.hash) {
+  if (grant.consumer !== request.consumer || grant.manifestHash !== installed.hash) {
     return { ok: false, failure: failure("PERMISSION_DENIED", `the grant does not cover ${request.consumer}'s read of ${source.id} as installed`, "Ask the person to consent again.") };
   }
   if (request.event["account"] !== void 0 && request.event["account"] !== grant.account) {
@@ -179,7 +188,7 @@ async function readDetail(host, request) {
   const called = await fencedCall(
     host,
     detailRules(source, request.detail, grant),
-    { package: installed.package, ...rpcOf(installed), method: detail.tool, input: { account: grant.account, scope, fields: fields.value }, ...request.signal ? { signal: request.signal } : {} },
+    { package: installed.package, method: detail.method, input: { account: grant.account, scope, fields: fields.value }, ...request.signal ? { signal: request.signal } : {} },
     `${request.consumer} reads ${request.detail}`
   );
   if (!called.ok) return called;
@@ -187,18 +196,16 @@ async function readDetail(host, request) {
   return problem ? { ok: false, failure: problem } : { ok: true, answer: called.answer };
 }
 async function probe(host, request) {
-  const source = findSource(request.installed.sources, request.source);
+  const source = findSource(request.installed.manifest, request.source);
   if (!source) return { ok: false, failure: failure("UNAVAILABLE", `${request.installed.package} declares no source ${request.source}`, "Check the source id.") };
-  const declared = source.permission.identity ?? (source.permission.identityRules !== void 0 ? [] : void 0);
-  const identity = declared ?? request.identityOperations;
-  if (identity === void 0) {
-    return { ok: false, failure: failure("PERMISSION_DENIED", `${source.id} declares no identity operations, and none were given`, "Declare permission.identity in the source, or pass the identity operations.") };
-  }
+  const method = findMethod(request.installed.manifest, "probe");
+  if (method === void 0) return { ok: false, failure: failure("PERMISSION_DENIED", `${request.installed.package} declares no probe method`, "Declare probe in the manifest's methods.") };
+  const identity = request.identityOperations ?? method.operations ?? [];
   const name = typeof source.input?.["source"] === "string" ? { source: source.input["source"] } : {};
   const called = await fencedCall(
     host,
-    probeRules(source, request.account, identity, request.installed.sources.probe?.action),
-    { package: request.installed.package, ...rpcOf(request.installed), method: "probe", input: { ...name, account: request.account }, ...request.signal ? { signal: request.signal } : {} },
+    probeRules(source, request.account, identity, `${namespaceOf(source)}.probe`),
+    { package: request.installed.package, method: "probe", input: { ...name, account: request.account }, ...request.signal ? { signal: request.signal } : {} },
     `probe ${source.id}`
   );
   if (!called.ok) return called;

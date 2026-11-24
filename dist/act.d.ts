@@ -1,6 +1,5 @@
-import { type InstalledDescriptor } from "./descriptor.js";
+import { type ActionEffect, type InstalledManifest } from "./manifest.js";
 import { type ReadFailure } from "./internal/failure.js";
-import type { ActEffect } from "./internal/schema/types.js";
 import { type ActGrant, type ActPhase } from "./permission.js";
 import type { ReadHost } from "./read.js";
 export type { ReadFailure } from "./internal/failure.js";
@@ -14,14 +13,14 @@ export interface ActHost extends ReadHost {
     issuedConfirmation?(check: {
         readonly token: string;
         readonly act: string;
-        readonly effect: ActEffect;
+        readonly effect: ActionEffect;
         readonly account: string;
         readonly consumer: string;
     }): boolean | Promise<boolean>;
 }
 /** One preview or commit of an act. */
 export interface ActRequest {
-    readonly installed: InstalledDescriptor;
+    readonly installed: InstalledManifest;
     readonly act: string;
     readonly grant: ActGrant;
     readonly consumer: string;

@@ -1,4 +1,5 @@
 import { type Scope } from "../cursor.js";
+import { type Owner } from "../manifest/types.js";
 export type { Scope } from "../cursor.js";
 export { secretKinds } from "./secrets.js";
 /** The tool's and the tools-RPC method's name. */
@@ -233,17 +234,8 @@ export interface SourceEvent {
     /** #42: the item's https thumbnail, present only when the read asked and the item has one. Outside `eventHash`. */
     readonly thumbnail?: string;
 }
-/** The signed-in source account. */
-export interface EventsOwner {
-    readonly id: string;
-    readonly label: string;
-    /**
-     * `false` when the provider does not confirm who this is, so the id is the plugin's best knowledge
-     * (Wispr Flow names OpenCode's credential, `wisprflow:credential:<id>`). A consumer shows it as unverified. Absent
-     * means the plugin vouches that the provider named the owner. Only `false` is accepted, so one owner has one encoding.
-     */
-    readonly verified?: false;
-}
+/** The signed-in source account, with the organizations its provider reports (#44 item 2). */
+export type EventsOwner = Owner;
 /** Why an event is refused for good: instruction-shaped text from someone else, a secret, or not the owner's. */
 export declare const REFUSAL_REASONS: readonly ["instruction", "secret", "owner"];
 export type RefusalReason = (typeof REFUSAL_REASONS)[number];
@@ -335,6 +327,8 @@ export interface EventsListRequest {
     readonly account?: string;
     readonly source?: string;
     readonly scope?: Record<string, string | string[]>;
+    /** #42: the read asks for each item's `thumbnail`. Only a source that declares `thumbnails` accepts it. */
+    readonly thumbnails?: true;
 }
 /** The one error table (contract §12). A plugin may add codes; it declares them in its manifest. */
 export declare const ERROR_CODES: readonly ["NEEDS_SIGN_IN", "SCOPE_MISSING", "ACCOUNT_REQUIRED", "ACCOUNT_UNKNOWN", "ACCOUNT_MISMATCH", "CURSOR_INVALID", "CURSOR_EXPIRED", "RATE_LIMITED", "BUDGET_EXCEEDED", "SOURCE_DISABLED", "TOO_LARGE", "INPUT_INVALID", "SOURCE_UNKNOWN", "SCHEMA_VIOLATION", "PERMISSION_DENIED", "PLAN_INVALID", "GRANT_INVALID", "HOST_UNTESTED", "OPTIONS_INVALID", "UNAVAILABLE"];
@@ -379,14 +373,17 @@ export declare const SCOPE_KEY_PATTERN: RegExp;
 export declare function sinceTime(since: string): number | undefined;
 /** A scope's problems against the keys a source declares, one sentence each, naming keys and never values. */
 export declare function scopeProblems(scope: unknown, keys: readonly string[]): string[];
-/** How a source parses its input: the scope keys it declares (`scope.keys` in its descriptor), none by default. */
+/** How a source parses its input: the scope keys it declares (`scope.keys` in its manifest), none by default. */
 export interface ParseOptions {
     readonly scopeKeys?: readonly string[];
+    /** #42: the source declares `thumbnails: true`, so the read may ask for `thumbnail`s. */
+    readonly thumbnails?: boolean;
 }
 /**
  * The input checked and normalised, or the problems with it, one sentence each, naming fields and never values.
  * `scope` is accepted only when `options.scopeKeys` declares keys: a source that does not read a scope must refuse
- * one rather than ignore it, since ignoring it would read more than the consumer asked for.
+ * one rather than ignore it, since ignoring it would read more than the consumer asked for. `thumbnails` is accepted
+ * the same way: only from a source that declares it, and only as `true`.
  */
 export declare function parseEventsListInput(input: unknown, options?: ParseOptions): {
     ok: true;
@@ -438,6 +435,8 @@ export interface EventDraft {
         readonly actor?: string;
     }[];
     readonly facts?: readonly EventFact[];
+    /** #42: present only when the read asked for thumbnails. The field is outside `eventHash`. */
+    readonly thumbnail?: string | null;
 }
 /**
  * A `SourceEvent` from a draft: the time in UTC ISO form, the title on one line and cut to 300 characters, the text cut
@@ -543,8 +542,15 @@ export declare function eventsListResult(identity: EventsListIdentity, events: r
  * package's) and no field for a sensitive trait.
  */
 export declare function factProblems(fact: unknown, actors: ReadonlySet<string>, where?: string): string[];
+/** The event fields a read may allow beyond the contract's own. */
+export interface EventProblemOptions {
+    /** #42: the read asked for thumbnails, so `thumbnail` is allowed when the item has one. */
+    readonly thumbnails?: boolean;
+    /** The source's `urlHosts`: a thumbnail's host must match one. */
+    readonly urlHosts?: readonly string[];
+}
 /** One event's problems, one sentence each; none when it keeps the contract. */
-export declare function eventProblems(event: unknown, where?: string): string[];
+export declare function eventProblems(event: unknown, where?: string, options?: EventProblemOptions): string[];
 /**
  * A page's `removals[]` problems (#27), one sentence each; none when it is absent or keeps the contract: at most 500
  * entries of exactly `{ external_id, at, reason }`, each id once, none also in `failed[]`, and no `at` later than the
@@ -555,4 +561,4 @@ export declare function removalProblems(result: unknown): string[];
  * A result's problems: its shape, every event, the order, the limit and the size, and each optional addition that is
  * present. None when it keeps the contract. `maxBytes` is the source's declared cap, `MAX_PAGE_BYTES` by default.
  */
-export declare function resultProblems(result: unknown, limit?: number, maxBytes?: number): string[];
+export declare function resultProblems(result: unknown, limit?: number, maxBytes?: number, options?: EventProblemOptions): string[];
