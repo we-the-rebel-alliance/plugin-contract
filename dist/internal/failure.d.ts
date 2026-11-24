@@ -1,8 +1,8 @@
 /**
  * A read's failure, in the contract's form: `CODE: what happened. Next step: …` (contract §12).
  *
- * The codes are the one error table in `events` (`ERROR_CODES`). A plugin's own code is read through `canonicalCode`;
- * a code the table does not hold is `UNAVAILABLE`.
+ * The codes are the one error table in `events` (`ERROR_CODES`). A plugin's own code is read through `errorCodeOf`; a
+ * code the table does not hold is `UNAVAILABLE`.
  */
 import { type ErrorCode } from "./events.js";
 /** The codes a read answers: the events table. */

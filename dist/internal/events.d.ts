@@ -338,13 +338,9 @@ export interface EventsListRequest {
 export declare const ERROR_CODES: readonly ["NEEDS_SIGN_IN", "SCOPE_MISSING", "ACCOUNT_REQUIRED", "ACCOUNT_UNKNOWN", "ACCOUNT_MISMATCH", "CURSOR_INVALID", "CURSOR_EXPIRED", "RATE_LIMITED", "BUDGET_EXCEEDED", "SOURCE_DISABLED", "TOO_LARGE", "INPUT_INVALID", "SOURCE_UNKNOWN", "SCHEMA_VIOLATION", "PERMISSION_DENIED", "PLAN_INVALID", "GRANT_INVALID", "HOST_UNTESTED", "OPTIONS_INVALID", "UNAVAILABLE"];
 export type ErrorCode = (typeof ERROR_CODES)[number];
 /** The table's code for `code`, or undefined for a code the table does not hold. */
-export declare function canonicalCode(code: string): ErrorCode | undefined;
+export declare function errorCodeOf(code: string): ErrorCode | undefined;
 /**
  * A refusal in the contract's form, `CODE: what happened. Next step: what to do.`, with the code and its data. A
- * `RATE_LIMITED` or `BUDGET_EXCEEDED` may carry `retryAfterSec`; a `CURSOR_EXPIRED` carries the `gap`.
- */
-/**
- * A refusal in the family's form, `CODE: what happened. Next step: what to do.`, with the code and its data. A
  * `RATE_LIMITED` or `BUDGET_EXCEEDED` may carry `retryAfterSec`; a `CURSOR_EXPIRED` carries the `gap`.
  */
 export declare class SourceError extends Error {
@@ -363,7 +359,7 @@ export declare class SourceError extends Error {
 }
 /**
  * The code, its canonical code, what happened and the next step, read from a refusal: a `SourceError`, or any error
- * whose message is in the family's form. Undefined for an error with no code.
+ * whose message is in the contract's form. Undefined for an error with no code.
  */
 export declare function parseSourceError(error: unknown): {
     code: string;

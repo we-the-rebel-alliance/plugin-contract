@@ -215,7 +215,7 @@ var ERROR_CODES = [
   "OPTIONS_INVALID",
   "UNAVAILABLE"
 ];
-function canonicalCode(code) {
+function errorCodeOf(code) {
   return ERROR_CODES.includes(code) ? code : void 0;
 }
 var SourceError = class extends Error {
@@ -234,16 +234,16 @@ var SourceError = class extends Error {
     if (init.gap !== void 0) this.gap = init.gap;
   }
 };
-var FAMILY_MESSAGE = /^([A-Z][A-Z0-9_]*): ([^]*?)(?:\. Next step: ([^]*))?$/;
+var SOURCE_ERROR_MESSAGE = /^([A-Z][A-Z0-9_]*): ([^]*?)(?:\. Next step: ([^]*))?$/;
 function parseSourceError(error) {
   if (error instanceof SourceError) {
-    const canonical2 = canonicalCode(error.code);
+    const canonical2 = errorCodeOf(error.code);
     return { code: error.code, ...canonical2 ? { canonical: canonical2 } : {}, what: error.what, next: error.next };
   }
   const message = error instanceof Error ? error.message : typeof error === "string" ? error : void 0;
-  const match = message === void 0 ? null : FAMILY_MESSAGE.exec(message.split("\n", 1)[0] ?? "");
+  const match = message === void 0 ? null : SOURCE_ERROR_MESSAGE.exec(message.split("\n", 1)[0] ?? "");
   if (!match) return void 0;
-  const canonical = canonicalCode(match[1]);
+  const canonical = errorCodeOf(match[1]);
   return { code: match[1], ...canonical ? { canonical } : {}, what: match[2], ...match[3] === void 0 ? {} : { next: match[3] } };
 }
 var SINCE_PATTERN = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2}))?$/;
@@ -886,7 +886,7 @@ export {
   REMOVAL_REASONS,
   GAP_REASONS,
   ERROR_CODES,
-  canonicalCode,
+  errorCodeOf,
   SourceError,
   parseSourceError,
   SINCE_PATTERN,

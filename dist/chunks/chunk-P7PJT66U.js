@@ -1,8 +1,8 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   ERROR_CODES,
-  canonicalCode
-} from "./chunk-577LF5CA.js";
+  errorCodeOf
+} from "./chunk-BMJJJDZ6.js";
 
 // src/internal/failure.ts
 var FAILURE_CODES = ERROR_CODES;
@@ -19,7 +19,7 @@ function failureFromError(error) {
   const data = typeof record["data"] === "object" && record["data"] !== null ? record["data"] : {};
   const message = typeof record["message"] === "string" ? record["message"] : String(error);
   const raw = [record["code"], data["code"], /^([A-Z][A-Z_]+):/.exec(message)?.[1]].find((code2) => typeof code2 === "string");
-  const canonical = raw === void 0 ? void 0 : canonicalCode(raw);
+  const canonical = raw === void 0 ? void 0 : errorCodeOf(raw);
   const refusedInput = canonical === "INPUT_INVALID" || canonical === "SOURCE_UNKNOWN";
   const code = canonical !== void 0 && FAILURE_CODES.includes(canonical) ? canonical : void 0;
   const first = message.split(/\r?\n/, 1)[0].slice(0, 300);

@@ -14,6 +14,9 @@ import {
   union,
   validator
 } from "./chunk-BQEBNVNU.js";
+import {
+  EXTENSION_NAME
+} from "./chunk-BMJJJDZ6.js";
 
 // src/outputs.ts
 var text = (max) => string().max(max);
@@ -156,9 +159,8 @@ function isOutputName(name) {
 function outputValidator(name) {
   return isOutputName(name) ? OUTPUTS[name] : void 0;
 }
-var EXTENSION_OUTPUT = /^x-[a-z][a-z0-9-]{0,31}\/[a-z][a-z0-9-]{0,31}$/;
 function isExtensionOutput(name) {
-  return typeof name === "string" && EXTENSION_OUTPUT.test(name);
+  return typeof name === "string" && EXTENSION_NAME.test(name);
 }
 function checkOutput(name, data, schema) {
   const found = outputValidator(name);
@@ -177,7 +179,6 @@ export {
   OUTPUT_NAMES,
   isOutputName,
   outputValidator,
-  EXTENSION_OUTPUT,
   isExtensionOutput,
   checkOutput
 };

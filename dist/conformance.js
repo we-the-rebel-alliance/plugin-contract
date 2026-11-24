@@ -1,11 +1,11 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   maxBytesOf
-} from "./chunks/chunk-ZWKV37GW.js";
-import "./chunks/chunk-6E62CHFC.js";
+} from "./chunks/chunk-TYSWMQDX.js";
+import "./chunks/chunk-AFCXCE4V.js";
 import {
   SOURCES_SCHEMA
-} from "./chunks/chunk-RGWXXX65.js";
+} from "./chunks/chunk-EMGW7BT2.js";
 import {
   toolsRpcIdProblems
 } from "./chunks/chunk-T2QSLHBQ.js";
@@ -16,7 +16,7 @@ import {
 import "./chunks/chunk-65FTIXYZ.js";
 import {
   hintProblems
-} from "./chunks/chunk-NY4JZ3MG.js";
+} from "./chunks/chunk-X5LDDGDL.js";
 import {
   fromJSONSchema
 } from "./chunks/chunk-BQEBNVNU.js";
@@ -30,7 +30,7 @@ import {
   resultProblems,
   secretKinds,
   sourceNamespace
-} from "./chunks/chunk-577LF5CA.js";
+} from "./chunks/chunk-BMJJJDZ6.js";
 import "./chunks/chunk-7KJXMIQH.js";
 import "./chunks/chunk-WLRWVIVP.js";
 

@@ -23,7 +23,7 @@ import {
   EVENT_LIMITS,
   FACT_TYPES,
   isEventKind
-} from "./chunk-577LF5CA.js";
+} from "./chunk-BMJJJDZ6.js";
 
 // src/internal/schema/types.ts
 var MAX_BYTES_DEFAULT = 65536;

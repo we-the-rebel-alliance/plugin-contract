@@ -29,8 +29,8 @@ import {
   SOURCE_PATTERN,
   SourceError,
   TRUST,
-  canonicalCode,
   cut,
+  errorCodeOf,
   eventHash,
   eventProblems,
   eventsListResult,
@@ -55,7 +55,7 @@ import {
   sinceTime,
   sourceNamespace,
   startTime
-} from "./chunks/chunk-577LF5CA.js";
+} from "./chunks/chunk-BMJJJDZ6.js";
 import {
   decodeBoundCursor,
   encodeBoundCursor
@@ -239,8 +239,8 @@ export {
   SourceError,
   TRUST,
   assertEventsListConformance,
-  canonicalCode,
   cut,
+  errorCodeOf,
   eventHash,
   eventProblems,
   eventsListConformance,

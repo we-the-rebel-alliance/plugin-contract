@@ -167,7 +167,7 @@ export interface ProbeAnswer {
  * Probes a source for an account, in a session fenced by its probe rules: the plugin's declared probe action
  * (`sources.probe.action`) and the source's declared identity operations (`permission.identity`), or, for a plugin
  * that declares neither yet, the source's own action and the identity operations the caller passes. The call is the
- * family's: `probe` with `{ source?, account }`.
+ * contract's form: `probe` with `{ source?, account }`.
  */
 export declare function probe(host: ReadHost, request: {
     readonly installed: InstalledDescriptor;

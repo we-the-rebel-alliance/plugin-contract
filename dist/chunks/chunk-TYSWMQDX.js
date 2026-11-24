@@ -3,10 +3,10 @@ import {
   OUTPUT_NAMES,
   isExtensionOutput,
   isOutputName
-} from "./chunk-6E62CHFC.js";
+} from "./chunk-AFCXCE4V.js";
 import {
   SOURCES_SCHEMA
-} from "./chunk-RGWXXX65.js";
+} from "./chunk-EMGW7BT2.js";
 import {
   SUPPORTED_CONTRACT_VERSIONS
 } from "./chunk-65FTIXYZ.js";
@@ -26,7 +26,7 @@ import {
   EVENT_KINDS,
   MAX_BYTES,
   isEventKind
-} from "./chunk-577LF5CA.js";
+} from "./chunk-BMJJJDZ6.js";
 
 // src/descriptor.ts
 import { createHash } from "node:crypto";
@@ -47,8 +47,8 @@ var item = looseObject({
   kind: _enum(["events", "snapshot"]),
   tool: string().regex(METHOD, "must be a tools-RPC method name"),
   input: record(string(), unknown()).optional(),
-  // PROVISIONAL (app#2346 decisions D13 and D15, PR #7): one event kind, core or x-<plugin>/<kind>. Whether `reads`
-  // takes a list, and whether an extension's <plugin> must match the descriptor's, are not agreed yet.
+  // PROVISIONAL (D13 and D15, open): one event kind, core or x-<plugin>/<kind>. Whether `reads` takes a list, and
+  // whether an extension's <plugin> must match the plugin's own name, are not agreed yet.
   reads: string().refine(isEventKind, `must be an event kind: ${EVENT_KINDS.join(", ")}, or x-<plugin>/<kind>`).optional(),
   output: string().optional(),
   params: record(string(), looseObject({ relative: boolean().optional(), me: boolean().optional() })).optional(),
