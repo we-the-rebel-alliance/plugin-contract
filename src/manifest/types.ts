@@ -9,10 +9,10 @@
 /** The manifest's wire version. Independent of the package's semver (contract §4). */
 export const MANIFEST_VERSION = 1 as const
 
-/** The OpenCode range a v0 manifest declares (D8). A plugin outside it refuses to start with `HOST_UNTESTED`. */
+/** The OpenCode range a v0 manifest declares (D7). A plugin outside it refuses to start with `HOST_UNTESTED`. */
 export const OPENCODE_RANGE = ">=2.4.1 <2.5.0" as const
 
-/** The release the v0 contract is built and tested against (D8). */
+/** The release the v0 contract is built and tested against (D7). */
 export const TESTED_OPENCODE = "2.4.1" as const
 
 /** A plugin's name: 2–31 lowercase letters or digits, no hyphen, which separates an account alias (§3). */
@@ -92,7 +92,7 @@ export interface Icon {
   readonly type: string
 }
 
-/** The OpenCode range and the releases the plugin was tested on (§4, D8). */
+/** The OpenCode range and the releases the plugin was tested on (§4, D7). */
 export interface HostRange {
   /** Exactly `>=2.4.1 <2.5.0` in v0. */
   readonly opencode: typeof OPENCODE_RANGE
@@ -235,7 +235,7 @@ export interface SourceCommon {
   readonly facts?: readonly string[] | undefined
   /** The hint files the package ships for this source, relative paths ending in `.md`. */
   readonly hints?: readonly string[] | undefined
-  /** The hosts an event's `url` and `thumbnail_url` may point at. */
+  /** The hosts an event's `url` and `thumbnail` may point at. */
   readonly urlHosts?: readonly string[] | undefined
 }
 
@@ -244,7 +244,7 @@ export interface SourceEvents extends SourceCommon {
   readonly kind: "events"
   /** The thing it reads: a core kind such as `message`, or `x-<namespace>/<name>`. */
   readonly reads: string
-  /** True when the source can answer an event's `thumbnail_url` (#42). Requires `urlHosts`. */
+  /** True when the source can answer an event's `thumbnail` (#42). Requires `urlHosts`. */
   readonly thumbnails?: true | undefined
   /** Not allowed on an events source. */
   readonly output?: undefined

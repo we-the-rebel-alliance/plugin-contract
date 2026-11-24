@@ -114,8 +114,6 @@ One rule for every mechanism:
 ```ts
 accountName("slack", "default")  // "slack"
 accountName("slack", "work")     // "slack-work"
-integrationName                  // alias of accountName
-serverName                       // alias of accountName
 accountLabel("Slack", "work")    // "Slack (work)"
 ```
 
@@ -226,6 +224,6 @@ decodeBoundCursor({ plugin: "example", source: "messages", account: "personal" }
 
 ## Exports
 
-`ALIAS_PATTERN`, `DEFAULT_ALIAS`, `isAlias`, `aliasProblem`, `accountName`, `integrationName`, `serverName`,
+`ALIAS_PATTERN`, `DEFAULT_ALIAS`, `isAlias`, `aliasProblem`, `accountName`,
 `accountLabel`, `accountsOf`, `hasAccount`, `localIdentity`, `registerAccounts` (and its types), `resolveAccount`,
 `aliasesSentence`, `ACCOUNT_STATES`, `accountStatus`, `accountStatuses`, `NO_ACCOUNTS`, `REASON_MAX`, `redactReason`.

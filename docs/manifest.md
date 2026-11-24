@@ -69,7 +69,7 @@ app ignores and no app may require.
 - `title`, `summary`: what a person reads.
 - `vendor`: the provider's stable id, name and main domain. No scheme or path in `domain`.
 - `icons`: at least one; `src` is a path inside the installed package.
-- `host`: `opencode` is exactly `>=2.4.1 <2.5.0` in v0, and `tested` includes `2.4.1` (D8). Outside the range a plugin
+- `host`: `opencode` is exactly `>=2.4.1 <2.5.0` in v0, and `tested` includes `2.4.1` (D7). Outside the range a plugin
   refuses to start with `HOST_UNTESTED`, unless `allowUntestedHost` is set.
 
 ### `accounts`
@@ -164,9 +164,9 @@ A source is an events feed with a cursor, or a snapshot of the latest state.
 | `details` | events | Follow-up reads of one event: `{ id, method, from }`, where `from` names only identifying event fields. |
 | `facts` | events | The fact types its events carry. |
 | `hints` | events | Hint files the package ships, relative paths ending in `.md`. |
-| `urlHosts` | both | The hosts an event's `url` and `thumbnail_url` may point at. |
+| `urlHosts` | both | The hosts an event's `url` and `thumbnail` may point at. |
 | `reads` | events | A core event kind (`message`, `meeting`, `session`, `bookmark`, `issue`, `pr`, `commit`, `doc`, `event`, `task`, `file`) or `x-<plugin>/<kind>`. |
-| `thumbnails` | events | `true` when the source can answer `thumbnail_url` (#42). Requires `urlHosts`. |
+| `thumbnails` | events | `true` when the source can answer `thumbnail` (#42). Requires `urlHosts`. |
 | `output` | snapshot | A registry output name (`agenda`, `inbox`, `metric`, `list`, `progress`, `note`, `links`, `countdown`, `image`, `thread`, `table`, `record`) or `x-<plugin>/<name>`. |
 
 `details[].from` may name `external_id`, `kind`, `occurred_at`, `url`, `thread`, `actors`, `labels` or `hash`. It never
@@ -253,7 +253,7 @@ probe-answer check uses them.
 ### `thumbnail` (#42)
 
 An events source may declare `thumbnails: true`, and must then declare `urlHosts`. A read asks for thumbnails with
-`thumbnails: true`; only such a source accepts it. An event then carries `thumbnail_url` when the item has one. It is
+`thumbnails: true`; only such a source accepts it. An event then carries `thumbnail` when the item has one. It is
 never `null`, is left out when not asked for, and stays **outside `eventHash`**: how an item looks is not what it says,
 a rotating CDN link does not edit the item, and one item keeps one hash. `thumbnailUrlProblems(url, urlHosts)` checks
 that a URL is:

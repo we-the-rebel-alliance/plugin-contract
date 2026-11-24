@@ -11,7 +11,7 @@
  * identity).
  */
 export { ALIAS_PATTERN, DEFAULT_ALIAS, aliasProblem, isAlias } from "./accounts/alias.ts"
-export { accountLabel, accountName, integrationName, serverName } from "./accounts/names.ts"
+export { accountLabel, accountName } from "./accounts/names.ts"
 export { accountsOf, hasAccount, localIdentity } from "./accounts/profiles.ts"
 export type { AccountProfile, AccountsPlan } from "./accounts/profiles.ts"
 export { registerAccounts } from "./accounts/register.ts"

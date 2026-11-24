@@ -3,6 +3,7 @@ import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { after, describe, test } from "node:test"
+import * as z from "zod"
 import {
   canonicalJson,
   checkManifest,
@@ -57,7 +58,7 @@ describe("the manifest", () => {
     has(manifest((m) => (m.plugin.name = "a".repeat(32))), "capabilities.plugin.name")
   })
 
-  test("enforces the v0 host range and the tested release (D8)", () => {
+  test("enforces the v0 host range and the tested release (D7)", () => {
     has(manifest((m) => (m.plugin.host.opencode = ">=2.3.0 <2.5.0")), "capabilities.plugin.host.opencode")
     has(manifest((m) => (m.plugin.host.opencode = "^2.4.1")), "capabilities.plugin.host.opencode")
     has(manifest((m) => (m.plugin.host.tested = ["2.4.0"])), "capabilities.plugin.host.tested")
@@ -94,8 +95,10 @@ describe("the manifest", () => {
     has(manifest((m) => (m.methods.share_file = { class: "write" })), "a share_* method must be class share")
     assert.deepEqual(problems(manifest((m) => (m.methods.delete_message = { class: "delete" }))), [])
     assert.deepEqual(problems(manifest((m) => (m.methods.share_file = { class: "share" }))), [])
-    // A pass-through MCP tool's own name is not the contract's method name.
-    assert.deepEqual(problems(manifest((m) => (m.methods["mcp:delete_message"] = { class: "read" }))), [])
+    // A pass-through MCP tool is checked by its tool name too, after `mcp:`.
+    has(manifest((m) => (m.methods["mcp:delete_message"] = { class: "read" })), "a delete_* or remove_* method must be class delete")
+    assert.deepEqual(problems(manifest((m) => (m.methods["mcp:delete_message"] = { class: "delete" }))), [])
+    has(manifest((m) => (m.methods["other:tool"] = { class: "read" })), "capabilities.methods.other:tool")
   })
 
   test("allows none or one pinned method, and none by default", () => {
@@ -167,6 +170,24 @@ describe("the manifest", () => {
     has(manifest((m) => (m.events = { changed: {}, status: {}, account: {}, other: {} })), "capabilities.events.other")
     has(manifest((m) => (m.events.status = { type: "object" })), "capabilities.events.status")
     assert.deepEqual(problems(manifest((m) => (m.events = {}))), [])
+  })
+
+  test("reports field errors, stray keys and cross-references in one pass", () => {
+    const found = problems(manifest((m) => {
+      m.plugin.name = "Bad-Name"
+      m.stray = true
+      m.sources[0].method = "no_such_method"
+    }))
+    assert.ok(found.some((problem) => problem.startsWith("capabilities.plugin.name:")), found.join("\n"))
+    assert.ok(found.some((problem) => problem.startsWith("capabilities.stray:")), found.join("\n"))
+    assert.ok(found.some((problem) => problem.startsWith("capabilities.sources[0].method:")), found.join("\n"))
+  })
+
+  test("requires status on every plugin, and probe on every plugin with accounts (§11)", () => {
+    has(manifest((m) => delete m.methods.status), "capabilities.methods.status")
+    assert.deepEqual(problems(manifest((m) => (m.methods.status = { class: "read" }))), [])
+    has(manifest((m) => delete m.methods.probe), "capabilities.methods.probe")
+    assert.deepEqual(problems(manifest((m) => { delete m.methods.probe; delete m.accounts })), [])
   })
 
   test("every problem names its path from capabilities, and manifestProblems returns them", () => {
@@ -335,6 +356,16 @@ describe("MANIFEST_SCHEMA", () => {
     assert.equal(schema["type"], "object")
     const properties = schema["properties"] as Record<string, unknown>
     for (const key of ["version", "plugin", "accounts", "options", "methods", "sources", "actions", "events"]) assert.ok(properties[key], key)
+  })
+
+  test("publishes only the manifest's keys and x-<app>, and the JSON Schema itself refuses a stray key", () => {
+    const schema = MANIFEST_SCHEMA.jsonSchema()
+    assert.equal(schema["additionalProperties"], false)
+    assert.deepEqual(schema["patternProperties"], { "^x-[a-z][a-z0-9-]*$": {} })
+    const published = z.fromJSONSchema(schema as never)
+    assert.equal(published.safeParse(manifest()).success, true)
+    assert.equal(published.safeParse(manifest((m) => (m["x-demo"] = { placement: "sidebar" }))).success, true)
+    assert.equal(published.safeParse(manifest((m) => (m["stray"] = true))).success, false)
   })
 
   test("parse throws one error listing every problem", () => {

@@ -2,7 +2,7 @@
  * `act`: the consumer-side call for a declared write. It mirrors `read`:
  *
  * 1. the manifest comes from the installed package, and the grant must be for the same manifest hash, consumer,
- *    action and account;
+ *    act and account;
  * 2. the caller's input is checked against the act's input schema before anything is called;
  * 3. the call runs in a session fenced by exactly that phase's rules (`actSessionRules`);
  * 4. a commit whose effect is not `local` is refused unless the caller passes a confirmation the host issued.
@@ -208,13 +208,13 @@ async function confirmationProblem(host: ActHost, act: ActionItem, request: ActR
 export async function act(host: ActHost, request: ActRequest): Promise<ActOutcome> {
   const { installed, grant } = request
   const declared = findAction(installed.manifest, request.act)
-  if (!declared) return refused("UNAVAILABLE", `${installed.package} ${installed.version} declares no act ${request.act}`, "Check the act id against the installed plugin's sources.")
+  if (!declared) return refused("UNAVAILABLE", `${installed.package} ${installed.version} declares no act ${request.act}`, "Check the act id against the installed plugin's manifest.")
   if (request.phase !== "preview" && request.phase !== "commit") {
     return refused("SCHEMA_VIOLATION", "an act is previewed or committed", "Pass phase preview or commit.")
   }
   if (grant.disabled) return refused("SOURCE_DISABLED", `${declared.id} is turned off for ${grant.consumer}`, "Turn the act on again to preview or commit it.")
   if (grant.consumer !== request.consumer) return refused("PERMISSION_DENIED", `the grant is ${grant.consumer}'s, not ${request.consumer}'s`, "Ask the person to grant this consumer the act.")
-  if (grant.action !== declared.id) return refused("PERMISSION_DENIED", `the grant is for ${grant.action}, not ${declared.id}`, "Use the grant for this act.")
+  if (grant.act !== declared.id) return refused("PERMISSION_DENIED", `the grant is for ${grant.act}, not ${declared.id}`, "Use the grant for this act.")
   if (grant.manifestHash !== installed.hash) {
     return refused("PERMISSION_DENIED", `${declared.id}'s manifest changed since the person consented`, "Ask the person to review the action and consent again.")
   }

@@ -415,7 +415,7 @@ export interface EventsListRequest {
   readonly account?: string
   readonly source?: string
   readonly scope?: Record<string, string | string[]>
-  /** #42: the read asks for each item's `thumbnail_url`. Only a source that declares `thumbnails` accepts it. */
+  /** #42: the read asks for each item's `thumbnail`. Only a source that declares `thumbnails` accepts it. */
   readonly thumbnails?: true
 }
 
@@ -537,7 +537,7 @@ export function scopeProblems(scope: unknown, keys: readonly string[]): string[]
 /** How a source parses its input: the scope keys it declares (`scope.keys` in its manifest), none by default. */
 export interface ParseOptions {
   readonly scopeKeys?: readonly string[]
-  /** #42: the source declares `thumbnails: true`, so the read may ask for `thumbnail_url`s. */
+  /** #42: the source declares `thumbnails: true`, so the read may ask for `thumbnail`s. */
   readonly thumbnails?: boolean
 }
 
@@ -677,7 +677,7 @@ export interface EventDraft {
   readonly parts?: readonly { readonly id: string; readonly text: string; readonly actor?: string }[]
   readonly facts?: readonly EventFact[]
   /** #42: present only when the read asked for thumbnails. The field is outside `eventHash`. */
-  readonly thumbnail_url?: string | null
+  readonly thumbnail?: string | null
 }
 
 const clean = (text: string) => text.replaceAll("\u0000", "")
@@ -728,9 +728,8 @@ export function makeEvent(draft: EventDraft): SourceEvent {
     .filter((part) => part.id.length > 0)
   // #42: a thumbnail is never null, and only a basic https URL of the contract's length reaches the event. Its host is
   // checked against the source's urlHosts by `eventProblems`, which knows the source.
-  const thumbnail = draft.thumbnail_url
-  const thumbnail_url =
-    typeof thumbnail === "string" && thumbnail.length <= THUMBNAIL_URL_MAX && /^https:\/\/\S+$/.test(thumbnail) ? thumbnail : undefined
+  const thumbnail =
+    typeof draft.thumbnail === "string" && draft.thumbnail.length <= THUMBNAIL_URL_MAX && /^https:\/\/\S+$/.test(draft.thumbnail) ? draft.thumbnail : undefined
   const event = {
     source: draft.source,
     account: draft.account,
@@ -749,7 +748,7 @@ export function makeEvent(draft: EventDraft): SourceEvent {
     ...(sections === undefined || sections.length === 0 ? {} : { sections }),
     ...(parts === undefined || parts.length === 0 ? {} : { parts }),
     ...(draft.facts === undefined || draft.facts.length === 0 ? {} : { facts: [...draft.facts] }),
-    ...(thumbnail_url === undefined ? {} : { thumbnail_url }),
+    ...(thumbnail === undefined ? {} : { thumbnail }),
   }
   return { ...event, hash: eventHash(event) }
 }
@@ -1141,7 +1140,7 @@ const EVENT_KEYS: readonly string[] = ["source", "account", "external_id", "kind
 const EVENT_METADATA_KEYS: readonly string[] = ["reply_to", "audience", "domains", "sections", "parts", "facts"]
 /** The event fields a read may allow beyond the contract's own. */
 export interface EventProblemOptions {
-  /** #42: the read asked for thumbnails, so `thumbnail_url` is allowed when the item has one. */
+  /** #42: the read asked for thumbnails, so `thumbnail` is allowed when the item has one. */
   readonly thumbnails?: boolean
   /** The source's `urlHosts`: a thumbnail's host must match one. */
   readonly urlHosts?: readonly string[]
@@ -1151,13 +1150,13 @@ export interface EventProblemOptions {
 export function eventProblems(event: unknown, where = "event", options: EventProblemOptions = {}): string[] {
   if (!plainObject(event)) return [`${where} is not an object`]
   const problems: string[] = []
-  const keys = [...EVENT_KEYS, ...EVENT_METADATA_KEYS, ...(options.thumbnails === true ? ["thumbnail_url"] : [])]
+  const keys = [...EVENT_KEYS, ...EVENT_METADATA_KEYS, ...(options.thumbnails === true ? ["thumbnail"] : [])]
   for (const key of Object.keys(event)) if (!keys.includes(key)) problems.push(`${where} has the field "${key}", which the contract does not define`)
   for (const key of EVENT_KEYS) if (!Object.hasOwn(event, key)) problems.push(`${where} has no "${key}"`)
   const e = event as Record<string, unknown>
-  if (e.thumbnail_url !== undefined) {
-    if (e.thumbnail_url === null) problems.push(`${where}.thumbnail_url must be left out, never null`)
-    else problems.push(...thumbnailUrlProblems(e.thumbnail_url, options.urlHosts ?? []).map((problem) => `${where}.thumbnail_url ${problem}`))
+  if (e.thumbnail !== undefined) {
+    if (e.thumbnail === null) problems.push(`${where}.thumbnail must be left out, never null`)
+    else problems.push(...thumbnailUrlProblems(e.thumbnail, options.urlHosts ?? []).map((problem) => `${where}.thumbnail ${problem}`))
   }
   if (!line(e.source, EVENT_LIMITS.source) || !SOURCE_PATTERN.test(e.source)) problems.push(`${where}.source must be a lowercase name such as gmail`)
   if (!line(e.account, EVENT_LIMITS.account)) problems.push(`${where}.account must be a non-empty name of at most ${EVENT_LIMITS.account} characters`)

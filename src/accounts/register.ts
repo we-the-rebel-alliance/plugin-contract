@@ -67,7 +67,7 @@ export interface RegisterAccountsRequest {
   /** The auth methods for one integration, named by the id the account gets. */
   readonly auth?: ((account: AccountProfile, integrationID: string) => readonly IntegrationMethodRegistration[]) | undefined
   /** The MCP server config for one alias, named by the server the account gets. */
-  readonly server?: ((account: AccountProfile, serverName: string) => MCPServerConfig) | undefined
+  readonly server?: ((account: AccountProfile, name: string) => MCPServerConfig) | undefined
 }
 
 /** One account as registered: its alias and the integration or server name it uses. */
@@ -98,6 +98,9 @@ export async function registerAccounts(context: AccountsContext, request: Regist
   if (mechanism === "local") return { mechanism, accounts: registered, problems: [] }
   const problems: string[] = []
   if (mechanism === "integration") {
+    if (request.auth === undefined) {
+      return { mechanism, accounts: registered, problems: ["accounts: the integration mechanism needs auth methods for each alias"] }
+    }
     try {
       await context.integration.transform((raw: unknown) => {
         const editor = raw as IntegrationEditor

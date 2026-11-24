@@ -42,7 +42,8 @@ import {
 const plain = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
 
 /** The most characters a name, an operation or a line may take. */
-const METHOD_NAME = /^[a-z][a-z0-9_]*(?::(?:[a-z0-9][a-z0-9_.-]{0,99}|\*))?$/
+const METHOD_NAME = /^[a-z][a-z0-9_]*$/
+const MCP_METHOD_NAME = /^mcp:(?:[a-z0-9][a-z0-9_.-]{0,99}|\*)$/
 const SOURCE_ID = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)+$/
 const SCOPE_KEY = /^[a-z][a-z0-9_]{0,31}$/
 const OPERATION = /^[A-Za-z][A-Za-z0-9._-]{0,199}$/
@@ -105,7 +106,11 @@ const accountsInfo = z
   })
   .describe("How accounts work. Absent: the plugin signs in to nothing.")
 
-const methodName = z.string().regex(METHOD_NAME, { error: "must be a method name such as events_list or mcp:slack_send_message" })
+const methodName = z
+  .string()
+  .refine((value) => METHOD_NAME.test(value) || MCP_METHOD_NAME.test(value), {
+    error: "must be a method name such as events_list, or mcp:<tool> / mcp:*",
+  })
 
 const methodItem = z
   .strictObject({
@@ -120,11 +125,8 @@ const methodItem = z
   })
   .superRefine((value, context) => {
     if (value.plans === true && value.commits !== undefined) context.addIssue({ code: "custom", path: ["commits"], message: "a method either plans a change or commits one, not both" })
-    if (value.commits !== undefined) {
-      if (!METHOD_NAME.test(value.commits)) context.addIssue({ code: "custom", path: ["commits"], message: "must name a declared method" })
-      if (value.accounts === "optional") {
-        // A commit takes { planId } and the account the grant names; it is not itself an account-taking read.
-      }
+    if (value.commits !== undefined && !METHOD_NAME.test(value.commits)) {
+      context.addIssue({ code: "custom", path: ["commits"], message: "must name a declared method" })
     }
     if (value.operations !== undefined && new Set(value.operations).size !== value.operations.length) {
       context.addIssue({ code: "custom", path: ["operations"], message: "must not repeat an operation" })
@@ -206,7 +208,7 @@ const sourceBase = {
     .array(z.string().regex(HOST, { error: "must be a lowercase domain, or *. and a domain for its subdomains" }))
     .min(1)
     .optional()
-    .describe("The hosts an event's url and thumbnail_url may point at."),
+    .describe("The hosts an event's url and thumbnail may point at."),
 }
 
 const eventsSource = z
@@ -214,7 +216,7 @@ const eventsSource = z
     ...sourceBase,
     kind: z.literal("events"),
     reads: z.string().describe("A core event kind, or x-<name>/<kind>."),
-    thumbnails: z.literal(true).optional().describe("The source can answer an event's thumbnail_url (#42). Requires urlHosts."),
+    thumbnails: z.literal(true).optional().describe("The source can answer an event's thumbnail (#42). Requires urlHosts."),
   })
   .superRefine((value, context) => {
     if (value.thumbnails === true && value.urlHosts === undefined) context.addIssue({ code: "custom", path: ["thumbnails"], message: "a source that declares thumbnails must declare urlHosts" })
@@ -293,104 +295,151 @@ function optionProblems(schema: unknown): { path: string[]; message: string }[] 
   return problems
 }
 
-const top = z
-  .looseObject({
-    version: z.literal(MANIFEST_VERSION),
-    plugin,
-    accounts: accountsInfo.optional(),
-    options: z.record(z.string(), z.unknown()).describe("JSON Schema 2020-12 of the plugin's options. It must include access."),
-    methods: z.record(methodName, methodItem).describe("Every callable, including pass-through MCP tools."),
-    sources: z.array(source),
-    actions: z.array(action),
-    events,
-  })
-  .superRefine((value, context) => {
-    const issue = (path: (string | number)[], message: string) => context.addIssue({ code: "custom", path, message })
-    const known = new Set(["version", "plugin", "accounts", "options", "methods", "sources", "actions", "events"])
-    for (const key of Object.keys(value)) {
-      if (!known.has(key) && !EXTENSION_KEY.test(key)) issue([key], "is not a key the manifest defines; app-only hints use x-<app>")
-    }
-    const name = value.plugin.name
-    const methods = value.methods
+const versionField = z.literal(MANIFEST_VERSION)
+const optionsField = z.record(z.string(), z.unknown()).describe("JSON Schema 2020-12 of the plugin's options. It must include access.")
+const methodsField = z.record(methodName, methodItem).describe("Every callable, including pass-through MCP tools.")
+const sourcesField = z.array(source)
+const actionsField = z.array(action)
+const eventsField = events
 
-    // Every options schema includes access, and accounts when the manifest declares them.
-    for (const problem of optionProblems(value.options)) issue(["options", ...problem.path], problem.message)
-    if (value.accounts !== undefined) {
-      const properties = (value.options as Record<string, unknown>)["properties"]
-      if (plain(properties) && !Object.hasOwn(properties, "accounts")) {
-        issue(["options", "properties", "accounts"], "an account-taking plugin declares accounts in its options schema")
-      } else if (plain(properties) && plain(properties["accounts"])) {
-        const accountSchema = properties["accounts"] as Record<string, unknown>
-        if (!plain(accountSchema["additionalProperties"])) {
-          issue(["options", "properties", "accounts", "additionalProperties"], "must define the profile schema every alias is checked against")
-        }
-      }
-      if (value.accounts.profile !== undefined && value.accounts.profile.$ref !== PROFILE_REF) {
-        issue(["accounts", "profile", "$ref"], `must be "${PROFILE_REF}"`)
-      }
-    }
+/** The manifest's own keys, each with its schema and whether it is required. */
+const FIELDS = {
+  version: { schema: versionField, required: true },
+  plugin: { schema: plugin, required: true },
+  accounts: { schema: accountsInfo, required: false },
+  options: { schema: optionsField, required: true },
+  methods: { schema: methodsField, required: true },
+  sources: { schema: sourcesField, required: true },
+  actions: { schema: actionsField, required: true },
+  events: { schema: eventsField, required: true },
+} as const
 
-    if (Object.keys(methods).length === 0) issue(["methods"], "must declare at least one method; status is every plugin's")
-    let pinned = 0
-    for (const [methodNameValue, item] of Object.entries(methods)) {
-      if (item.pinned === true) pinned++
-      if (item.commits !== undefined) {
-        const target = methods[item.commits]
-        if (target === undefined) issue(["methods", methodNameValue, "commits"], `"${item.commits}" is not a declared method`)
-        else if (target.plans !== true) issue(["methods", methodNameValue, "commits"], `"${item.commits}" does not declare plans: true`)
-        if (item.commits === methodNameValue) issue(["methods", methodNameValue, "commits"], "a method cannot commit itself")
-      }
-      const named = methodNameValue.startsWith("mcp:") ? undefined : methodNameValue
-      if (named !== undefined) {
-        if (/^(?:delete|remove)_/.test(named) && item.class !== "delete") issue(["methods", methodNameValue, "class"], "a delete_* or remove_* method must be class delete")
-        if (/^(?:send|post)_/.test(named) && item.class !== "send") issue(["methods", methodNameValue, "class"], "a send_* or post_* method must be class send")
-        if (/^share_/.test(named) && item.class !== "share") issue(["methods", methodNameValue, "class"], "a share_* method must be class share")
-      }
-    }
-    if (pinned > 1) issue(["methods"], "at most one method may be pinned")
-    if (value.accounts === undefined && Object.values(methods).some((item) => item.accounts === "optional")) {
-      // Not an error: a plugin may take an account-like option without declaring accounts. Documented, not enforced.
-    }
+/** The shape used only to generate the published JSON Schema. Values are checked field by field in `checkManifest`. */
+const top = z.looseObject({
+  version: versionField,
+  plugin,
+  accounts: accountsInfo.optional(),
+  options: optionsField,
+  methods: methodsField,
+  sources: sourcesField,
+  actions: actionsField,
+  events: eventsField,
+})
 
-    const sourceIds = new Set<string>()
-    const serviceLabels = new Map<string, string>()
-    for (const [index, item] of value.sources.entries()) {
-      if (item.id.split(".")[0] !== name) issue(["sources", index, "id"], `must begin with the plugin's name "${name}"`)
-      if (sourceIds.has(item.id)) issue(["sources", index, "id"], `"${item.id}" is declared twice`)
-      sourceIds.add(item.id)
-      if (methods[item.method] === undefined) issue(["sources", index, "method"], `"${item.method}" is not a declared method`)
-      if (item.kind === "events") {
-        if (!isEventKindIn(item.reads, name)) issue(["sources", index, "reads"], `must be one of ${EVENT_KINDS.join(", ")}, or x-${name}/<kind>`)
-      } else {
-        if (!isOutputName(item.output) && !isExtensionOutput(item.output)) issue(["sources", index, "output"], `"${item.output}" is not a registered output and not an x-<namespace>/<name>`)
-        if (isExtensionOutput(item.output) && !item.output.startsWith(`x-${name}/`)) issue(["sources", index, "output"], `an extension output must be in the plugin's namespace, x-${name}/<name>`)
-      }
-      if (item.service !== undefined) {
-        const seen = serviceLabels.get(item.service.id)
-        if (seen !== undefined && seen !== item.service.label) {
-          issue(["sources", index, "service", "label"], `is "${item.service.label}", and ${item.service.id} says "${seen}" everywhere else`)
-        } else serviceLabels.set(item.service.id, item.service.label)
-      }
-      if (item.scope?.suggest !== undefined && methods[item.scope.suggest.method] === undefined) {
-        issue(["sources", index, "scope", "suggest", "method"], `"${item.scope.suggest.method}" is not a declared method`)
-      }
-      for (const [detailIndex, entry] of (item.details ?? []).entries()) {
-        if (methods[entry.method] === undefined) issue(["sources", index, "details", detailIndex, "method"], `"${entry.method}" is not a declared method`)
-      }
-    }
+const asObject = (value: unknown): Record<string, unknown> | undefined => (plain(value) ? value : undefined)
+const objectRecord = (value: unknown): Record<string, unknown> => asObject(value) ?? {}
+const objectList = (value: unknown): Record<string, unknown>[] => (Array.isArray(value) ? value.filter(plain) : [])
 
-    const actionIds = new Set<string>()
-    for (const [index, item] of value.actions.entries()) {
-      if (item.id.split(".")[0] !== name) issue(["actions", index, "id"], `must begin with the plugin's name "${name}"`)
-      if (actionIds.has(item.id)) issue(["actions", index, "id"], `"${item.id}" is declared twice`)
-      actionIds.add(item.id)
-      if (item.preview === item.commit) issue(["actions", index, "commit"], "the commit must be a different method from the preview")
-      if (methods[item.preview] === undefined) issue(["actions", index, "preview"], `"${item.preview}" is not a declared method`)
-      if (methods[item.commit] === undefined) issue(["actions", index, "commit"], `"${item.commit}" is not a declared method`)
-      for (const problem of jsonSchemaProblems(item.input, "input")) issue(["actions", index, "input"], problem.replace(/^input: /, ""))
-      for (const problem of jsonSchemaProblems(item.output, "output")) issue(["actions", index, "output"], problem.replace(/^output: /, ""))
+/**
+ * The rules a field's own schema cannot express: keys against paths, and the cross-references between fields. It runs
+ * on the raw values, so a bad field elsewhere does not hide a stray key or an undeclared method.
+ */
+function crossProblems(value: Record<string, unknown>, parsed: Record<string, unknown>): string[] {
+  const problems: string[] = []
+  const issue = (path: (string | number)[], message: string) => problems.push(`capabilities${pathText(path)}: ${message}`)
+
+  const plugin = asObject(parsed["plugin"]) ?? asObject(value["plugin"])
+  const name = typeof plugin?.["name"] === "string" ? plugin["name"] : undefined
+  const accounts = asObject(parsed["accounts"]) ?? asObject(value["accounts"])
+  const methods = objectRecord(parsed["methods"] ?? value["methods"])
+
+  // §11: status is every plugin's; probe belongs to every plugin with accounts.
+  if (!Object.hasOwn(methods, "status")) issue(["methods", "status"], "every plugin declares status")
+  if (accounts !== undefined && !Object.hasOwn(methods, "probe")) issue(["methods", "probe"], "a plugin with accounts declares probe")
+
+  // Every options schema includes access, and accounts when the manifest declares them.
+  if (value["options"] !== undefined) for (const problem of optionProblems(value["options"])) issue(["options", ...problem.path], problem.message)
+  if (accounts !== undefined) {
+    const options = asObject(value["options"])
+    const properties = options === undefined ? undefined : asObject(options["properties"])
+    if (properties === undefined) issue(["options", "properties", "accounts"], "an account-taking plugin declares accounts in its options schema")
+    else if (!Object.hasOwn(properties, "accounts")) issue(["options", "properties", "accounts"], "an account-taking plugin declares accounts in its options schema")
+    else {
+      const accountSchema = asObject(properties["accounts"])
+      if (accountSchema === undefined || !plain(accountSchema["additionalProperties"])) {
+        issue(["options", "properties", "accounts", "additionalProperties"], "must define the profile schema every alias is checked against")
+      }
     }
-  })
+    const profile = asObject(accounts["profile"])
+    if (profile !== undefined && profile["$ref"] !== PROFILE_REF) issue(["accounts", "profile", "$ref"], `must be "${PROFILE_REF}"`)
+  }
+
+  let pinned = 0
+  for (const [methodNameValue, item] of Object.entries(methods)) {
+    const record = objectRecord(item)
+    if (record["pinned"] === true) pinned++
+    const commits = record["commits"]
+    if (typeof commits === "string") {
+      const target = methods[commits]
+      if (target === undefined) issue(["methods", methodNameValue, "commits"], `"${commits}" is not a declared method`)
+      else if (objectRecord(target)["plans"] !== true) issue(["methods", methodNameValue, "commits"], `"${commits}" does not declare plans: true`)
+      if (commits === methodNameValue) issue(["methods", methodNameValue, "commits"], "a method cannot commit itself")
+    }
+    const named = methodNameValue.startsWith("mcp:") ? methodNameValue.slice(4) : methodNameValue
+    if (named !== "*") {
+      if (/^(?:delete|remove)_/.test(named) && record["class"] !== "delete") issue(["methods", methodNameValue, "class"], "a delete_* or remove_* method must be class delete")
+      if (/^(?:send|post)_/.test(named) && record["class"] !== "send") issue(["methods", methodNameValue, "class"], "a send_* or post_* method must be class send")
+      if (/^share_/.test(named) && record["class"] !== "share") issue(["methods", methodNameValue, "class"], "a share_* method must be class share")
+    }
+  }
+  if (pinned > 1) issue(["methods"], "at most one method may be pinned")
+
+  const sourceIds = new Set<string>()
+  const serviceLabels = new Map<string, string>()
+  for (const [index, item] of objectList(value["sources"]).entries()) {
+    const id = item["id"]
+    if (typeof id === "string") {
+      if (name !== undefined && id.split(".")[0] !== name) issue(["sources", index, "id"], `must begin with the plugin's name "${name}"`)
+      if (sourceIds.has(id)) issue(["sources", index, "id"], `"${id}" is declared twice`)
+      sourceIds.add(id)
+    }
+    const method = item["method"]
+    if (typeof method === "string" && methods[method] === undefined) issue(["sources", index, "method"], `"${method}" is not a declared method`)
+    const kind = item["kind"]
+    if (kind === "events") {
+      const reads = item["reads"]
+      if (typeof reads === "string" && name !== undefined && !isEventKindIn(reads, name)) issue(["sources", index, "reads"], `must be one of ${EVENT_KINDS.join(", ")}, or x-${name}/<kind>`)
+    } else if (kind === "snapshot") {
+      const output = item["output"]
+      if (typeof output === "string") {
+        if (!isOutputName(output) && !isExtensionOutput(output)) issue(["sources", index, "output"], `"${output}" is not a registered output and not an x-<namespace>/<name>`)
+        else if (isExtensionOutput(output) && name !== undefined && !output.startsWith(`x-${name}/`)) issue(["sources", index, "output"], `an extension output must be in the plugin's namespace, x-${name}/<name>`)
+      }
+    }
+    const service = asObject(item["service"])
+    if (service !== undefined && typeof service["id"] === "string" && typeof service["label"] === "string") {
+      const seen = serviceLabels.get(service["id"])
+      if (seen !== undefined && seen !== service["label"]) issue(["sources", index, "service", "label"], `is "${service["label"]}", and ${service["id"]} says "${seen}" everywhere else`)
+      else serviceLabels.set(service["id"], service["label"])
+    }
+    const scope = asObject(item["scope"])
+    const suggest = scope === undefined ? undefined : asObject(scope["suggest"])
+    const suggested = suggest?.["method"]
+    if (typeof suggested === "string" && methods[suggested] === undefined) issue(["sources", index, "scope", "suggest", "method"], `"${suggested}" is not a declared method`)
+    for (const [detailIndex, entry] of objectList(item["details"]).entries()) {
+      const detailMethod = entry["method"]
+      if (typeof detailMethod === "string" && methods[detailMethod] === undefined) issue(["sources", index, "details", detailIndex, "method"], `"${detailMethod}" is not a declared method`)
+    }
+  }
+
+  const actionIds = new Set<string>()
+  for (const [index, item] of objectList(value["actions"]).entries()) {
+    const id = item["id"]
+    if (typeof id === "string") {
+      if (name !== undefined && id.split(".")[0] !== name) issue(["actions", index, "id"], `must begin with the plugin's name "${name}"`)
+      if (actionIds.has(id)) issue(["actions", index, "id"], `"${id}" is declared twice`)
+      actionIds.add(id)
+    }
+    const preview = item["preview"]
+    const commit = item["commit"]
+    if (typeof preview === "string" && preview === commit) issue(["actions", index, "commit"], "the commit must be a different method from the preview")
+    if (typeof preview === "string" && methods[preview] === undefined) issue(["actions", index, "preview"], `"${preview}" is not a declared method`)
+    if (typeof commit === "string" && methods[commit] === undefined) issue(["actions", index, "commit"], `"${commit}" is not a declared method`)
+    if (item["input"] !== undefined) for (const problem of jsonSchemaProblems(item["input"], "input")) issue(["actions", index, "input"], problem.replace(/^input: /, ""))
+    if (item["output"] !== undefined) for (const problem of jsonSchemaProblems(item["output"], "output")) issue(["actions", index, "output"], problem.replace(/^output: /, ""))
+  }
+  return problems
+}
 
 /** A path as a person reads it: `.methods.send.class`, `[2].id`, or nothing for the root. */
 function pathText(path: readonly PropertyKey[]): string {
@@ -412,8 +461,27 @@ function problemsOf(error: z.ZodError): string[] {
 
 /** The `capabilities` value checked; problems name their path, such as `capabilities.methods.send.class`. */
 export function checkManifest(value: unknown): Checked<Manifest> {
-  const result = top.safeParse(value)
-  return result.success ? { ok: true, value: result.data as Manifest } : { ok: false, problems: problemsOf(result.error) }
+  if (!plain(value)) return { ok: false, problems: ["capabilities: must be an object"] }
+  const problems: string[] = []
+  for (const key of Object.keys(value)) {
+    if (!Object.hasOwn(FIELDS, key) && !EXTENSION_KEY.test(key)) {
+      problems.push(`capabilities.${key}: is not a key the manifest defines; app-only hints use x-<app>`)
+    }
+  }
+  const parsed: Record<string, unknown> = {}
+  for (const key of Object.keys(value)) if (EXTENSION_KEY.test(key)) parsed[key] = value[key]
+  for (const [key, field] of Object.entries(FIELDS)) {
+    const raw = value[key]
+    if (raw === undefined) {
+      if (field.required) problems.push(`capabilities.${key}: Required`)
+      continue
+    }
+    const result = field.schema.safeParse(raw)
+    if (result.success) parsed[key] = result.data
+    else problems.push(...problemsOf(result.error).map((problem) => `capabilities.${key}${problem.slice("capabilities".length)}`))
+  }
+  problems.push(...crossProblems(value, parsed))
+  return problems.length === 0 ? { ok: true, value: parsed as unknown as Manifest } : { ok: false, problems }
 }
 
 /** The manifest's problems, one sentence each; empty when it validates. */
@@ -432,7 +500,15 @@ export const MANIFEST_SCHEMA: Validator<Manifest> = {
     throw new Error(`capabilities: the manifest breaks the schema:\n- ${checked.problems.join("\n- ")}`)
   },
   jsonSchema() {
-    return z.toJSONSchema(top, { target: "draft-2020-12", unrepresentable: "any" }) as Record<string, unknown>
+    // zod cannot express a key pattern that is the only allowed unknown key, so the published schema is corrected
+    // here: the manifest's own keys are the properties, only x-<app> may be added, and nothing else. The zod validator
+    // above remains the source of truth for values.
+    const generated = z.toJSONSchema(top, { target: "draft-2020-12", unrepresentable: "any" }) as Record<string, unknown>
+    return {
+      ...generated,
+      additionalProperties: false,
+      patternProperties: { "^x-[a-z][a-z0-9-]*$": {} },
+    }
   },
 }
 

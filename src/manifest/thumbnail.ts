@@ -1,8 +1,8 @@
 /**
- * Thumbnails on events (#42): the URL rules a declared `thumbnail_url` must keep.
+ * Thumbnails on events (#42): the URL rules a declared `thumbnail` must keep.
  *
  * A source declares `thumbnails: true` only when it can answer a thumbnail for its items, and a source that does
- * declares `urlHosts`. A read asks for one with `thumbnails: true`; the event then carries `thumbnail_url` only when
+ * declares `urlHosts`. A read asks for one with `thumbnails: true`; the event then carries `thumbnail` only when
  * the read asked and the item has one. The field is outside `eventHash`: it is how an item looks, not what it says.
  */
 import { THUMBNAIL_URL_MAX } from "./types.ts"

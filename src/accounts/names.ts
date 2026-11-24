@@ -13,12 +13,6 @@ export function accountName(plugin: string, alias: string): string {
   return alias === DEFAULT_ALIAS ? plugin : `${plugin}-${alias}`
 }
 
-/** The OpenCode integration id of `alias` (contract §3). */
-export const integrationName = accountName
-
-/** The MCP server name of `alias` (contract §3). */
-export const serverName = accountName
-
 /** The label a person sees next to a name: the plugin's title, and the alias when it has one. */
 export function accountLabel(title: string, alias: string): string {
   return alias === DEFAULT_ALIAS ? title : `${title} (${alias})`

@@ -3,7 +3,6 @@
  * with this context, so a read that asserts more than its declaration holds is refused here, and a grant nothing
  * asserts is reported at the end. Declared equals asserted.
  */
-import { operationRule } from "../../permission.ts"
 import type { SourceItem } from "../schema/types.ts"
 
 /** A permission action and its resource, as a declaration derives them. */
@@ -108,8 +107,11 @@ function addGrant(grants: Grant[], source: SourceItem, operation: string, accoun
   // the namespace. The manifest's one naming rule does the same when the alias is not `default`.
   const namespace = source.id.split(".")[0] ?? source.id
   const server = source.accounts?.server !== undefined && account !== "default" ? source.accounts.server.replace("{account}", account) : namespace
-  const rule = operationRule(server, operation, account)
-  const grant: Grant = { action: rule.action, resource: rule.resource.replace(`${account}:`, "{account}:") }
+  // The old kit's derivation, independent of the app's `permission` module: a dotted operation is `<server>.read` on
+  // `<account>:<operation>`, and a bare one (an MCP tool) is `<server>_<operation>` on `*`.
+  const grant: Grant = operation.includes(".")
+    ? { action: `${server}.read`, resource: `${account}:${operation}`.replace(`${account}:`, "{account}:") }
+    : { action: `${server}_${operation}`, resource: "*" }
   if (!grants.some((held) => held.action === grant.action && held.resource === grant.resource)) grants.push(grant)
 }
 

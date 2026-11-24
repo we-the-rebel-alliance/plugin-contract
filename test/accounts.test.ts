@@ -10,13 +10,11 @@ import {
   aliasesSentence,
   DEFAULT_ALIAS,
   hasAccount,
-  integrationName,
   isAlias,
   localIdentity,
   redactReason,
   registerAccounts,
   resolveAccount,
-  serverName,
 } from "../src/accounts.ts"
 import { decodeBoundCursor, encodeBoundCursor } from "../src/cursor.ts"
 import { checkManifest, type Manifest } from "../src/manifest.ts"
@@ -41,8 +39,6 @@ describe("aliases", () => {
   test("names derive from the plugin's name, and default has none", () => {
     assert.equal(accountName("slack", DEFAULT_ALIAS), "slack")
     assert.equal(accountName("slack", "work"), "slack-work")
-    assert.equal(integrationName("gws", "work"), "gws-work")
-    assert.equal(serverName("slack", "personal"), "slack-personal")
     assert.equal(accountLabel("Slack", "work"), "Slack (work)")
     assert.equal(accountLabel("Slack", DEFAULT_ALIAS), "Slack")
     assert.throws(() => accountName("slack", "Work"), /not an account alias/)
@@ -221,7 +217,7 @@ describe("registerAccounts with a synthetic context", () => {
 
   test("the default alias has the plugin's own name, and no alias means exactly one integration", async () => {
     const { ctx, updates } = integrationContext()
-    const result = await registerAccounts(ctx, { manifest: checkedManifest() })
+    const result = await registerAccounts(ctx, { manifest: checkedManifest(), auth: (_account, id) => [{ integrationID: id, method: { type: "key" } }] as never })
     assert.equal(result.problems.length, 0)
     assert.deepEqual(updates.map((update) => update.id), ["demo"])
     assert.deepEqual(result.accounts, [{ alias: "default", name: "demo" }])
@@ -237,7 +233,6 @@ describe("registerAccounts with a synthetic context", () => {
     assert.deepEqual(result.problems, [])
     assert.deepEqual(servers.map((server) => server.name), ["demo-work", "demo-personal"])
     assert.deepEqual(servers[1]!.config, { type: "remote", url: "https://demo-personal.example/mcp", oauth: "personal" })
-    assert.deepEqual(serverName("demo", "work"), "demo-work")
   })
 
   test("a local plugin registers nothing", async () => {
@@ -267,8 +262,16 @@ describe("registerAccounts with a synthetic context", () => {
     const result = await registerAccounts(ctx, {
       manifest: checkedManifest(),
       options: { accounts: { work: {}, personal: {} } },
+      auth: (_account, id) => [{ integrationID: id, method: { type: "key" } }] as never,
     })
     assert.deepEqual(result.problems, ["accounts.personal: the integration demo-personal could not be registered: the host refused it"])
+  })
+
+  test("an integration plugin with no auth methods is reported, not silently registered", async () => {
+    const { ctx, updates } = integrationContext()
+    const result = await registerAccounts(ctx, { manifest: checkedManifest() })
+    assert.deepEqual(result.problems, ["accounts: the integration mechanism needs auth methods for each alias"])
+    assert.equal(updates.length, 0)
   })
 
   test("an invalid options map is reported before any transform runs", async () => {
