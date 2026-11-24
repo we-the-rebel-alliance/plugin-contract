@@ -58,6 +58,8 @@ export interface ReadRequest {
     /** A snapshot read. */
     readonly pick?: readonly string[];
     readonly context: ParamsContext;
+    /** The plugin's declared account aliases, from its manifest options. Fences refuse an undeclared alias. */
+    readonly aliases: readonly string[];
     readonly signal?: AbortSignal;
 }
 /** An events page, as the plugin answered it (design §2.1). */
@@ -130,6 +132,8 @@ export interface DetailRequest {
     readonly consumer: string;
     /** The event the detail is read for, as the source listed it. Inputs come only from its API fields. */
     readonly event: Readonly<Record<string, unknown>>;
+    /** The plugin's declared account aliases. */
+    readonly aliases: readonly string[];
     readonly signal?: AbortSignal;
 }
 /**
@@ -176,6 +180,7 @@ export declare function probe(host: ReadHost, request: {
     readonly source: string;
     readonly account: string;
     readonly identityOperations?: readonly string[];
+    readonly aliases: readonly string[];
     readonly signal?: AbortSignal;
 }): Promise<{
     readonly ok: true;

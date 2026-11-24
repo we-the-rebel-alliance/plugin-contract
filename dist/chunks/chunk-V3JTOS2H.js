@@ -23,6 +23,13 @@ function isMcpMethod(method) {
 function methodAction(name, method) {
   return `${name}.${method}`;
 }
+function normalizeToolName(name) {
+  return name.replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+function toolAction(server, tool) {
+  const namespace = server.replaceAll(".", "_");
+  return tool === "*" ? `${namespace}_*` : `${namespace}_${normalizeToolName(tool)}`;
+}
 function effectFor(method, level) {
   if (method.effect === "deny") return "deny";
   const base = method.class === "read" ? "allow" : level === "all" ? "allow" : level === "ask-changes" ? "ask" : "deny";
@@ -57,7 +64,7 @@ function rulesFor(manifest, level, aliases = [DEFAULT_ALIAS]) {
       for (const alias of declared) {
         const server = serverOf(name, alias, declared);
         if (!server.ok) throw new Error(`access: ${server.problems.join("; ")}`);
-        push({ action: `${server.value}_${tool}`, resource: "*", effect });
+        push({ action: toolAction(server.value, tool), resource: "*", effect });
       }
       continue;
     }
@@ -80,12 +87,12 @@ var allow = (action, resource) => ({ action, resource, effect: "allow" });
 function namespaceOf(source) {
   return source.id.split(".")[0] ?? source.id;
 }
-function operationRule(source, operation, account, aliases = [account]) {
+function operationRule(source, operation, account, aliases = [], kind = operation.includes(".") ? "operation" : "tool") {
   const namespace = namespaceOf(source);
-  if (operation.includes(".")) return allow(`${namespace}.read`, `${account}:${operation}`);
-  const server = serverOf(namespace, account, aliases.length === 0 ? [DEFAULT_ALIAS] : aliases);
-  if (!server.ok) throw new Error(`access: ${server.problems.join("; ")}`);
-  return allow(`${server.value}_${operation}`, "*");
+  if (kind === "operation") return { ok: true, value: allow(`${namespace}.read`, `${account}:${operation}`) };
+  const server = serverOf(namespace, account, aliases);
+  if (!server.ok) return { ok: false, problems: server.problems };
+  return { ok: true, value: allow(toolAction(server.value, operation), "*") };
 }
 function fenced(rules) {
   const loose = rules.find((rule) => WILDCARD.test(rule.action) || rule.resource !== "*" && WILDCARD.test(rule.resource));
@@ -102,15 +109,18 @@ function fenced(rules) {
 function methodAction2(source) {
   return `${namespaceOf(source)}.${source.method}`;
 }
-function sessionRules(source, grant, aliases = [grant.account]) {
+function sessionRules(source, grant, aliases = []) {
   if (grant.source !== source.id) return { ok: false, problems: [`the grant is for ${grant.source}, not ${source.id}`] };
   const problem = accountProblem(grant.account);
   if (problem) return { ok: false, problems: [problem] };
   const method = methodAction2(source);
   const operations = source.operations ?? [];
-  return fenced([allow(method, "*"), ...operations.map((operation) => operationRule(source, operation, grant.account, aliases))]);
+  const checked = operations.map((operation) => operationRule(source, operation, grant.account, aliases));
+  const failed = checked.find((rule) => !rule.ok);
+  if (failed && !failed.ok) return { ok: false, problems: failed.problems };
+  return fenced([allow(method, "*"), ...checked.flatMap((rule) => rule.ok ? [rule.value] : [])]);
 }
-function actSessionRules(manifest, act, grant, phase, aliases = [grant.account]) {
+function actSessionRules(manifest, act, grant, phase, aliases = []) {
   if (grant.action !== act.id) return { ok: false, problems: [`the grant is for ${grant.action}, not ${act.id}`] };
   const problem = accountProblem(grant.account);
   if (problem) return { ok: false, problems: [problem] };
@@ -119,23 +129,32 @@ function actSessionRules(manifest, act, grant, phase, aliases = [grant.account])
   if (declared === void 0) return { ok: false, problems: [`${act.id} names no declared method ${method}`] };
   const action = `${namespaceOf(act)}.${method}`;
   const operations = declared.operations ?? [];
-  return fenced([allow(action, "*"), ...operations.map((operation) => operationRule(act, operation, grant.account, aliases))]);
+  const checked = operations.map((operation) => operationRule(act, operation, grant.account, aliases));
+  const failed = checked.find((rule) => !rule.ok);
+  if (failed && !failed.ok) return { ok: false, problems: failed.problems };
+  return fenced([allow(action, "*"), ...checked.flatMap((rule) => rule.ok ? [rule.value] : [])]);
 }
-function detailRules(source, detailId, grant, aliases = [grant.account]) {
+function detailRules(source, detailId, grant, aliases = []) {
   const detail = source.details?.find((entry) => entry.id === detailId);
   if (detail === void 0) return { ok: false, problems: [`${source.id} declares no detail read ${detailId}`] };
   const rules = sessionRules(source, grant, aliases);
   if (!rules.ok) return rules;
   return fenced([...rules.value.slice(1), allow(`${namespaceOf(source)}.${detail.method}`, "*")]);
 }
-function probeRules(source, account, identityOperations, probeAction, aliases = [account]) {
+function probeRules(source, account, identityOperations, probeAction, aliases = []) {
   const problem = accountProblem(account);
   if (problem) return { ok: false, problems: [problem] };
   const method = probeAction ?? methodAction2(source);
-  return fenced([allow(method, "*"), ...identityOperations.map((operation) => operationRule(source, operation, account, aliases))]);
+  const checked = identityOperations.map((operation) => operationRule(source, operation, account, aliases));
+  const failed = checked.find((rule) => !rule.ok);
+  if (failed && !failed.ok) return { ok: false, problems: failed.problems };
+  return fenced([allow(method, "*"), ...checked.flatMap((rule) => rule.ok ? [rule.value] : [])]);
 }
 function evaluate(rules, action, resource = "*") {
   return rules.findLast((rule) => wildcard(rule.action, action) && wildcard(rule.resource, resource))?.effect ?? "ask";
+}
+function matches(pattern, value) {
+  return wildcard(pattern, value);
 }
 var wildcard = (pattern, value) => new RegExp(`^${pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".")}$`).test(value);
 function grantCovers(grant, request) {
@@ -161,9 +180,16 @@ function withRules(permissions, additions) {
 var rank = (effect) => effect === "allow" ? 2 : effect === "ask" ? 1 : 0;
 var concrete = (action) => action.replaceAll("*", "x").replaceAll("?", "x");
 function overridden(agent, rule) {
-  if (!agent.permissions.some((held) => sameRule(held, rule))) return true;
-  const effective = evaluate(agent.permissions, concrete(rule.action), rule.resource);
-  return rank(effective) > rank(rule.effect);
+  const index = agent.permissions.findIndex((held) => sameRule(held, rule));
+  if (index === -1) return true;
+  const action = concrete(rule.action);
+  if (rank(evaluate(agent.permissions, action, rule.resource)) > rank(rule.effect)) return true;
+  for (const later of agent.permissions.slice(index + 1)) {
+    if (rank(later.effect) <= rank(rule.effect)) continue;
+    if (later.resource === "*") continue;
+    if (matches(later.action, action) || matches(rule.action, concrete(later.action))) return true;
+  }
+  return false;
 }
 function unguardedAgents(agents, rules) {
   return agents.filter((agent) => rules.some((rule) => overridden(agent, rule))).map((agent) => agent.id).sort();
@@ -215,6 +241,8 @@ export {
   accessLevel,
   isMcpMethod,
   methodAction,
+  normalizeToolName,
+  toolAction,
   effectFor,
   serverOf,
   aliasesFrom,

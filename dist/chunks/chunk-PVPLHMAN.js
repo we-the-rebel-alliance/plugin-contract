@@ -16,7 +16,7 @@ import {
   namespaceOf,
   probeRules,
   sessionRules
-} from "./chunk-IZEACXMW.js";
+} from "./chunk-V3JTOS2H.js";
 import {
   findMethod,
   findSource,
@@ -116,7 +116,7 @@ async function read(host, request) {
   const { source, input } = prepared;
   const called = await fencedCall(
     host,
-    sessionRules(source, request.grant),
+    sessionRules(source, request.grant, request.aliases),
     { package: request.installed.package, method: source.method, input, ...request.signal ? { signal: request.signal } : {} },
     `${request.consumer} reads ${source.id}`
   );
@@ -187,7 +187,7 @@ async function readDetail(host, request) {
   const scope = grant.scope === void 0 ? {} : canonicalScope(grant.scope);
   const called = await fencedCall(
     host,
-    detailRules(source, request.detail, grant),
+    detailRules(source, request.detail, grant, request.aliases),
     { package: installed.package, method: detail.method, input: { account: grant.account, scope, fields: fields.value }, ...request.signal ? { signal: request.signal } : {} },
     `${request.consumer} reads ${request.detail}`
   );
@@ -204,7 +204,7 @@ async function probe(host, request) {
   const name = typeof source.input?.["source"] === "string" ? { source: source.input["source"] } : {};
   const called = await fencedCall(
     host,
-    probeRules(source, request.account, identity, `${namespaceOf(source)}.probe`),
+    probeRules(source, request.account, identity, `${namespaceOf(source)}.probe`, request.aliases),
     { package: request.installed.package, method: "probe", input: { ...name, account: request.account }, ...request.signal ? { signal: request.signal } : {} },
     `probe ${source.id}`
   );

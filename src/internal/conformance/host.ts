@@ -100,7 +100,7 @@ export async function inspectHost(directory: string, manifest: Manifest, host: s
     findings.push(...eventFindings(manifest, run))
     findings.push(...pinnedFindings(manifest, run))
     findings.push(...(await permissionFindings(directory, manifest, host, run, pluginOptions)))
-    findings.push(...(await rpcFindings(manifest, run, options.inputs ?? {})))
+    findings.push(...(await rpcFindings(manifest, run, options.inputs ?? {}, options.accounts ?? [])))
     if (options.realAccounts === true) findings.push(...(await accountFindings(manifest, run, options.accounts ?? [], options.inputs ?? {})))
     return { run, findings }
   } finally {
@@ -235,13 +235,24 @@ function wildcard(pattern: string, value: string): boolean {
 }
 
 /** LD-5: a non-read RPC method with an allow rule and no grant is refused; with no permission check it runs. */
-async function rpcFindings(manifest: Manifest, run: HostRun, inputs: Readonly<Record<string, unknown>>): Promise<Finding[]> {
+async function rpcFindings(manifest: Manifest, run: HostRun, inputs: Readonly<Record<string, unknown>>, aliases: readonly string[]): Promise<Finding[]> {
   if (run.rpc === undefined) return []
   const findings: Finding[] = []
   const rules: PermissionRule[] = [{ action: "*", resource: "*", effect: "allow" }]
+  const account = aliases[0]
   for (const [method, item] of Object.entries(manifest.methods)) {
     if (item.class === "read" || method.startsWith("mcp:")) continue
-    const answer = await run.call(method, inputs[method] ?? {}, { rules })
+    let input = { ...(inputs[method] ?? {}) } as Record<string, unknown>
+    if (item.commits !== undefined) {
+      // A commit takes only the planId its planning method answered; plan first, as a person would.
+      const planned = await run.call(item.commits, { ...(inputs[item.commits] ?? {}), ...(account === undefined ? {} : { account }) }, { rules })
+      const planId = planned.ok && planned.output !== null && typeof planned.output === "object" ? (planned.output as { planId?: unknown }).planId : undefined
+      if (typeof planId !== "string") continue
+      input = { planId }
+    } else if (account !== undefined && item.accounts === "optional" && input["account"] === undefined) {
+      input = { ...input, account }
+    }
+    const answer = await run.call(method, input, { rules })
     if (answer.ok || answer.code !== "PERMISSION_DENIED") {
       findings.push(error("T1.rpc-confirmation", `${method} is class ${item.class} and its RPC call ran with an allow rule and no grant${answer.ok ? "" : ` (${answer.code})`}`, { path: `capabilities.methods.${method}`, fix: "Refuse a non-read method over RPC unless an ask was answered or a valid action grant verifies (contract §8)." }))
     }

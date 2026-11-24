@@ -4,14 +4,14 @@ import {
 } from "./chunks/chunk-ED3MMWUJ.js";
 import {
   acceptAnswer
-} from "./chunks/chunk-SPX5CKAR.js";
+} from "./chunks/chunk-PVPLHMAN.js";
 import "./chunks/chunk-6WEY3U6L.js";
 import "./chunks/chunk-D545RHPD.js";
 import "./chunks/chunk-SQQJ24OZ.js";
 import {
   effectFor,
   serverOf
-} from "./chunks/chunk-IZEACXMW.js";
+} from "./chunks/chunk-V3JTOS2H.js";
 import {
   maxBytesOf,
   methodAccounts,
@@ -11396,7 +11396,7 @@ async function inspectHost(directory, manifest, host, options = {}) {
     findings.push(...eventFindings(manifest, run));
     findings.push(...pinnedFindings(manifest, run));
     findings.push(...await permissionFindings(directory, manifest, host, run, pluginOptions));
-    findings.push(...await rpcFindings(manifest, run, options.inputs ?? {}));
+    findings.push(...await rpcFindings(manifest, run, options.inputs ?? {}, options.accounts ?? []));
     if (options.realAccounts === true) findings.push(...await accountFindings2(manifest, run, options.accounts ?? [], options.inputs ?? {}));
     return { run, findings };
   } finally {
@@ -11510,13 +11510,23 @@ function lastEffect(rules, action) {
 function wildcard(pattern, value) {
   return new RegExp(`^${pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".")}$`).test(value);
 }
-async function rpcFindings(manifest, run, inputs) {
+async function rpcFindings(manifest, run, inputs, aliases) {
   if (run.rpc === void 0) return [];
   const findings = [];
   const rules = [{ action: "*", resource: "*", effect: "allow" }];
+  const account = aliases[0];
   for (const [method, item] of Object.entries(manifest.methods)) {
     if (item.class === "read" || method.startsWith("mcp:")) continue;
-    const answer = await run.call(method, inputs[method] ?? {}, { rules });
+    let input = { ...inputs[method] ?? {} };
+    if (item.commits !== void 0) {
+      const planned = await run.call(item.commits, { ...inputs[item.commits] ?? {}, ...account === void 0 ? {} : { account } }, { rules });
+      const planId = planned.ok && planned.output !== null && typeof planned.output === "object" ? planned.output.planId : void 0;
+      if (typeof planId !== "string") continue;
+      input = { planId };
+    } else if (account !== void 0 && item.accounts === "optional" && input["account"] === void 0) {
+      input = { ...input, account };
+    }
+    const answer = await run.call(method, input, { rules });
     if (answer.ok || answer.code !== "PERMISSION_DENIED") {
       findings.push(error("T1.rpc-confirmation", `${method} is class ${item.class} and its RPC call ran with an allow rule and no grant${answer.ok ? "" : ` (${answer.code})`}`, { path: `capabilities.methods.${method}`, fix: "Refuse a non-read method over RPC unless an ask was answered or a valid action grant verifies (contract \xA78)." }));
     }

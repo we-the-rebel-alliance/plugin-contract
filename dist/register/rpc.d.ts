@@ -62,6 +62,14 @@ export interface RpcContext {
                 readonly id: string;
             };
         }): Promise<void>;
+        hook(name: "evaluate", callback: (event: {
+            effect: "allow" | "deny" | "ask";
+            source?: {
+                readonly id: string;
+            };
+        }) => void | Promise<void>): Promise<{
+            dispose(): Promise<void>;
+        }>;
     };
     readonly rpc: {
         register(definition: unknown, handlers: Readonly<Record<string, (input: unknown, context: RpcCallContext) => Promise<unknown>>>): Promise<RpcRegistration>;

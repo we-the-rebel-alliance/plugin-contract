@@ -11,7 +11,7 @@ import {
   effectFor,
   evaluate,
   methodAction
-} from "./chunks/chunk-IZEACXMW.js";
+} from "./chunks/chunk-V3JTOS2H.js";
 import {
   manifestHash
 } from "./chunks/chunk-RIPYHT4Z.js";
@@ -24,7 +24,6 @@ import {
 } from "./chunks/chunk-FTEX4OOT.js";
 import "./chunks/chunk-L3NVT2DE.js";
 import {
-  DEFAULT_ALIAS,
   accountsOf,
   redactReason,
   resolveAccount
@@ -64,7 +63,8 @@ async function gate(context, name, entry, call, account, options) {
     ...call.agent === void 0 ? {} : { agent: call.agent },
     action: methodAction(name, entry.name),
     resources: resourcesFor(entry, account),
-    ...options.save ? { save: ["*"] } : {},
+    // Save only this method's own action for this account. Never `*`, which would be a project-wide allow.
+    ...options.save ? { save: [`${account}:*`] } : {},
     ...options.source === void 0 ? {} : { source: options.source }
   });
 }
@@ -103,8 +103,36 @@ function refusalOf(error) {
   if (step === void 0 || step.trim() === "") return void 0;
   return refusal(code, redactReason(what), redactReason(step));
 }
+function permissionRefusal(error, what) {
+  const own = refusalOf(error);
+  if (own) return own;
+  const message = (error instanceof Error ? error.message.split(/\r?\n/, 1)[0] : String(error)) ?? String(error);
+  return refusal("PERMISSION_DENIED", `${what} was refused: ${message}`, "Ask the person to allow it, or use a session whose agent allows it.");
+}
 function reasonOf(error) {
   return redactReason(error instanceof Error ? error.message : String(error));
+}
+
+// src/register/plans.ts
+var PLAN_TTL_MS = 15 * 6e4;
+function planStore(options = {}) {
+  const now = options.now ?? Date.now;
+  const ttl = options.ttlMs ?? PLAN_TTL_MS;
+  const plans = /* @__PURE__ */ new Map();
+  return {
+    record(planId, account) {
+      plans.set(planId, { account, expires: now() + ttl });
+    },
+    accountOf(planId) {
+      const plan2 = plans.get(planId);
+      if (plan2 === void 0) return { ok: false, problems: [`there is no plan '${planId}'; plan again and commit with the planId it answers`] };
+      if (plan2.expires <= now()) {
+        plans.delete(planId);
+        return { ok: false, problems: [`the plan '${planId}' has expired; plan again and commit with the new planId`] };
+      }
+      return { ok: true, value: plan2.account };
+    }
+  };
 }
 
 // src/register/validate.ts
@@ -242,7 +270,7 @@ function shapes(name, method, item, handler) {
 // src/register/invoke.ts
 var plain3 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 function prepare(manifest, handlers, accounts) {
-  return { name: manifest.plugin.name, manifest, hash: manifestHash(manifest), entries: methodEntries(manifest, handlers), accounts };
+  return { name: manifest.plugin.name, manifest, hash: manifestHash(manifest), entries: methodEntries(manifest, handlers), accounts, plans: planStore() };
 }
 function checkedInput(entry, raw) {
   if (!plain3(raw)) refuse("INPUT_INVALID", `${entry.name} takes an object as its input`, "Pass the input its schema describes.");
@@ -264,13 +292,14 @@ function checkedInput(entry, raw) {
   if (!checked.ok) throw new RegisterError(refusal("INPUT_INVALID", `${entry.name}'s input breaks its schema: ${checked.problems.join("; ")}`, "Pass only the input the method's schema describes."));
   return { input: checked.value, account };
 }
-function prepareCall(entry, raw, accounts, preferred) {
+function prepareCall(entry, raw, accounts, plans) {
   const { input, account } = checkedInput(entry, raw);
   if (entry.item.commits !== void 0) {
-    const candidate = preferred ?? accounts[0]?.alias ?? DEFAULT_ALIAS;
-    if (accounts.length === 0) return { input, account: candidate };
-    const resolved2 = resolveAccount(accounts, { account: candidate });
-    if (!resolved2.ok) throw new RegisterError(refusal(resolved2.code, resolved2.what, resolved2.next));
+    const planId = typeof input["planId"] === "string" ? input["planId"] : "";
+    const plan2 = plans.accountOf(planId);
+    if (!plan2.ok) throw new RegisterError(refusal("PLAN_INVALID", plan2.problems.join("; "), "Plan again, then commit with the planId it answers."));
+    const resolved2 = accounts.length === 0 ? { ok: true, alias: plan2.value } : resolveAccount(accounts, { account: plan2.value });
+    if (!resolved2.ok) throw new RegisterError(refusal("ACCOUNT_UNKNOWN", resolved2.what, resolved2.next));
     return { input, account: resolved2.alias };
   }
   const resolved = resolveAccount(accounts, { account });
@@ -295,9 +324,11 @@ function failureOf(entry, error) {
   if (own) return own;
   return refusal("UNAVAILABLE", `${entry.name} failed: ${reasonOf(error)}`, "Try again; if it keeps failing, check the plugin's status.");
 }
-async function execute(entry, prepared, call) {
+async function execute(entry, prepared, call, plans) {
   try {
-    return checkedOutput(entry, await entry.handler.run(prepared.input, { ...call, account: prepared.account }));
+    const value = checkedOutput(entry, await entry.handler.run(prepared.input, { ...call, account: prepared.account }));
+    if (entry.item.plans === true) plans.record(value.planId, prepared.account);
+    return value;
   } catch (error) {
     if (error instanceof RegisterError) throw error;
     throw new RegisterError(failureOf(entry, error));
@@ -348,12 +379,6 @@ function grantActions(environment) {
   for (const entry of environment.entries) if (entry.item.class !== "read") actions[grantAct(environment, entry)] = "required";
   return actions;
 }
-function permissionRefusal(error, what) {
-  const own = refusalOf(error);
-  if (own) return own;
-  const message = (error instanceof Error ? error.message.split(/\r?\n/, 1)[0] : String(error)) ?? String(error);
-  return refusal("PERMISSION_DENIED", `${what} was refused: ${message}`, "Ask the person to allow it, or use a session whose agent allows it.");
-}
 async function rulesOf(context, sessionID) {
   let info;
   try {
@@ -394,17 +419,7 @@ async function verify(environment, wiring, request, entry, account) {
   });
   return checked.ok ? { ok: true, account: checked.claims.account } : { ok: false, refusal: refusal("GRANT_INVALID", checked.reason, "Ask the host to issue a fresh grant for this action and input."), code: checked.code };
 }
-async function verifyAny(environment, wiring, request, entry, accounts) {
-  let first;
-  for (const account of accounts.length === 0 ? [DEFAULT_ALIAS] : accounts) {
-    const checked = await verify(environment, wiring, request, entry, account);
-    if (checked.ok) return checked;
-    if (checked.code !== "GRANT_ACCOUNT_MISMATCH") return checked;
-    first ??= checked;
-  }
-  return first ?? { ok: false, refusal: refusal("GRANT_INVALID", "the grant names no account this plugin has", "Ask the host to issue the grant for one of the plugin's accounts."), code: "GRANT_ACCOUNT_MISMATCH" };
-}
-async function invoke(context, environment, level, entry, wiring, raw, rpc) {
+async function invoke(context, environment, level, entry, wiring, raw, rpc, freshAsks) {
   try {
     if (!plain4(raw)) throw new RegisterError(refusal("INPUT_INVALID", "the RPC envelope must be an object", `Pass {"sessionID":"<session>","input":<the method's input>}.`));
     const sessionID = raw["sessionID"];
@@ -413,8 +428,10 @@ async function invoke(context, environment, level, entry, wiring, raw, rpc) {
     if (!plain4(input)) throw new RegisterError(refusal("INPUT_INVALID", "the RPC envelope needs an input object", "Pass the method's input as the envelope's input."));
     const resolved = await rulesOf(context, sessionID);
     const nonRead = entry.item.class !== "read";
+    const callID = `rpc:${randomUUID()}`;
     let prepared;
     let gated = false;
+    let fresh = false;
     if (nonRead) {
       if (level === "read-only") {
         throw new RegisterError(refusal("PERMISSION_DENIED", `${environment.name}.${entry.name} is a ${entry.item.class} and the plugin's access is read-only`, "Set access to ask-changes, or use the agent tool in a session that allows it."));
@@ -424,39 +441,41 @@ async function invoke(context, environment, level, entry, wiring, raw, rpc) {
       }
       if (raw["grant"] !== void 0) {
         if (wiring === void 0) throw new RegisterError(refusal("GRANT_INVALID", "this plugin has no grant verifier, so it cannot accept a grant", "Use a permission ask in a session, or configure the plugin's grant verifier."));
-        const accounts = entry.item.commits === void 0 ? void 0 : environment.accounts.map((account) => account.alias);
-        if (accounts === void 0) {
-          prepared = prepareCall(entry, input, environment.accounts);
-          const checked = await verify(environment, wiring, raw, entry, prepared.account);
-          if (!checked.ok) throw new RegisterError(checked.refusal);
-        } else {
-          const checked = await verifyAny(environment, wiring, raw, entry, accounts);
-          if (!checked.ok) throw new RegisterError(checked.refusal);
-          prepared = prepareCall(entry, input, environment.accounts, checked.account);
+        prepared = prepareCall(entry, input, environment.accounts, environment.plans);
+        const checked = await verify(environment, wiring, raw, entry, prepared.account);
+        if (!checked.ok) {
+          const failure = entry.item.commits !== void 0 && checked.code === "GRANT_ACCOUNT_MISMATCH" ? refusal("ACCOUNT_MISMATCH", "the grant names another account than the plan", "Issue the grant for the account the plan was made for.") : checked.refusal;
+          throw new RegisterError(failure);
         }
+        gated = true;
       } else {
-        prepared = prepareCall(entry, input, environment.accounts);
+        prepared = prepareCall(entry, input, environment.accounts, environment.plans);
         const effect = callEffect(environment.name, entry, prepared.account, resolved.rules);
         if (effect === "allow") {
-          await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: `rpc:${entry.name}` }, prepared.account, { save: false });
+          await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: callID }, prepared.account, { save: false });
           gated = true;
           throw new RegisterError(refusal("PERMISSION_DENIED", `${environment.name}.${entry.name} is a ${entry.item.class} and an allow rule is not a confirmation for RPC`, "A non-read method over RPC needs a permission ask or a host-signed action grant."));
         }
+        fresh = effect === "ask";
       }
     } else {
-      prepared = prepareCall(entry, input, environment.accounts);
+      prepared = prepareCall(entry, input, environment.accounts, environment.plans);
     }
     if (!gated) {
+      const source = { type: "tool", messageID: "msg_rpc", id: callID };
+      if (fresh) freshAsks.add(callID);
       try {
-        await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: `rpc:${entry.name}` }, prepared.account, { save: false });
+        await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: callID }, prepared.account, { save: false, ...fresh ? { source } : {} });
       } catch (error) {
         throw new RegisterError(permissionRefusal(error, `${environment.name}.${entry.name}`));
+      } finally {
+        if (fresh) freshAsks.delete(callID);
       }
     }
     const messageID = "msg_rpc";
     const id = `rpc:${randomUUID()}`;
     const value = await execute(entry, prepared, { sessionID, agent: resolved.agent, messageID, id, signal: rpc.signal, progress: async () => {
-    }, door: "rpc" });
+    }, door: "rpc" }, environment.plans);
     return value === void 0 ? null : JSON.parse(JSON.stringify(value));
   } catch (error) {
     const own = refusalOf(error);
@@ -469,11 +488,28 @@ async function installRpc(context, environment, level, wiring) {
   const handlers = {};
   for (const entry of environment.entries) {
     methods[entry.name] = { input: strictEnvelope(entry.input), output: entry.output, errors: { failed: FAILED } };
-    handlers[entry.name] = (raw, call) => invoke(context, environment, level, entry, wiring, raw, call);
+    handlers[entry.name] = (raw, call) => invoke(context, environment, level, entry, wiring, raw, call, freshAsks);
   }
   const events = Object.fromEntries(Object.entries(busEvents(environment.name)).filter(([event]) => Object.hasOwn(environment.manifest.events, event)));
   const definition = { id: environment.name, methods, events };
-  return context.rpc.register(definition, handlers);
+  const freshAsks = /* @__PURE__ */ new Set();
+  const hook = await context.permission.hook("evaluate", (event) => {
+    if (event.source !== void 0 && freshAsks.has(event.source.id) && event.effect !== "deny") event.effect = "ask";
+  });
+  let registration;
+  try {
+    registration = await context.rpc.register(definition, handlers);
+  } catch (error) {
+    await hook.dispose().catch(() => void 0);
+    throw error;
+  }
+  return {
+    events: registration.events,
+    async dispose() {
+      await hook.dispose().catch(() => void 0);
+      await registration.dispose();
+    }
+  };
 }
 
 // src/register/tools.ts
@@ -497,16 +533,15 @@ function toolRegistrations(environment, context) {
     options: { namespace: environment.name, permission: `${environment.name}.${entry.name}`, codemode: codemodeFor(entry) },
     async execute(raw, callContext) {
       try {
-        const prepared = prepareCall(entry, raw, environment.accounts);
+        const prepared = prepareCall(entry, raw, environment.accounts, environment.plans);
         await gate(context, environment.name, entry, callContext, prepared.account, {
           save: true,
           source: { type: "tool", messageID: callContext.messageID, id: callContext.id }
         });
-        const value = await execute(entry, prepared, toolCall(callContext, callContext.codemode === true ? "codemode" : "tool"));
+        const value = await execute(entry, prepared, toolCall(callContext, callContext.codemode === true ? "codemode" : "tool"), environment.plans);
         return { output: value, content: textOf(value) };
       } catch (error) {
-        const own = error instanceof RegisterError ? error : void 0;
-        throw new Error(own?.message ?? (error instanceof Error ? error.message : String(error)));
+        throw new Error(error instanceof RegisterError ? error.message : permissionRefusal(error, `${environment.name}.${entry.name}`).message);
       }
     }
   }));
