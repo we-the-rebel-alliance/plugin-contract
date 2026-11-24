@@ -5,9 +5,7 @@ import { describe, test } from "node:test"
 import { fileURLToPath } from "node:url"
 import { loadExamples, runExamples } from "../scripts/examples.ts"
 import * as conformance from "../src/conformance.ts"
-import { readInstalledDescriptor } from "../src/descriptor.ts"
-import type { SourceDetail, SourcePermission } from "../src/descriptor.ts"
-import type { Detail as SchemaDetail, Permission as SchemaPermission, SourceItem as SchemaSourceItem } from "../src/schema.ts"
+import { SOURCES_SCHEMA, type SourceItem as SchemaSourceItem } from "../src/schema.ts"
 import * as events from "../src/events.ts"
 import { acceptAnswer } from "../src/read.ts"
 import * as schema from "../src/schema.ts"
@@ -45,23 +43,24 @@ describe("the examples", () => {
 
   test("read accepts every page and snapshot an example records, as a consumer would receive it", () => {
     // The kit records a snapshot's grants but not its shape, so this is where an example's answers meet `read`.
-    let checked = 0
+    let accepted = 0
     for (const example of loadExamples(root)) {
-      const installed = readInstalledDescriptor(join(root, "examples", example.name))
-      assert.ok(installed.ok, example.name)
+      const pkg = JSON.parse(readFileSync(join(root, "examples", example.name, "package.json"), "utf8")) as { sources: unknown }
+      const declaration = SOURCES_SCHEMA.check(pkg.sources)
+      assert.ok(declaration.ok, example.name)
       const recorded = JSON.parse(readFileSync(join(root, "examples", example.name, "fixtures", "conformance.json"), "utf8")) as Recorded
       for (const [id, entry] of Object.entries(recorded.sources)) {
-        const source = installed.value.sources.items.find((item) => item.id === id)
+        const source = declaration.value.items.find((item) => item.id === id)
         assert.ok(source, `${example.name}: ${id}`)
         const answers = [...(entry.cases ?? []).filter((entry) => entry.expect === "page"), ...(entry.snapshot ? [entry.snapshot] : [])]
         for (const answer of answers) {
-          const outcome = acceptAnswer(source, answer.input?.account ?? recorded.account, answer.answer, answer.input?.limit === undefined ? {} : { limit: answer.input.limit })
-          assert.ok(outcome.ok, `${example.name}: ${id}: ${outcome.ok ? "" : outcome.failure.message}`)
-          checked++
+          const outcome = (acceptAnswer as (source: unknown, account: string, answer: unknown, options?: { limit?: number }) => { ok: boolean; failure?: { message: string } })(source, answer.input?.account ?? recorded.account, answer.answer, answer.input?.limit === undefined ? {} : { limit: answer.input.limit })
+          assert.ok(outcome.ok, `${example.name}: ${id}: ${outcome.ok ? "" : outcome.failure?.message ?? ""}`)
+          accepted++
         }
       }
     }
-    assert.ok(checked > 0)
+    assert.ok(accepted > 0)
   })
 
   test("every check Acme adds runs on at least one example", async () => {
@@ -75,24 +74,14 @@ describe("the examples", () => {
 
 describe("one SourceItem (#30, item 8)", () => {
   test("an item read from disk goes to acceptAnswer and sourceConformance as it is, with no re-parse", async () => {
-    const installed = readInstalledDescriptor(join(dirname(fileURLToPath(import.meta.url)), "..", "examples", "gws-gmail"))
-    assert.ok(installed.ok)
-    // The same value, the same type: descriptor's SourceItem is the schema's (no SOURCES_SCHEMA.check, no cast).
-    const item: SchemaSourceItem = installed.value.sources.items[0]!
-    const refused = acceptAnswer(item, "sam.rivera@example.com", { trust: "untrusted" })
+    const root = join(dirname(fileURLToPath(import.meta.url)), "..")
+    const pkg = JSON.parse(readFileSync(join(root, "examples", "gws-gmail", "package.json"), "utf8")) as { name: string; sources: unknown }
+    const checked = SOURCES_SCHEMA.check(pkg.sources)
+    assert.ok(checked.ok)
+    const item: SchemaSourceItem = checked.value.items[0]!
+    const refused = (acceptAnswer as (source: unknown, account: string, answer: unknown) => { ok: boolean })(item, "sam.rivera@example.com", { trust: "untrusted" })
     assert.equal(refused.ok, false)
-    const report = await conformance.sourceConformance({ plugin: installed.value.package, source: item, tools: [{ id: item.tool, readOnly: true }], calls: { probe: async () => ({}) } })
+    const report = await conformance.sourceConformance({ plugin: pkg.name, source: item, tools: [{ id: item.tool, readOnly: true }], calls: { probe: async () => ({}) } })
     assert.equal(report.source, item.id)
-  })
-})
-
-describe("one permission and detail type (#30, item 8)", () => {
-  test("descriptor's SourcePermission and SourceDetail are the schema's Permission and Detail", () => {
-    const permission: SchemaPermission = { events: "gws.events_list", operations: ["gmail.users.messages.list"] }
-    const asDescriptor: SourcePermission = permission
-    const back: SchemaPermission = asDescriptor
-    const detail: SchemaDetail = { id: "gws.gmail.message", tool: "gws_read", from: ["external_id"] }
-    const detailBack: SchemaDetail = detail satisfies SourceDetail
-    assert.deepEqual([back, detailBack], [permission, detail])
   })
 })

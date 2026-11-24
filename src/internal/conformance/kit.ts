@@ -35,7 +35,7 @@ import {
   type SessionContext,
 } from "./permission.ts"
 import { AUTHOR_ROLES, removalProblems } from "../events.ts"
-import { maxBytesOf } from "../../descriptor.ts"
+import { maxBytesOf } from "../../manifest.ts"
 import { hintProblems } from "../../hints.ts"
 import { sessionRules } from "../../permission.ts"
 import { toolsRpcIdProblems } from "../../tools-rpc.ts"

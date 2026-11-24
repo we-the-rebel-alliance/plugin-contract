@@ -1,8 +1,8 @@
 /**
  * `act`: the consumer-side call for a declared write. It mirrors `read`:
  *
- * 1. the descriptor comes from the installed package, and the grant must be for the same descriptor hash, consumer,
- *    act and account;
+ * 1. the manifest comes from the installed package, and the grant must be for the same manifest hash, consumer,
+ *    action and account;
  * 2. the caller's input is checked against the act's input schema before anything is called;
  * 3. the call runs in a session fenced by exactly that phase's rules (`actSessionRules`);
  * 4. a commit whose effect is not `local` is refused unless the caller passes a confirmation the host issued.
@@ -12,11 +12,10 @@
  * `reaches`, `changes` and `cost`, so a host can render one confirm for every act.
  */
 import * as z from "zod"
-import { DEFAULT_MAX_BYTES, findAct, type InstalledDescriptor } from "./descriptor.ts"
+import { MAX_BYTES_DEFAULT, findAction, type ActionEffect, type ActionItem, type InstalledManifest } from "./manifest.ts"
 import type { Checked } from "./internal/checked.ts"
 import { failure, failureFromError, type ReadFailure } from "./internal/failure.ts"
 import { problemsOf } from "./internal/validator.ts"
-import type { ActEffect, ActItem } from "./internal/schema/types.ts"
 import { actSessionRules, type ActGrant, type ActPhase, type PermissionRule } from "./permission.ts"
 import type { ReadHost } from "./read.ts"
 
@@ -32,7 +31,7 @@ export interface ActHost extends ReadHost {
   issuedConfirmation?(check: {
     readonly token: string
     readonly act: string
-    readonly effect: ActEffect
+    readonly effect: ActionEffect
     readonly account: string
     readonly consumer: string
   }): boolean | Promise<boolean>
@@ -40,7 +39,7 @@ export interface ActHost extends ReadHost {
 
 /** One preview or commit of an act. */
 export interface ActRequest {
-  readonly installed: InstalledDescriptor
+  readonly installed: InstalledManifest
   readonly act: string
   readonly grant: ActGrant
   readonly consumer: string
@@ -79,7 +78,6 @@ export type ActOutcome =
   | { readonly ok: true; readonly phase: "commit"; readonly result: ActAnswer }
   | { readonly ok: false; readonly failure: ReadFailure }
 
-const rpcOf = (installed: InstalledDescriptor): { rpc?: string } => (installed.sources.rpc === undefined ? {} : { rpc: installed.sources.rpc })
 const plain = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
 const refused = (code: Parameters<typeof failure>[0], what: string, next: string): ActOutcome => ({ ok: false, failure: failure(code, what, next) })
 const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length
@@ -125,14 +123,14 @@ function confirmProblems(answer: Record<string, unknown>): string[] {
 }
 
 /** The answer's problems against the act, as a failure; undefined when it keeps the contract. */
-function checkAnswer(act: ActItem, account: string, answer: unknown): ReadFailure | undefined {
+function checkAnswer(act: ActionItem, account: string, answer: unknown): ReadFailure | undefined {
   let size: number
   try {
     size = bytes(answer)
   } catch {
     return failure("SCHEMA_VIOLATION", `${act.id} answered a value that is not JSON`, "Report it to the plugin's maintainers.")
   }
-  const limit = DEFAULT_MAX_BYTES
+  const limit = MAX_BYTES_DEFAULT
   if (size > limit) return failure("TOO_LARGE", `${act.id} answered ${size} bytes, over its ${limit}`, "Ask the plugin to answer a smaller preview.")
   if (!plain(answer)) return failure("SCHEMA_VIOLATION", `${act.id} answered something that is not an object`, "Report it to the plugin's maintainers.")
   if (answer["trust"] !== "untrusted") return failure("SCHEMA_VIOLATION", `${act.id}'s answer is not marked trust: "untrusted"`, "Report it to the plugin's maintainers.")
@@ -177,7 +175,7 @@ async function fencedCall(host: ActHost, rules: Checked<readonly PermissionRule[
  * Refuses a non-local commit that has no confirmation the host issued. A preview is not a commit, and a local commit
  * needs no confirmation. A token the host cannot verify is not a confirmation: this package does not issue one.
  */
-async function confirmationProblem(host: ActHost, act: ActItem, request: ActRequest): Promise<ActOutcome | undefined> {
+async function confirmationProblem(host: ActHost, act: ActionItem, request: ActRequest): Promise<ActOutcome | undefined> {
   if (request.phase !== "commit" || act.effect === "local") return undefined
   const token = request.confirmation?.trim() ?? ""
   if (token.length === 0) {
@@ -209,16 +207,16 @@ async function confirmationProblem(host: ActHost, act: ActItem, request: ActRequ
 /** Previews or commits an act under a grant, in a session fenced by that phase's rules. Never throws for a refusal. */
 export async function act(host: ActHost, request: ActRequest): Promise<ActOutcome> {
   const { installed, grant } = request
-  const declared = findAct(installed.sources, request.act)
+  const declared = findAction(installed.manifest, request.act)
   if (!declared) return refused("UNAVAILABLE", `${installed.package} ${installed.version} declares no act ${request.act}`, "Check the act id against the installed plugin's sources.")
   if (request.phase !== "preview" && request.phase !== "commit") {
     return refused("SCHEMA_VIOLATION", "an act is previewed or committed", "Pass phase preview or commit.")
   }
   if (grant.disabled) return refused("SOURCE_DISABLED", `${declared.id} is turned off for ${grant.consumer}`, "Turn the act on again to preview or commit it.")
   if (grant.consumer !== request.consumer) return refused("PERMISSION_DENIED", `the grant is ${grant.consumer}'s, not ${request.consumer}'s`, "Ask the person to grant this consumer the act.")
-  if (grant.act !== declared.id) return refused("PERMISSION_DENIED", `the grant is for ${grant.act}, not ${declared.id}`, "Use the grant for this act.")
-  if (grant.descriptorHash !== installed.hash) {
-    return refused("PERMISSION_DENIED", `${declared.id}'s declaration changed since the person consented`, "Ask the person to review the act and consent again.")
+  if (grant.action !== declared.id) return refused("PERMISSION_DENIED", `the grant is for ${grant.action}, not ${declared.id}`, "Use the grant for this act.")
+  if (grant.manifestHash !== installed.hash) {
+    return refused("PERMISSION_DENIED", `${declared.id}'s manifest changed since the person consented`, "Ask the person to review the action and consent again.")
   }
   const confirmed = await confirmationProblem(host, declared, request)
   if (confirmed) return confirmed
@@ -229,10 +227,9 @@ export async function act(host: ActHost, request: ActRequest): Promise<ActOutcom
   if (inputProblems.length > 0) return refused("SCHEMA_VIOLATION", inputProblems.join("; "), "Pass only the input the act's schema describes.")
   const called = await fencedCall(
     host,
-    actSessionRules(declared, grant, request.phase),
+    actSessionRules(installed.manifest, declared, grant, request.phase),
     {
       package: installed.package,
-      ...rpcOf(installed),
       method: request.phase === "preview" ? declared.preview : declared.commit,
       input: { ...(request.input ?? {}), account: grant.account },
       ...(request.signal ? { signal: request.signal } : {}),

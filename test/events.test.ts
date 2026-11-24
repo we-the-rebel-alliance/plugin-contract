@@ -138,7 +138,7 @@ describe("probe (plugin-contract#8, #4)", () => {
   test("finds a probe that read content, has no owner label, or answers for another source or account", () => {
     const answer = probeResult(WHOSE)
     expect(probeResultProblems({ ...answer, events: [] })).toEqual([expect.stringContaining('the field "events": a probe reads no content')])
-    expect(probeResultProblems({ ...answer, owner: { id: OWNER.id } })).toEqual(["the probe answer's owner must be { id, label }, two non-empty lines"])
+    expect(probeResultProblems({ ...answer, owner: { id: OWNER.id } })).toEqual(["the probe answer's owner.label must be one non-empty line of at most 200 characters"])
     expect(probeResultProblems({ ...answer, owner: null })).toHaveLength(1)
     // docs/contract.md: an owner's id is scheme-qualified. gws once answered the bare address (Wave 1 review).
     expect(probeResultProblems({ ...answer, owner: { id: "sam@example.com", label: "sam@example.com" } })).toEqual([
@@ -172,7 +172,7 @@ describe("a weak owner (#30, item 13)", () => {
     expect(probeResultProblems({ ...probeResult(WHOSE), owner: { ...OWNER, verified: true } })).toEqual(["the probe answer's owner.verified must be false, or left out for an owner the provider named"])
     expect(probeResultProblems({ ...probeResult(WHOSE), owner: { ...OWNER, verified: "no" } })).toEqual(["the probe answer's owner.verified must be false, or left out for an owner the provider named"])
     expect(resultProblems({ ...eventsListResult(WHOSE, [], "c", false), owner: { ...OWNER, verified: 0 } })).toEqual(["the result's owner.verified must be false, or left out for an owner the provider named"])
-    expect(probeResultProblems({ ...probeResult(WHOSE), owner: { ...OWNER, trust: "weak" } })).toEqual(["the probe answer's owner must be { id, label }, two non-empty lines"])
+    expect(probeResultProblems({ ...probeResult(WHOSE), owner: { ...OWNER, trust: "weak" } })).toEqual(['the probe answer\'s owner has the field "trust", which the contract does not define'])
   })
 })
 

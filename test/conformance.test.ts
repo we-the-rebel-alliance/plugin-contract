@@ -374,7 +374,7 @@ describe("sourceConformance", () => {
     const failing = async (change: (answer: Record<string, unknown>) => Record<string, unknown>) => (await run(full({ probe: async (input, context) => { await context.permission.assert({ action: "slack_events_list" }); await context.permission.assert({ action: "slack_slack_read_user_profile" }); return change(good(input)) } }))).problems.filter((problem) => /^probe\(/.test(problem))
     assert.deepEqual(await failing((answer) => answer), [])
     assert.ok((await failing((answer) => ({ ...answer, owner: null }))).some((problem) => /owner: null/.test(problem)))
-    assert.ok((await failing((answer) => ({ ...answer, owner: { id: "slack:U0PILOTOWN" } }))).some((problem) => /owner must be \{ id, label \}/.test(problem)))
+    assert.ok((await failing((answer) => ({ ...answer, owner: { id: "slack:U0PILOTOWN" } }))).some((problem) => /owner.label must be one non-empty line/.test(problem)))
     assert.ok((await failing(({ source: _source, ...answer }) => answer)).some((problem) => /source/.test(problem)))
     assert.ok((await failing(({ trust: _trust, ...answer }) => answer)).some((problem) => /trust/.test(problem)))
     assert.ok((await failing((answer) => ({ ...answer, account: "someone-else" }))).some((problem) => /another account/.test(problem)))
