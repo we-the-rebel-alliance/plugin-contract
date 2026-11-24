@@ -113,7 +113,7 @@ export function checkReadRequest(request: ReadRequest): { readonly source: Sourc
   if (!grantCovers(grant, { source: source.id, account: grant.account, ...(asked === undefined ? {} : { scope: asked }) })) {
     return refused("PERMISSION_DENIED", `the read asks for more of ${source.id} than the person granted`, "Read within the granted scope, or ask the person to widen it.")
   }
-  // One canonical form (keys and values sorted, no repeats), so a cursor's binding and a cache key agree (#7, D12).
+  // One canonical form (keys and values sorted, no repeats), so a cursor's binding and a cache key agree (#7, Q12).
   const scope = asked === undefined ? undefined : (canonicalScope(asked) as Record<string, string[]>)
   if (source.kind === "events") {
     if (request.pick !== undefined) return refused("SCHEMA_VIOLATION", "pick is for a snapshot source", "Pass cursor, since and limit to an events source.")

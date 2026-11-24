@@ -80,7 +80,7 @@ describe("kinds", () => {
   })
 })
 
-describe("extension kinds and their namespace (D13, plugin-contract#15)", () => {
+describe("extension kinds and their namespace (Q13, plugin-contract#15)", () => {
   test("x-acme/reminder is a kind, in acme's namespace and no other", () => {
     expect(isEventKind("x-acme/reminder")).toBe(true)
     expect(extensionNamespace("x-acme/reminder")).toBe("acme")
@@ -219,7 +219,7 @@ describe("scope input", () => {
   })
 })
 
-describe("the default page cap (D10)", () => {
+describe("the default page cap (Q10)", () => {
   test("is the descriptor's default maxBytes, 64 KB", () => {
     expect(MAX_PAGE_BYTES).toBe(MAX_BYTES.default)
     expect(MAX_PAGE_BYTES).toBe(65_536)

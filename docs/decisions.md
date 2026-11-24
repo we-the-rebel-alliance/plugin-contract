@@ -49,42 +49,42 @@ in full.
 
 ## Old open questions
 
-The questions the earlier `docs/events.md` left open, and where v0 settles each. Two are not settled.
+The questions the earlier `docs/events.md` left open (Q1–Q20), and where v0 settles each. Two are not settled.
 
-- **D1, required or optional page parts:** settled by contract §7, which lists the page and its parts; a part a source
+- **Q1, required or optional page parts:** settled by contract §7, which lists the page and its parts; a part a source
   does not have is left out.
-- **D2, the hash:** settled by contract §7: every event carries `hash`, and a source re-lists an item when it changes.
-- **D3, codes for malformed input and an unknown source:** settled by contract §12: `INPUT_INVALID` and `SOURCE_UNKNOWN`
+- **Q2, the hash:** settled by contract §7: every event carries `hash`, and a source re-lists an item when it changes.
+- **Q3, codes for malformed input and an unknown source:** settled by contract §12: `INPUT_INVALID` and `SOURCE_UNKNOWN`
   are in the one table.
-- **D4, the gap:** settled by contract §7: `gap` carries `expired` or `window-truncated` and a `since`; there is no
+- **Q4, the gap:** settled by contract §7: `gap` carries `expired` or `window-truncated` and a `since`; there is no
   `until`.
-- **D5, instruction-shaped text:** there is no default detector; a source passes its own predicate to `screenEvents`.
+- **Q5, instruction-shaped text:** there is no default detector; a source passes its own predicate to `screenEvents`.
   Does the package own a heuristic, and who writes it? A wrong positive drops a real event for good.
   **open: lead decides in phase 1**
-- **D6, cost on the page:** settled by contract §7: `cost` is `{ units: [{ per, count }], usd? }`, and the units are
+- **Q6, cost on the page:** settled by contract §7: `cost` is `{ units: [{ per, count }], usd? }`, and the units are
   the source's declared price units (§4).
-- **D7, the scope echo and `setup`:** settled by contract §7: the confirmed scope belongs to the source and the grant,
+- **Q7, the scope echo and `setup`:** settled by contract §7: the confirmed scope belongs to the source and the grant,
   and no page carries a `setup` sentence.
-- **D8, the owner:** settled by contract §5 and §11: an owner is `{ id, label, verified?, orgs? }`, and a probe never
+- **Q8, the owner:** settled by contract §5 and §11: an owner is `{ id, label, verified?, orgs? }`, and a probe never
   answers `owner: null`.
-- **D9, actors:** settled by contract §7: an actor is `{ role, id, name?, kind?, identities?, self? }`.
-- **D10, the default page cap:** settled by contract §7: `maxBytes` defaults to 64 KB and is capped at 1 MB.
-- **D11, identity:** settled by contract §11: `probe` is the one method that reads the signed-in account.
-- **D12, scope canonical form:** settled by contract §5 and §7: a cursor is bound to the plugin, capability, account
+- **Q9, actors:** settled by contract §7: an actor is `{ role, id, name?, kind?, identities?, self? }`.
+- **Q10, the default page cap:** settled by contract §7: `maxBytes` defaults to 64 KB and is capped at 1 MB.
+- **Q11, identity:** settled by contract §11: `probe` is the one method that reads the signed-in account.
+- **Q12, scope canonical form:** settled by contract §5 and §7: a cursor is bound to the plugin, capability, account
   and scope, so a scope has one canonical form.
-- **D13, extension kinds:** each segment is at most 32 characters (`EXTENSION_NAME`). The `<plugin>` word is not
+- **Q13, extension kinds:** each segment is at most 32 characters (`EXTENSION_NAME`). The `<plugin>` word is not
   checked against the plugin's id. Should conformance check it against the manifest? **open: lead decides in phase 1**
-- **D14, who owns `secrets.ts`:** settled by contract §13 and §15: screening belongs to `events`.
-- **D15, one kind or several:** settled by contract §4 and §7: `reads` names one kind, and a second kind is a second
+- **Q14, who owns `secrets.ts`:** settled by contract §13 and §15: screening belongs to `events`.
+- **Q15, one kind or several:** settled by contract §4 and §7: `reads` names one kind, and a second kind is a second
   source.
-- **D16, which string `CursorBinding.plugin` is:** settled by contract §3 and §5: the plugin's `<name>`, not its
+- **Q16, which string `CursorBinding.plugin` is:** settled by contract §3 and §5: the plugin's `<name>`, not its
   package name or RPC id.
-- **D17, `acceptV1` with a scope:** settled by contract §18: the compatibility path is removed, so there is no
+- **Q17, `acceptV1` with a scope:** settled by contract §18: the compatibility path is removed, so there is no
   version-1 cursor to accept.
-- **D18, forgery:** settled by contract §13: the grant fences each call, and the cursor's binding hash is a mix-up
+- **Q18, forgery:** settled by contract §13: the grant fences each call, and the cursor's binding hash is a mix-up
   guard, not a signature.
-- **D19, retractions:** settled by contract §7: `removals[]` on the page.
-- **D20, actor, event and fact metadata:** settled by contract §7 (actors, `reply_to`/`audience`/`domains`,
+- **Q19, retractions:** settled by contract §7: `removals[]` on the page.
+- **Q20, actor, event and fact metadata:** settled by contract §7 (actors, `reply_to`/`audience`/`domains`,
   `sections`/`parts`, `facts`) and §18 (hints stay, routines leave).
 - **R1, `maxBytes` and images:** settled by contract §7 and §15: `maxBytes` counts the answer's bytes, and the
   `outputs` image cap keeps a data URI inside it.

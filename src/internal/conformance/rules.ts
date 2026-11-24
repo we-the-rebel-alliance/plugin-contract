@@ -299,7 +299,7 @@ export function declarationProblems(sources: unknown, options: DeclarationOption
       }
     }
 
-    // One rule, not two regexes: `events` says whether a kind is in the source's namespace (D13, #15).
+    // One rule, not two regexes: `events` says whether a kind is in the source's namespace (Q13, #15).
     const namespace = sourceNamespace(item.id)
     if (item.kind === "events" && !isEventKindIn(item.reads, namespace)) {
       problems.push(`${at}.reads "${item.reads}" is not a core kind, or an extension kind in the namespace "${namespace}"`)

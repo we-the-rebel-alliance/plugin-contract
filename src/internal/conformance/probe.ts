@@ -4,7 +4,7 @@
  *
  * One check, not three (#8, D230): this, `read.probe` and `events.probeResultProblems` all judge an answer by
  * `probeResultProblems`, so a probe passes in conformance only if a consumer's `read.probe` accepts it. The answer is
- * `{ source, account, owner: { id, label }, scopes?, cost?, trust: "untrusted" }` (D8). There is no `owner: null`: a
+ * `{ source, account, owner: { id, label }, scopes?, cost?, trust: "untrusted" }` (Q8). There is no `owner: null`: a
  * source that is not signed in refuses the probe with `NEEDS_SIGN_IN` and a `next`, and a local source names a
  * synthetic owner (history: `os-user:<user>@<host>`).
  */
