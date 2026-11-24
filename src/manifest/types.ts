@@ -29,8 +29,8 @@ export type MethodClass = (typeof METHOD_CLASSES)[number]
 export const METHOD_ACCOUNTS = ["optional", "none"] as const
 export type MethodAccounts = (typeof METHOD_ACCOUNTS)[number]
 
-/** A method's optional override of the access setting (§6). */
-export const METHOD_EFFECTS = ["allow", "ask", "deny"] as const
+/** A method's optional narrowing of the access setting (§6): ask or deny, never allow. */
+export const METHOD_EFFECTS = ["ask", "deny"] as const
 export type MethodEffect = (typeof METHOD_EFFECTS)[number]
 
 /** How a plugin signs in to its accounts (§5). */
@@ -136,10 +136,8 @@ export interface MethodItem {
   readonly plans?: true | undefined
   /** The planning method this method commits: it then takes only `{ planId }`. */
   readonly commits?: string | undefined
-  /** An override of the `access` setting. */
+  /** A narrowing of the `access` setting. */
   readonly effect?: MethodEffect | undefined
-  /** `false` leaves the method out of agent prompts; it stays in Code Mode, automations and RPC. */
-  readonly agent?: false | undefined
   /** True for the one method Code Mode may send on every turn. None by default, at most one. */
   readonly pinned?: true | undefined
 }

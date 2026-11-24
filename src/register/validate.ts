@@ -13,15 +13,35 @@ import type { Checked } from "../internal/checked.ts"
 import type { JsonSchema } from "../manifest.ts"
 import { problemsOf } from "../internal/validator.ts"
 
-/** The plan's answer (contract §6): the id of the dry-run and the method that commits it. */
+/**
+ * The plan's answer (contract §6 and §8): the id of the dry-run, the method that commits it, and the preview fields a
+ * person sees before confirming: output, reaches, changes, cost and trust.
+ */
 export const PLAN_OUTPUT: JsonSchema = {
   type: "object",
-  properties: { planId: { type: "string", minLength: 1 }, method: { type: "string", minLength: 1 } },
+  properties: {
+    planId: { type: "string", minLength: 1 },
+    method: { type: "string", minLength: 1 },
+    output: {},
+    reaches: {
+      type: "array",
+      maxItems: 20,
+      items: {
+        type: "object",
+        properties: { id: { type: "string", minLength: 1, maxLength: 320 }, label: { type: "string", maxLength: 200 } },
+        required: ["id"],
+        additionalProperties: false,
+      },
+    },
+    changes: { type: "array", maxItems: 20, items: { type: "string", minLength: 1, maxLength: 500 } },
+    cost: {},
+    trust: { type: "string", enum: ["untrusted"] },
+  },
   required: ["planId", "method"],
   additionalProperties: false,
 }
 
-/** What a commit accepts from its planning method: the plan id, and nothing else. */
+/** What a commit accepts from its planning method: the plan id, and nothing else. The grant names the account. */
 export const COMMIT_INPUT: JsonSchema = {
   type: "object",
   properties: { planId: { type: "string", minLength: 1 } },
@@ -29,7 +49,16 @@ export const COMMIT_INPUT: JsonSchema = {
   additionalProperties: false,
 }
 
-const plan = z.strictObject({ planId: z.string().min(1), method: z.string().min(1) })
+const reach = z.strictObject({ id: z.string().min(1).max(320), label: z.string().max(200).optional() })
+const plan = z.strictObject({
+  planId: z.string().min(1),
+  method: z.string().min(1),
+  output: z.unknown().optional(),
+  reaches: z.array(reach).max(20).optional(),
+  changes: z.array(z.string().min(1).max(500)).max(20).optional(),
+  cost: z.unknown().optional(),
+  trust: z.literal("untrusted").optional(),
+})
 const commit = z.strictObject({ planId: z.string().min(1) })
 
 const plain = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
@@ -86,7 +115,9 @@ export function validateCommitInput(value: unknown): Checked<{ planId: string }>
  * method declared `accounts: "none"` must not declare one.
  */
 export function toolInputSchema(item: { readonly accounts?: "optional" | "none" | undefined; readonly commits?: string | undefined }, handlerInput: JsonSchema): JsonSchema {
-  const base = item.commits === undefined ? handlerInput : COMMIT_INPUT
+  // A commit takes exactly { planId }; the grant names the account, so no account property is added.
+  if (item.commits !== undefined) return COMMIT_INPUT
+  const base = handlerInput
   const properties = plain(base["properties"]) ? { ...(base["properties"] as Record<string, unknown>) } : {}
   const required = Array.isArray(base["required"]) ? [...(base["required"] as unknown[])] : []
   const declaresAccount = Object.hasOwn(properties, "account") || required.includes("account")

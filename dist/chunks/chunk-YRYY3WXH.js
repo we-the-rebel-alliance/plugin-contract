@@ -2,7 +2,7 @@
 import {
   isExtensionOutput,
   isOutputName
-} from "./chunk-V4DNAPX5.js";
+} from "./chunk-FZW2HFUR.js";
 import {
   ACCOUNT_MECHANISMS,
   ACTION_EFFECTS,
@@ -24,7 +24,7 @@ import {
   SOURCE_SIGNALS,
   TESTED_OPENCODE,
   isEventKindIn
-} from "./chunk-OGAJDQ7Z.js";
+} from "./chunk-4TUKQJKX.js";
 import {
   _enum,
   array,
@@ -140,8 +140,7 @@ var methodItem = strictObject({
   operations: array(string().regex(OPERATION, { error: "must be a provider operation of letters, digits, dots, underscores or hyphens" })).min(1).optional(),
   plans: literal(true).optional().describe("The method dry-runs a change and answers { planId, method }."),
   commits: methodName.optional().describe("The planning method this method commits. It then takes only { planId }."),
-  effect: _enum(METHOD_EFFECTS).optional().describe("An override of the access setting."),
-  agent: literal(false).optional().describe("Leave the method out of agent prompts; it stays in Code Mode, automations and RPC."),
+  effect: _enum(METHOD_EFFECTS).optional().describe("A narrowing of the access setting: ask or deny, never allow."),
   pinned: literal(true).optional().describe("The one method Code Mode sends on every turn. None by default.")
 }).superRefine((value, context) => {
   if (value.plans === true && value.commits !== void 0) context.addIssue({ code: "custom", path: ["commits"], message: "a method either plans a change or commits one, not both" });

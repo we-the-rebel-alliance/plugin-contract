@@ -80,29 +80,29 @@ export declare function namespaceOf(source: Pick<SourceItem, "id">): string;
  * The alias is the grant's own account, which the app resolved from the plugin's manifest before it issued the grant;
  * `serverOf` in `./rules.ts` is the deriving form that also refuses an alias the plugin does not declare.
  */
-export declare function operationRule(source: Pick<SourceItem, "id">, operation: string, account: string): PermissionRule;
+export declare function operationRule(source: Pick<SourceItem, "id">, operation: string, account: string, aliases?: readonly string[]): PermissionRule;
 /**
  * The session rules for reading `source` under `grant`: deny everything, then allow the method and each declared
  * operation for the granted account. Refused when the grant is for another source or its account cannot be named in a
  * rule.
  */
-export declare function sessionRules(source: SourceItem, grant: Pick<Grant, "source" | "account">): Checked<readonly PermissionRule[]>;
+export declare function sessionRules(source: SourceItem, grant: Pick<Grant, "source" | "account">, aliases?: readonly string[]): Checked<readonly PermissionRule[]>;
 /**
  * The session rules for one phase of `act` under `grant`: deny everything, then allow that phase's action and each
  * declared operation for the granted account. A preview session allows the preview action and not the commit action,
  * so the commit method cannot run while previewing. Operations are derived like a source's (`operationRule`).
  */
-export declare function actSessionRules(manifest: Manifest, act: Pick<ActionItem, "id" | "preview" | "commit">, grant: Pick<ActGrant, "action" | "account">, phase: ActPhase): Checked<readonly PermissionRule[]>;
+export declare function actSessionRules(manifest: Manifest, act: Pick<ActionItem, "id" | "preview" | "commit">, grant: Pick<ActGrant, "action" | "account">, phase: ActPhase, aliases?: readonly string[]): Checked<readonly PermissionRule[]>;
 /**
  * The session rules for one detail read of `source` under `grant`: the source's own rules, plus the detail's declared
  * method. Refused when the source declares no such detail.
  */
-export declare function detailRules(source: SourceItem, detailId: string, grant: Pick<Grant, "source" | "account">): Checked<readonly PermissionRule[]>;
+export declare function detailRules(source: SourceItem, detailId: string, grant: Pick<Grant, "source" | "account">, aliases?: readonly string[]): Checked<readonly PermissionRule[]>;
 /**
  * The session rules for the source's `probe` on `account`: deny everything, then allow the probe's action and its
  * identity operations. That a probe reads no content is the kit's check of its answer.
  */
-export declare function probeRules(source: SourceItem, account: string, identityOperations: readonly string[], probeAction?: string): Checked<readonly PermissionRule[]>;
+export declare function probeRules(source: SourceItem, account: string, identityOperations: readonly string[], probeAction?: string, aliases?: readonly string[]): Checked<readonly PermissionRule[]>;
 /**
  * How OpenCode decides an action on a resource under `rules`: the last rule whose action and resource match wins (`*`
  * matches any run of characters and `?` one), and no match asks. The same evaluation the register and the tools RPC run.

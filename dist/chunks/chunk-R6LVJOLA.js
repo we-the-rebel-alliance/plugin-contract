@@ -5,13 +5,13 @@ import {
 
 // src/accounts/alias.ts
 var DEFAULT_ALIAS = "default";
-var ALIAS_PATTERN = /^[a-z][a-z0-9_]{0,31}$/;
+var ALIAS_PATTERN = /^[a-z][a-z0-9]{0,31}$/;
 function isAlias(value) {
   return typeof value === "string" && ALIAS_PATTERN.test(value);
 }
 function aliasProblem(value, where = "the account alias") {
   if (typeof value !== "string") return `${where} must be a string`;
-  if (!ALIAS_PATTERN.test(value)) return `${where} must match ${ALIAS_PATTERN.source}: one lowercase letter, then up to 31 lowercase letters, digits or underscores`;
+  if (!ALIAS_PATTERN.test(value)) return `${where} must match ${ALIAS_PATTERN.source}: one lowercase letter, then up to 31 lowercase letters or digits`;
   return void 0;
 }
 

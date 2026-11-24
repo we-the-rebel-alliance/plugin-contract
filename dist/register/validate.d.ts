@@ -1,8 +1,11 @@
 import type { Checked } from "../internal/checked.js";
 import type { JsonSchema } from "../manifest.js";
-/** The plan's answer (contract §6): the id of the dry-run and the method that commits it. */
+/**
+ * The plan's answer (contract §6 and §8): the id of the dry-run, the method that commits it, and the preview fields a
+ * person sees before confirming: output, reaches, changes, cost and trust.
+ */
 export declare const PLAN_OUTPUT: JsonSchema;
-/** What a commit accepts from its planning method: the plan id, and nothing else. */
+/** What a commit accepts from its planning method: the plan id, and nothing else. The grant names the account. */
 export declare const COMMIT_INPUT: JsonSchema;
 /**
  * The problems with a handler's declared schema: it must be an object schema, so the register can add `account` and

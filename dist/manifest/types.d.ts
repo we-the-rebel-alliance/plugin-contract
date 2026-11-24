@@ -21,8 +21,8 @@ export type MethodClass = (typeof METHOD_CLASSES)[number];
 /** Whether a method takes an `account` (§6). */
 export declare const METHOD_ACCOUNTS: readonly ["optional", "none"];
 export type MethodAccounts = (typeof METHOD_ACCOUNTS)[number];
-/** A method's optional override of the access setting (§6). */
-export declare const METHOD_EFFECTS: readonly ["allow", "ask", "deny"];
+/** A method's optional narrowing of the access setting (§6): ask or deny, never allow. */
+export declare const METHOD_EFFECTS: readonly ["ask", "deny"];
 export type MethodEffect = (typeof METHOD_EFFECTS)[number];
 /** How a plugin signs in to its accounts (§5). */
 export declare const ACCOUNT_MECHANISMS: readonly ["integration", "mcp", "local"];
@@ -113,10 +113,8 @@ export interface MethodItem {
     readonly plans?: true | undefined;
     /** The planning method this method commits: it then takes only `{ planId }`. */
     readonly commits?: string | undefined;
-    /** An override of the `access` setting. */
+    /** A narrowing of the `access` setting. */
     readonly effect?: MethodEffect | undefined;
-    /** `false` leaves the method out of agent prompts; it stays in Code Mode, automations and RPC. */
-    readonly agent?: false | undefined;
     /** True for the one method Code Mode may send on every turn. None by default, at most one. */
     readonly pinned?: true | undefined;
 }

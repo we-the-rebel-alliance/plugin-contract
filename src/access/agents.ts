@@ -2,7 +2,7 @@
  * Generating access into every agent's rules, and detecting an agent that lacks them (contract §6 and §11).
  *
  *   const access = await applyAccess(ctx, { manifest, options })
- *   status.unguardedAgents = unguardedAgents(await ctx.agent.list(), access.rules)
+ *   status.unguardedAgents = unguardedAgents((await ctx.agent.list()).data, access.rules)
  *
  * OpenCode appends agent rules after the base policy and the last matching rule wins. The generated rules are inserted
  * after each agent's base allow (the first `*` on `*` with effect `allow`), so a later rule the person or an app adds
@@ -10,13 +10,15 @@
  *
  * `applyAccess` patches the agents that exist when the plugin loads. An agent registered later does not receive the
  * rules, because OpenCode gives a transform no event for a later agent; `unguardedAgents` names it for status, and the
- * plugin never patches it behind the person's back.
+ * plugin never patches it behind the person's back. Agent rules are appended after global rules
+ * (`core/src/config/plugin/agent.ts:63-72`), so a later config `"*": "allow"` is exactly the widening
+ * `unguardedAgents` reports.
  */
 import type { Plugin } from "@opencode/plugin"
 import { accountsOf } from "../accounts.ts"
 import type { Checked } from "../internal/checked.ts"
 import type { Manifest } from "../manifest.ts"
-import type { PermissionRule } from "./fences.ts"
+import { evaluate, type PermissionRule } from "./fences.ts"
 import { accessLevel, aliasesFrom, rulesFor, type AccessLevel } from "./rules.ts"
 
 /** An agent as the transforms and status see it: its id and its ordered rules. */
@@ -79,13 +81,30 @@ export function withRules(permissions: readonly PermissionRule[], additions: rea
   return [...permissions.slice(0, at), ...missing, ...permissions.slice(at)]
 }
 
+const rank = (effect: PermissionRule["effect"]): number => (effect === "allow" ? 2 : effect === "ask" ? 1 : 0)
+
+/** A concrete action a wildcard rule speaks about, for the last-match check: `demo-work_*` becomes `demo-work_x`. */
+const concrete = (action: string): string => action.replaceAll("*", "x").replaceAll("?", "x")
+
 /**
- * The agent ids that do not hold every generated rule. An agent registered after the plugin loaded, or one whose rules
- * an app replaced, is named here; status reports it and the plugin never patches it.
+ * True when the agent's rules no longer give `rule` the effect it generated. OpenCode's last matching rule wins, so a
+ * later `{ action: "*", resource: "*", effect: "allow" }` appended by configuration widens a generated `ask` or `deny`;
+ * a later narrower rule is the person's choice and does not unguard the agent.
+ */
+function overridden(agent: AgentLike, rule: PermissionRule): boolean {
+  if (!agent.permissions.some((held) => sameRule(held, rule))) return true
+  const effective = evaluate(agent.permissions, concrete(rule.action), rule.resource)
+  return rank(effective) > rank(rule.effect)
+}
+
+/**
+ * The agent ids whose rules no longer give every generated rule its effect. An agent registered after the plugin
+ * loaded, or one whose later rule widens a generated `ask` or `deny`, is named here; status reports it and the plugin
+ * never patches it.
  */
 export function unguardedAgents(agents: readonly AgentLike[], rules: readonly PermissionRule[]): readonly string[] {
   return agents
-    .filter((agent) => rules.some((rule) => !agent.permissions.some((held) => sameRule(held, rule))))
+    .filter((agent) => rules.some((rule) => overridden(agent, rule)))
     .map((agent) => agent.id)
     .sort()
 }

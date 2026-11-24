@@ -21,7 +21,8 @@
 import type { Checked } from "../internal/checked.ts"
 import type { ActionItem, Manifest, SourceItem } from "../manifest.ts"
 import { findMethod } from "../manifest.ts"
-import { serverName } from "./rules.ts"
+import { DEFAULT_ALIAS } from "../accounts/alias.ts"
+import { serverOf } from "./rules.ts"
 
 /** One OpenCode permission rule, as a session or an agent holds it. */
 export interface PermissionRule {
@@ -103,9 +104,12 @@ export function namespaceOf(source: Pick<SourceItem, "id">): string {
  * The alias is the grant's own account, which the app resolved from the plugin's manifest before it issued the grant;
  * `serverOf` in `./rules.ts` is the deriving form that also refuses an alias the plugin does not declare.
  */
-export function operationRule(source: Pick<SourceItem, "id">, operation: string, account: string): PermissionRule {
+export function operationRule(source: Pick<SourceItem, "id">, operation: string, account: string, aliases: readonly string[] = [account]): PermissionRule {
   const namespace = namespaceOf(source)
-  return operation.includes(".") ? allow(`${namespace}.read`, `${account}:${operation}`) : allow(`${serverName(namespace, account)}_${operation}`, "*")
+  if (operation.includes(".")) return allow(`${namespace}.read`, `${account}:${operation}`)
+  const server = serverOf(namespace, account, aliases.length === 0 ? [DEFAULT_ALIAS] : aliases)
+  if (!server.ok) throw new Error(`access: ${server.problems.join("; ")}`)
+  return allow(`${server.value}_${operation}`, "*")
 }
 
 function fenced(rules: readonly PermissionRule[]): Checked<readonly PermissionRule[]> {
@@ -131,13 +135,13 @@ function methodAction(source: SourceItem): string {
  * operation for the granted account. Refused when the grant is for another source or its account cannot be named in a
  * rule.
  */
-export function sessionRules(source: SourceItem, grant: Pick<Grant, "source" | "account">): Checked<readonly PermissionRule[]> {
+export function sessionRules(source: SourceItem, grant: Pick<Grant, "source" | "account">, aliases: readonly string[] = [grant.account]): Checked<readonly PermissionRule[]> {
   if (grant.source !== source.id) return { ok: false, problems: [`the grant is for ${grant.source}, not ${source.id}`] }
   const problem = accountProblem(grant.account)
   if (problem) return { ok: false, problems: [problem] }
   const method = methodAction(source)
   const operations = source.operations ?? []
-  return fenced([allow(method, "*"), ...operations.map((operation) => operationRule(source, operation, grant.account))])
+  return fenced([allow(method, "*"), ...operations.map((operation) => operationRule(source, operation, grant.account, aliases))])
 }
 
 /**
@@ -145,7 +149,7 @@ export function sessionRules(source: SourceItem, grant: Pick<Grant, "source" | "
  * declared operation for the granted account. A preview session allows the preview action and not the commit action,
  * so the commit method cannot run while previewing. Operations are derived like a source's (`operationRule`).
  */
-export function actSessionRules(manifest: Manifest, act: Pick<ActionItem, "id" | "preview" | "commit">, grant: Pick<ActGrant, "action" | "account">, phase: ActPhase): Checked<readonly PermissionRule[]> {
+export function actSessionRules(manifest: Manifest, act: Pick<ActionItem, "id" | "preview" | "commit">, grant: Pick<ActGrant, "action" | "account">, phase: ActPhase, aliases: readonly string[] = [grant.account]): Checked<readonly PermissionRule[]> {
   if (grant.action !== act.id) return { ok: false, problems: [`the grant is for ${grant.action}, not ${act.id}`] }
   const problem = accountProblem(grant.account)
   if (problem) return { ok: false, problems: [problem] }
@@ -154,17 +158,17 @@ export function actSessionRules(manifest: Manifest, act: Pick<ActionItem, "id" |
   if (declared === undefined) return { ok: false, problems: [`${act.id} names no declared method ${method}`] }
   const action = `${namespaceOf(act)}.${method}`
   const operations = declared.operations ?? []
-  return fenced([allow(action, "*"), ...operations.map((operation) => operationRule(act, operation, grant.account))])
+  return fenced([allow(action, "*"), ...operations.map((operation) => operationRule(act, operation, grant.account, aliases))])
 }
 
 /**
  * The session rules for one detail read of `source` under `grant`: the source's own rules, plus the detail's declared
  * method. Refused when the source declares no such detail.
  */
-export function detailRules(source: SourceItem, detailId: string, grant: Pick<Grant, "source" | "account">): Checked<readonly PermissionRule[]> {
+export function detailRules(source: SourceItem, detailId: string, grant: Pick<Grant, "source" | "account">, aliases: readonly string[] = [grant.account]): Checked<readonly PermissionRule[]> {
   const detail = source.details?.find((entry) => entry.id === detailId)
   if (detail === undefined) return { ok: false, problems: [`${source.id} declares no detail read ${detailId}`] }
-  const rules = sessionRules(source, grant)
+  const rules = sessionRules(source, grant, aliases)
   if (!rules.ok) return rules
   return fenced([...rules.value.slice(1), allow(`${namespaceOf(source)}.${detail.method}`, "*")])
 }
@@ -173,11 +177,11 @@ export function detailRules(source: SourceItem, detailId: string, grant: Pick<Gr
  * The session rules for the source's `probe` on `account`: deny everything, then allow the probe's action and its
  * identity operations. That a probe reads no content is the kit's check of its answer.
  */
-export function probeRules(source: SourceItem, account: string, identityOperations: readonly string[], probeAction?: string): Checked<readonly PermissionRule[]> {
+export function probeRules(source: SourceItem, account: string, identityOperations: readonly string[], probeAction?: string, aliases: readonly string[] = [account]): Checked<readonly PermissionRule[]> {
   const problem = accountProblem(account)
   if (problem) return { ok: false, problems: [problem] }
   const method = probeAction ?? methodAction(source)
-  return fenced([allow(method, "*"), ...identityOperations.map((operation) => operationRule(source, operation, account))])
+  return fenced([allow(method, "*"), ...identityOperations.map((operation) => operationRule(source, operation, account, aliases))])
 }
 
 /**

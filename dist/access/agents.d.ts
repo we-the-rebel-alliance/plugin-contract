@@ -1,5 +1,5 @@
 import type { Manifest } from "../manifest.js";
-import type { PermissionRule } from "./fences.js";
+import { type PermissionRule } from "./fences.js";
 import { type AccessLevel } from "./rules.js";
 /** An agent as the transforms and status see it: its id and its ordered rules. */
 export interface AgentLike {
@@ -43,8 +43,9 @@ export interface AccessRequest {
  */
 export declare function withRules(permissions: readonly PermissionRule[], additions: readonly PermissionRule[]): PermissionRule[];
 /**
- * The agent ids that do not hold every generated rule. An agent registered after the plugin loaded, or one whose rules
- * an app replaced, is named here; status reports it and the plugin never patches it.
+ * The agent ids whose rules no longer give every generated rule its effect. An agent registered after the plugin
+ * loaded, or one whose later rule widens a generated `ask` or `deny`, is named here; status reports it and the plugin
+ * never patches it.
  */
 export declare function unguardedAgents(agents: readonly AgentLike[], rules: readonly PermissionRule[]): readonly string[];
 /**

@@ -2,16 +2,14 @@
  * Door 1 and door 2: the agent tool and Code Mode, from the same handler table (contract §9).
  *
  * Every method becomes one tool in the plugin's namespace `<name>`, with permission action `<name>.<method>`; OpenCode
- * exposes it as `tools.<name>.<method>` in Code Mode and as `<name>_<method>` to a model. A method declared
- * `agent: false` is registered with a Code Mode entry object, which is the registration that leaves it out of agent
- * prompts while keeping it in Code Mode, automations and RPC (§6). `pinned: true` sets Code Mode's `pinned` flag
- * instead of the deprecated top-level one.
+ * exposes it as `tools.<name>.<method>` in Code Mode and as `<name>_<method>` to a model. `pinned: true` sets Code
+ * Mode's `pinned` flag instead of the deprecated top-level one.
  *
- * The tool's executor runs the same prepared-call path as every other door: input and answer validation, account resolution and
- * operation assertions are not reimplemented here.
+ * The tool's executor runs the same prepared-call path as every other door: input and answer validation, account
+ * resolution and the one permission gate are not reimplemented here.
  */
 import type { Plugin } from "@opencode/plugin"
-import { assertOperations } from "./assertions.ts"
+import { gate } from "./assertions.ts"
 import { RegisterError } from "./errors.ts"
 import type { MethodEntry } from "./handlers.ts"
 import { execute, prepareCall, toolCall, type CallEnvironment } from "./invoke.ts"
@@ -77,13 +75,9 @@ function textOf(value: unknown): string {
   }
 }
 
-/** The Code Mode options of one method: an entry object for `agent: false`, the flag otherwise, with `pinned`. */
+/** The Code Mode options of one method: the flag, or Code Mode's entry object when `pinned`. */
 function codemodeFor(entry: MethodEntry): ToolRegistration["options"]["codemode"] {
-  const pinned = entry.item.pinned === true
-  if (entry.item.agent === false) {
-    return { ...(pinned ? { pinned: true } : {}), description: entry.handler.description, input: entry.input, output: entry.output }
-  }
-  return pinned ? { pinned: true } : true
+  return entry.item.pinned === true ? { pinned: true } : true
 }
 
 /** The tool registrations, built once, so a test can inspect them before OpenCode runs them. */
@@ -97,7 +91,10 @@ export function toolRegistrations(environment: CallEnvironment, context: ToolCon
     async execute(raw, callContext) {
       try {
         const prepared = prepareCall(entry, raw, environment.accounts)
-        await assertOperations(context, environment.name, entry, callContext, prepared.account)
+        await gate(context, environment.name, entry, callContext, prepared.account, {
+          save: true,
+          source: { type: "tool", messageID: callContext.messageID, id: callContext.id },
+        })
         const value = await execute(entry, prepared, toolCall(callContext, callContext.codemode === true ? "codemode" : "tool"))
         return { output: value, content: textOf(value) }
       } catch (error) {

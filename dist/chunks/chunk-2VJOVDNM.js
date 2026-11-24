@@ -1,7 +1,7 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   ALIAS_PATTERN
-} from "./chunk-TRS5DZ3K.js";
+} from "./chunk-R6LVJOLA.js";
 import {
   validator
 } from "./chunk-S3ZVQTGH.js";
@@ -47,7 +47,7 @@ function holdsSecret(text) {
 // src/bus/schema.ts
 var ACCOUNT = ALIAS_PATTERN;
 var ONE_LINE_RE = /^[^\r\n]+$/;
-var ACCOUNT_EXPECTATION = "must be an account alias: lowercase letters, digits and underscores, starting with a letter (contract \xA75)";
+var ACCOUNT_EXPECTATION = "must be an account alias: lowercase letters and digits, starting with a letter (contract \xA75)";
 function validatorsFor(name) {
   const capability = new RegExp(capabilityPattern(name));
   const changed = object({

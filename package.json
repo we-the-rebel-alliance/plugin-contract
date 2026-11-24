@@ -108,6 +108,7 @@
   },
   "devDependencies": {
     "@opencode/plugin": "2.4.1",
+    "@opencode/sdk": "2.4.1",
     "@types/node": "24.19.2",
     "effect": "4.1.0",
     "esbuild": "0.28.2",

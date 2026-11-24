@@ -65,17 +65,47 @@ describe("the access levels", () => {
     assert.equal(readOnly.find((rule) => rule.action === "demo.send_message")?.effect, "deny")
   })
 
-  test("a method's effect is the person's choice and wins over the table", () => {
+  test("a method's effect only narrows: ask forces an ask, deny turns it off, and there is no allow", () => {
     const own = value((m) => {
       m.methods["send_message"].effect = "deny"
       m.methods["events_list"].effect = "ask"
-      m.methods["delete_note"] = { class: "delete", accounts: "none", effect: "allow" }
+      m.methods["delete_note"] = { class: "delete", accounts: "none", effect: "ask" }
     })
-    const ask = rulesFor(own, "ask-changes")
-    assert.equal(ask.find((rule) => rule.action === "demo.send_message")?.effect, "deny")
-    assert.equal(ask.find((rule) => rule.action === "demo.events_list")?.effect, "ask")
+    const all = rulesFor(own, "all")
+    assert.equal(all.find((rule) => rule.action === "demo.send_message")?.effect, "deny")
+    assert.equal(all.find((rule) => rule.action === "demo.events_list")?.effect, "ask")
+    assert.equal(all.find((rule) => rule.action === "demo.delete_note")?.effect, "ask")
     const readOnly = rulesFor(own, "read-only")
-    assert.equal(readOnly.find((rule) => rule.action === "demo.delete_note")?.effect, "allow")
+    assert.equal(readOnly.find((rule) => rule.action === "demo.delete_note")?.effect, "deny", "read-only is stricter than ask")
+    const invalid = checkManifest(manifest((m: any) => {
+      m.methods["delete_note"] = { class: "delete", accounts: "none", effect: "allow" }
+    }))
+    assert.equal(invalid.ok, false)
+    if (!invalid.ok) assert.ok(invalid.problems.some((problem) => /effect/.test(problem)))
+  })
+
+  test("wildcard rules come before specific ones, whatever the manifest key order", () => {
+    const order = (wildcardFirst: boolean): Manifest => value((m) => {
+      const rest = { ...m.methods }
+      delete rest["mcp:*"]
+      const wildcard = { "mcp:*": { class: "read" } }
+      const specific = { "mcp:send_message": { class: "send" } }
+      m.methods = wildcardFirst ? { ...wildcard, ...specific, ...rest } : { ...rest, ...specific, ...wildcard }
+    })
+    for (const level of ["all", "ask-changes", "read-only"] as const) {
+      for (const mcpFirst of [true, false]) {
+        const rules = rulesFor(order(mcpFirst), level, ["default", "work"])
+        const expected = level === "all" ? "allow" : level === "ask-changes" ? "ask" : "deny"
+        assert.equal(evaluate(rules, "demo_send_message"), expected, `${level} mcpFirst=${mcpFirst} default`)
+        assert.equal(evaluate(rules, "demo-work_send_message"), expected, `${level} mcpFirst=${mcpFirst} work`)
+        assert.equal(evaluate(rules, "demo_read_file"), "allow", `${level} mcpFirst=${mcpFirst} wildcard read`)
+        assert.equal(evaluate(rules, "demo-work_read_file"), "allow", `${level} mcpFirst=${mcpFirst} work wildcard read`)
+        // The specific send rule is after the wildcard read rule, so it decides.
+        const wildcard = rules.findIndex((rule) => rule.action === "demo_*")
+        const specific = rules.findIndex((rule) => rule.action === "demo_send_message")
+        assert.ok(wildcard < specific, `${level} mcpFirst=${mcpFirst}`)
+      }
+    }
   })
 
   test("a pass-through MCP method has one rule per alias, and a rule for work cannot reach another alias", () => {
@@ -95,6 +125,7 @@ describe("the access levels", () => {
     assert.equal(serverOf("demo", "personal", ["default", "work"]).ok, false)
     assert.equal(serverOf("demo", "*", ["default", "work"]).ok, false)
     assert.equal(serverOf("demo", "Work", ["default", "work"]).ok, false)
+    assert.equal(serverOf("demo", "work_2", ["default", "work"]).ok, false)
   })
 })
 
@@ -133,7 +164,7 @@ describe("generating access into agents", () => {
     assert.deepEqual(updates, ["build", "plan"])
     const build = list[0]!.permissions
     assert.equal(build[0]!.action, "*")
-    assert.equal(build[1]!.action, "demo.status", "the generated rules follow the base allow")
+    assert.equal(build[1]!.action, "demo_*", "the wildcard rule follows the base allow")
     assert.equal(build.at(-1)!.action, "read", "the agent's own rule still follows")
     assert.equal(evaluate(build, "demo.send_message"), "deny")
     // A later rule the person adds for one tool wins, whichever level generated the default.
@@ -151,6 +182,16 @@ describe("generating access into agents", () => {
     const later: AgentLike = { id: "reviewer", permissions: [{ action: "*", resource: "*", effect: "allow" }] }
     assert.deepEqual(unguardedAgents([...list, later], first.rules), ["reviewer"])
     assert.deepEqual(unguardedAgents(list, first.rules), [])
+  })
+
+  test("unguardedAgents names an agent whose later rule widens a generated ask or deny, not one that narrows", async () => {
+    const list = agents()
+    const { ctx } = context(list)
+    const access = await applyAccess(ctx, { manifest: demo, options: { access: "read-only" } })
+    const widened: AgentLike = { id: "widened", permissions: [...list[0]!.permissions, { action: "*", resource: "*", effect: "allow" }] }
+    const narrowed: AgentLike = { id: "narrowed", permissions: [...list[0]!.permissions, { action: "*", resource: "*", effect: "deny" }] }
+    const missing: AgentLike = { id: "missing", permissions: [{ action: "*", resource: "*", effect: "allow" }] }
+    assert.deepEqual(unguardedAgents([widened, narrowed, missing], access.rules), ["missing", "widened"])
   })
 
   test("an invalid access option is a problem, not a wider default", async () => {

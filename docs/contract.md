@@ -129,7 +129,7 @@ again. Nothing said over RPC is trusted as a manifest.
 
 Every plugin that signs in supports several named accounts at once, such as `work` and `personal`.
 
-- **Alias:** `^[a-z][a-z0-9_]{0,31}$`. The account with no alias is `default`.
+- **Alias:** `^[a-z][a-z0-9]{0,31}$`. The account with no alias is `default`.
 - **Profiles:** option `accounts`, a map of alias to profile. The profile's schema is the plugin's (for example gws's
   `mode`, `enabledServices`; elevenlabs's `region`; github's `host`). With no `accounts` option, there is one `default`
   account.
@@ -161,8 +161,7 @@ One table covers every callable, including pass-through MCP tools, so a consumer
 | `operations` | the provider operations it may assert, for grants and session rules |
 | `plans: true` | dry-runs a change and answers `{ planId, method }` naming the method that commits it |
 | `commits: "<method>"` | takes only `{ planId }` from that planning method; a consumer refuses any other input |
-| `effect` | optional override for access: `allow`, `ask` or `deny` |
-| `agent` | `false` to leave the method out of agent prompts; it stays in Code Mode, automations and RPC (`events_list`, `probe`, `status`) |
+| `effect` | optional narrowing of access: `ask` or `deny`; never `allow` |
 | `pinned` | `true` for a method whose signature Code Mode sends on every turn. None by default; at most one per plugin, only when session data shows most of the plugin's sessions call it, within about 1,000 tokens |
 
 **Access** (option `access`), generated into every agent's rules with `ctx.agent.transform` by the `access` module:
@@ -173,8 +172,9 @@ One table covers every callable, including pass-through MCP tools, so a consumer
 | `ask-changes` | runs | asks first |
 | `read-only` | runs | off |
 
-An `effect` of `ask` makes a call ask under `ask-changes` even when it is `read`. `deny` turns it off under `ask-changes` and
-`read-only`. A choice the person makes for one tool wins. An agent that lacks the generated rules is named in status,
+An `effect` of `ask` makes a call ask even when it is `read`. `deny` turns it off. `effect` only narrows the `access`
+setting: there is no `allow`, so a method can never widen the person's level. A choice the person makes for one tool
+wins. An agent that lacks the generated rules is named in status,
 never patched.
 
 ## 7. Sources (reads)

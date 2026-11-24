@@ -19,9 +19,8 @@ export declare function refusal(code: ErrorCode, what: string, next: string): Re
 /** Throw a refusal. */
 export declare function refuse(code: ErrorCode, what: string, next: string): never;
 /**
- * The refusal an error carries, or undefined for an error with no contract code. `AUTH_REQUIRED` is the old transport's
- * sign-in code and maps to `NEEDS_SIGN_IN`; a code the table does not hold is left undefined, so the caller's fallback
- * is `UNAVAILABLE`.
+ * The refusal an error carries, or undefined for an error with no contract code. A code the table does not hold is left
+ * undefined, so the caller's fallback is `UNAVAILABLE`; a sign-in must use the table's `NEEDS_SIGN_IN`.
  */
 export declare function refusalOf(error: unknown): Refusal | undefined;
 /** The one-line reason of an unknown failure, redacted and cut to 160 characters. */

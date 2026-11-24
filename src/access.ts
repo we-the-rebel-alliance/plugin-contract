@@ -3,7 +3,7 @@
  * (contract §6 and §13).
  *
  *   const access = await applyAccess(ctx, { manifest, options: ctx.options })
- *   status.unguardedAgents = unguardedAgents(await ctx.agent.list(), access.rules)
+ *   status.unguardedAgents = unguardedAgents((await ctx.agent.list()).data, access.rules)
  *
  * `rulesFor` derives one rule per method from the level and each method's `class` and `effect`: `<name>.<method>` on
  * `*`, and `<server>_<tool>` for a pass-through MCP method. `applyAccess` inserts them into every agent after its base
@@ -21,7 +21,6 @@ export {
   isMcpMethod,
   methodAction,
   rulesFor,
-  serverName,
   serverOf,
 } from "./access/rules.ts"
 export type { AccessLevel } from "./access/rules.ts"

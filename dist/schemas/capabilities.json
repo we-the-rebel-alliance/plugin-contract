@@ -202,18 +202,12 @@
             "type": "string"
           },
           "effect": {
-            "description": "An override of the access setting.",
+            "description": "A narrowing of the access setting: ask or deny, never allow.",
             "type": "string",
             "enum": [
-              "allow",
               "ask",
               "deny"
             ]
-          },
-          "agent": {
-            "description": "Leave the method out of agent prompts; it stays in Code Mode, automations and RPC.",
-            "type": "boolean",
-            "const": false
           },
           "pinned": {
             "description": "The one method Code Mode sends on every turn. None by default.",

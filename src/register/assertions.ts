@@ -1,16 +1,23 @@
 /**
- * The permission checks around one call (contract §6, §9 and §13).
+ * The one permission gate every door runs (contract §6 and §13; OpenCode 2.4.1 `ctx.permission.assert`).
  *
- * The method's own action is `<name>.<method>`. A method that declares dotted provider operations also asserts that
- * action on `<alias>:<operation>`, so a grant or an agent rule can narrow one operation. A bare operation is an MCP
- * tool, whose action is `<server>_<tool>` on `*`, with the server derived per alias: a rule for `work` can never reach
- * another alias's tools.
+ * OpenCode 2.4.1's gate is `ctx.permission.assert` (`@opencode/plugin/dist/promise/permission.d.ts`; its input is
+ * `AssertInput.Encoded` in `dist/permission.d.ts`). A tool's `permission` option only hides a fully denied tool, and
+ * `tool.add` adds no ask (`core/src/tool.ts:327,500`; `core/src/tool/AGENTS.md:53-55`;
+ * `plugin/src/promise/adapter.ts:574`). So every handler invocation calls `ctx.permission.assert` once, with the
+ * method's action `<name>.<method>` and the resources its declared operations name (`<alias>:<operation>`, or `["*"]`
+ * when it declares none). The host evaluates the session's rules and asks when the last matching rule says `ask`; a
+ * deny or a rejection rejects. A tool or Code Mode call passes `save: ["*"]` so "Always allow" can save the tool's
+ * action; an RPC call never saves, because its answer applies to that one call only.
+ *
+ * `callEffect` is the read-only evaluation the RPC cap needs before the gate: it says whether the session's rules will
+ * ask, allow or deny the method, without prompting.
  */
-import { evaluate, methodAction, serverName, type PermissionRule } from "../access.ts"
+import { evaluate, methodAction, type PermissionRule } from "../access.ts"
 import type { MethodEntry } from "./handlers.ts"
 
-/** The part of the plugin context a call asserts through. */
-export interface AssertContext {
+/** The part of the plugin context the gate asserts through. */
+export interface GateContext {
   readonly permission: {
     assert(input: {
       readonly sessionID: string
@@ -23,60 +30,45 @@ export interface AssertContext {
   }
 }
 
-/** One permission assertion a call makes. */
-export interface OperationAssertion {
-  readonly action: string
-  readonly resources: readonly string[]
-}
-
-const dotted = (operation: string): boolean => operation.includes(".")
-
-/** The assertions one call makes beyond its own tool permission: the method's dotted operations, then its bare ones. */
-export function assertionsFor(name: string, entry: MethodEntry, account: string): readonly OperationAssertion[] {
+/** The resources a method's gate names: its operations on the account, or `*` when it declares none. */
+export function resourcesFor(entry: MethodEntry, account: string): readonly string[] {
   const operations = entry.item.operations ?? []
-  const action = methodAction(name, entry.name)
-  const assertions: OperationAssertion[] = []
-  const dottedOperations = operations.filter(dotted)
-  if (dottedOperations.length > 0) assertions.push({ action, resources: dottedOperations.map((operation) => `${account}:${operation}`) })
-  for (const operation of operations.filter((held) => !dotted(held))) {
-    assertions.push({ action: `${serverName(name, account)}_${operation}`, resources: ["*"] })
-  }
-  return assertions
+  return operations.length === 0 ? ["*"] : operations.map((operation) => `${account}:${operation}`)
 }
 
 /**
- * The effect of a call under `rules`: the method's action on `*`, narrowed by every declared operation's resource. A
- * deny anywhere wins; otherwise an ask anywhere asks.
+ * The effect the session's rules give a call: the method's action on `*`, narrowed by each declared operation's
+ * resource. A deny anywhere wins; otherwise an ask anywhere asks.
  */
 export function callEffect(name: string, entry: MethodEntry, account: string, rules: readonly PermissionRule[]): PermissionRule["effect"] {
   const action = methodAction(name, entry.name)
   let effect = evaluate(rules, action, "*")
-  for (const assertion of assertionsFor(name, entry, account)) {
-    for (const resource of assertion.resources) {
-      const found = evaluate(rules, assertion.action, resource)
-      if (found === "deny") return "deny"
-      if (found === "ask") effect = "ask"
-    }
+  for (const resource of resourcesFor(entry, account)) {
+    const found = evaluate(rules, action, resource)
+    if (found === "deny") return "deny"
+    if (found === "ask") effect = "ask"
   }
   return effect
 }
 
-/** Assert every operation the method declares, as the session's agent. A refusal propagates as OpenCode's error. */
-export async function assertOperations(
-  context: AssertContext,
+/**
+ * The one gate. It never reimplements the rules: it asks OpenCode's permission API, which evaluates the agent's and the
+ * session's rules with last-match-wins, prompts when the answer is `ask`, and rejects on a deny or a rejection.
+ */
+export async function gate(
+  context: GateContext,
   name: string,
   entry: MethodEntry,
-  call: { readonly sessionID: string; readonly agent: string; readonly messageID: string; readonly id: string },
+  call: { readonly sessionID: string; readonly agent?: string; readonly messageID: string; readonly id: string },
   account: string,
+  options: { readonly save: boolean; readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string } },
 ): Promise<void> {
-  for (const assertion of assertionsFor(name, entry, account)) {
-    await context.permission.assert({
-      sessionID: call.sessionID,
-      agent: call.agent,
-      action: assertion.action,
-      resources: assertion.resources,
-      save: ["*"],
-      source: { type: "tool", messageID: call.messageID, id: call.id },
-    })
-  }
+  await context.permission.assert({
+    sessionID: call.sessionID,
+    ...(call.agent === undefined ? {} : { agent: call.agent }),
+    action: methodAction(name, entry.name),
+    resources: resourcesFor(entry, account),
+    ...(options.save ? { save: ["*"] } : {}),
+    ...(options.source === undefined ? {} : { source: options.source }),
+  })
 }

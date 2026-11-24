@@ -38,6 +38,7 @@ export interface Assertion {
   readonly agent?: string
   readonly action: string
   readonly resources: readonly string[]
+  readonly save?: readonly string[]
 }
 
 export interface HarnessOptions {
@@ -127,7 +128,13 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
     },
     permission: {
       async assert(input) {
-        assertions.push({ sessionID: input.sessionID, ...(input.agent === undefined ? {} : { agent: input.agent }), action: input.action, resources: input.resources })
+        assertions.push({
+          sessionID: input.sessionID,
+          ...(input.agent === undefined ? {} : { agent: input.agent }),
+          action: input.action,
+          resources: input.resources,
+          ...(input.save === undefined ? {} : { save: input.save }),
+        })
         const rules = rulesFor(input.sessionID, input.agent)
         let effect: PermissionRule["effect"] = "allow"
         for (const resource of input.resources.length === 0 ? ["*"] : input.resources) {

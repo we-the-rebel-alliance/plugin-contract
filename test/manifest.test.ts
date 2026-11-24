@@ -83,7 +83,9 @@ describe("the manifest", () => {
     has(manifest((m) => (m.methods.plan_send.commits = "send_message")), "either plans a change or commits one")
     has(manifest((m) => (m.methods.status.accounts = "required")), "capabilities.methods.status.accounts")
     has(manifest((m) => (m.methods.status.effect = "maybe")), "capabilities.methods.status.effect")
+    has(manifest((m) => (m.methods.status.effect = "allow")), "capabilities.methods.status.effect")
     has(manifest((m) => (m.methods.status.agent = true)), "capabilities.methods.status.agent")
+    has(manifest((m) => (m.methods.status.agent = false)), "capabilities.methods.status.agent")
     has(manifest((m) => (m.methods.status.pinned = false)), "capabilities.methods.status.pinned")
   })
 

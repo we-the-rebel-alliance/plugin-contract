@@ -76,18 +76,14 @@ describe("register: the tool table", () => {
     assert.equal(h.rpc.count("demo"), 0)
   })
 
-  test("agent: false gets a Code Mode entry; pinned marks the one method Code Mode may send every turn", async () => {
+  test("pinned marks the one method Code Mode may send every turn", async () => {
     const own = value((m) => {
-      m.methods["internal_sync"] = { class: "read", accounts: "none", agent: false }
       m.methods["search"] = { class: "read", accounts: "none", pinned: true }
     })
     const h = makeHarness()
-    await register(h.ctx, own, handlers({ internal_sync: handler(), search: handler() }))
-    const hidden = h.tools.get("demo_internal_sync")!.tool
-    assert.equal(typeof hidden.options["codemode"], "object")
-    assert.deepEqual((hidden.options["codemode"] as Record<string, unknown>)["input"], hidden.input)
-    const pinned = h.tools.get("demo_search")!.tool
-    assert.deepEqual(pinned.options["codemode"], { pinned: true })
+    await register(h.ctx, own, handlers({ search: handler() }))
+    assert.deepEqual(h.tools.get("demo_search")!.tool.options["codemode"], { pinned: true })
+    assert.deepEqual(h.tools.get("demo_status")!.tool.options["codemode"], true)
   })
 
   test("a declared method with no handler, a handler with no declaration, and a handler for mcp:* are refused", async () => {
@@ -134,14 +130,31 @@ describe("register: input, account and output", () => {
     await assert.rejects(h.tools.get("demo_broken")!.tool.execute({}, context()), /SCHEMA_VIOLATION: .*ok/)
   })
 
-  test("a plan answers { planId, method }; a commit takes only the planId", async () => {
+  test("a plan answers { planId, method } with the preview fields; a commit takes only the planId and no account", async () => {
     const h = makeHarness()
-    await register(h.ctx, demo, handlers())
+    await register(
+      h.ctx,
+      demo,
+      handlers({
+        plan_send: handler({
+          run: async () => ({ planId: "p1", method: "send_message", output: { text: "hi" }, reaches: [{ id: "person:ana", label: "Ana" }], changes: ["sends one message"], cost: { usd: 0 }, trust: "untrusted" }),
+        }),
+      }),
+    )
     const plan = await h.tools.get("demo_plan_send")!.tool.execute({}, context())
-    assert.deepEqual(plan.output, { planId: "p1", method: "send_message" })
+    assert.deepEqual(plan.output, {
+      planId: "p1",
+      method: "send_message",
+      output: { text: "hi" },
+      reaches: [{ id: "person:ana", label: "Ana" }],
+      changes: ["sends one message"],
+      cost: { usd: 0 },
+      trust: "untrusted",
+    })
     const sent = await h.tools.get("demo_send_message")!.tool.execute({ planId: "p1" }, context())
     assert.deepEqual(sent.output, { sent: true })
     await assert.rejects(h.tools.get("demo_send_message")!.tool.execute({ planId: "p1", text: "x" }, context()), /PLAN_INVALID: .*only \{ planId \}/)
+    await assert.rejects(h.tools.get("demo_send_message")!.tool.execute({ planId: "p1", account: "work" }, context()), /PLAN_INVALID: .*takes only \{ planId \}; the grant names the account/)
     await assert.rejects(h.tools.get("demo_send_message")!.tool.execute({ text: "x" }, context()), /PLAN_INVALID: .*only \{ planId \}/)
   })
 
@@ -160,37 +173,50 @@ describe("register: input, account and output", () => {
 
 describe("register: error mapping", () => {
   const own = value((m) => {
-    for (const name of ["fail_auth", "fail_input", "fail_plain"]) m.methods[name] = { class: "read", accounts: "none" }
+    for (const name of ["fail_auth", "fail_old", "fail_input", "fail_secret", "fail_plain"]) m.methods[name] = { class: "read", accounts: "none" }
   })
 
-  test("a sign-in is NEEDS_SIGN_IN, a contract code passes through, and an unknown failure is UNAVAILABLE", async () => {
+  test("NEEDS_SIGN_IN passes, an unknown code is UNAVAILABLE, and a coded what is redacted", async () => {
     const h = makeHarness()
     await register(
       h.ctx,
       own,
       handlers({
-        fail_auth: handler({ run: async () => Promise.reject(new Error("AUTH_REQUIRED: the sign-in expired. Next step: Sign in again.")) }),
+        fail_auth: handler({ run: async () => Promise.reject(new Error("NEEDS_SIGN_IN: the sign-in expired. Next step: Sign in again.")) }),
+        fail_old: handler({ run: async () => Promise.reject(new Error("AUTH_REQUIRED: the sign-in expired. Next step: Sign in again.")) }),
         fail_input: handler({ run: async () => Promise.reject(new Error("INPUT_INVALID: the cursor is not ours. Next step: Read from the start.")) }),
+        fail_secret: handler({
+          run: async () =>
+            Promise.reject(Object.assign(new Error("INPUT_INVALID: the token ghp_abcdefghijklmnop1234 is not ours. Next step: Sign in again with https://example.com/cb?code=abcdef."), { code: "INPUT_INVALID", next: "Sign in again with https://example.com/cb?code=abcdef." })),
+        }),
         fail_plain: handler({ run: async () => Promise.reject(new Error("the provider fell over")) }),
       }),
     )
     await assert.rejects(h.tools.get("demo_fail_auth")!.tool.execute({}, context()), /^Error: NEEDS_SIGN_IN: the sign-in expired\. Next step: Sign in again\.$/)
+    await assert.rejects(h.tools.get("demo_fail_old")!.tool.execute({}, context()), /^Error: UNAVAILABLE: fail_old failed: AUTH_REQUIRED: the sign-in expired\. Next step: /)
     await assert.rejects(h.tools.get("demo_fail_input")!.tool.execute({}, context()), /^Error: INPUT_INVALID: the cursor is not ours\. Next step: Read from the start\.$/)
+    await assert.rejects(h.tools.get("demo_fail_secret")!.tool.execute({}, context()), (error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error)
+      assert.match(message, /^INPUT_INVALID: /)
+      assert.equal(message.includes("ghp_abcdefghijklmnop1234"), false)
+      assert.equal(message.includes("code=abcdef"), false)
+      return true
+    })
     await assert.rejects(h.tools.get("demo_fail_plain")!.tool.execute({}, context()), /^Error: UNAVAILABLE: fail_plain failed: the provider fell over\. Next step: /)
   })
 })
 
 describe("register: the per-alias server rule", () => {
-  test("a bare operation for work asserts work's server, never the default alias's", async () => {
+  test("the gate names the method action and its operation's account resource, and access covers work's MCP server", async () => {
     const own = value((m) => {
       m.methods["sync"] = { class: "read", accounts: "optional", operations: ["list_files"] }
     })
     const h = makeHarness({ options: { accounts: { work: {}, personal: {} } } })
     await register(h.ctx, own, handlers({ sync: handler() }))
     await h.tools.get("demo_sync")!.tool.execute({ account: "work" }, context())
-    assert.ok(h.assertions.some((assertion) => assertion.action === "demo-work_list_files" && assertion.resources.join(",") === "*"))
-    assert.equal(h.assertions.some((assertion) => assertion.action === "demo_list_files"), false)
+    assert.deepEqual(h.assertions, [{ sessionID: "s1", agent: "build", action: "demo.sync", resources: ["work:list_files"], save: ["*"] }])
     assert.ok(agentRules(h).some((rule) => rule.action === "demo-work_*"), "access covers work's MCP server")
+    assert.equal(agentRules(h).some((rule) => rule.action === "demo-personal_*"), true, "access covers personal's MCP server")
   })
 })
 
@@ -215,10 +241,95 @@ describe("register: door 3", () => {
     assert.deepEqual(await bus.emit("status", { state: "ready" }), { ok: false, reason: "unavailable" })
   })
 
-  test("a read runs under the session's rules", async () => {
+  test("a read runs through the one gate, and an RPC gate never saves", async () => {
     const h = makeHarness()
     await register(h.ctx, demo, handlers())
     assert.deepEqual(await h.rpc.call("demo", "status", { sessionID: "s1", input: {} }), { ok: true })
+    assert.deepEqual(h.assertions, [{ sessionID: "s1", agent: "build", action: "demo.status", resources: ["*"] }])
+  })
+
+  test("read-only still runs a read over RPC", async () => {
+    const h = makeHarness({ options: { access: "read-only" } })
+    await register(h.ctx, demo, handlers())
+    assert.deepEqual(await h.rpc.call("demo", "status", { sessionID: "s1", input: {} }), { ok: true })
+  })
+
+  test("an effect deny is refused under ask-changes before any confirmation", async () => {
+    const own = value((m) => {
+      m.methods["send_message"].effect = "deny"
+    })
+    const h = makeHarness({ options: { access: "ask-changes" } })
+    await register(h.ctx, own, handlers())
+    await assert.rejects(h.rpc.call("demo", "send_message", { sessionID: "s1", input: { planId: "p1" } }), (error: unknown) => {
+      assert.ok(error instanceof RpcDeclaredFailure)
+      assert.equal((error.data as { code: string }).code, "PERMISSION_DENIED")
+      return true
+    })
+    assert.equal(h.assertions.length, 0, "the plugin's deny is checked before the session gate")
+  })
+
+  test("read-only refuses a non-read over RPC even with a valid grant", async () => {
+    const { publicKey, privateKey } = generateKeyPairSync("ed25519")
+    const now = 1_800_000_000
+    const input = { planId: "p1" }
+    const token = signGrant({
+      key: privateKey,
+      kid: "host_test",
+      audience: "@we-the-rebel-alliance/demo-plugin",
+      consumer: "consumer:demo",
+      capability: "demo.send_message",
+      account: "default",
+      act: "demo.messages.send",
+      manifest: manifestHash(demo),
+      jti: "grant_read_only_1",
+      iat: now,
+      exp: now + 60,
+      input,
+      cfm: true,
+    })
+    const h = makeHarness({ options: { access: "read-only" } })
+    await register(h.ctx, demo, handlers(), {
+      grant: { keys: { keys: { host_test: publicKey } }, audience: "@we-the-rebel-alliance/demo-plugin", store: { consume: async () => true }, now: () => now },
+    })
+    await assert.rejects(h.rpc.call("demo", "send_message", { sessionID: "s1", input, grant: token, consumer: "consumer:demo" }), (error: unknown) => {
+      assert.ok(error instanceof RpcDeclaredFailure)
+      assert.equal((error.data as { code: string }).code, "PERMISSION_DENIED")
+      return true
+    })
+  })
+
+  test("ask-changes asks, never saves, and a valid grant is the other confirmation", async () => {
+    const { publicKey, privateKey } = generateKeyPairSync("ed25519")
+    const now = 1_800_000_000
+    const input = { planId: "p1" }
+    const token = signGrant({
+      key: privateKey,
+      kid: "host_test",
+      audience: "@we-the-rebel-alliance/demo-plugin",
+      consumer: "consumer:demo",
+      capability: "demo.send_message",
+      account: "default",
+      act: "demo.messages.send",
+      manifest: manifestHash(demo),
+      jti: "grant_ask_changes_1",
+      iat: now,
+      exp: now + 60,
+      input,
+      cfm: true,
+    })
+    const h = makeHarness({ options: { access: "ask-changes" } })
+    await register(h.ctx, demo, handlers(), {
+      grant: { keys: { keys: { host_test: publicKey } }, audience: "@we-the-rebel-alliance/demo-plugin", store: { consume: async () => true }, now: () => now },
+    })
+    assert.deepEqual(await h.rpc.call("demo", "send_message", { sessionID: "s1", input }), { sent: true })
+    assert.equal(h.assertions.length, 1)
+    assert.equal(h.assertions[0]!.action, "demo.send_message")
+    assert.equal(h.assertions[0]!.save, undefined, "an RPC ask never saves")
+    assert.deepEqual(await h.rpc.call("demo", "send_message", { sessionID: "s1", input }), { sent: true })
+    assert.equal(h.assertions.length, 2, "the second call asks again, so nothing was saved")
+    // A session allow rule appended after the generated ask makes the grant the confirmation, and the gate allows it.
+    h.sessions.get("s1")!.permissions = [{ action: "*", resource: "*", effect: "allow" }]
+    assert.deepEqual(await h.rpc.call("demo", "send_message", { sessionID: "s1", input, grant: token, consumer: "consumer:demo" }), { sent: true })
   })
 
   test("a non-read with an allow rule and no ask or grant is refused (LD-5)", async () => {

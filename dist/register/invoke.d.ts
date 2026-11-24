@@ -1,10 +1,3 @@
-/**
- * One call through one handler, with the contract's checks around it (contract §6, §9 and §12).
- *
- * The register resolves the account, validates the input, refuses a commit that carries anything but a `planId`, runs
- * the handler, checks the answer (a plan's shape included), and maps a refusal. The same path runs behind every door,
- * so an agent tool, Code Mode and RPC cannot disagree about what a method accepts or answers.
- */
 import { type AccountProfile } from "../accounts.js";
 import { type Manifest } from "../manifest.js";
 import { type Door, type HandlerTable, type MethodCall, type MethodEntry } from "./handlers.js";
@@ -24,8 +17,11 @@ export interface PreparedCall {
     readonly input: Record<string, unknown>;
     readonly account: string;
 }
-/** The input checked and the account resolved, or a contract refusal. */
-export declare function prepareCall(entry: MethodEntry, raw: unknown, accounts: readonly AccountProfile[]): PreparedCall;
+/**
+ * The input checked and the account resolved, or a contract refusal. A commit takes no account: its account is the one
+ * a verified grant names, or the plugin's only account, or `default` for the handler to read from the plan.
+ */
+export declare function prepareCall(entry: MethodEntry, raw: unknown, accounts: readonly AccountProfile[], preferred?: string): PreparedCall;
 /** The answer, checked; a plan must name the method that commits it. */
 export declare function checkedOutput(entry: MethodEntry, value: unknown): unknown;
 /** Run a prepared call's handler, checking its answer and mapping its failure. */

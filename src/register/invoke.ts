@@ -5,6 +5,7 @@
  * the handler, checks the answer (a plan's shape included), and maps a refusal. The same path runs behind every door,
  * so an agent tool, Code Mode and RPC cannot disagree about what a method accepts or answers.
  */
+import { DEFAULT_ALIAS } from "../accounts/alias.ts"
 import { resolveAccount, type AccountProfile } from "../accounts.ts"
 import { manifestHash, type Manifest } from "../manifest.ts"
 import { refusal, refusalOf, refuse, RegisterError, reasonOf, type Refusal } from "./errors.ts"
@@ -36,14 +37,17 @@ function checkedInput(entry: MethodEntry, raw: unknown): { readonly input: Recor
   if (!plain(raw)) refuse("INPUT_INVALID", `${entry.name} takes an object as its input`, "Pass the input its schema describes.")
   const input = { ...raw }
   const account = input["account"]
+  if (entry.item.commits !== undefined) {
+    if (Object.hasOwn(input, "account")) {
+      throw new RegisterError(refusal("PLAN_INVALID", `${entry.name} commits a plan and takes only { planId }; the grant names the account`, "Remove account from the commit input."))
+    }
+    const checked = validateCommitInput(input)
+    if (!checked.ok) throw new RegisterError(refusal("PLAN_INVALID", `${entry.name} commits a plan and takes only { planId }: ${checked.problems.join("; ")}`, "Call the planning method, then pass the planId it answers."))
+    return { input: checked.value, account: undefined }
+  }
   if (Object.hasOwn(input, "account")) {
     if (entry.item.accounts !== "optional") refuse("INPUT_INVALID", `${entry.name} takes no account`, "Remove account from the input; only a method declared accounts: optional takes one.")
     delete input["account"]
-  }
-  if (entry.item.commits !== undefined) {
-    const checked = validateCommitInput(input)
-    if (!checked.ok) throw new RegisterError(refusal("PLAN_INVALID", `${entry.name} commits a plan and takes only { planId }: ${checked.problems.join("; ")}`, "Call the planning method, then pass the planId it answers."))
-    return { input: checked.value, account }
   }
   const checked = validate(entry.input, input)
   if (!checked.ok) throw new RegisterError(refusal("INPUT_INVALID", `${entry.name}'s input breaks its schema: ${checked.problems.join("; ")}`, "Pass only the input the method's schema describes."))
@@ -56,9 +60,19 @@ export interface PreparedCall {
   readonly account: string
 }
 
-/** The input checked and the account resolved, or a contract refusal. */
-export function prepareCall(entry: MethodEntry, raw: unknown, accounts: readonly AccountProfile[]): PreparedCall {
+/**
+ * The input checked and the account resolved, or a contract refusal. A commit takes no account: its account is the one
+ * a verified grant names, or the plugin's only account, or `default` for the handler to read from the plan.
+ */
+export function prepareCall(entry: MethodEntry, raw: unknown, accounts: readonly AccountProfile[], preferred?: string): PreparedCall {
   const { input, account } = checkedInput(entry, raw)
+  if (entry.item.commits !== undefined) {
+    const candidate = preferred ?? accounts[0]?.alias ?? DEFAULT_ALIAS
+    if (accounts.length === 0) return { input, account: candidate }
+    const resolved = resolveAccount(accounts, { account: candidate })
+    if (!resolved.ok) throw new RegisterError(refusal(resolved.code, resolved.what, resolved.next))
+    return { input, account: resolved.alias }
+  }
   const resolved = resolveAccount(accounts, { account })
   if (!resolved.ok) throw new RegisterError(refusal(resolved.code, resolved.what, resolved.next))
   return { input, account: resolved.alias }

@@ -96,7 +96,7 @@ export async function register(context: RegisterContext, manifest: Manifest, han
     const environment: CallEnvironment = prepare(manifest, handlers, accounts)
     const tools = await installTools(context, environment)
     return withCleanup([() => tools.dispose()], async () => {
-      const rpc = await installRpc(context, environment, wiring.grant)
+      const rpc = await installRpc(context, environment, access.level, wiring.grant)
       return {
         name,
         access,

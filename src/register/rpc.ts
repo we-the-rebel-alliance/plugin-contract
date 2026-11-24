@@ -4,22 +4,26 @@
  *   POST /api/rpc/<name>/<method>
  *   { "sessionID": "<session>", "input": <the method's input> }
  *
- * The call runs as the session and agent it names, under the session's rules. A read may run when the rule allows it.
- * A non-read method runs only with one of the two confirmations contract §8 names: a permission ask the session's
- * rules resolve to `ask` (OpenCode prompts, and the call waits for the answer), or a host-signed action grant in the
- * envelope's `grant` with the `consumer` it was issued to. An `allow` rule is not a confirmation; without one of the
- * two, the call is refused. This is LD-5.
+ * The call runs as the session and agent it names, under the session's rules. A read runs when the gate allows it. A
+ * non-read method is capped by the plugin's own `access` level first: under `read-only` it is refused even with a
+ * grant; under `ask-changes` or `all` it needs one of contract §8's two confirmations, a permission ask the gate
+ * resolves to `ask`, or a host-signed action grant in the envelope's `grant` with the `consumer` it was issued to. An
+ * `allow` rule is not a confirmation; without one of the two, the call is refused. This is LD-5.
+ *
+ * Every call, read or write, then passes the one gate (`./assertions.ts`) exactly once. The gate never saves for RPC:
+ * an answer applies to that one call.
  *
  * The registration carries the bus's events block (`busEvents(name)`); a second registration with the same id would
  * hide it, so the plugin registers once and wraps it with `createBus(name, registration)`.
  */
 import { randomUUID } from "node:crypto"
 import type { Plugin } from "@opencode/plugin"
-import { methodAction } from "../access.ts"
+import { effectFor, methodAction, type AccessLevel } from "../access.ts"
+import { DEFAULT_ALIAS } from "../accounts/alias.ts"
 import { busEvents } from "../bus.ts"
 import { verifyGrant, type GrantKeys, type GrantScope, type GrantStore } from "../grant.ts"
 import type { JsonSchema } from "../manifest.ts"
-import { assertOperations, callEffect } from "./assertions.ts"
+import { callEffect, gate } from "./assertions.ts"
 import { refusal, refusalOf, RegisterError, type Refusal } from "./errors.ts"
 import type { MethodEntry } from "./handlers.ts"
 import { execute, prepareCall, type CallEnvironment } from "./invoke.ts"
@@ -159,12 +163,23 @@ async function rulesOf(context: RpcContext, sessionID: string): Promise<{ readon
   return { agent: info.agent, rules: [...agent.data.permissions, ...(info.permissions ?? [])] }
 }
 
-/** A verified grant, or a `GRANT_INVALID` refusal. */
-async function verify(environment: CallEnvironment, wiring: GrantWiring, request: Record<string, unknown>, entry: MethodEntry, account: string): Promise<Refusal | undefined> {
+interface Verified {
+  readonly ok: true
+  readonly account: string
+}
+interface Unverified {
+  readonly ok: false
+  readonly refusal: Refusal
+  readonly code: string
+}
+type Verdict = Verified | Unverified
+
+/** A verified grant for exactly `account`, or a `GRANT_INVALID` refusal. */
+async function verify(environment: CallEnvironment, wiring: GrantWiring, request: Record<string, unknown>, entry: MethodEntry, account: string): Promise<Verdict> {
   const token = request["grant"]
-  if (typeof token !== "string" || token === "") return refusal("GRANT_INVALID", "the grant is not a token", "Pass the grant the host signed, or use a permission ask.")
+  if (typeof token !== "string" || token === "") return { ok: false, refusal: refusal("GRANT_INVALID", "the grant is not a token", "Pass the grant the host signed, or use a permission ask."), code: "GRANT_MALFORMED" }
   const consumer = request["consumer"]
-  if (typeof consumer !== "string" || consumer === "") return refusal("GRANT_INVALID", "the grant names no consumer", "Pass the consumer the grant was issued to.")
+  if (typeof consumer !== "string" || consumer === "") return { ok: false, refusal: refusal("GRANT_INVALID", "the grant names no consumer", "Pass the consumer the grant was issued to."), code: "GRANT_CLAIMS_INVALID" }
   const checked = await verifyGrant({
     grant: token,
     input: request["input"],
@@ -180,16 +195,34 @@ async function verify(environment: CallEnvironment, wiring: GrantWiring, request
     now: wiring.now?.() ?? Math.floor(Date.now() / 1000),
     store: wiring.store,
   })
-  return checked.ok ? undefined : refusal("GRANT_INVALID", checked.reason, "Ask the host to issue a fresh grant for this action and input.")
+  return checked.ok
+    ? { ok: true, account: checked.claims.account }
+    : { ok: false, refusal: refusal("GRANT_INVALID", checked.reason, "Ask the host to issue a fresh grant for this action and input."), code: checked.code }
 }
 
 /**
- * The RPC call: the session's rules, the two confirmations for a non-read, the operation assertions, then the same
- * handler path every door uses.
+ * A commit's grant names the account in its claims, and its input must not; try each declared alias and keep the
+ * first failure that is not another account's mismatch, so a replay or an expiry is reported as itself.
+ */
+async function verifyAny(environment: CallEnvironment, wiring: GrantWiring, request: Record<string, unknown>, entry: MethodEntry, accounts: readonly string[]): Promise<Verdict> {
+  let first: Unverified | undefined
+  for (const account of accounts.length === 0 ? [DEFAULT_ALIAS] : accounts) {
+    const checked = await verify(environment, wiring, request, entry, account)
+    if (checked.ok) return checked
+    if (checked.code !== "GRANT_ACCOUNT_MISMATCH") return checked
+    first ??= checked
+  }
+  return first ?? { ok: false, refusal: refusal("GRANT_INVALID", "the grant names no account this plugin has", "Ask the host to issue the grant for one of the plugin's accounts."), code: "GRANT_ACCOUNT_MISMATCH" }
+}
+
+/**
+ * The RPC call: the plugin's level, the two confirmations for a non-read, the one gate, then the same handler path
+ * every door uses.
  */
 async function invoke(
   context: RpcContext,
   environment: CallEnvironment,
+  level: AccessLevel,
   entry: MethodEntry,
   wiring: GrantWiring | undefined,
   raw: unknown,
@@ -202,39 +235,49 @@ async function invoke(
     const input = raw["input"]
     if (!plain(input)) throw new RegisterError(refusal("INPUT_INVALID", "the RPC envelope needs an input object", "Pass the method's input as the envelope's input."))
     const resolved = await rulesOf(context, sessionID)
-    const prepared = prepareCall(entry, input, environment.accounts)
-    const effect = callEffect(environment.name, entry, prepared.account, resolved.rules)
     const nonRead = entry.item.class !== "read"
+    let prepared
+    let gated = false
     if (nonRead) {
-      if (effect === "deny") {
-        throw new RegisterError(refusal("PERMISSION_DENIED", `${environment.name}.${entry.name} is denied for this session's agent`, "Use a session whose agent allows it."))
+      // The plugin's own setting is final: a caller's session rules can narrow it, never widen it (contract §13).
+      if (level === "read-only") {
+        throw new RegisterError(refusal("PERMISSION_DENIED", `${environment.name}.${entry.name} is a ${entry.item.class} and the plugin's access is read-only`, "Set access to ask-changes, or use the agent tool in a session that allows it."))
+      }
+      if (effectFor(entry.item, level) === "deny") {
+        throw new RegisterError(refusal("PERMISSION_DENIED", `${environment.name}.${entry.name} is off under the plugin's access setting`, "Change the method's effect or the plugin's access setting."))
       }
       if (raw["grant"] !== undefined) {
         if (wiring === undefined) throw new RegisterError(refusal("GRANT_INVALID", "this plugin has no grant verifier, so it cannot accept a grant", "Use a permission ask in a session, or configure the plugin's grant verifier."))
-        const failed = await verify(environment, wiring, raw, entry, prepared.account)
-        if (failed !== undefined) throw new RegisterError(failed)
-      } else if (effect === "ask") {
-        try {
-          await context.permission.assert({ sessionID, agent: resolved.agent, action: methodAction(environment.name, entry.name), resources: ["*"], save: ["*"] })
-        } catch (error) {
-          throw new RegisterError(permissionRefusal(error, `${environment.name}.${entry.name}`))
+        const accounts = entry.item.commits === undefined ? undefined : environment.accounts.map((account) => account.alias)
+        if (accounts === undefined) {
+          // The input names the account for a non-commit; resolve it before the grant can be checked against it.
+          prepared = prepareCall(entry, input, environment.accounts)
+          const checked = await verify(environment, wiring, raw, entry, prepared.account)
+          if (!checked.ok) throw new RegisterError(checked.refusal)
+        } else {
+          const checked = await verifyAny(environment, wiring, raw, entry, accounts)
+          if (!checked.ok) throw new RegisterError(checked.refusal)
+          prepared = prepareCall(entry, input, environment.accounts, checked.account)
         }
       } else {
-        throw new RegisterError(refusal("PERMISSION_DENIED", `${environment.name}.${entry.name} is a ${entry.item.class} and an allow rule is not a confirmation for RPC`, "A non-read method over RPC needs a permission ask or a host-signed action grant."))
+        prepared = prepareCall(entry, input, environment.accounts)
+        const effect = callEffect(environment.name, entry, prepared.account, resolved.rules)
+        if (effect === "allow") {
+          // An allow rule is not a confirmation. Run the gate first so it is the one permission evaluation, then refuse.
+          await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: `rpc:${entry.name}` }, prepared.account, { save: false })
+          gated = true
+          throw new RegisterError(refusal("PERMISSION_DENIED", `${environment.name}.${entry.name} is a ${entry.item.class} and an allow rule is not a confirmation for RPC`, "A non-read method over RPC needs a permission ask or a host-signed action grant."))
+        }
       }
-    } else if (effect === "deny") {
-      throw new RegisterError(refusal("PERMISSION_DENIED", `${environment.name}.${entry.name} is denied for this session's agent`, "Use a session whose agent allows it."))
-    } else if (effect === "ask") {
+    } else {
+      prepared = prepareCall(entry, input, environment.accounts)
+    }
+    if (!gated) {
       try {
-        await context.permission.assert({ sessionID, agent: resolved.agent, action: methodAction(environment.name, entry.name), resources: ["*"], save: ["*"] })
+        await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: `rpc:${entry.name}` }, prepared.account, { save: false })
       } catch (error) {
         throw new RegisterError(permissionRefusal(error, `${environment.name}.${entry.name}`))
       }
-    }
-    try {
-      await assertOperations(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: `rpc:${entry.name}` }, prepared.account)
-    } catch (error) {
-      throw new RegisterError(permissionRefusal(error, `${environment.name}.${entry.name}`))
     }
     const messageID = "msg_rpc"
     const id = `rpc:${randomUUID()}`
@@ -248,12 +291,12 @@ async function invoke(
 }
 
 /** The RPC definition and handlers, and the one registration that carries the bus events. */
-export async function installRpc(context: RpcContext, environment: CallEnvironment, wiring?: GrantWiring): Promise<RpcRegistration> {
+export async function installRpc(context: RpcContext, environment: CallEnvironment, level: AccessLevel, wiring?: GrantWiring): Promise<RpcRegistration> {
   const methods: Record<string, unknown> = {}
   const handlers: Record<string, (input: unknown, call: RpcCallContext) => Promise<unknown>> = {}
   for (const entry of environment.entries) {
     methods[entry.name] = { input: strictEnvelope(entry.input), output: entry.output, errors: { failed: FAILED } }
-    handlers[entry.name] = (raw: unknown, call: RpcCallContext) => invoke(context, environment, entry, wiring, raw, call)
+    handlers[entry.name] = (raw: unknown, call: RpcCallContext) => invoke(context, environment, level, entry, wiring, raw, call)
   }
   // Only the events the manifest declares: an undeclared bus event must not be publishable (contract §10 and §16).
   const events = Object.fromEntries(Object.entries(busEvents(environment.name)).filter(([event]) => Object.hasOwn(environment.manifest.events, event)))

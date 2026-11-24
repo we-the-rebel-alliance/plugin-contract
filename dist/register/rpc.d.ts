@@ -1,3 +1,4 @@
+import { type AccessLevel } from "../access.js";
 import { type GrantKeys, type GrantScope, type GrantStore } from "../grant.js";
 import { type CallEnvironment } from "./invoke.js";
 /** What the plugin wires into the grant verifier: the host's keys, the audience and the durable ledger. */
@@ -74,4 +75,4 @@ export interface RpcRegistration {
     dispose(): Promise<void>;
 }
 /** The RPC definition and handlers, and the one registration that carries the bus events. */
-export declare function installRpc(context: RpcContext, environment: CallEnvironment, wiring?: GrantWiring): Promise<RpcRegistration>;
+export declare function installRpc(context: RpcContext, environment: CallEnvironment, level: AccessLevel, wiring?: GrantWiring): Promise<RpcRegistration>;

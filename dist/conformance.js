@@ -1,14 +1,14 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   SOURCES_SCHEMA
-} from "./chunks/chunk-5G3NN4JP.js";
+} from "./chunks/chunk-IMGQH7PB.js";
 import {
   hintProblems
-} from "./chunks/chunk-TLTKVIYI.js";
+} from "./chunks/chunk-J6MOXA3F.js";
 import {
   maxBytesOf
-} from "./chunks/chunk-5CSIUNS2.js";
-import "./chunks/chunk-V4DNAPX5.js";
+} from "./chunks/chunk-YRYY3WXH.js";
+import "./chunks/chunk-FZW2HFUR.js";
 import {
   AUTHOR_ROLES,
   PAGE,
@@ -18,7 +18,7 @@ import {
   removalProblems,
   resultProblems,
   sourceNamespace
-} from "./chunks/chunk-OGAJDQ7Z.js";
+} from "./chunks/chunk-4TUKQJKX.js";
 import "./chunks/chunk-S3ZVQTGH.js";
 import {
   secretKinds

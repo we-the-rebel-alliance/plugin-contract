@@ -8,7 +8,7 @@ rule language.
 import { applyAccess, unguardedAgents } from "@we-the-rebel-alliance/plugin-contract/access"
 
 const access = await applyAccess(ctx, { manifest, options: ctx.options })
-status.unguardedAgents = unguardedAgents(await ctx.agent.list(), access.rules)
+status.unguardedAgents = unguardedAgents((await ctx.agent.list()).data, access.rules)
 ```
 
 `register` calls `applyAccess` itself, so a plugin that only calls `register` gets its access rules too. Import
@@ -24,13 +24,14 @@ status.unguardedAgents = unguardedAgents(await ctx.agent.list(), access.rules)
 | `ask-changes` | runs | asks first |
 | `read-only` | runs | off |
 
-A method's `effect` is the person's per-method choice and wins over the table: `allow` runs, `ask` asks, `deny` is off.
-That is also the only way a write wins under `read-only`. An invalid `access` value is `OPTIONS_INVALID`; the module
-does not fall back to a wider level.
+A method's `effect` only narrows the table: `ask` asks where the level would allow, `deny` turns it off. There is no
+`allow`, so a method can never widen the person's level. An invalid `access` value is `OPTIONS_INVALID`; the module does
+not fall back to a wider level.
 
 The rule for a plugin's own method is its permission action, `<name>.<method>`, on `*`. A pass-through MCP method
 (`mcp:<tool>` or `mcp:*`) is the MCP tool's action, `<server>_<tool>`, on `*`, one rule per alias: `<name>_<tool>` for
-`default` and `<name>-<alias>_<tool>` for any other. A rule for `work` can never reach another alias's tools.
+`default` and `<name>-<alias>_<tool>` for any other. A rule for `work` can never reach another alias's tools. Wildcard
+rules (`mcp:*`) are emitted before specific ones, because OpenCode's last matching rule wins.
 
 ## Into the agents
 
@@ -39,8 +40,10 @@ first `*` on `*` with effect `allow`. The base allow therefore cannot override a
 the person or an app adds later still wins for one method.
 
 The transform runs when the plugin loads. An agent registered later does not receive the rules: OpenCode gives a
-transform no event for it. `unguardedAgents(agents, rules)` names every agent that lacks one of the rules, and status
-reports it as `unguardedAgents` (contract §11). Nothing patches a later agent behind the person's back.
+transform no event for it. `unguardedAgents(agents, rules)` evaluates each generated rule with the same last-match-wins order, so it names every
+agent that lacks a rule or whose later rule widens a generated `ask` or `deny` (for example a config `"*": "allow"`
+appended after them). Status reports the ids as `unguardedAgents` (contract §11). Nothing patches a later agent behind
+the person's back.
 
 ## Per-alias names
 

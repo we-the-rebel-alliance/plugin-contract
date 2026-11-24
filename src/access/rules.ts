@@ -10,12 +10,12 @@
  *   ask-changes allow    ask
  *   read-only   allow    deny
  *
- * A method's `effect` is the person's per-method choice and wins over the table: `allow` runs, `ask` asks, `deny` is
- * off. The rules are inserted after each agent's base allow, so a later agent or session rule can narrow or widen one
- * method without touching the plugin's setting; the plugin's setting is the ceiling a host may only narrow.
+ * A method's `effect` may only narrow the table: `ask` asks where the table allows, `deny` turns it off. It can never
+ * widen: there is no `allow`. The rules are inserted after each agent's base allow, in an order OpenCode's last-match
+ * wins can read: a wildcard rule (`mcp:*`) comes before a specific one (`mcp:send_message`), so the specific method
+ * always decides.
  */
 import { DEFAULT_ALIAS, isAlias } from "../accounts/alias.ts"
-import { accountName } from "../accounts/names.ts"
 import type { Checked } from "../internal/checked.ts"
 import type { Manifest, MethodItem } from "../manifest.ts"
 import type { PermissionRule } from "./fences.ts"
@@ -45,12 +45,11 @@ export function methodAction(name: string, method: string): string {
   return `${name}.${method}`
 }
 
-/** The effect a method's class and `effect` give under `level`. */
+/** The effect a method's class and `effect` give under `level`. `effect` only narrows: ask or deny. */
 export function effectFor(method: Pick<MethodItem, "class" | "effect">, level: AccessLevel): PermissionRule["effect"] {
-  if (method.effect !== undefined) return method.effect
-  if (method.class === "read") return "allow"
-  if (level === "all") return "allow"
-  return level === "ask-changes" ? "ask" : "deny"
+  if (method.effect === "deny") return "deny"
+  const base: PermissionRule["effect"] = method.class === "read" ? "allow" : level === "all" ? "allow" : level === "ask-changes" ? "ask" : "deny"
+  return method.effect === "ask" && base === "allow" ? "ask" : base
 }
 
 /**
@@ -59,19 +58,9 @@ export function effectFor(method: Pick<MethodItem, "class" | "effect">, level: A
  * exist. This is the one per-alias derivation: `operationRule`, the access rules and the conformance kit all use it.
  */
 export function serverOf(name: string, alias: string, aliases: readonly string[]): Checked<string> {
-  if (!isAlias(alias)) return { ok: false, problems: [`"${alias}" is not an account alias: lowercase letters, digits and underscores, starting with a letter`] }
+  if (!isAlias(alias)) return { ok: false, problems: [`"${alias}" is not an account alias: lowercase letters and digits, starting with a letter`] }
   if (!aliases.includes(alias)) return { ok: false, problems: [`the account alias "${alias}" is not one this plugin declares`] }
-  return { ok: true, value: accountName(name, alias) }
-}
-
-/**
- * The per-alias name without the declared-alias check, for a grant whose account the app already resolved from the
- * manifest. Everything that derives a name from configuration uses `serverOf` instead.
- */
-export function serverName(name: string, alias: string): string {
-  // The same naming rule as `accounts` (`accountName`), without its alias validation: a grant's account is already the
-  // person's confirmed account string, and a fence must not throw while deriving a rule from it.
-  return alias === DEFAULT_ALIAS ? name : `${name}-${alias}`
+  return { ok: true, value: alias === DEFAULT_ALIAS ? name : `${name}-${alias}` }
 }
 
 /** The declared aliases from the plugin's options, or `default` when the plugin has no accounts option. */
@@ -85,23 +74,32 @@ export function aliasesFrom(options: Readonly<Record<string, unknown>> = {}): re
 /**
  * The rules `level` generates for `manifest`, one per method and, for pass-through MCP tools, one per alias: every
  * alias gets its own `<server>_<tool>` rule, so a rule for `work` can never reach another alias's tools.
+ *
+ * Wildcard rules come first and specific ones after, because OpenCode's last matching rule wins: a later `mcp:*` must
+ * never override a `mcp:send_message`. Two declarations of the same action and resource keep the last manifest entry,
+ * as the manifest's own order says.
  */
 export function rulesFor(manifest: Manifest, level: AccessLevel, aliases: readonly string[] = [DEFAULT_ALIAS]): readonly PermissionRule[] {
   const name = manifest.plugin.name
   const declared = aliases.length === 0 ? [DEFAULT_ALIAS] : aliases
+  const methods = Object.entries(manifest.methods)
+  // `mcp:*` is a wildcard action; it goes before every specific MCP tool and every normal method.
+  const ordered = [...methods].sort(([left], [right]) => Number(!left.endsWith(":*")) - Number(!right.endsWith(":*")))
   const rules: PermissionRule[] = []
-  // A later declaration of the same action and resource replaces the earlier one, so the last rule stays the winner,
-  // as OpenCode reads the list.
   const push = (rule: PermissionRule) => {
     const existing = rules.findIndex((held) => held.action === rule.action && held.resource === rule.resource)
     if (existing !== -1) rules.splice(existing, 1)
     rules.push(rule)
   }
-  for (const [method, item] of Object.entries(manifest.methods)) {
+  for (const [method, item] of ordered) {
     const effect = effectFor(item, level)
     if (isMcpMethod(method)) {
       const tool = method.slice("mcp:".length)
-      for (const alias of declared) push({ action: `${serverName(name, alias)}_${tool}`, resource: "*", effect })
+      for (const alias of declared) {
+        const server = serverOf(name, alias, declared)
+        if (!server.ok) throw new Error(`access: ${server.problems.join("; ")}`)
+        push({ action: `${server.value}_${tool}`, resource: "*", effect })
+      }
       continue
     }
     push({ action: methodAction(name, method), resource: "*", effect })
