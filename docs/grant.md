@@ -30,7 +30,7 @@ The header is exactly:
 | Member | Rule |
 |---|---|
 | `alg` | Exactly `Ed25519`. No other algorithm, and no "try the key as HMAC": the key itself must be an Ed25519 public key. |
-| `kid` | The key id, 1–64 characters of letters, digits, `.`, `_`, `:` and `-`, starting with a letter or a digit. A base64url JWK thumbprint is a valid key id. |
+| `kid` | The key id, 1–64 characters of letters, digits, `.`, `_`, `:` and `-` at any position. A base64url JWK thumbprint is a valid key id, including one that starts with `-` or `_`. |
 | `typ` | Exactly `plugin-contract-act+jwt`. |
 
 The claims are exactly these and no others:
@@ -47,7 +47,7 @@ The claims are exactly these and no others:
 | `manifest` | The manifest hash | `sha256:` and 64 lowercase hex digits |
 | `iat` | When the host signed, in whole seconds since the Unix epoch | A non-negative safe integer |
 | `exp` | When the grant stops being valid, in whole seconds since the Unix epoch | A non-negative safe integer, after `iat` |
-| `jti` | The single-use key | 1–128 characters of letters, digits, `.`, `_`, `:` and `-`; a UUID is valid |
+| `jti` | The single-use key | 1–128 characters of letters, digits, `.`, `_`, `:` and `-` at any position; a UUID or a base64url value is valid |
 | `cfm` | A person confirmed this action and input | Present only as `true`; see "Confirmation" |
 
 `exp` is exclusive: a grant is valid while `now < exp`. There is no grace period after `exp`; a clock that runs behind

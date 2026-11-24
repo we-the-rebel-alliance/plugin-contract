@@ -368,6 +368,21 @@ describe("verifyGrant: valid grants", () => {
     expect(calls.map((claims) => claims.jti)).toEqual([jti])
   })
 
+  test("accepts a key id and a grant id starting with - or _", async () => {
+    const values = [
+      ["-NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs", `-${randomUUID()}`],
+      ["_NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs", `_${randomUUID()}`],
+    ] as const
+    for (const [kid, jti] of values) {
+      const grant = signed({ kid, jti })
+      const { outcome, calls } = await attempt({ grant, keys: { keys: { [kid]: HOST.publicKey } } })
+      if (!outcome.ok) throw new Error(outcome.reason)
+      expect(outcome.kid).toBe(kid)
+      expect(outcome.claims.jti).toBe(jti)
+      expect(calls.map((claims) => claims.jti)).toEqual([jti])
+    }
+  })
+
   test("accepts a scope in any key or value order, and returns it canonical", async () => {
     const grant = signed({ scope: { label: ["IMPORTANT", "INBOX", "INBOX"] } })
     const { outcome } = await attempt({ grant, scope: { label: ["INBOX", "IMPORTANT"] } })
