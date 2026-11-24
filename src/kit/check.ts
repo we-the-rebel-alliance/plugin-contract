@@ -6,6 +6,7 @@
  * an app name, a `main` link or a secret. Typecheck, build, unit tests and pack stay the plugin's own commands, because
  * they are its build, not the contract's.
  */
+import { bundledFindings } from "./bundled.ts"
 import { docsFindings } from "./docs.ts"
 import { forbiddenFindings } from "./forbidden.ts"
 import { hostsOf, readPlugin } from "./plugin.ts"
@@ -23,6 +24,7 @@ export async function checkPlugin(context: CommandContext, options: { readonly h
   for (const host of hosts) findings.push(...(await attempt(`T1 ${host}`, () => runner.t1(context.dir, host))))
   findings.push(...docsFindings(context.dir, plugin.manifest))
   findings.push(...forbiddenFindings(context.dir))
+  findings.push(...bundledFindings(context.dir))
   return sortFindings(findings)
 }
 

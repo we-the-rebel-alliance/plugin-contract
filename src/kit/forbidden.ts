@@ -15,6 +15,7 @@
 import { basename } from "node:path"
 import { secretKinds } from "../internal/secrets.ts"
 import { isTextFile, readText, relativePath, walkFiles } from "./files.ts"
+import { join } from "node:path"
 import { FORBIDDEN_APPS, type ForbiddenApp } from "./forbidden-apps.ts"
 import type { CommandContext, Finding } from "./types.ts"
 import { hasError, sortFindings } from "./types.ts"
@@ -36,14 +37,60 @@ export interface ForbiddenOptions {
   readonly skip?: readonly string[] | undefined
 }
 
+/** A line of `.plugin-kit/forbidden-allow`: one path and one finding id, with the reason it is allowed. */
+interface Allowance {
+  readonly path: string
+  readonly pattern: string
+  readonly reason: string
+}
+
+/** The allowance file, relative to the plugin root. */
+export const ALLOW_FILE = ".plugin-kit/forbidden-allow"
+
+/** The pattern ids an allowance may name: the finding id without its `FORBIDDEN.` prefix. */
+const PATTERNS = ["app-name", "main-branch", "secret"] as const
+
+/** Every valid allowance line. A line without a reason is not an allowance. */
+function allowances(dir: string): Allowance[] {
+  const text = readText(join(dir, ALLOW_FILE))
+  if (text === undefined) return []
+  const found: Allowance[] = []
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim()
+    if (trimmed === "" || trimmed.startsWith("#")) continue
+    const match = /^(.*):(app-name|main-branch|secret|FORBIDDEN\.(?:app-name|main-branch|secret))\s+(.+)$/.exec(trimmed)
+    if (match === null) continue
+    const reason = match[3]!.trim()
+    if (reason === "") continue
+    found.push({ path: normalizePath(match[1]!), pattern: match[2]!.replace(/^FORBIDDEN\./, ""), reason })
+  }
+  return found
+}
+
+const normalizePath = (path: string): string => path.replace(/\\/g, "/").replace(/^\.\//, "")
+
+/** One finding, unless an allowance names its path and id; a used allowance is reported as a warning. */
+function add(findings: Finding[], used: Map<Allowance, number>, allowances: readonly Allowance[], finding: Finding): void {
+  const pattern = finding.id.replace(/^FORBIDDEN\./, "")
+  const allow = allowances.find((entry) => entry.pattern === pattern && entry.path === finding.path)
+  if (allow !== undefined && (PATTERNS as readonly string[]).includes(allow.pattern)) {
+    used.set(allow, (used.get(allow) ?? 0) + 1)
+    return
+  }
+  findings.push(finding)
+}
+
 /** Every forbidden pattern under `dir`, with the line each was found on. */
 export function forbiddenFindings(dir: string, options: ForbiddenOptions = {}): Finding[] {
   const apps = options.apps ?? FORBIDDEN_APPS
   const findings: Finding[] = []
+  const allowed = allowances(dir)
+  const used = new Map<Allowance, number>()
   for (const path of walkFiles(dir, options.skip === undefined ? {} : { skip: options.skip })) {
     const name = basename(path)
     if (SKIPPED_FILES.has(name) || !isTextFile(path)) continue
     const relative = relativePath(dir, path)
+    if (relative === ALLOW_FILE) continue
     const text = readText(path)
     if (text === undefined) continue
     const lines = text.split(/\r?\n/)
@@ -59,7 +106,7 @@ export function forbiddenFindings(dir: string, options: ForbiddenOptions = {}): 
           const key = `app:${lineNumber}:${app.name}`
           if (seen.has(key)) continue
           seen.add(key)
-          findings.push({
+          add(findings, used, allowed, {
             id: "FORBIDDEN.app-name",
             level: "error",
             path: relative,
@@ -74,7 +121,7 @@ export function forbiddenFindings(dir: string, options: ForbiddenOptions = {}): 
           const key = `main:${lineNumber}`
           if (seen.has(key)) continue
           seen.add(key)
-          findings.push({
+          add(findings, used, allowed, {
             id: "FORBIDDEN.main-branch",
             level: "error",
             path: relative,
@@ -103,7 +150,7 @@ export function forbiddenFindings(dir: string, options: ForbiddenOptions = {}): 
       const key = `whole:${kind}`
       if (seen.has(key) || reportedKinds.has(kind)) continue
       seen.add(key)
-      findings.push({
+      add(findings, used, allowed, {
         id: "FORBIDDEN.secret",
         level: "error",
         path: relative,
@@ -111,6 +158,14 @@ export function forbiddenFindings(dir: string, options: ForbiddenOptions = {}): 
         fix: "remove it, rotate it with the provider, and record the fixture again through plugin-kit record",
       })
     }
+  }
+  for (const [allow, count] of used) {
+    findings.push({
+      id: "FORBIDDEN.suppressed",
+      level: "warning",
+      path: allow.path,
+      message: `${allow.pattern} is suppressed for ${allow.path}${count > 1 ? ` (${count} matches)` : ""}: ${allow.reason}`,
+    })
   }
   return sortFindings(findings)
 }

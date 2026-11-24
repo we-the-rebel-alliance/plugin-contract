@@ -1,161 +1,200 @@
 import assert from "node:assert/strict"
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { execFile, execFileSync } from "node:child_process"
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { describe, test } from "node:test"
-import { changelogFor, isReleaseVersion, releaseDate, runRelease, tagOf, versionedFiles } from "../src/kit/release.ts"
-import { KitError } from "../src/kit/types.ts"
-import type { CommandContext, ConformanceRunner, Git, GitResult } from "../src/kit/types.ts"
-import { fakeConformance, finding } from "./support/kit.ts"
-import { fullPlugin } from "./support/plugin.ts"
+import { isReleaseVersion, runRelease, tagOf } from "../src/kit/release.ts"
+import type { CommandContext, ConformanceRunner, Git } from "../src/kit/types.ts"
+import { fakeConformance } from "./support/kit.ts"
+import { fullPlugin, write } from "./support/plugin.ts"
 
-const context = (dir: string, options: { readonly runner?: ConformanceRunner; readonly git?: Git; readonly json?: boolean } = {}): CommandContext & { out: () => string; err: () => string; readonly calls: string[][] } => {
+const realGit: Git = (args, directory) =>
+  new Promise((done) => {
+    execFile("git", [...args], { cwd: directory, encoding: "utf8" }, (error, stdout, stderr) => {
+      done({ code: error === null ? 0 : 1, stdout: stdout ?? "", stderr: stderr ?? "" })
+    })
+  })
+
+const run = (directory: string, args: readonly string[]): void => {
+  execFileSync("git", [...args], { cwd: directory, stdio: "pipe" })
+}
+
+const temp = (): { dir: string; cleanup: () => void } => {
+  const dir = mkdtempSync(join(tmpdir(), "plugin-kit-release-"))
+  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) }
+}
+
+interface Repository {
+  readonly plugin: ReturnType<typeof fullPlugin>
+  readonly origin: { dir: string; cleanup: () => void }
+  cleanup(): void
+}
+
+/** A plugin directory as a real git repository, committed on master and pushed to a bare origin. */
+function repository(version = "0.0.0", options: { readonly changelog?: string } = {}): Repository {
+  const plugin = fullPlugin()
+  const pkg = JSON.parse(readFileSync(join(plugin.dir, "package.json"), "utf8")) as Record<string, unknown>
+  pkg["version"] = version
+  writeFileSync(join(plugin.dir, "package.json"), `${JSON.stringify(pkg, null, 2)}\n`)
+  write(join(plugin.dir, "CHANGELOG.md"), options.changelog ?? `# Changelog\n\n## [${version}] - 2026-11-24\n\n- Release ${version}.\n`)
+  const origin = temp()
+  run(origin.dir, ["init", "--bare", "-b", "master"])
+  run(plugin.dir, ["init", "-b", "master"])
+  run(plugin.dir, ["config", "user.email", "release@example.test"])
+  run(plugin.dir, ["config", "user.name", "Release Test"])
+  run(plugin.dir, ["add", "-A"])
+  run(plugin.dir, ["commit", "-m", "initial"])
+  run(plugin.dir, ["remote", "add", "origin", origin.dir])
+  run(plugin.dir, ["push", "origin", "master"])
+  return { plugin, origin, cleanup: () => { plugin.cleanup(); origin.cleanup() } }
+}
+
+const context = (dir: string, json = false): CommandContext & { out: () => string; err: () => string } => {
   let out = ""
   let err = ""
-  const calls: string[][] = []
-  const git: Git = options.git ?? (async (args) => {
-    calls.push([...args])
-    return { code: 0, stdout: "", stderr: "" }
-  })
+  const runner: ConformanceRunner = fakeConformance()
   return {
     dir,
-    json: options.json ?? false,
+    json,
     io: { stdout: (text) => (out += text), stderr: (text) => (err += text) },
-    conformance: async () => options.runner ?? fakeConformance(),
-    git,
+    conformance: async () => runner,
+    git: realGit,
     now: () => new Date("2026-11-24T12:34:56.000Z"),
     out: () => out,
     err: () => err,
-    calls,
   }
 }
 
-describe("the release's changelog and version", () => {
-  test("renames Unreleased, or adds a section after the title", () => {
-    assert.equal(changelogFor("# Changelog\n\n## Unreleased\n\n- A change.\n", "0.1.0", "2026-11-24").text, "# Changelog\n\n## [0.1.0] - 2026-11-24\n\n- A change.\n")
-    assert.equal(changelogFor("# Changelog\n\n## Unreleased\n", "0.1.0", "2026-11-24").text, "# Changelog\n\n## [0.1.0] - 2026-11-24\n\n- Release 0.1.0.\n")
-    assert.equal(changelogFor("# Changelog\n\n## [0.1.0] - 2026-01-01\n\n- Old.\n", "0.1.0", "2026-11-24").changed, false)
-    assert.match(changelogFor("# Changelog\n\n- Hand-written intro.\n", "0.1.0", "2026-11-24").text, /^# Changelog\n\n## \[0\.1\.0\] - 2026-11-24/)
-    assert.match(changelogFor("No title here.\n", "0.1.0", "2026-11-24").text, /^## \[0\.1\.0\]/)
-  })
-
-  test("versions are semver tags, and the date is UTC", () => {
+describe("the release's version line", () => {
+  test("only 0.0.x is a release version", () => {
     assert.equal(isReleaseVersion("0.0.0"), true)
-    assert.equal(isReleaseVersion("1.2.3-rc.1"), true)
+    assert.equal(isReleaseVersion("0.0.10"), true)
+    assert.equal(isReleaseVersion("0.1.0"), false)
+    assert.equal(isReleaseVersion("1.2.3"), false)
+    assert.equal(isReleaseVersion("1.2.3-rc.1"), false)
     assert.equal(isReleaseVersion("v0.0.0"), false)
-    assert.equal(tagOf("0.0.0"), "v0.0.0")
-    assert.equal(releaseDate(new Date("2026-11-24T23:30:00.000Z")), "2026-11-24")
+    assert.equal(tagOf("0.0.1"), "v0.0.1")
   })
 
-  test("the package and lockfile carry the release version, and only changed files are named", () => {
-    const local = mkdtempSync(join(tmpdir(), "plugin-kit-release-"))
+  test("refuses a version outside 0.0.x before touching git", async () => {
+    const local = temp()
     try {
-      writeFileSync(join(local, "package.json"), `${JSON.stringify({ name: "acme", version: "0.0.0" }, null, 2)}\n`)
-      writeFileSync(join(local, "package-lock.json"), `${JSON.stringify({ name: "acme", version: "0.0.0", lockfileVersion: 3, packages: { "": { name: "acme", version: "0.0.0" } } }, null, 2)}\n`)
-      const files = versionedFiles(local, "0.1.0")
-      assert.deepEqual(files.changed, ["package.json", "package-lock.json"])
-      assert.equal((JSON.parse(files.package) as { version: string }).version, "0.1.0")
-      assert.equal((JSON.parse(files.lock ?? "{}") as { packages: Record<string, { version: string }> }).packages[""]?.version, "0.1.0")
-      assert.deepEqual(versionedFiles(local, "0.0.0").changed, [])
+      await assert.rejects(runRelease(context(local.dir), "1.2.3-rc.1", { dryRun: false }), /KIT_VERSION: "1\.2\.3-rc\.1" is not a release version\. Next step: /)
     } finally {
-      rmSync(local, { recursive: true, force: true })
+      local.cleanup()
     }
   })
 })
 
-describe("plugin-kit release", () => {
-  test("refuses a version that is not semver, before touching a file", async () => {
-    const plugin = fullPlugin()
+describe("the release's preparation and git guards", () => {
+  test("tags a clean, level master whose version and changelog are prepared, and pushes nothing", async () => {
+    const repo = repository("0.0.0")
     try {
-      await assert.rejects(runRelease(context(plugin.dir), "v0.0.0", { dryRun: false }), /KIT_VERSION: "v0\.0\.0" is not a release version\. Next step: /)
-      assert.equal(existsSync(join(plugin.dir, "CHANGELOG.md")), true)
+      const before = runGit(repo.plugin.dir, ["rev-parse", "HEAD"])
+      const answer = context(repo.plugin.dir)
+      assert.equal(await runRelease(answer, "0.0.0", { dryRun: false }), 0)
+      assert.match(answer.out(), /release: v0\.0\.0 cut locally; push the tag yourself/)
+      assert.equal(runGit(repo.plugin.dir, ["tag", "--list", "v0.0.0"]), "v0.0.0")
+      assert.equal(runGit(repo.plugin.dir, ["rev-parse", "HEAD"]), before)
+      // The tag is local: the bare origin has no tag and the same single commit.
+      assert.equal(runGit(repo.origin.dir, ["tag", "--list"]), "")
+      assert.equal(runGit(repo.origin.dir, ["rev-list", "--count", "master"]), "1")
+      assert.equal(readFileSync(join(repo.plugin.dir, "CHANGELOG.md"), "utf8"), "# Changelog\n\n## [0.0.0] - 2026-11-24\n\n- Release 0.0.0.\n")
     } finally {
-      plugin.cleanup()
+      repo.cleanup()
     }
   })
 
-  test("does not write or tag when a check fails", async () => {
-    const plugin = fullPlugin()
+  test("dry-run writes no tag", async () => {
+    const repo = repository("0.0.0")
     try {
-      const run = context(plugin.dir, { runner: fakeConformance({ t0: [finding({ id: "T0.namespace-length" })] }) })
-      assert.equal(await runRelease(run, "0.1.0", { dryRun: false }), 1)
-      assert.deepEqual(run.calls, [])
-      assert.match(readFileSync(join(plugin.dir, "CHANGELOG.md"), "utf8"), /Unreleased/)
-      assert.match(readFileSync(join(plugin.dir, "package.json"), "utf8"), /"version": "0\.0\.0"/)
+      const answer = context(repo.plugin.dir)
+      assert.equal(await runRelease(answer, "0.0.0", { dryRun: true }), 0)
+      assert.match(answer.out(), /would cut v0\.0\.0; checks and guards passed, no tag written/)
+      assert.equal(runGit(repo.plugin.dir, ["tag", "--list"]), "")
     } finally {
-      plugin.cleanup()
+      repo.cleanup()
     }
   })
 
-  test("dry-run prints the plan and writes nothing", async () => {
-    const plugin = fullPlugin()
+  test("refuses a branch other than master", async () => {
+    const repo = repository("0.0.0")
     try {
-      const run = context(plugin.dir)
-      assert.equal(await runRelease(run, "0.1.0", { dryRun: true }), 0)
-      assert.deepEqual(run.calls, [])
-      assert.match(run.out(), /release: would prepare v0\.1\.0: CHANGELOG\.md, package\.json; checks passed/)
-      assert.match(readFileSync(join(plugin.dir, "CHANGELOG.md"), "utf8"), /Unreleased/)
+      run(repo.plugin.dir, ["checkout", "-b", "feature"])
+      await assert.rejects(runRelease(context(repo.plugin.dir), "0.0.0", { dryRun: false }), /KIT_RELEASE\.branch: the release runs on feature, not master\. Next step: /)
+      assert.equal(runGit(repo.plugin.dir, ["tag", "--list"]), "")
     } finally {
-      plugin.cleanup()
+      repo.cleanup()
     }
   })
 
-  test("writes the version and changelog, then commits and tags", async () => {
-    const plugin = fullPlugin()
+  test("refuses a dirty tree", async () => {
+    const repo = repository("0.0.0")
     try {
-      const run = context(plugin.dir)
-      assert.equal(await runRelease(run, "0.1.0", { dryRun: false }), 0)
-      assert.equal((JSON.parse(readFileSync(join(plugin.dir, "package.json"), "utf8")) as { version: string }).version, "0.1.0")
-      assert.match(readFileSync(join(plugin.dir, "CHANGELOG.md"), "utf8"), /## \[0\.1\.0\] - 2026-11-24/)
-      assert.deepEqual(run.calls, [
-        ["add", "CHANGELOG.md", "package.json"],
-        ["commit", "-m", "chore(release): prepare v0.1.0"],
-        ["tag", "-a", "v0.1.0", "-m", "v0.1.0"],
-      ])
-      assert.match(run.out(), /release: v0\.1\.0 cut after writing CHANGELOG\.md, package\.json; push it to let CI publish the release: git push origin v0\.1\.0/)
+      write(join(repo.plugin.dir, "README.md"), `${readFileSync(join(repo.plugin.dir, "README.md"), "utf8")}\nchanged\n`)
+      await assert.rejects(runRelease(context(repo.plugin.dir), "0.0.0", { dryRun: false }), /KIT_RELEASE\.dirty: the working tree has uncommitted changes\. Next step: /)
+      assert.equal(runGit(repo.plugin.dir, ["tag", "--list"]), "")
     } finally {
-      plugin.cleanup()
+      repo.cleanup()
     }
   })
 
-  test("a release with nothing to write still tags, without an empty commit", async () => {
-    const plugin = fullPlugin()
+  test("refuses master that is not level with origin/master", async () => {
+    const repo = repository("0.0.0")
     try {
-      assert.equal(await runRelease(context(plugin.dir), "0.0.0", { dryRun: false }), 0)
-      const run = context(plugin.dir)
-      assert.equal(await runRelease(run, "0.0.0", { dryRun: false }), 0)
-      assert.deepEqual(run.calls, [["tag", "-a", "v0.0.0", "-m", "v0.0.0"]])
+      write(join(repo.plugin.dir, "NOTES.md"), "local commit\n")
+      run(repo.plugin.dir, ["add", "NOTES.md"])
+      run(repo.plugin.dir, ["commit", "-m", "ahead"])
+      await assert.rejects(runRelease(context(repo.plugin.dir), "0.0.0", { dryRun: false }), /KIT_RELEASE\.origin: master is not level with origin\/master\. Next step: /)
+      assert.equal(runGit(repo.plugin.dir, ["tag", "--list"]), "")
     } finally {
-      plugin.cleanup()
+      repo.cleanup()
     }
   })
 
-  test("a missing changelog and a failing git each name their next step", async () => {
-    const plugin = fullPlugin()
+  test("requires the release version in package.json and its changelog section", async () => {
+    const repo = repository("0.0.0")
     try {
-      rmSync(join(plugin.dir, "CHANGELOG.md"))
-      await assert.rejects(runRelease(context(plugin.dir), "0.1.0", { dryRun: false }), (error: unknown) => error instanceof KitError && error.code === "KIT_RELEASE")
+      const unprepared = context(repo.plugin.dir)
+      assert.equal(await runRelease(unprepared, "0.0.1", { dryRun: false }), 1)
+      assert.match(unprepared.err(), /KIT_RELEASE\.version/)
+      assert.match(unprepared.err(), /KIT_RELEASE\.changelog/)
+      assert.equal(runGit(repo.plugin.dir, ["tag", "--list"]), "")
     } finally {
-      plugin.cleanup()
-    }
-    const second = fullPlugin()
-    try {
-      const git: Git = async (args): Promise<GitResult> => (args[0] === "tag" ? { code: 1, stdout: "", stderr: "tag exists" } : { code: 0, stdout: "", stderr: "" })
-      await assert.rejects(runRelease(context(second.dir, { git }), "0.1.0", { dryRun: false }), /KIT_GIT: git tag v0\.1\.0 failed: tag exists\. Next step: /)
-    } finally {
-      second.cleanup()
+      repo.cleanup()
     }
   })
 
-  test("--json prints the tag and the files", async () => {
-    const plugin = fullPlugin()
+  test("a missing changelog is a finding, not a section the kit invents", async () => {
+    const repo = repository("0.0.0", { changelog: "# Changelog\n\n## Unreleased\n" })
     try {
-      const run = context(plugin.dir, { json: true })
-      assert.equal(await runRelease(run, "0.1.0", { dryRun: true }), 0)
-      const parsed = JSON.parse(run.out()) as { tag: string; files: string[]; dryRun: boolean }
-      assert.deepEqual({ tag: parsed.tag, files: parsed.files, dryRun: parsed.dryRun }, { tag: "v0.1.0", files: ["CHANGELOG.md", "package.json"], dryRun: true })
+      const answer = context(repo.plugin.dir)
+      assert.equal(await runRelease(answer, "0.0.0", { dryRun: false }), 1)
+      assert.match(answer.err(), /KIT_RELEASE\.changelog CHANGELOG\.md: CHANGELOG\.md has no "## \[0\.0\.0\]" section/)
+      assert.match(readFileSync(join(repo.plugin.dir, "CHANGELOG.md"), "utf8"), /Unreleased/)
+      assert.equal(runGit(repo.plugin.dir, ["tag", "--list"]), "")
     } finally {
-      plugin.cleanup()
+      repo.cleanup()
+    }
+  })
+
+  test("--json prints the tag and no files", async () => {
+    const repo = repository("0.0.0")
+    try {
+      const answer = context(repo.plugin.dir, true)
+      assert.equal(await runRelease(answer, "0.0.0", { dryRun: true }), 0)
+      const parsed = JSON.parse(answer.out()) as { tag: string; dryRun: boolean; files?: unknown }
+      assert.equal(parsed.tag, "v0.0.0")
+      assert.equal(parsed.dryRun, true)
+      assert.equal(parsed.files, undefined)
+    } finally {
+      repo.cleanup()
     }
   })
 })
+
+/** Run a real git command and return its trimmed stdout. */
+function runGit(directory: string, args: readonly string[]): string {
+  return execFileSync("git", [...args], { cwd: directory, encoding: "utf8" }).trim()
+}

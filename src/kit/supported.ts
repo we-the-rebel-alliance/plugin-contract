@@ -17,7 +17,7 @@ export const SUPPORTED_HEADERS: readonly string[] = ["Plugin", "Repository", "Ac
 
 /** The row's cells, for a test and for the JSON answer. */
 export function supportedCells(manifest: Manifest, repository: string, options: { readonly wave?: string | undefined; readonly status?: string | undefined } = {}): string[] {
-  const accounts = manifest.accounts === undefined ? "—" : `${manifest.accounts.via} (multi → multi)`
+  const accounts = accountsCell(manifest)
   const sources =
     manifest.sources.length === 0
       ? "—"
@@ -30,6 +30,13 @@ export function supportedCells(manifest: Manifest, repository: string, options: 
     .filter((value): value is number => value !== undefined)
   const cadenceCell = minutes.length === 0 ? "—" : cadence(Math.min(...minutes))
   return [manifest.plugin.name, `\`${repository}\``, accounts, sources, list(writeClasses(manifest), String), list(signals, String), cadenceCell, options.wave ?? "—", options.status ?? "supported"]
+}
+
+/** The accounts column, read from the manifest: the mechanism, and whether it profiles each alias. */
+export function accountsCell(manifest: Manifest): string {
+  const info = manifest.accounts
+  if (info === undefined) return "—"
+  return info.profile === undefined ? info.via : `${info.via} (profile per alias)`
 }
 
 /** The row as SUPPORTED.md writes it. */

@@ -9,6 +9,7 @@
  * of plugin standard §8; each has a test beside it.
  */
 export { COMMANDS, HELP, main } from "./kit/cli.ts"
+export { KIT_BUNDLE_MARKER } from "./kit/bundled.ts"
 export type { Command, MainOptions } from "./kit/cli.ts"
 export type { ConformanceOptions, ConformanceReport, ConformanceRunner, Finding, Git, GitResult, Io } from "./kit/types.ts"
 export { KitError } from "./kit/types.ts"
@@ -23,7 +24,6 @@ export {
   createAutomation,
   createCodeMode,
   createHost,
-  legacySchedule,
   mcpAddress,
   TurnLog,
   waitForActivation,

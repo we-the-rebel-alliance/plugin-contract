@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { describe, test } from "node:test"
 import { forbiddenFindings } from "../src/kit.ts"
+import { ALLOW_FILE } from "../src/kit/forbidden.ts"
 import { FORBIDDEN_APPS } from "../src/kit/forbidden-apps.ts"
 
 const write = (path: string, text: string): void => {
@@ -48,6 +49,35 @@ describe("plugin-kit forbidden", () => {
       const findings = forbiddenFindings(local.dir).filter((finding) => finding.id === "FORBIDDEN.main-branch")
       assert.equal(findings.length, 3)
       assert.ok(findings.every((finding) => finding.path === "README.md"))
+    } finally {
+      local.cleanup()
+    }
+  })
+
+  test("ordinary words are not app identifiers, and the real identifiers are", () => {
+    const local = temp()
+    try {
+      write(join(local.dir, "notes.md"), "Memory is a browser concern; artifacts are build output.\nhey-jelly and toqan are products.\n")
+      const findings = forbiddenFindings(local.dir).filter((finding) => finding.id === "FORBIDDEN.app-name")
+      assert.equal(findings.length, 2)
+      assert.ok(findings.every((finding) => finding.path === "notes.md"))
+    } finally {
+      local.cleanup()
+    }
+  })
+
+  test("an allowance with a reason suppresses a match and is reported; an empty reason does not", () => {
+    const local = temp()
+    try {
+      write(join(local.dir, "docs", "quoted.md"), `# Quoted\n\n${FORBIDDEN_APPS[0]!.name} is the product this page documents.\n`)
+      write(join(local.dir, ALLOW_FILE), "docs/quoted.md:app-name This page is about the product itself.\n")
+      const findings = forbiddenFindings(local.dir)
+      assert.equal(findings.filter((finding) => finding.id === "FORBIDDEN.app-name").length, 0)
+      const suppressed = findings.find((finding) => finding.id === "FORBIDDEN.suppressed")
+      assert.equal(suppressed?.level, "warning")
+      assert.match(suppressed?.message ?? "", /This page is about the product itself\./)
+      write(join(local.dir, ALLOW_FILE), "docs/quoted.md:app-name \n")
+      assert.equal(forbiddenFindings(local.dir).filter((finding) => finding.id === "FORBIDDEN.app-name").length, 1)
     } finally {
       local.cleanup()
     }

@@ -27,10 +27,10 @@ const PLACEHOLDER = {
 } as const
 
 /** A key whose value is a credential, whatever it holds. */
-const SECRET_KEY = /(?:(?:^|[_.-])(?:token|secret|password|passwd|pwd|apikey|api_key|api-key|authorization|cookie|credential|credentials|private_key|private-key|client_secret|client-secret|access_token|refresh_token)(?:$|[_.-])|^(?:accessToken|refreshToken|idToken|apiKey|clientSecret|privateKey)$)/i
+const SECRET_KEY = /(?:(?:^|[_.-])(?:token|secret|password|passwd|pwd|apikey|api_key|api-key|authorization|cookie|credential|credentials|private_key|private-key|client_secret|client-secret|access_token|refresh_token)(?:$|[_.-])|^(?:accessToken|refreshToken|idToken|apiKey|clientSecret|privateKey|sessionToken|botToken)$)/i
 
 /** A key whose value is personal data: an address, a phone number, a person's name. */
-const PERSONAL_KEY = /^(?:e?mail|phone|phone_number|phoneNumber|mobile|address|username|user_name|display_name|displayName|real_name|realName|full_name|fullName)$/i
+const PERSONAL_KEY = /^(?:e?mail|phone|phone_number|phoneNumber|mobile|address|username|user_name|login|display_name|displayName|real_name|realName|full_name|fullName|first_name|firstName|name)$/i
 
 /**
  * Replace the patterns in one string: a credential gives the whole string up, because a token's neighbours may be as
@@ -40,9 +40,11 @@ export function redactText(text: string): string {
   if (secretKinds(text).length > 0) return PLACEHOLDER.secret
   let result = text
     .replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, PLACEHOLDER.email)
-    .replace(/(?<![A-Za-z0-9._])(?:\+?\d[\d ().-]{6,}\d)(?![A-Za-z0-9._])/g, (match) => {
+    // An E.164 number starts with + and has 8–15 digits. A timestamp or a plain account id has no leading +, so it is
+    // not a phone number; a phone-shaped value under a phone key is redacted by key, not by this pattern.
+    .replace(/(?<![\w+])\+\d[\d ().-]{5,}\d(?![\w])/g, (match) => {
       const digits = match.replace(/\D/g, "").length
-      return digits >= 10 && digits <= 15 ? PLACEHOLDER.phone : match
+      return digits >= 8 && digits <= 15 ? PLACEHOLDER.phone : match
     })
     .replace(/\/(?:home|Users)\/[A-Za-z0-9._/-]+/g, PLACEHOLDER.home)
   result = result.replace(/([?&](?:access_token|refresh_token|token|key|api_key|apikey|secret|client_secret|signature|sig|password|email|code)=)[^&#\s]+/gi, `$1${PLACEHOLDER.query}`)
@@ -50,9 +52,9 @@ export function redactText(text: string): string {
 }
 
 /** Replace credentials and personal data in a JSON value, preserving its keys and their order. */
-export function redactValue(value: unknown): unknown {
+export function redactValue(value: unknown, path: readonly string[] = []): unknown {
   if (typeof value === "string") return redactText(value)
-  if (Array.isArray(value)) return value.map((item) => redactValue(item))
+  if (Array.isArray(value)) return value.map((item) => redactValue(item, path))
   if (typeof value !== "object" || value === null) return value
   const result: Record<string, unknown> = {}
   for (const [key, item] of Object.entries(value)) {
@@ -60,11 +62,14 @@ export function redactValue(value: unknown): unknown {
       result[key] = PLACEHOLDER.secret
       continue
     }
-    if (PERSONAL_KEY.test(key)) {
+    // `events.status.name` is the plugin's name, which status is checked against; every other name in a fixture is a
+    // person's or an account's and is personal data.
+    const keepsStatusName = key === "name" && path.length === 2 && path[0] === "events" && path[1] === "status"
+    if (PERSONAL_KEY.test(key) && !keepsStatusName) {
       result[key] = PLACEHOLDER.personal
       continue
     }
-    result[key] = redactValue(item)
+    result[key] = redactValue(item, [...path, key])
   }
   return result
 }

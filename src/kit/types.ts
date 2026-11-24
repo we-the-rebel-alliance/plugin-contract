@@ -75,11 +75,18 @@ export interface CommandContext {
 /** A failure the kit itself raises, in the contract's `CODE: … Next step: …` form. */
 export class KitError extends Error {
   readonly code: string
+  /** What happened, without the code and next step. */
+  readonly what: string
+  /** What to do about it. */
+  readonly next: string
 
   constructor(code: string, what: string, next: string) {
-    super(`${code}: ${what.replace(/[.\s]+$/, "")}. Next step: ${next}`)
+    const said = what.replace(/[.\s]+$/, "")
+    super(`${code}: ${said}. Next step: ${next}`)
     this.name = "KitError"
     this.code = code
+    this.what = said
+    this.next = next
   }
 }
 

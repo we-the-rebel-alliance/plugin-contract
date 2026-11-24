@@ -82,7 +82,7 @@ describe("plugin-kit's command line", () => {
       const answer = await run(["supported", "--dir", plugin.dir, "--json"])
       assert.equal(answer.code, 0)
       const parsed = JSON.parse(answer.out) as { cells: string[] }
-      assert.equal(parsed.cells[2], "mcp (multi → multi)")
+      assert.equal(parsed.cells[2], "mcp")
       assert.equal(parsed.cells[3], "acme.feed (events: message), acme.inbox (snapshot: x-acme/inbox)")
       assert.equal(parsed.cells[4], "send, share, delete")
       assert.equal(parsed.cells[5], "bus, webhook")
@@ -90,6 +90,17 @@ describe("plugin-kit's command line", () => {
     } finally {
       plugin.cleanup()
     }
+  })
+
+  test("supported reads the accounts column from the manifest, not a fixed multi → multi", async () => {
+    const { accountsCell } = await import("../src/kit/supported.ts")
+    assert.equal(accountsCell(manifest()), "—")
+    assert.equal(
+      accountsCell(manifest({ accounts: { via: "integration", owner: "mailto", profile: { $ref: "#/options/properties/accounts/additionalProperties" } } })),
+      "integration (profile per alias)",
+    )
+    assert.equal(accountsCell(manifest({ accounts: { via: "mcp", owner: "slack" } })), "mcp")
+    assert.equal(accountsCell(manifest({ accounts: { via: "local", owner: "machine" } })), "local")
   })
 
   test("check runs T0 once and T1 on every tested host the manifest names", async () => {
@@ -226,6 +237,22 @@ describe("plugin-kit's command line", () => {
     } finally {
       plugin.cleanup()
     }
+  })
+
+  test("--json prints a KitError as one JSON object on stdout, not a plain line", async () => {
+    const missing = await run(["supported", "--dir", "/nonexistent/plugin", "--json"])
+    assert.equal(missing.code, 1)
+    assert.equal(missing.err, "")
+    const parsed = JSON.parse(missing.out) as { ok: boolean; error: { code: string; message: string; next: string } }
+    assert.deepEqual({ ok: parsed.ok, code: parsed.error.code, hasNext: parsed.error.next.length > 0 }, { ok: false, code: "KIT_NOT_A_PLUGIN", hasNext: true })
+    const version = await run(["release", "1.2.3", "--json"])
+    assert.equal(version.code, 1)
+    assert.equal(version.err, "")
+    assert.equal((JSON.parse(version.out) as { error: { code: string } }).error.code, "KIT_VERSION")
+    const usage = await run(["chek", "--json"])
+    assert.equal(usage.code, 2)
+    assert.equal(usage.err, "")
+    assert.equal((JSON.parse(usage.out) as { error: { code: string } }).error.code, "KIT_USAGE")
   })
 
   test("a plugin without a manifest answers docs with a manifest finding, not a crash", async () => {

@@ -7,31 +7,33 @@
 The kit calls the conformance module for every conformance check (`runConformance`, `t0`, `t1` in
 `src/conformance.ts`). It does not re-implement a check or keep a second copy of a rule. Its own work is what is about a
 repository rather than a plugin's runtime: generated documentation, the forbidden patterns, fixture redaction, the
-release files and the host harness.
+release guards and the host harness.
 
 ```sh
 npx plugin-kit <command> [options]
 ```
 
 Every command runs from the plugin's root directory, or with `--dir <path>`. `--json` prints one JSON object and moves
-the report off stdout. A command exits `0` when it passes, `1` when a finding is an error, and `2` for a usage mistake.
+the report off stdout; a `KitError` is then `{ "ok": false, "error": { "code", "message", "next" } }` on stdout. A
+command exits `0` when it passes, `1` when a finding is an error, and `2` for a usage mistake.
 
 ## Commands
 
 | Command | What it does | Options |
 |---|---|---|
-| `check` | everything a pull request needs from the kit: T0, T1 on every tested host, generated docs, forbidden patterns | `--host <release>` (repeatable), `--json` |
+| `check` | everything a pull request needs from the kit: T0, T1 on every tested host, generated docs, forbidden patterns, no bundled kit | `--host <release>` (repeatable), `--json` |
 | `docs` | writes each manifest-driven section between its markers | `--check`, `--json` |
 | `record` | runs the recorder, then redacts every JSON fixture under `test/conformance/` | `--account <alias>`, `--fixtures <path>`, `--check`, `--json` |
 | `conformance` | the whole conformance report | `--host <release>`, `--record`, `--json` |
 | `hosts` | the OpenCode release matrix: `[2.4.1]` | `--json` |
-| `release <version>` | checks, a changelog section, the version in `package.json` and the lockfile, one commit and one tag | `--dry-run`, `--json` |
+| `release <version>` | checks, then a local 0.0.x tag; CI publishes the GitHub release | `--dry-run`, `--json` |
 | `supported` | this plugin's row for `SUPPORTED.md` | `--wave <name>`, `--status <state>`, `--json` |
-| `forbidden` | app names, `main`-branch links and secrets | `--json` |
+| `forbidden` | app identifiers, `main`-branch links and secrets | `--json` |
 
 `check` does not typecheck, build or run the plugin's unit tests: those are the plugin's own commands, and its CI runs
 them beside the kit. T0 and T1 are hard gates (plugin standard §0.2 rule 8); a conformance call that throws becomes a
-`KIT_CONFORMANCE` error, never a skipped gate.
+`KIT_CONFORMANCE` error, never a skipped gate. It also fails `KIT_BUNDLED` when the plugin's runtime entry or its `dist/`
+contains the kit: the kit is a devDependency, never part of a plugin's server build.
 
 ### `check` and `conformance`
 
@@ -86,10 +88,10 @@ Redaction replaces:
 
 - a credential: a string the contract's `secretKinds` recognises, or a value under a key such as `token`, `secret`,
   `password`, `api_key`, `authorization`, `cookie` or `credential`, with `<redacted:secret>`;
-- an email address with `<redacted:email>`, a phone number with `<redacted:phone>`, a home directory with
-  `<redacted:home>`;
-- a value under `email`, `phone`, `username`, `display_name`, `real_name` or `full_name` with
-  `<redacted:personal>`;
+- an E.164 phone number (a leading `+` and 8–15 digits) with `<redacted:phone>`; a timestamp or a plain account id is
+  not a phone number, an email address becomes `<redacted:email>`, and a home directory `<redacted:home>`;
+- a value under `email`, `phone`, `mobile`, `username`, `login`, `name`, `first_name`, `display_name`, `real_name` or
+  `full_name` with `<redacted:personal>`;
 - a sensitive URL query value (`token`, `key`, `signature`, `password`, `email`, `code`) with `<redacted>`.
 
 The pass is deterministic and idempotent: keys keep their order, a placeholder carries no pattern, and a second run
@@ -102,25 +104,31 @@ The scan reads text files outside `node_modules`, `dist` and the other generated
 
 | Id | What it finds |
 |---|---|
-| `FORBIDDEN.app-name` | an app's name in code, manifest or docs. An `x-<app>` key is allowed: the prefix is the one place a name belongs. |
+| `FORBIDDEN.app-name` | an app identifier in code, manifest or docs. An `x-<app>` key is allowed: the prefix is the one place a name belongs. |
 | `FORBIDDEN.main-branch` | a GitHub `blob/main`, `tree/main`, `raw/main` or `raw.githubusercontent.com/…/main` link. Every repository in the org uses `master`. |
 | `FORBIDDEN.secret` | a credential the contract's own detector (`secretKinds`) recognises. |
 
-The app list is `src/kit/forbidden-apps.ts`, the kit's one denylist. A common word is matched only when it is
-capitalised or part of the app's package or repository name, so ordinary prose is not a finding.
+The app list is `src/kit/forbidden-apps.ts`, the kit's one denylist. It targets the app's own identifiers (its name in
+any case, `hey-jelly`, `toqan` and the repository prefixes), not ordinary words such as "memory" or "artifacts".
+
+A real site that must name an app is allowed in `.plugin-kit/forbidden-allow`, one `<path>:<pattern-id> <reason>` per
+line, such as `docs/quote.md:app-name This page documents the product itself.` A used allowance removes that finding and
+is reported as a `FORBIDDEN.suppressed` warning with its reason; a line with no reason is not an allowance.
 
 ### `release`
 
-`release <version>` is the one release command. It:
+`release <version>` releases only the `0.0.x` line (contract §17). It:
 
 1. runs `check`, and writes nothing when an error is found;
-2. adds the version's section to `CHANGELOG.md`: `Unreleased` is renamed when it exists, otherwise the section follows
-   the title;
-3. writes the version to `package.json` and, when it exists, `package-lock.json`;
-4. commits the files it changed as `chore(release): prepare v<version>`, and creates the annotated tag `v<version>`.
+2. requires the release to be prepared, not prepares it: `package.json` must already say the version, and `CHANGELOG.md`
+   must already carry its `## [<version>]` section;
+3. refuses unless the branch is `master`, `git status --porcelain` is empty, and `HEAD` equals `origin/master` after a
+   fetch;
+4. creates the annotated tag `v<version>` locally.
 
-The tag is local. Pushing it is the owner's step; CI publishes the GitHub release on that tag (plugin standard §9).
-`--dry-run` prints the plan and writes nothing. The command refuses a tag that already exists instead of moving it.
+It never edits a release file, pushes or publishes. Pushing the tag is the owner's step; CI publishes the GitHub release
+on that tag (plugin standard §9). `--dry-run` runs the checks and guards and prints the plan without writing a tag. The
+command refuses a tag that already exists instead of moving it.
 
 `supported` prints one row for the data-source table in `SUPPORTED.md`, with the repository, account mechanism, sources,
 write classes, signals, suggested cadence, wave and status. `Wave` and `Status` are decisions rather than manifest data,
@@ -142,9 +150,9 @@ The harness handles the six OpenCode 2.4 behaviours in plugin standard §8. Each
 2. **The embedded `@opencode/sdk` host never runs automations.** `createAutomation({ kind: "sdk" }, api, spec)` answers
    `{ status: "skipped" }` and does not call the API; `{ kind: "server" }` creates one, and a test on the embedded host
    that supplies its own scheduler passes `{ allowScheduler: true }`.
-3. **`experimental.schedule` is gone.** `automationApi(client)` returns the 2.4 `experimental.automation` API, and
-   `legacySchedule()` is a `KIT_API_GONE` refusal that names `/api/experimental/automation`. The harness never calls the
-   removed method.
+3. **`experimental.schedule` is gone.** `automationApi(client)` returns the 2.4 `experimental.automation` API; a client
+   that still offers only `experimental.schedule` is a `KIT_API_GONE` refusal that names
+   `/api/experimental/automation`. The harness never calls the removed method.
 4. **MCP `server/discover` first.** `connectMcpServer(config, transport)` probes a server with no `protocol`; a 2xx is
    the connection, a 401 ends the attempt with no `initialize`, and another failure falls back to `initialize`. An
    explicit `legacy` protocol initializes directly; an explicit `2026-07-28` does not fall back. The returned `sent`

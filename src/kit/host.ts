@@ -8,10 +8,11 @@
 import type { ActivationOptions } from "./host/activation.ts"
 import { waitForActivation } from "./host/activation.ts"
 
+export { KIT_BUNDLE_MARKER } from "./bundled.ts"
 export type { ActivationOptions } from "./host/activation.ts"
 export { waitForActivation } from "./host/activation.ts"
 export type { AutomationAction, AutomationApi, AutomationClient, AutomationHost, AutomationResult, AutomationSpec, AutomationTrigger } from "./host/automation.ts"
-export { automationApi, createAutomation, legacySchedule } from "./host/automation.ts"
+export { automationApi, createAutomation } from "./host/automation.ts"
 export type { CodeModeHarness, CodeModeSession, ToolCall, ToolCallInput } from "./host/codemode.ts"
 export { createCodeMode } from "./host/codemode.ts"
 export type { ToolCallLike } from "./host/host-types.ts"

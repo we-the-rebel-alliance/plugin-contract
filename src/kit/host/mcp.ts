@@ -3,7 +3,8 @@
  * ends the attempt: no `initialize` follows.
  *
  * The harness models the transport as one request function. It records the methods it sent, so a test can assert that a
- * rejected discovery was final rather than followed by a legacy handshake.
+ * rejected discovery was final rather than followed by a legacy handshake. Both 401 and 403 are final: OpenCode 2.4.1
+ * treats them the same way (`core/src/mcp/client.ts`).
  */
 import { KitError } from "../types.ts"
 
@@ -50,10 +51,10 @@ const discoveredProtocol = (body: unknown): string => {
  * Connect to a server the way OpenCode 2.4 does.
  *
  * - `protocol: "legacy"`: `initialize` directly.
- * - no protocol, or `"auto"`: `server/discover`; a 2xx is the connection, a 401 ends it, and any other failure falls
- *   back to `initialize`.
- * - `protocol: "2026-07-28"`: `server/discover`; a 401 or another failure ends it, because the server was told which
- *   protocol to speak.
+ * - no protocol, or `"auto"`: `server/discover`; a 2xx is the connection, a 401 or 403 ends it, and any other failure
+ *   falls back to `initialize`.
+ * - `protocol: "2026-07-28"`: `server/discover`; a 401, a 403 or another failure ends it, because the server was told
+ *   which protocol to speak.
  */
 export async function connectMcpServer(config: McpServerConfig, transport: McpTransport): Promise<McpConnection> {
   const sent: string[] = []
@@ -70,11 +71,11 @@ export async function connectMcpServer(config: McpServerConfig, transport: McpTr
   if (discovered.status >= 200 && discovered.status < 300) {
     return { status: "discovered", protocol: discoveredProtocol(discovered.body), sent }
   }
-  if (discovered.status === 401) {
+  if (discovered.status === 401 || discovered.status === 403) {
     return {
       status: "failed",
-      code: 401,
-      reason: "the server rejected server/discover with 401; a 401 ends the attempt and no initialize follows",
+      code: discovered.status,
+      reason: `the server rejected server/discover with ${discovered.status}; a ${discovered.status} ends the attempt and no initialize follows`,
       sent,
     }
   }

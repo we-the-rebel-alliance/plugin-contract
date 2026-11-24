@@ -8,10 +8,10 @@ import {
   createAutomation,
   createCodeMode,
   createHost,
-  legacySchedule,
   mcpAddress,
   TurnLog,
   waitForActivation,
+  type AutomationApi,
   type AutomationSpec,
   type McpTransport,
   type ToolCallLike,
@@ -93,29 +93,22 @@ describe("the host harness's automation rules (2.4 behaviours 2 and 3)", () => {
     assert.deepEqual(await createAutomation({ kind: "sdk" }, api, spec, { allowScheduler: true }), { status: "created", id: "aut_2" })
   })
 
-  test("experimental.schedule is refused, and the 2.4 automation API is used instead", async () => {
-    let scheduled = 0
-    const client = {
-      experimental: {
-        schedule: () => {
-          scheduled++
-        },
-        automation: { create: async () => ({ id: "aut_1" }) },
-      },
-    }
-    assert.throws(() => legacySchedule(client), /KIT_API_GONE: experimental\.schedule is gone from OpenCode 2\.4\. Next step: /)
-    assert.equal(scheduled, 0)
-    assert.equal((await automationApi(client).create(spec)).id, "aut_1")
+  test("a client that still offers experimental.schedule is told the method is gone", () => {
+    const client = { experimental: { schedule: () => undefined, automation: { create: async () => ({ id: "aut_1" }) } } }
+    assert.equal(automationApi(client).create !== undefined, true)
+    assert.throws(() => automationApi({ experimental: { schedule: () => undefined } }), /KIT_API_GONE: experimental\.schedule is gone from OpenCode 2\.4\. Next step: /)
   })
 
   test("a host without experimental.automation says what to use", () => {
-    assert.throws(() => automationApi({}), /KIT_API_GONE: this host has no experimental\.automation API\. Next step: use OpenCode 2\.4\.1 or later/)
+    assert.throws(() => automationApi({}), /KIT_API_GONE: this host has no experimental\.automation API\. Next step: create the automation with ctx\.experimental\.automation\.create/)
   })
 
-  test("accepts OpenCode 2.4.1's own automation create and server config types", async () => {
-    // The real create has a wider input (sessionID, directory) and returns the whole automation; it still fits.
-    const create = (async () => ({ id: "aut_real" })) as unknown as Plugin.Context["experimental"]["automation"]["create"]
-    assert.deepEqual(await createAutomation({ kind: "server" }, { create }, spec), { status: "created", id: "aut_real" })
+  test("accepts OpenCode 2.4.1's own automation create and server config types, with no cast", async () => {
+    const create: Plugin.Context["experimental"]["automation"]["create"] = async () => {
+      throw new Error("signature only")
+    }
+    const accepts: AutomationApi = { create }
+    assert.equal(typeof accepts.create, "function")
     const server: Mcp.ServerConfig = { type: "remote", url: "https://mcp.example.test", protocol: "legacy" }
     const answer = await connectMcpServer(server, { request: async () => ({ status: 200 }) })
     assert.equal(answer.status, "initialized")
@@ -143,6 +136,14 @@ describe("the host harness's MCP discovery (2.4 behaviour 4)", () => {
     assert.equal(answer.status, "failed")
     assert.equal(answer.code, 401)
     assert.match(answer.reason ?? "", /a 401 ends the attempt and no initialize follows/)
+  })
+
+  test("a 403 to server/discover is final too, with no initialize", async () => {
+    const fake = transport([403])
+    const answer = await connectMcpServer({ type: "remote", url: "https://mcp.example.test" }, fake)
+    assert.deepEqual(fake.sent, ["server/discover"])
+    assert.equal(answer.status, "failed")
+    assert.equal(answer.code, 403)
   })
 
   test("a server without discovery falls back to initialize", async () => {

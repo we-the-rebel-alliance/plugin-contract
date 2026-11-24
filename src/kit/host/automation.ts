@@ -9,17 +9,20 @@
 import type { HostKind } from "../host.ts"
 import { KitError } from "../types.ts"
 
+/** A JSON value, as an automation's code args and event args take. */
+export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
+
 /** A trigger, in the shape OpenCode 2.4's automation API takes. */
 export type AutomationTrigger =
-  | { readonly type: "at"; readonly at: string; readonly tz?: string | undefined }
-  | { readonly type: "every"; readonly every: string; readonly tz?: string | undefined }
-  | { readonly type: "cron"; readonly cron: string; readonly tz?: string | undefined }
-  | { readonly type: "event"; readonly server: string; readonly event: string; readonly args?: Readonly<Record<string, unknown>> | undefined }
+  | { readonly type: "at"; readonly at: string; readonly tz?: string }
+  | { readonly type: "every"; readonly every: string; readonly tz?: string }
+  | { readonly type: "cron"; readonly cron: string; readonly tz?: string }
+  | { readonly type: "event"; readonly server: string; readonly event: string; readonly args?: Record<string, JsonValue> }
 
 /** An action, in the shape OpenCode 2.4's automation API takes. */
 export type AutomationAction =
-  | { readonly type: "prompt"; readonly prompt: string; readonly to?: { readonly session: string } | { readonly subagent: string } | undefined }
-  | { readonly type: "code"; readonly code: string; readonly args?: unknown }
+  | { readonly type: "prompt"; readonly prompt: string; readonly to?: { readonly session: string } | { readonly subagent: string } }
+  | { readonly type: "code"; readonly code: string; readonly args?: JsonValue }
   | { readonly type: "shell"; readonly command: string }
 
 /** What a test creates: the API's input, with the fields a release test needs. */
@@ -27,8 +30,8 @@ export interface AutomationSpec {
   readonly name: string
   readonly trigger: AutomationTrigger
   readonly action: AutomationAction
-  readonly tz?: string | undefined
-  readonly expires?: string | undefined
+  readonly tz?: string
+  readonly expires?: string
 }
 
 /** The one automation call the harness uses. OpenCode 2.4's `create` returns the whole automation; its `id` is enough. */
@@ -81,20 +84,12 @@ export async function createAutomation(
 export function automationApi(client: AutomationClient): AutomationApi {
   const api = client.experimental?.automation
   if (api === undefined || typeof api.create !== "function") {
+    const legacy = client.experimental?.schedule !== undefined
     throw new KitError(
       "KIT_API_GONE",
-      "this host has no experimental.automation API",
-      "use OpenCode 2.4.1 or later; automations are created through /api/experimental/automation",
+      legacy ? "experimental.schedule is gone from OpenCode 2.4" : "this host has no experimental.automation API",
+      "create the automation with ctx.experimental.automation.create, which posts to /api/experimental/automation",
     )
   }
   return api
-}
-
-/** The removed 2.4 client method: calling it is refused, with the replacement in the message. */
-export function legacySchedule(_client?: AutomationClient): never {
-  throw new KitError(
-    "KIT_API_GONE",
-    "experimental.schedule is gone from OpenCode 2.4",
-    "create the automation with ctx.experimental.automation.create, which posts to /api/experimental/automation",
-  )
 }

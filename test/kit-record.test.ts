@@ -54,6 +54,10 @@ describe("redaction", () => {
     assert.equal(redactText("?token=abc123&page=2"), "?token=<redacted>&page=2")
     assert.equal(redactText("nothing personal"), "nothing personal")
     assert.equal(redactText("version 1.2.3, 2026-11-24"), "version 1.2.3, 2026-11-24")
+    // A timestamp and a plain account id are not phone numbers.
+    assert.equal(redactText("at 2026-11-24 12:30"), "at 2026-11-24 12:30")
+    assert.equal(redactText("id 1234567890"), "id 1234567890")
+    assert.equal(redactText("reach +14155550123"), "reach <redacted:phone>")
   })
 
   test("is idempotent: a placeholder carries no pattern", () => {
@@ -67,7 +71,12 @@ describe("redaction", () => {
       email: "ana@example.com",
       token: "anything",
       accessToken: "anything",
+      sessionToken: "anything",
+      botToken: "anything",
       displayName: "Ana",
+      login: "ana",
+      first_name: "Ana",
+      name: "Ana",
       nested: { phone: "+33 6 12 34 56 78", safe: "hello", contact: "bo@example.com" },
       list: [{ note: "ana@example.com" }],
       count: 3,
@@ -78,12 +87,24 @@ describe("redaction", () => {
     assert.equal(redacted.email, "<redacted:personal>")
     assert.equal(redacted.token, "<redacted:secret>")
     assert.equal(redacted.accessToken, "<redacted:secret>")
+    assert.equal(redacted.sessionToken, "<redacted:secret>")
+    assert.equal(redacted.botToken, "<redacted:secret>")
     assert.equal(redacted.displayName, "<redacted:personal>")
+    assert.equal(redacted.login, "<redacted:personal>")
+    assert.equal(redacted.first_name, "<redacted:personal>")
+    assert.equal(redacted.name, "<redacted:personal>")
     assert.equal(redacted.nested.phone, "<redacted:personal>")
     assert.equal(redacted.nested.safe, "hello")
     assert.equal(redacted.nested.contact, "<redacted:email>")
     assert.equal(redacted.list[0]?.note, "<redacted:email>")
     assert.equal(redacted.count, 3)
+  })
+
+  test("the status answer keeps its plugin name, and a phone value is redacted by its key", () => {
+    const value = redactValue({ events: { status: { name: "acme" } }, phone: "020 7946 0018", profile: { name: "Ana" } }) as Record<string, any>
+    assert.equal(value.events.status.name, "acme")
+    assert.equal(value.phone, "<redacted:personal>")
+    assert.equal(value.profile.name, "<redacted:personal>")
   })
 
   test("a directory is checked without a write, and rewritten with one", () => {

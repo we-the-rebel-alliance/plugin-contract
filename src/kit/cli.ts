@@ -150,11 +150,13 @@ export async function main(argv: readonly string[], options: MainOptions = {}): 
     stdout: options.stdout ?? ((text: string) => process.stdout.write(text)),
     stderr: options.stderr ?? ((text: string) => process.stderr.write(text)),
   }
+  const wantsJson = argv.includes("--json")
   let parsed: Parsed | "help"
   try {
     parsed = parse(argv)
   } catch (error) {
-    io.stderr(`${error instanceof Error ? error.message : String(error)}\n`)
+    if (wantsJson) io.stdout(`${JSON.stringify(errorObject(error), null, 2)}\n`)
+    else io.stderr(`${error instanceof Error ? error.message : String(error)}\n`)
     return 2
   }
   if (parsed === "help") {
@@ -195,11 +197,22 @@ export async function main(argv: readonly string[], options: MainOptions = {}): 
         return await runForbidden(context)
     }
   } catch (error) {
-    if (error instanceof KitError) {
-      io.stderr(`${error.message}\n`)
-      return error.code === "KIT_USAGE" ? 2 : 1
-    }
-    io.stderr(`KIT_INTERNAL: ${error instanceof Error ? error.message : String(error)}. Next step: run plugin-kit --help, and report this with the plugin directory.\n`)
-    return 1
+    if (context.json) io.stdout(`${JSON.stringify(errorObject(error), null, 2)}\n`)
+    else if (error instanceof KitError) io.stderr(`${error.message}\n`)
+    else io.stderr(`KIT_INTERNAL: ${error instanceof Error ? error.message : String(error)}. Next step: run plugin-kit --help, and report this with the plugin directory.\n`)
+    return error instanceof KitError ? (error.code === "KIT_USAGE" ? 2 : 1) : 1
+  }
+}
+
+/** A failure as `--json` prints it: one object on stdout, with the code, what happened and the next step. */
+function errorObject(error: unknown): { readonly ok: false; readonly error: { readonly code: string; readonly message: string; readonly next: string } } {
+  if (error instanceof KitError) return { ok: false, error: { code: error.code, message: error.what, next: error.next } }
+  return {
+    ok: false,
+    error: {
+      code: "KIT_INTERNAL",
+      message: error instanceof Error ? error.message : String(error),
+      next: "run plugin-kit --help, and report this with the plugin directory",
+    },
   }
 }
