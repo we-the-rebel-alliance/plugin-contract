@@ -6,7 +6,7 @@
  *         scope?, refused?, failed?, removals?, gap?, cost?, plugin?, asOf? }
  *
  * A source plugin adds one read-only tool and tools-RPC method named `events_list`. It never writes, never asks and
- * never calls a model, so a scheduled check can run it with no one there. The rules, which `eventsListConformance`
+ * never calls a model, so a scheduled check can run it with no one there. The rules, which the conformance kit
  * (`./events-conformance.ts`) tests against any source:
  *
  * - **Input.** `since` is an ISO date (a UTC day) or an ISO date-time with `Z` or an offset. `cursor` is a string a

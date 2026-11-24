@@ -8,9 +8,8 @@ what the plugin answers.
 
 ## Install
 
-```sh
-opencode plugin add github:we-the-rebel-alliance/gws-plugin#v0.0.0
-```
+This conformance example is not a published release: run `npm run conformance:self-test` from the contract
+repository, or point a local OpenCode install at this directory.
 
 ## Sign in
 

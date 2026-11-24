@@ -15,7 +15,7 @@
  *
  * An unsupported release must refuse with `HOST_UNTESTED` and a next step, unless `allowUntestedHost` is true.
  */
-import { effectFor, type AccessLevel, type PermissionRule } from "../../access.ts"
+import { effectFor, evaluate, type AccessLevel, type PermissionRule } from "../../access.ts"
 import { OPENCODE_RANGE, type Manifest } from "../../manifest.ts"
 import { createHost, type HostRun } from "../host/index.ts"
 import { error, warning, type Finding } from "./report.ts"
@@ -210,10 +210,10 @@ async function permissionFindings(directory: string, manifest: Manifest, host: s
       for (const agent of run.agents) {
         // An agent whose last catch-all rule is deny is narrowed by its own configuration, which a plugin must not
         // widen; the access rules cannot decide it. The primary agents are the ones the transform guards.
-        if (lastEffect(agent.permissions, "*") === "deny") continue
+        if (evaluate(agent.permissions, "*", "*") === "deny") continue
         for (const [method, item] of Object.entries(manifest.methods)) {
           const expected = effectFor(item, level as AccessLevel)
-          const actual = lastEffect(agent.permissions, `${manifest.plugin.name}.${method}`)
+          const actual = evaluate(agent.permissions, `${manifest.plugin.name}.${method}`, "*")
           if (actual === expected) continue
           findings.push(error("T1.permissions", `access ${level} gives ${agent.id} ${actual} for ${method}, and the contract gives ${expected}`, { path: `capabilities.methods.${method}`, fix: "Generate the access rules from the access setting and each method's class and effect." }))
         }
@@ -223,15 +223,6 @@ async function permissionFindings(directory: string, manifest: Manifest, host: s
     }
   }
   return findings
-}
-
-/** The last rule matching an action, as OpenCode reads a rule list. */
-function lastEffect(rules: readonly PermissionRule[], action: string): PermissionRule["effect"] {
-  return rules.findLast((rule) => wildcard(rule.action, action) && wildcard(rule.resource, "*"))?.effect ?? "ask"
-}
-
-function wildcard(pattern: string, value: string): boolean {
-  return new RegExp(`^${pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".")}$`).test(value)
 }
 
 /** LD-5: a non-read RPC method with an allow rule and no grant is refused; with no permission check it runs. */

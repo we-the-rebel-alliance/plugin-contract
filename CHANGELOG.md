@@ -11,9 +11,9 @@ The first release in `we-the-rebel-alliance`: the contract at wire version 1, gr
 
 - **The contract and the standard:** `docs/contract.md` and `docs/plugin-standard.md`, with the settled decisions in
   `docs/decisions.md` and the plugin list in `SUPPORTED.md`.
-- **The modules:** `events` (event model, hash, screening, page checks), `cursor` (a bound cursor codec), `outputs` (the
-  snapshot shape registry), `params` and `pick`, `read` and `act`, `bus`, `grant`, `catalog`, `hints`, `schemas` and
-  `conformance`.
+- **The modules:** `manifest`, `accounts`, `access`, `register`, `events` (event model, hash, screening, page checks),
+  `cursor` (a bound cursor codec), `outputs` (the snapshot shape registry), `params` and `pick`, `read` and `act`, `bus`,
+  `grant`, `catalog`, `hints`, `schemas` and `conformance`.
 - **One error table** (contract §12): `ERROR_CODES`, `SourceError` and `parseSourceError`. There are no aliases;
   `AUTH_REQUIRED` is not a contract code.
 - **Hints, without routines** (decision D10): a plugin may ship a hint file per source for any model-based consumer;

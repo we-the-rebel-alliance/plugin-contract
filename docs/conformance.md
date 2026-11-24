@@ -29,7 +29,8 @@ interface Finding { id: string; level: "error" | "warning"; message: string; pat
 `id` is stable (`T0.namespace-length`, `T1.permissions`, `accounts.required`), so CI and a reviewer can tell one finding
 from another across releases. `ok` is false when any finding is an error. A warning names something the kit could not
 prove. `record: true` turns a missing recording into a warning while a fixture is being written. `hosts` defaults to the
-manifest's `plugin.host.tested`; the first unsupported release (`2.5.0`) is always run as well, for the clean refusal.
+manifest's `plugin.host.tested`; when any host is requested, the first unsupported release (`2.5.0`) is run as well,
+for the clean refusal.
 
 `t0` is static except for one host reading: the registered namespace line, which only the real host can show, is
 measured from T1 (or from a short host run on Node 24). `t1` loads the plugin on one OpenCode release. `runConformance`
@@ -56,12 +57,12 @@ is not a T0 finding: the file set belongs to the kit's `docs` and `forbidden` ch
 | `T1.load` | the package's server entry imports and exports `Plugin.define({ id, setup })` |
 | `T1.id` | the plugin's id is `capabilities.plugin.name` |
 | `T1.doors` | every non-MCP method is an agent tool with permission `<name>.<method>` and an RPC method under id `<name>`, and nothing else is registered |
-| `T1.permissions` | the access matrix holds for every real primary agent at `all`, `ask-changes` and `read-only`, using the one `effectFor` from `./access` |
+| `T1.permissions` | the access matrix holds for every real primary agent at `all`, `ask-changes` and `read-only` (a plugin whose methods are all reads has one matrix, so only `all` is run), using the one `effectFor` from `./access` |
 | `T1.codemode` | every tool is exposed to Code Mode, and only a declared pinned method is pinned |
 | `T1.events` | the one RPC registration carries exactly the manifest's bus events |
 | `T1.pinned-budget` | a pinned tool's signature is within about 1,000 tokens |
 | `T1.rpc-confirmation` | a non-`read` method over RPC with an allow rule and no grant is refused (LD-5) |
-| `T1.accounts` | with two aliases, a missing account is `ACCOUNT_REQUIRED`, an unknown one is `ACCOUNT_UNKNOWN`, and a cursor does not cross accounts |
+| `T1.accounts` | with two aliases and `accounts.real`, a missing account is `ACCOUNT_REQUIRED`, an unknown one is `ACCOUNT_UNKNOWN`, and a cursor does not cross accounts |
 | `T1.unsupported-host` | a release outside `>=2.4.1 <2.5.0` is refused with `HOST_UNTESTED` and a next step |
 
 T1 loads the built server entry through OpenCode's own `Plugin.Host.resolve` (`./server`, then `.`; never `main` or

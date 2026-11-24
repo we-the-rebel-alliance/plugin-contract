@@ -3,8 +3,8 @@
 // a real installed package, and so T1 can load a real plugin and see its doors, permissions and LD-5 refusal.
 //
 // Everything here is deliberately small. A real plugin calls `contract.register` and `contract.access`; the examples
-// stand in for them until those modules land, and follow the same public host API: `ctx.tool.transform`,
-// `ctx.rpc.register`, `ctx.agent.transform`, `ctx.permission.assert` and `ctx.app.version`.
+// keep a visible server part so a consumer and the kit can read a real installed package, and use the same public host
+// API: `ctx.tool.transform`, `ctx.rpc.register`, `ctx.agent.transform`, `ctx.permission.assert` and `ctx.app.version`.
 import { readFileSync } from "node:fs"
 import { effectFor, withRules } from "../../dist/access.js"
 

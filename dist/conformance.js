@@ -10,6 +10,7 @@ import "./chunks/chunk-D545RHPD.js";
 import "./chunks/chunk-SQQJ24OZ.js";
 import {
   effectFor,
+  evaluate,
   serverOf
 } from "./chunks/chunk-V3JTOS2H.js";
 import {
@@ -11490,10 +11491,10 @@ async function permissionFindings(directory, manifest, host, all, options) {
     try {
       if (run.failure !== void 0) continue;
       for (const agent of run.agents) {
-        if (lastEffect(agent.permissions, "*") === "deny") continue;
+        if (evaluate(agent.permissions, "*", "*") === "deny") continue;
         for (const [method, item] of Object.entries(manifest.methods)) {
           const expected = effectFor(item, level);
-          const actual = lastEffect(agent.permissions, `${manifest.plugin.name}.${method}`);
+          const actual = evaluate(agent.permissions, `${manifest.plugin.name}.${method}`, "*");
           if (actual === expected) continue;
           findings.push(error("T1.permissions", `access ${level} gives ${agent.id} ${actual} for ${method}, and the contract gives ${expected}`, { path: `capabilities.methods.${method}`, fix: "Generate the access rules from the access setting and each method's class and effect." }));
         }
@@ -11503,12 +11504,6 @@ async function permissionFindings(directory, manifest, host, all, options) {
     }
   }
   return findings;
-}
-function lastEffect(rules, action) {
-  return rules.findLast((rule) => wildcard(rule.action, action) && wildcard(rule.resource, "*"))?.effect ?? "ask";
-}
-function wildcard(pattern, value) {
-  return new RegExp(`^${pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".")}$`).test(value);
 }
 async function rpcFindings(manifest, run, inputs, aliases) {
   if (run.rpc === void 0) return [];
