@@ -54,10 +54,10 @@ The catalog mirrors `@opencode/util@2.4.1` (`dist/npm.js`: `cacheKey`/`key`, `gi
 - **`<name>`** is the package name for a registry target. For a Git target it is the first key of the generation root's
   `package.json` `dependencies`, falling back to the repository name in the target.
 
-A host names a registry target with its `@spec` stripped and its version resolved. The catalog tries the version, then
-`@latest`, then every entry for the package name, so a range or tag reaches the entry it names. A registry package whose
-installed name is not the target is reported, never listed: a cache entry must not be bound to another package's
-manifest.
+OpenCode reports a registry target as it is configured, including its `@spec`. The catalog tries that spec's entry, then
+`@latest`, then the version the host names, then every entry for the package name (for a target a host reports without
+a spec); the installed version chooses between them. A registry package whose installed name is not the target is
+reported, never listed: a cache entry must not be bound to another package's manifest.
 
 `cacheDirectory` names the OpenCode cache directory, the one that holds `npm/`. It defaults to
 `<XDG_CACHE_HOME or ~/.cache>/opencode`:

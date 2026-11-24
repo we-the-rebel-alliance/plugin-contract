@@ -58,11 +58,12 @@ const hostOf = (data: readonly HostPlugin[]): CatalogHost => ({ plugin: { list: 
 describe("listInstalledPlugins", () => {
   test("locates scoped and unscoped registry packages in the 2.4.1 cache", async () => {
     const cache = join(scratch, "registry", "opencode")
-    const scoped = installRegistry(cache, "@example/demo@1.0.0", "1700000000000", "@example/demo", "1.0.0")
+    const scopedTarget = "@example/demo@1.0.0"
+    const scoped = installRegistry(cache, scopedTarget, "1700000000000", "@example/demo", "1.0.0")
     const plain = installRegistry(cache, "plain@latest", "1700000000001", "plain", "2.0.0")
     const listing = await listInstalledPlugins(
       hostOf([
-        active({ type: "package", target: "@example/demo", version: "1.0.0" }),
+        active({ type: "package", target: scopedTarget, version: "1.0.0" }),
         active({ type: "package", target: "plain", version: "2.0.0" }),
         active({ type: "builtin" }),
         active({ type: "sdk" }),
@@ -72,9 +73,9 @@ describe("listInstalledPlugins", () => {
     assert.deepEqual(listing.problems, [])
     assert.equal(listing.plugins.length, 2)
     const byTarget = new Map(listing.plugins.map((plugin) => [plugin.target, plugin]))
-    assert.equal(byTarget.get("@example/demo")?.directory, scoped)
-    assert.equal(byTarget.get("@example/demo")?.package, "@example/demo")
-    assert.equal(byTarget.get("@example/demo")?.manifest.sources[0]?.id, "demo.messages")
+    assert.equal(byTarget.get(scopedTarget)?.directory, scoped)
+    assert.equal(byTarget.get(scopedTarget)?.package, "@example/demo")
+    assert.equal(byTarget.get(scopedTarget)?.manifest.sources[0]?.id, "demo.messages")
     assert.equal(byTarget.get("plain")?.directory, plain)
     assert.equal(byTarget.get("plain")?.version, "2.0.0")
     for (const plugin of listing.plugins) {
@@ -130,11 +131,20 @@ describe("listInstalledPlugins", () => {
     assert.equal(listing.plugins[0]?.version, "1.0.0")
   })
 
-  test("finds a range's own cache entry by the host's version", async () => {
+  test("finds a package entry by the host's version when the target has no spec", async () => {
     const cache = join(scratch, "range", "opencode")
     installRegistry(cache, "@example/demo@latest", "299", "@example/demo", "2.0.0")
     const directory = installRegistry(cache, "@example/demo@^1.0.0", "300", "@example/demo", "1.2.0")
     const listing = await listInstalledPlugins(hostOf([active({ type: "package", target: "@example/demo", version: "1.2.0" })]), { cacheDirectory: cache })
+    assert.deepEqual(listing.problems, [])
+    assert.equal(listing.plugins[0]?.directory, directory)
+  })
+
+  test("uses a range target's own spec entry", async () => {
+    const cache = join(scratch, "range-target", "opencode")
+    const target = "@example/demo@^1.0.0"
+    const directory = installRegistry(cache, target, "301", "@example/demo", "1.2.0")
+    const listing = await listInstalledPlugins(hostOf([active({ type: "package", target, version: "1.2.0" })]), { cacheDirectory: cache })
     assert.deepEqual(listing.problems, [])
     assert.equal(listing.plugins[0]?.directory, directory)
   })
@@ -201,7 +211,7 @@ describe("listInstalledPlugins", () => {
     writeFileSync(join(broken, "package.json"), JSON.stringify({ name: "@example/broken", version: "1.0.0", capabilities: { version: 1 } }))
     const listing = await listInstalledPlugins(
       hostOf([
-        active({ type: "package", target: "@example/demo", version: "2.0.0" }),
+        active({ type: "package", target: "@example/demo@2.0.0", version: "2.0.0" }),
         active({ type: "package", target: "@example/bare" }),
         active({ type: "package", target: "@example/broken" }),
         active({ type: "package", target: "@example/missing" }),
@@ -212,7 +222,7 @@ describe("listInstalledPlugins", () => {
     assert.deepEqual(listing.plugins, [])
     assert.equal(listing.problems.length, 5)
     const problem = (target: string) => listing.problems.find((entry) => entry.target === target)?.problems.join("\n") ?? ""
-    assert.match(problem("@example/demo"), /is version 1\.0\.0, not the 2\.0\.0/)
+    assert.match(problem("@example/demo@2.0.0"), /is version 1\.0\.0, not the 2\.0\.0/)
     assert.match(problem("@example/bare"), /declares no manifest/)
     assert.match(problem("@example/broken"), /capabilities\.plugin: Required/)
     assert.match(problem("@example/missing"), /no installed package/)

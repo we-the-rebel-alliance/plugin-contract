@@ -254,15 +254,15 @@ function registryKeys(cacheDirectory: string, name: string): string[] {
 }
 
 /**
- * A registry target's installed package. The host reports the package name and version, not the spec in the original
- * config, so try the spec the target still carries, then the version, then `@latest`, then every entry for that name
- * (a range or tag names its own entry) and prefer the version the host names.
+ * A registry target's installed package. The target is as the host configured it, so its own spec names the cache
+ * entry. `@latest` then the version the host names cover a target without one, and every entry for the package name
+ * covers a host that reports no spec; the installed version chooses between them.
  */
 function registryInstall(cacheDirectory: string, parsed: { readonly name: string; readonly spec?: string }, version: string | undefined): string | undefined {
   const keys = new Set<string>()
   if (parsed.spec !== undefined) keys.add(sanitize(`${parsed.name}@${parsed.spec}`))
-  if (version !== undefined) keys.add(sanitize(`${parsed.name}@${version}`))
   keys.add(sanitize(`${parsed.name}@latest`))
+  if (version !== undefined) keys.add(sanitize(`${parsed.name}@${version}`))
   const found: string[] = []
   const matches = (directory: string) => version === undefined || packageVersion(directory) === version
   for (const key of keys) {

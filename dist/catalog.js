@@ -217,8 +217,8 @@ function registryKeys(cacheDirectory, name) {
 function registryInstall(cacheDirectory, parsed, version) {
   const keys = /* @__PURE__ */ new Set();
   if (parsed.spec !== void 0) keys.add(sanitize(`${parsed.name}@${parsed.spec}`));
-  if (version !== void 0) keys.add(sanitize(`${parsed.name}@${version}`));
   keys.add(sanitize(`${parsed.name}@latest`));
+  if (version !== void 0) keys.add(sanitize(`${parsed.name}@${version}`));
   const found = [];
   const matches = (directory) => version === void 0 || packageVersion(directory) === version;
   for (const key of keys) {
