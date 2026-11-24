@@ -88,6 +88,7 @@ function namespaceOf(source) {
   return source.id.split(".")[0] ?? source.id;
 }
 function operationRule(source, operation, account, aliases = [], kind = operation.includes(".") ? "operation" : "tool") {
+  if (!aliases.includes(account)) return { ok: false, problems: [`the account alias "${account}" is not one this plugin declares`] };
   const namespace = namespaceOf(source);
   if (kind === "operation") return { ok: true, value: allow(`${namespace}.read`, `${account}:${operation}`) };
   const server = serverOf(namespace, account, aliases);
