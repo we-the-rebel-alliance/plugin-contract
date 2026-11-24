@@ -83,10 +83,10 @@ plugin. A new plugin starts from `plugin-template`.
 ## Install
 
 Releases are tagged GitHub releases, not npm. Each tag carries `dist/`, `SHA256SUMS`, the conformance kit as one file
-and the JSON Schema bundle. Pin the exact tag:
+and the JSON Schema bundle. Pin the exact release tag:
 
 ```sh
-npm install github:we-the-rebel-alliance/plugin-contract#v0.0.0
+npm install github:we-the-rebel-alliance/plugin-contract#<tag>
 ```
 
 The package has no runtime dependencies: `dist/` imports only Node built-ins, and a plugin bundles what it imports into
