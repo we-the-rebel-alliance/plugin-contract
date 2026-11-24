@@ -186,7 +186,7 @@ function installedName(parsed, generation) {
     }
   } catch {
   }
-  return parsed.slug;
+  return PACKAGE_NAME.test(parsed.slug) ? parsed.slug : "repository";
 }
 function packageAt(cacheDirectory, key, parsed) {
   const generation = currentGeneration(join(cacheDirectory, "npm", key));

@@ -226,6 +226,17 @@ describe("listInstalledPlugins", () => {
     assert.match(listing.problems[0]?.problems[0] ?? "", /not an npm or Git package target/)
   })
 
+  test("never uses a Git slug that would leave node_modules as the package path", async () => {
+    const cache = join(scratch, "slug", "opencode")
+    const target = "github:.."
+    const generation = writeGeneration(cache, gitKey(target, ".."), "1")
+    const directory = join(generation, "node_modules", "repository")
+    writePackage(directory, manifest(), "repository", "1.0.0")
+    const listing = await listInstalledPlugins(hostOf([active({ type: "package", target })]), { cacheDirectory: cache })
+    assert.deepEqual(listing.problems, [])
+    assert.equal(listing.plugins[0]?.directory, directory)
+  })
+
   test("reports a plugin list that cannot be read instead of throwing", async () => {
     const host: CatalogHost = {
       plugin: {

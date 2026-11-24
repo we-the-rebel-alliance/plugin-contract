@@ -217,7 +217,8 @@ function installedName(parsed: InstallTarget, generation: string): string {
     // A generation without a readable root package.json still has its package directory; the target's own name is
     // the best fallback, and the manifest read reports the rest.
   }
-  return parsed.slug
+  // The fallback becomes a path segment: a slug such as ".." must never leave node_modules.
+  return PACKAGE_NAME.test(parsed.slug) ? parsed.slug : "repository"
 }
 
 /** The installed package directory for one cache key, when its newest generation holds it. */
