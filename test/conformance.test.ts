@@ -141,6 +141,15 @@ describe("the fixture plugin, and the real host", () => {
     assert.ok(ids(await t1(directory, "2.4.1")).includes("T1.accounts"))
   })
 
+  test("a setup error holding a secret is not printed", { skip: skipHost, timeout: 30_000 }, async () => {
+    const directory = copy()
+    writeFileSync(join(directory, "index.js"), 'export default { id: "fixture", async setup() { throw new Error("ghp_0123456789abcdefghijklmnopqrstuvwxyz") } }\n')
+    const found = await t1(directory, "2.4.1")
+    const text = found.map((finding) => finding.message).join("\n")
+    assert.ok(ids(found).includes("T1.load"))
+    assert.equal(text.includes("ghp_"), false)
+  })
+
   test("a plugin with no server entry does not load", { skip: skipHost, timeout: 30_000 }, async () => {
     const directory = copy()
     rmSync(join(directory, "index.js"))

@@ -32,9 +32,8 @@ prove. `record: true` turns a missing recording into a warning while a fixture i
 manifest's `plugin.host.tested`; when any host is requested, the first unsupported release (`2.5.0`) is run as well,
 for the clean refusal.
 
-`t0` is static: it reads the namespace text recorded in `fixtures/conformance.json` (a real T1 run writes it through
-`plugin-kit record`). `runConformance` measures it live from T1 instead, so the CI gate always uses the registered
-text. `t1` loads the plugin on one OpenCode release. `runConformance` runs T0, the declaration and its recordings, and
+`t0` is static: it reads the namespace text recorded in `fixtures/conformance.json`. `runConformance` measures it live
+from T1 instead, so the CI gate always uses the registered text. `t1` loads the plugin on one OpenCode release. `runConformance` runs T0, the declaration and its recordings, and
 T1.
 
 ## T0, the static gate
