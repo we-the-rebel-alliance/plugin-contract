@@ -28,8 +28,7 @@ Each is a closed schema: a producer must send a known value, and an unknown key 
 | `isOutputName(name)` | true for a registered name |
 | `outputValidator(name)` | the validator, or undefined |
 | `checkOutput(name, data, schema?)` | `data` checked against the shape; a name the registry does not hold is a problem, not a throw |
-| `isExtensionOutput(name)` | true for `x-<name>/<name>` |
-| `EXTENSION_OUTPUT` | that rule |
+| `isExtensionOutput(name)` | true for `x-<name>/<name>` (the shared `EXTENSION_NAME` rule) |
 
 An `x-` shape has no registry schema: its source carries the JSON Schema inline as `outputSchema`, and `checkOutput`
 uses it. The registry only grows within wire version 1: a name is never removed or narrowed, so a source that validates

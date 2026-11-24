@@ -77,7 +77,7 @@ does not.
 
 Every failure reads `CODE: What happened. Next step: What to do.` from one table (contract §12). A plugin may add a code;
 it declares the code in its manifest. The events module exports `ERROR_CODES`, `SourceError` and `parseSourceError`, and
-`canonicalCode` answers whether a code is in the table.
+`errorCodeOf` answers whether a code is in the table.
 
 ## Conformance
 

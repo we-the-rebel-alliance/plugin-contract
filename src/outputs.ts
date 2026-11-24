@@ -13,6 +13,7 @@
  */
 import * as z from "zod"
 import type { Checked, Validator } from "./internal/checked.ts"
+import { EXTENSION_NAME } from "./internal/events.ts"
 import { problemsOf, validator } from "./internal/validator.ts"
 
 const text = (max: number) => z.string().max(max)
@@ -252,12 +253,12 @@ export function outputValidator(name: string): Validator<unknown> | undefined {
   return isOutputName(name) ? OUTPUTS[name] : undefined
 }
 
-/** An extension name: `x-<namespace>/<name>`. Its schema travels with the source, inline. */
-export const EXTENSION_OUTPUT = /^x-[a-z][a-z0-9-]{0,31}\/[a-z][a-z0-9-]{0,31}$/
-
-/** True when `name` is an extension output, which the registry does not hold. */
+/**
+ * True when `name` is an extension output (`EXTENSION_NAME`), which the registry does not hold. Its schema travels with
+ * the source, inline.
+ */
 export function isExtensionOutput(name: unknown): name is string {
-  return typeof name === "string" && EXTENSION_OUTPUT.test(name)
+  return typeof name === "string" && EXTENSION_NAME.test(name)
 }
 
 /**

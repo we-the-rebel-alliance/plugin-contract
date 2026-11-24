@@ -455,17 +455,12 @@ export const ERROR_CODES = [
 export type ErrorCode = (typeof ERROR_CODES)[number]
 
 /** The table's code for `code`, or undefined for a code the table does not hold. */
-export function canonicalCode(code: string): ErrorCode | undefined {
+export function errorCodeOf(code: string): ErrorCode | undefined {
   return (ERROR_CODES as readonly string[]).includes(code) ? (code as ErrorCode) : undefined
 }
 
 /**
  * A refusal in the contract's form, `CODE: what happened. Next step: what to do.`, with the code and its data. A
- * `RATE_LIMITED` or `BUDGET_EXCEEDED` may carry `retryAfterSec`; a `CURSOR_EXPIRED` carries the `gap`.
- */
-
-/**
- * A refusal in the family's form, `CODE: what happened. Next step: what to do.`, with the code and its data. A
  * `RATE_LIMITED` or `BUDGET_EXCEEDED` may carry `retryAfterSec`; a `CURSOR_EXPIRED` carries the `gap`.
  */
 export class SourceError extends Error {
@@ -485,21 +480,21 @@ export class SourceError extends Error {
   }
 }
 
-const FAMILY_MESSAGE = /^([A-Z][A-Z0-9_]*): ([^]*?)(?:\. Next step: ([^]*))?$/
+const SOURCE_ERROR_MESSAGE = /^([A-Z][A-Z0-9_]*): ([^]*?)(?:\. Next step: ([^]*))?$/
 
 /**
  * The code, its canonical code, what happened and the next step, read from a refusal: a `SourceError`, or any error
- * whose message is in the family's form. Undefined for an error with no code.
+ * whose message is in the contract's form. Undefined for an error with no code.
  */
 export function parseSourceError(error: unknown): { code: string; canonical?: ErrorCode; what: string; next?: string } | undefined {
   if (error instanceof SourceError) {
-    const canonical = canonicalCode(error.code)
+    const canonical = errorCodeOf(error.code)
     return { code: error.code, ...(canonical ? { canonical } : {}), what: error.what, next: error.next }
   }
   const message = error instanceof Error ? error.message : typeof error === "string" ? error : undefined
-  const match = message === undefined ? null : FAMILY_MESSAGE.exec(message.split("\n", 1)[0] ?? "")
+  const match = message === undefined ? null : SOURCE_ERROR_MESSAGE.exec(message.split("\n", 1)[0] ?? "")
   if (!match) return undefined
-  const canonical = canonicalCode(match[1]!)
+  const canonical = errorCodeOf(match[1]!)
   return { code: match[1]!, ...(canonical ? { canonical } : {}), what: match[2]!, ...(match[3] === undefined ? {} : { next: match[3] }) }
 }
 

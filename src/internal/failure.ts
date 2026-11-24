@@ -1,10 +1,10 @@
 /**
  * A read's failure, in the contract's form: `CODE: what happened. Next step: …` (contract §12).
  *
- * The codes are the one error table in `events` (`ERROR_CODES`). A plugin's own code is read through `canonicalCode`;
- * a code the table does not hold is `UNAVAILABLE`.
+ * The codes are the one error table in `events` (`ERROR_CODES`). A plugin's own code is read through `errorCodeOf`; a
+ * code the table does not hold is `UNAVAILABLE`.
  */
-import { canonicalCode, ERROR_CODES, type ErrorCode } from "./events.ts"
+import { ERROR_CODES, errorCodeOf, type ErrorCode } from "./events.ts"
 
 /** The codes a read answers: the events table. */
 export const FAILURE_CODES = ERROR_CODES
@@ -42,7 +42,7 @@ export function failureFromError(error: unknown): ReadFailure {
   const data = typeof record["data"] === "object" && record["data"] !== null ? (record["data"] as Record<string, unknown>) : {}
   const message = typeof record["message"] === "string" ? record["message"] : String(error)
   const raw = [record["code"], data["code"], /^([A-Z][A-Z_]+):/.exec(message)?.[1]].find((code): code is string => typeof code === "string")
-  const canonical = raw === undefined ? undefined : canonicalCode(raw)
+  const canonical = raw === undefined ? undefined : errorCodeOf(raw)
   const refusedInput = canonical === "INPUT_INVALID" || canonical === "SOURCE_UNKNOWN"
   const code = canonical !== undefined && (FAILURE_CODES as readonly string[]).includes(canonical) ? (canonical as FailureCode) : undefined
   const first = message.split(/\r?\n/, 1)[0]!.slice(0, 300)
