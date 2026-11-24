@@ -7,7 +7,7 @@ import {
   effectFor,
   evaluate,
   methodAction
-} from "./chunks/chunk-EDGC5UUW.js";
+} from "./chunks/chunk-HBOP7XMF.js";
 import {
   assertPluginName,
   busEvents

@@ -110,6 +110,7 @@ export function operationRule(
   aliases: readonly string[] = [],
   kind: "operation" | "tool" = operation.includes(".") ? "operation" : "tool",
 ): Checked<PermissionRule> {
+  if (!aliases.includes(account)) return { ok: false, problems: [`the account alias "${account}" is not one this plugin declares`] }
   const namespace = namespaceOf(source)
   if (kind === "operation") return { ok: true, value: allow(`${namespace}.read`, `${account}:${operation}`) }
   const server = serverOf(namespace, account, aliases)

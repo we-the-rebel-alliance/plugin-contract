@@ -225,13 +225,13 @@ describe("generating access into agents", () => {
 
 describe("sessionRules", () => {
   test("deny everything, allow the method on *, and each operation on <account>:<operation>", () => {
-    assert.deepEqual(rulesOf(sessionRules(messages, { source: "demo.messages", account: ana })), [
+    assert.deepEqual(rulesOf(sessionRules(messages, { source: "demo.messages", account: ana }, [ana])), [
       DENY_ALL,
       { action: "demo.events_list", resource: "*", effect: "allow" },
       { action: "demo.read", resource: `${ana}:demo.messages.list`, effect: "allow" },
       { action: "demo.read", resource: `${ana}:demo.messages.get`, effect: "allow" },
     ])
-    assert.deepEqual(rulesOf(sessionRules(channels, { source: "demo.channels", account: ana })), [
+    assert.deepEqual(rulesOf(sessionRules(channels, { source: "demo.channels", account: ana }, [ana])), [
       DENY_ALL,
       { action: "demo.list_channels", resource: "*", effect: "allow" },
       { action: "demo.read", resource: `${ana}:demo.channels.list`, effect: "allow" },
@@ -239,13 +239,13 @@ describe("sessionRules", () => {
   })
 
   test("derive each operation's rule as the conformance kit does", () => {
-    assert.deepEqual(operationRule(messages, "demo.messages.get", ana), { ok: true, value: { action: "demo.read", resource: `${ana}:demo.messages.get`, effect: "allow" } })
+    assert.deepEqual(operationRule(messages, "demo.messages.get", ana, [ana]), { ok: true, value: { action: "demo.read", resource: `${ana}:demo.messages.get`, effect: "allow" } })
     assert.deepEqual(operationRule({ id: "slack.workspace" }, "slack_read_channel", "work", ["work"]), { ok: true, value: { action: "slack-work_slack_read_channel", resource: "*", effect: "allow" } })
     assert.equal(namespaceOf(messages), "demo")
   })
 
   test("fence a session exactly: what is declared runs, nothing else does, and no other account", () => {
-    const rules = rulesOf(sessionRules(messages, { source: "demo.messages", account: ana }))
+    const rules = rulesOf(sessionRules(messages, { source: "demo.messages", account: ana }, [ana]))
     const session = [{ action: "*", resource: "*", effect: "allow" as const }, ...rules]
     assert.equal(evaluate(session, "demo.events_list"), "allow")
     assert.equal(evaluate(session, "demo.read", `${ana}:demo.messages.get`), "allow")
@@ -257,9 +257,9 @@ describe("sessionRules", () => {
 
   test("refuse an account that would widen a rule, and a grant for another source", () => {
     for (const account of ["*", "ana*", "a?a", "ana:evil", "ana b", "", "x".repeat(321)]) {
-      assert.equal(sessionRules(messages, { source: "demo.messages", account }).ok, false, account)
+      assert.equal(sessionRules(messages, { source: "demo.messages", account }, [account]).ok, false, account)
     }
-    assert.equal(sessionRules(messages, { source: "demo.channels", account: ana }).ok, false)
+    assert.equal(sessionRules(messages, { source: "demo.channels", account: ana }, [ana]).ok, false)
   })
 
   test("a grant for work uses work's MCP server and cannot reach the default alias's tools", () => {
@@ -288,17 +288,18 @@ describe("sessionRules", () => {
     const missing = sessionRules(recordings, { source: "demo.recordings", account: "work" })
     assert.equal(missing.ok, false, "a missing alias list does not fall back to the grant's own account")
     if (!missing.ok) assert.match(missing.problems[0]!, /not an account alias|not one this plugin declares/)
+    assert.equal(sessionRules(messages, { source: "demo.messages", account: "work" }, ["default"]).ok, false, "a dotted operation also checks the alias")
   })
 
   test("refuse a declared operation with a wildcard", () => {
     const loose = { ...demo, sources: [{ ...messages, operations: [...(messages.operations ?? []), "demo.*"] }] } as Manifest
-    assert.match(problemsIn(sessionRules(loose.sources[0]!, { source: "demo.messages", account: ana }))[0]!, /wildcard/)
+    assert.match(problemsIn(sessionRules(loose.sources[0]!, { source: "demo.messages", account: ana }, [ana]))[0]!, /wildcard/)
   })
 })
 
 describe("detail and probe rules", () => {
   test("a detail read runs under its declared method's rules", () => {
-    const rules = detailRules(messages, "demo.messages.thread", { source: "demo.messages", account: ana })
+    const rules = detailRules(messages, "demo.messages.thread", { source: "demo.messages", account: ana }, [ana])
     assert.deepEqual(rulesOf(rules), [
       DENY_ALL,
       { action: "demo.events_list", resource: "*", effect: "allow" },
@@ -306,17 +307,17 @@ describe("detail and probe rules", () => {
       { action: "demo.read", resource: `${ana}:demo.messages.get`, effect: "allow" },
       { action: "demo.events_detail", resource: "*", effect: "allow" },
     ])
-    assert.equal(detailRules(messages, "demo.nothing", { source: "demo.messages", account: ana }).ok, false)
+    assert.equal(detailRules(messages, "demo.nothing", { source: "demo.messages", account: ana }, [ana]).ok, false)
   })
 
   test("a probe is fenced to the probe action and its identity operations", () => {
-    const rules = probeRules(messages, ana, ["demo.users.get"], "demo.probe")
+    const rules = probeRules(messages, ana, ["demo.users.get"], "demo.probe", [ana])
     assert.ok(rules.ok)
     if (!rules.ok) return
     assert.equal(evaluate(rules.value, "demo.probe"), "allow")
     assert.equal(evaluate(rules.value, "demo.read", `${ana}:demo.users.get`), "allow")
     assert.equal(evaluate(rules.value, "demo.read", `${ana}:demo.users.delete`), "deny")
-    assert.equal(probeRules(messages, "*", [], "demo.probe").ok, false)
+    assert.equal(probeRules(messages, "*", [], "demo.probe", [ana]).ok, false)
   })
 })
 
