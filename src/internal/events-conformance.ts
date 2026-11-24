@@ -1,271 +1,308 @@
 /**
- * `eventsListConformance`: the events half of the conformance kit (contract §7 and §16).
+ * The recorded-source checks (contract §7, §16): every answer a plugin's own test recorded, judged against the
+ * manifest and the `events` module's authority.
  *
- * With a recorded fixture it walks a source's `events_list` whole and page by page, and checks every result against
- * `resultProblems`. Each optional part of the page is checked when the page carries it (`refused`, `failed`, `gap`,
- * `removals`, `cost`, `scope` and `asOf`), and, where a check needs to know something about the source, when the
- * fixture says so:
+ * The kit does not call the provider and does not replay a call: a plugin records what its methods answered under
+ * `fixtures/conformance.json`, and these checks read the recording. A page is checked against `resultProblems` (the
+ * same call `read.acceptAnswer` makes), the source's `reads` and `maxBytes`, and the optional parts a page carries:
+ * `failed` holds the cursor, `refused` is final, `removals` are final, `gap` is answered once, a billed source reports
+ * its cost, and an event's `thumbnail` appears only when the read asked for it, on a declared host, outside the hash
+ * (#42).
  *
- * - `maxBytes`: every page within the source's declared `maxBytes`;
- * - `kinds`: every event of a kind the source declares (`reads`);
- * - `refused`: the external_ids a full listing refuses, in order;
- * - `scope` and `scopeEcho`: the scope passed on every call, and echoed by every page;
- * - `binding`: the cursor is the library's bound cursor, and the same state bound to another plugin, account or scope
- *   is refused;
- * - `codes`: every refusal carries the table's code (`CURSOR_INVALID`, `INPUT_INVALID`, `SOURCE_UNKNOWN`);
- * - and always: no secret pattern survives in an event's title or text.
- *
- * **The seam for a consumer's kit.** `hooks.onCall` sees every call and its answer (a recording permission context
- * records the assertions here), and `hooks.after` adds the problems of the checks the consumer owns: `probe` reads no
- * content, `details` only with in-scope event fields, `failed[]` holds the cursor, and `gap` and `CURSOR_EXPIRED`
- * round-trip. This module does not implement those; it gives them every page the walk listed.
+ * A snapshot is checked against its output shape (the registry's, or an `x-` source's inline `outputSchema`); a probe
+ * against `probeResultProblems`; a detail read only with the event fields it declares; a suggest answer against the
+ * values a person may confirm.
  */
-import { decodeBoundCursor, encodeBoundCursor, type CursorBinding, type Scope } from "../cursor.ts"
-import {
-  isEventKindIn,
-  MAX_PAGE_BYTES,
-  PAGE,
-  parseSourceError,
-  resultProblems,
-  sinceTime,
-  type EventsListInput,
-  type EventsListResult,
-  type EventsOwner,
-} from "./events.ts"
-import { secretKinds } from "./secrets.ts"
+import { REFUSAL_REASONS, GAP_REASONS, PAGE, eventHash, isEventKindIn, removalProblems, secretKinds, sourceNamespace, type EventsListResult, type SourceEvent } from "./events.ts"
+import { checkOutput } from "../outputs.ts"
+import { acceptAnswer } from "../read.ts"
+import { maxBytesOf, ownerProblems, thumbnailUrlProblems, type Detail, type SourceItem } from "../manifest.ts"
+import { error, warning, type Finding } from "./conformance/report.ts"
 
-/** What one call answered, for `hooks.onCall`. */
-export interface ConformanceCall {
-  /** The check that made the call, such as "the first page" or "a malformed cursor". */
-  readonly what: string
-  readonly input: EventsListInput
-  readonly result?: unknown
-  readonly error?: unknown
+/** One recorded `events_list` call: its input, what it was expected to answer, and the answer. */
+export interface RecordedCase {
+  readonly name?: string | undefined
+  readonly input?: Readonly<Record<string, unknown>> | undefined
+  /** `page`, `empty`, `expired`, or the code a refusal carries (or `{ refuses: "<code>: …" }`). Absent: page. */
+  readonly expect?: unknown
+  /** The refusal's message, when the case is refused. */
+  readonly refuses?: string | undefined
+  readonly answer?: unknown
 }
 
-/** Where a consumer's kit plugs in (see the module's comment). */
-export interface ConformanceHooks {
-  readonly onCall?: (call: ConformanceCall) => void
-  readonly after?: (walk: { readonly whole?: EventsListResult; readonly pages: readonly EventsListResult[] }) => readonly string[] | Promise<readonly string[]>
+/** What one events source records. */
+export interface RecordedSource {
+  readonly cases?: readonly RecordedCase[] | undefined
+  readonly probe?: { readonly answer?: unknown } | undefined
+  readonly details?: readonly RecordedDetail[] | undefined
+  readonly suggest?: { readonly answer?: unknown } | undefined
+  readonly snapshot?: { readonly answer?: unknown } | undefined
+  readonly atomicPages?: { readonly reason?: unknown } | undefined
+  readonly noExpiry?: { readonly reason?: unknown } | undefined
+  readonly machineActors?: readonly string[] | undefined
 }
 
-/** What a source's fixture holds, for `eventsListConformance`. */
-export interface ConformanceFixtures {
-  /** The `source` every result and event names. */
-  readonly source: string
-  /** The `account` every result and event names; also passed as the input's account when set. */
-  readonly account?: string
-  /** Pass `source` on every call, as a collector does for a plugin with several sources. */
-  readonly sourceInput?: boolean
-  /** The owner every result names. */
-  readonly owner?: EventsOwner
-  /** Passed as `since` on every call without a cursor. Every event must be at or after it. */
-  readonly since?: string
-  /** The external_ids a full listing from `since` yields, oldest first. At most `PAGE.max`. */
-  readonly expected: readonly string[]
-  /** The limit of the paged walk; 2 by default. */
-  readonly pageSize?: number
-
-  // The final design's additions. Each is checked only when given.
-
-  /** The source's declared `maxBytes`: every page's JSON is at most this. `MAX_PAGE_BYTES` when absent. */
-  readonly maxBytes?: number
-  /** The kinds the source declares (`reads`): every event is one of them. */
-  readonly kinds?: readonly string[]
-  /**
-   * The source id's first segment (`acme` for `acme.reminders`): every `x-` kind must be in it. Without it, any
-   * well-formed `x-<namespace>/<kind>` passes.
-   */
-  readonly namespace?: string
-  /** The external_ids a full listing from `since` refuses, in order. */
-  readonly refused?: readonly string[]
-  /** Passed as `scope` on every call. */
-  readonly scope?: Scope
-  /** Every page echoes the scope (canonical). */
-  readonly scopeEcho?: boolean
-  /** The source uses the library's bound cursor for this plugin (`../cursor`, version 2). */
-  readonly binding?: { readonly plugin: string }
-  /** Every refusal carries the table's code. */
-  readonly codes?: boolean
-  readonly hooks?: ConformanceHooks
+/** One recorded detail read. */
+export interface RecordedDetail {
+  readonly id: string
+  readonly scope?: Readonly<Record<string, readonly string[]>> | undefined
+  readonly event?: Readonly<Record<string, unknown>> | undefined
+  readonly expect?: unknown
+  readonly refuses?: string | undefined
+  readonly answer?: unknown
 }
 
-export type EventsList = (input: EventsListInput) => Promise<unknown>
+/** The name a page gives its source: the fixed `input.source`, or the source's id when it names none. */
+export function pageSourceName(source: SourceItem): string {
+  const named = source.input?.["source"]
+  return typeof named === "string" ? named : source.id
+}
 
-type Listed = { readonly result?: EventsListResult; readonly error?: unknown }
+const plain = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
+const line = (value: unknown): string => (value instanceof Error ? value.message.split("\n", 1)[0] ?? "" : String(value))
+/** The code a recorded case expects: a string code, or `{ refuses: "<code>: …" }`. */
+const codesOf = (expect: unknown): string | undefined => {
+  if (typeof expect === "string" && !["page", "empty", "expired"].includes(expect)) return expect
+  if (plain(expect) && typeof expect["refuses"] === "string") return expect["refuses"].split(":", 1)[0] ?? undefined
+  return undefined
+}
+/** A recorded refusal reads `CODE: What happened. Next step: What to do.` */
+function refusalFindings(item: RecordedCase, where: string): Finding[] {
+  const findings: Finding[] = []
+  const message = item.refuses
+  if (typeof message !== "string") return findings
+  const code = codesOf(item.expect) ?? (item.expect === "expired" ? "CURSOR_EXPIRED" : undefined)
+  if (code !== undefined && !message.startsWith(`${code}: `)) findings.push(error("pages.refusal", `${where} refuses with "${message.slice(0, 120)}", and its case expects ${code}`, { path: "fixtures/conformance.json" }))
+  if (!message.includes("Next step: ")) findings.push(error("pages.refusal", `${where}'s refusal has no "Next step: ", and every failure reads CODE: What happened. Next step: What to do.`, { path: "fixtures/conformance.json" }))
+  return findings
+}
 
-const describeError = (error: unknown) => (error instanceof Error ? error.message.split("\n", 1)[0] : String(error))
-
-/**
- * Every way `list` breaks the contract over `fixtures`, one sentence each; none when it keeps it. It lists everything
- * at once and page by page, checks each result, that the pages join up to exactly the expected events with nothing
- * repeated or skipped, that an earlier cursor lists the same page again, that the last cursor lists nothing, that every
- * result names the source and account, an empty first page included, that the owner, account and hashes hold steady,
- * and that a bad limit, a source the plugin does not have or a cursor it did not issue is refused. `list` runs the
- * source's events_list as its tool or RPC method does, input check included, over data that does not change.
- */
-export async function eventsListConformance(list: EventsList, fixtures: ConformanceFixtures): Promise<string[]> {
-  const problems: string[] = []
-  const hooks = fixtures.hooks ?? {}
-  const maxBytes = fixtures.maxBytes ?? MAX_PAGE_BYTES
-  const call = async (input: EventsListInput, what: string): Promise<Listed> => {
-    try {
-      const result = (await list(input)) as EventsListResult
-      hooks.onCall?.({ what, input, result })
-      return { result }
-    } catch (error) {
-      hooks.onCall?.({ what, input, error })
-      return { error }
-    }
+/** Every finding for one events source's recorded cases. */
+export function eventsFindings(options: {
+  readonly plugin: string
+  readonly source: Extract<SourceItem, { kind: "events" }>
+  readonly recorded: RecordedSource
+  readonly record?: boolean | undefined
+}): Finding[] {
+  const { plugin, source, recorded } = options
+  const cases = recorded.cases ?? []
+  const findings: Finding[] = []
+  if (cases.length === 0) {
+    findings.push(
+      options.record === true
+        ? warning("pages.recorded", `${source.id} has no recorded page, and the fixture is being recorded`, { path: "fixtures/conformance.json" })
+        : error("pages.recorded", `${source.id} records no page, so nothing shows what its read answers`, {
+            path: "fixtures/conformance.json",
+            fix: "Record at least one page from a real account with plugin-kit record.",
+          }),
+    )
+    return findings
   }
-  const scope: EventsListInput = {
-    ...(fixtures.account === undefined ? {} : { account: fixtures.account }),
-    ...(fixtures.sourceInput ? { source: fixtures.source } : {}),
-    ...(fixtures.scope === undefined ? {} : { scope: fixtures.scope }),
-  }
-  const base: EventsListInput = { ...(fixtures.since === undefined ? {} : { since: fixtures.since }), ...scope }
-  const after = (cursor: string): EventsListInput => ({ cursor, ...scope })
-  const pageSize = fixtures.pageSize ?? 2
-  const since = fixtures.since === undefined ? undefined : sinceTime(fixtures.since)
-  const owners = new Set<string>()
-  const accounts = new Set<string>()
   const hashes = new Map<string, string>()
-
-  const check = (listed: Listed, what: string, limit: number): EventsListResult | undefined => {
-    if (listed.error !== undefined) {
-      problems.push(`${what} failed: ${describeError(listed.error)}`)
-      return undefined
+  let sawThumbnail = false
+  for (const [index, item] of cases.entries()) {
+    const where = `events_list(${item.name ?? `case ${index + 1}`})`
+    const refusal = codesOf(item.expect)
+    findings.push(...refusalFindings(item, where))
+    if (item.answer === undefined) {
+      if (refusal === undefined && item.expect !== "expired") findings.push(error("pages.answer", `${where} records no answer and no refusal code`, { path: "fixtures/conformance.json" }))
+      if (item.expect === "expired" && item.refuses === undefined) findings.push(error("pages.answer", `${where} is an expired-cursor case with neither a gap nor a CURSOR_EXPIRED refusal`, { path: "fixtures/conformance.json" }))
+      continue
     }
-    const found = resultProblems(listed.result, limit, maxBytes)
-    problems.push(...found.map((problem) => `${what}: ${problem}`))
-    if (found.length > 0) return undefined
-    const result = listed.result!
-    if (result.source !== fixtures.source) problems.push(`${what}: the result names the source ${result.source}, not ${fixtures.source}`)
-    if (fixtures.account !== undefined && result.account !== fixtures.account) problems.push(`${what}: the result names the account ${result.account}, not ${fixtures.account}`)
-    accounts.add(result.account)
-    owners.add(JSON.stringify(result.owner))
-    if (fixtures.owner && JSON.stringify(result.owner) !== JSON.stringify({ id: fixtures.owner.id, label: fixtures.owner.label, ...(fixtures.owner.verified === undefined ? {} : { verified: fixtures.owner.verified }) })) problems.push(`${what}: the owner is not the fixture's owner`)
-    if (fixtures.scopeEcho && fixtures.scope !== undefined) {
-      if (result.scope === undefined) problems.push(`${what}: the result does not echo the scope`)
-      else if (JSON.stringify(result.scope) !== JSON.stringify(sortedScope(fixtures.scope))) problems.push(`${what}: the result's scope is not the call's scope`)
+    if (refusal !== undefined) {
+      findings.push(error("pages.answer", `${where} expects the refusal ${refusal} and records an answer`, { path: "fixtures/conformance.json" }))
+      continue
     }
-    for (const event of result.events) {
-      if (event.source !== fixtures.source) problems.push(`${what}: an event names the source ${event.source}, not ${fixtures.source}`)
-      if (fixtures.account !== undefined && event.account !== fixtures.account) problems.push(`${what}: an event names the account ${event.account}, not ${fixtures.account}`)
-      if (since !== undefined && Date.parse(event.occurred_at) < since) problems.push(`${what}: the event ${event.external_id} is from before since`)
-      if (fixtures.namespace !== undefined && !isEventKindIn(event.kind, fixtures.namespace)) problems.push(`${what}: the event ${event.external_id} is a ${event.kind}, outside the namespace ${fixtures.namespace}`)
-      if (fixtures.kinds !== undefined && !fixtures.kinds.includes(event.kind)) problems.push(`${what}: the event ${event.external_id} is a ${event.kind}, which the source does not declare`)
-      const secrets = secretKinds([event.title, event.text].filter(Boolean).join("\n"))
-      if (secrets.length > 0) problems.push(`${what}: the event ${event.external_id} holds a secret (${secrets.join(", ")}); it belongs in refused[]`)
-      const known = hashes.get(event.external_id)
-      if (known !== undefined && known !== event.hash) problems.push(`${what}: the event ${event.external_id} has another hash than before`)
-      hashes.set(event.external_id, event.hash)
+    const answer = item.answer
+    const input = item.input ?? {}
+    const asked = input["thumbnails"] === true
+    if (asked && source.thumbnails !== true) {
+      findings.push(error("pages.thumbnail", `${where} asks for thumbnails, and ${source.id} does not declare thumbnails`, { path: `capabilities.sources.${source.id}.thumbnails`, fix: "Declare thumbnails: true and urlHosts, or stop asking." }))
     }
-    return result
-  }
-  const ids = (result: EventsListResult | undefined) => result?.events.map((event) => event.external_id) ?? []
-
-  // Everything at once.
-  const whole = check(await call({ ...base, limit: PAGE.max }, "one call with the largest limit"), "one call with the largest limit", PAGE.max)
-  if (whole) {
-    if (JSON.stringify(ids(whole)) !== JSON.stringify(fixtures.expected)) problems.push(`one call with the largest limit lists [${ids(whole).join(", ")}], not [${fixtures.expected.join(", ")}]`)
-    if (fixtures.expected.length <= PAGE.max && whole.more) problems.push("one call with the largest limit lists everything but says more")
-    if (fixtures.refused !== undefined) {
-      const refusedIds = (whole.refused ?? []).map((entry) => entry.external_id)
-      if (JSON.stringify(refusedIds) !== JSON.stringify(fixtures.refused)) problems.push(`one call with the largest limit refuses [${refusedIds.join(", ")}], not [${fixtures.refused.join(", ")}]`)
+    if (!asked && source.thumbnails === true) {
+      // A source that declares thumbnails may still answer without them; what it may not do is answer one unasked.
+      for (const event of eventsOf(answer)) {
+        if (event["thumbnail"] !== undefined) findings.push(error("pages.thumbnail", `${where} answers a thumbnail although the read did not ask for one`, { path: "fixtures/conformance.json" }))
+      }
     }
-  }
-
-  // Page by page.
-  const pages: EventsListResult[] = []
-  let page = check(await call({ ...base, limit: pageSize }, "the first page"), "the first page", pageSize)
-  const most = fixtures.expected.length + (fixtures.refused?.length ?? 0) + 10
-  while (page) {
-    pages.push(page)
-    if (!page.more) break
-    if (pages.length > most) {
-      problems.push(`the paged walk did not end after ${most} pages`)
-      break
+    const account = plain(answer) && typeof answer["account"] === "string" ? answer["account"] : "default"
+    const limit = typeof input["limit"] === "number" && Number.isInteger(input["limit"]) ? input["limit"] : PAGE.max
+    const accepted = acceptAnswer(source, account, answer, { limit, ...(asked ? { thumbnails: true as const } : {}) })
+    if (!accepted.ok) {
+      findings.push(error("pages.shape", `${where}: ${accepted.failure.message}`, { path: "fixtures/conformance.json", fix: "Fix the page the method answers, then record it again." }))
+      continue
     }
-    const what = `page ${pages.length + 1}`
-    page = check(await call({ ...after(page.cursor), limit: pageSize }, what), what, pageSize)
-  }
-  const walked = pages.flatMap(ids)
-  if (JSON.stringify(walked) !== JSON.stringify(fixtures.expected)) problems.push(`the pages of ${pageSize} list [${walked.join(", ")}], not [${fixtures.expected.join(", ")}]`)
-
-  // An earlier cursor lists the same page again.
-  if (pages.length >= 2) {
-    const again = check(await call({ ...after(pages[0]!.cursor), limit: pageSize }, "the first cursor again"), "the first cursor again", pageSize)
-    if (again && JSON.stringify(again.events) !== JSON.stringify(pages[1]!.events)) problems.push("the first cursor, used again, does not list the second page again")
-  }
-
-  // The last cursor lists nothing.
-  const last = pages.at(-1)
-  if (last && !last.more) {
-    const end = check(await call({ ...after(last.cursor), limit: pageSize }, "the last cursor"), "the last cursor", pageSize)
-    if (end && (end.events.length > 0 || end.more)) problems.push("the last cursor lists events again, or says more")
-  }
-
-  // An empty first page still names its source and account, so a consumer can bind a source that has nothing yet.
-  const empty = check(await call({ ...scope, since: "2999-01-01T00:00:00Z", limit: pageSize }, "an empty first page"), "an empty first page", pageSize)
-  if (empty && (empty.events.length > 0 || empty.more)) problems.push("a first page from a since in the future lists events, or says more")
-
-  if (owners.size > 1) problems.push("the owner changes between calls")
-  if (accounts.size > 1) problems.push("the account changes between calls")
-
-  // Refusals. With `codes`, each must carry one of the table's codes.
-  const refused = async (input: EventsListInput, what: string, codes: readonly string[]) => {
-    const listed = await call(input, what)
-    if (listed.error === undefined) {
-      problems.push(`${what} was not refused`)
-      return
+    if (!plain(answer)) continue
+    const page = answer as unknown as EventsListResult
+    if (page.plugin !== undefined && page.plugin !== plugin) findings.push(error("pages.plugin", `${where} names the plugin ${page.plugin}, not ${plugin}`, { path: "fixtures/conformance.json" }))
+    if (typeof source.input?.["source"] === "string" && page.source !== pageSourceName(source)) {
+      findings.push(error("pages.source", `${where} names the source ${page.source}, not ${pageSourceName(source)}`, { path: `capabilities.sources.${source.id}.input` }))
     }
-    if (fixtures.codes) {
-      const parsed = parseSourceError(listed.error)
-      if (!parsed?.canonical || !codes.includes(parsed.canonical)) problems.push(`${what} was refused without the code ${codes.join(" or ")}${parsed ? ` (it says ${parsed.code})` : ""}`)
+    if (item.expect === "empty" && page.events.length > 0) findings.push(error("pages.answer", `${where} expects an empty page and lists ${page.events.length} events`, { path: "fixtures/conformance.json" }))
+    if (item.expect === "expired" && page.gap?.reason !== "expired") findings.push(error("pages.gap", `${where} expects an expired cursor and answers no gap.reason "expired"`, { path: "fixtures/conformance.json" }))
+    if (page.gap !== undefined) findings.push(...gapFindings(source, item, page, cases))
+    if (Array.isArray(page.failed) && page.failed.length > 0) {
+      const held = typeof input["cursor"] === "string" ? input["cursor"] : ""
+      if (page.cursor !== held) findings.push(error("pages.cursor", `${where} carries failed[] and answers another cursor than the one it was read with`, { path: "fixtures/conformance.json", fix: "A failed entry holds the consumer's cursor back." }))
+    }
+    if (Array.isArray(page.refused)) {
+      for (const [at, entry] of page.refused.entries()) {
+        if (plain(entry) && !(REFUSAL_REASONS as readonly unknown[]).includes(entry["reason"])) findings.push(error("pages.refused", `${where} refused[${at}] names no reason of ${REFUSAL_REASONS.join(", ")}`, { path: "fixtures/conformance.json" }))
+      }
+    }
+    findings.push(...removalProblems(page).map((problem) => error("pages.removals", `${where}: ${problem}`, { path: "fixtures/conformance.json" })))
+    if (source.cost.class === "billed" && page.cost === undefined) findings.push(error("pages.cost", `${where} carries no cost, and ${source.id} is a billed source`, { path: "fixtures/conformance.json" }))
+    for (const [at, event] of page.events.entries()) {
+      if (typeof event.kind === "string" && !isEventKindIn(event.kind, sourceNamespace(source.id))) {
+        findings.push(error("pages.kinds", `${where} events[${at}] is a ${event.kind}, outside the namespace ${sourceNamespace(source.id)}`, { path: `capabilities.sources.${source.id}.reads` }))
+      }
+      const kinds = secretKinds([event.title, event.text].filter(Boolean).join("\n"))
+      if (kinds.length > 0) findings.push(error("pages.secrets", `${where} events[${at}] holds a secret (${kinds.join(", ")}): it belongs in refused[] with reason "secret"`, { path: "fixtures/conformance.json" }))
+      const before = hashes.get(`${event.account}\u0000${event.external_id}`)
+      if (before !== undefined && before !== event.hash) findings.push(error("pages.hash", `${where} lists ${event.external_id} with another hash than an earlier page`, { path: "fixtures/conformance.json" }))
+      else hashes.set(`${event.account}\u0000${event.external_id}`, event.hash)
+      if (event.thumbnail !== undefined) {
+        sawThumbnail = true
+        findings.push(...thumbnailFindings(where, event as unknown as SourceEvent, source))
+      }
     }
   }
-  const INPUT = ["INPUT_INVALID"] as const
-  const CURSOR = ["CURSOR_INVALID"] as const
-  await refused({ ...base, limit: PAGE.max + 1 }, `a limit of ${PAGE.max + 1}`, INPUT)
-  await refused({ ...base, limit: 0 }, "a limit of 0", INPUT)
-  await refused({ ...after("not-a-cursor"), limit: pageSize }, "a malformed cursor", CURSOR)
-  await refused({ ...after(encodeBoundCursor({ plugin: "conformance", source: `${fixtures.source}-other`, account: fixtures.account ?? "default" }, {})), limit: pageSize }, "another source's cursor", CURSOR)
-  await refused({ ...base, source: `${fixtures.source}-other`, limit: pageSize }, "a source the plugin does not have", ["SOURCE_UNKNOWN", "INPUT_INVALID"])
-
-  // The bound cursor: the source's cursor is the library's, bound to (plugin, source, account, scope), and the same
-  // state bound to anything else is refused rather than restarted.
-  const first = pages[0]
-  if (fixtures.binding !== undefined && first) {
-    const binding: CursorBinding = { plugin: fixtures.binding.plugin, source: fixtures.source, account: first.account, ...(fixtures.scope === undefined ? {} : { scope: fixtures.scope }) }
-    const decoded = decodeBoundCursor(binding, first.cursor)
-    if (!decoded.ok) problems.push("the first page's cursor is not the library's cursor bound to this plugin, source, account and scope")
-    else {
-      const others: [string, CursorBinding][] = [
-        ["another plugin's", { ...binding, plugin: `${binding.plugin}-other` }],
-        ["another account's", { ...binding, account: `${binding.account}-other` }],
-        ["another scope's", { ...binding, scope: { ...(binding.scope ?? {}), conformance: ["other"] } }],
-      ]
-      for (const [whose, other] of others) await refused({ ...after(encodeBoundCursor(other, decoded.state)), limit: pageSize }, `${whose} bound cursor`, CURSOR)
-    }
+  if (source.thumbnails === true && !sawThumbnail) {
+    findings.push(warning("pages.thumbnail", `${source.id} declares thumbnails, and no recorded page carries one`, { path: "fixtures/conformance.json", fix: "Record one page with thumbnails: true, or stop declaring them." }))
   }
-
-  if (hooks.after) problems.push(...(await hooks.after({ ...(whole ? { whole } : {}), pages })))
-  return problems
+  return findings
 }
 
-/** A scope as `canonicalScope` writes it, without throwing on a malformed fixture. */
-function sortedScope(scope: Scope): Record<string, unknown> {
-  const out: Record<string, unknown> = {}
-  for (const key of Object.keys(scope).sort()) {
-    const value = scope[key]
-    out[key] = Array.isArray(value) ? [...new Set(value)].sort() : value
+/** A gap is answered once per read: the page its cursor names, when recorded, carries none. */
+function gapFindings(source: SourceItem, item: RecordedCase, page: EventsListResult, cases: readonly RecordedCase[]): Finding[] {
+  const findings: Finding[] = []
+  if (page.gap !== undefined && !(GAP_REASONS as readonly unknown[]).includes(page.gap.reason)) {
+    findings.push(error("pages.gap", `events_list(${item.name ?? "a case"}) carries a gap reason outside ${GAP_REASONS.join(", ")}`, { path: "fixtures/conformance.json" }))
   }
-  return out
+  if (page.gap === undefined || page.more !== true) return findings
+  const next = cases.find((entry) => plain(entry.input) && entry.input["cursor"] === page.cursor)
+  if (next === undefined) {
+    findings.push(warning("pages.gap", `events_list(${item.name ?? "a case"}) carries a gap and more: true, and the page its cursor names is not recorded, so the gap is not shown answered once`, { path: "fixtures/conformance.json" }))
+    return findings
+  }
+  if (plain(next.answer) && next.answer["gap"] !== undefined) findings.push(error("pages.gap", `events_list(${item.name ?? "a case"}) answers a gap, and the page its cursor names answers another`, { path: "fixtures/conformance.json", fix: "A consumer counts one resync per gap." }))
+  return findings
 }
 
-/** `eventsListConformance`, for a test: throws one error that lists every problem. */
-export async function assertEventsListConformance(list: EventsList, fixtures: ConformanceFixtures): Promise<void> {
-  const problems = await eventsListConformance(list, fixtures)
-  if (problems.length > 0) throw new Error(`events_list breaks the contract:\n- ${problems.join("\n- ")}`)
+/** #42: a thumbnail is https, at most 2048 characters, on a declared host, and outside the event's hash. */
+function thumbnailFindings(where: string, event: SourceEvent, source: SourceItem): Finding[] {
+  const findings: Finding[] = []
+  for (const problem of thumbnailUrlProblems(event.thumbnail, source.urlHosts ?? [])) {
+    findings.push(error("pages.thumbnail", `${where} ${event.external_id}'s thumbnail ${problem}`, { path: "fixtures/conformance.json" }))
+  }
+  const { hash, ...rest } = event
+  if (eventHash({ ...rest, thumbnail: "https://example.invalid/another.png" }) !== hash) {
+    findings.push(error("pages.thumbnail", `${where} ${event.external_id}'s hash changes with its thumbnail: a thumbnail is outside the hash`, { path: "fixtures/conformance.json" }))
+  }
+  return findings
+}
+
+const eventsOf = (answer: unknown): Record<string, unknown>[] => (plain(answer) && Array.isArray(answer["events"]) ? (answer["events"] as unknown[]).filter(plain) : [])
+
+/** A probe reads the account, never content: its answer names the account, its owner and its trust, and no content. */
+export function probeFindings(source: SourceItem, answer: unknown, account?: string): Finding[] {
+  if (!plain(answer)) return [error("probe.shape", `probe(${source.id}) records no answer`, { path: "fixtures/conformance.json" })]
+  const findings: Finding[] = []
+  const keys = ["source", "account", "owner", "scopes", "cost", "trust"]
+  for (const key of Object.keys(answer)) if (!keys.includes(key)) findings.push(error("probe.shape", `probe(${source.id}) carries ${key}: a probe reads the account, never content`, { path: "fixtures/conformance.json" }))
+  if (answer["source"] !== undefined && typeof source.input?.["source"] === "string" && answer["source"] !== pageSourceName(source)) findings.push(error("probe.shape", `probe(${source.id}) names the source ${String(answer["source"])}, not ${pageSourceName(source)}`, { path: "fixtures/conformance.json" }))
+  if (typeof answer["account"] !== "string" || answer["account"].length === 0) findings.push(error("probe.shape", `probe(${source.id}) names no account`, { path: "fixtures/conformance.json" }))
+  else if (account !== undefined && answer["account"] !== account) findings.push(error("probe.shape", `probe(${source.id}) names ${answer["account"]}, not the account it was asked about`, { path: "fixtures/conformance.json" }))
+  findings.push(...ownerProblems(answer["owner"], `probe(${source.id}).owner`).map((problem) => error("probe.shape", problem, { path: "fixtures/conformance.json" })))
+  if (plain(answer["owner"]) && typeof answer["owner"]["id"] === "string" && !/^[a-z][a-z0-9+.-]*:/.test(answer["owner"]["id"])) {
+    findings.push(error("probe.shape", `probe(${source.id}).owner.id must be scheme-qualified, such as mailto:someone@example.com or slack:U0123`, { path: "fixtures/conformance.json" }))
+  }
+  if (answer["owner"] === null) findings.push(error("probe.shape", `probe(${source.id}) answers owner: null: an account that is not signed in refuses with NEEDS_SIGN_IN`, { path: "fixtures/conformance.json" }))
+  if (answer["trust"] !== "untrusted") findings.push(error("probe.shape", `probe(${source.id}).trust must be "untrusted"`, { path: "fixtures/conformance.json" }))
+  return findings
+}
+
+/** A detail read takes only the event fields it declares and answers a page for one event. */
+export function detailFindings(source: SourceItem, recorded: readonly RecordedDetail[], account: string): Finding[] {
+  const findings: Finding[] = []
+  for (const item of recorded) {
+    const detail = source.details?.find((entry) => entry.id === item.id)
+    if (detail === undefined) {
+      findings.push(error("details.declared", `the fixture records the detail ${item.id}, which ${source.id} does not declare`, { path: "fixtures/conformance.json" }))
+      continue
+    }
+    const expected = codesOf(item.expect)
+    if (item.refuses !== undefined) {
+      const code = expected ?? "PERMISSION_DENIED"
+      if (!item.refuses.startsWith(`${code}: `)) findings.push(error("details.refusal", `details(${item.id}) refuses with "${item.refuses.slice(0, 120)}", and its case expects ${code}`, { path: "fixtures/conformance.json" }))
+      if (!item.refuses.includes("Next step: ")) findings.push(error("details.refusal", `details(${item.id})'s refusal has no "Next step: "`, { path: "fixtures/conformance.json" }))
+    }
+    if (item.answer === undefined) {
+      if (expected === undefined) findings.push(error("details.answer", `details(${item.id}) records no answer and no refusal code`, { path: "fixtures/conformance.json" }))
+      else if (item.refuses === undefined) findings.push(error("details.answer", `details(${item.id}) expects the refusal ${expected} and records no message`, { path: "fixtures/conformance.json" }))
+      continue
+    }
+    if (expected !== undefined) {
+      findings.push(error("details.answer", `details(${item.id}) expects the refusal ${expected} and records an answer`, { path: "fixtures/conformance.json" }))
+      continue
+    }
+    findings.push(...detailInputFindings(detail, item))
+    const answerAccount = plain(item.answer) && typeof item.answer["account"] === "string" ? item.answer["account"] : account
+    const accepted = acceptAnswer(source, answerAccount, item.answer)
+    if (!accepted.ok) findings.push(error("details.shape", `details(${item.id}): ${accepted.failure.message}`, { path: "fixtures/conformance.json" }))
+  }
+  return findings
+}
+
+/** The input a detail read may take: the fields it declares, and never an event's prose. */
+function detailInputFindings(detail: Detail, item: RecordedDetail): Finding[] {
+  const findings: Finding[] = []
+  const event = item.event ?? {}
+  for (const field of Object.keys(event)) {
+    if (detail.from.includes(field as Detail["from"][number])) continue
+    findings.push(error("details.input", `details(${detail.id}) records the event field ${field}, which its from does not name`, { path: "fixtures/conformance.json" }))
+  }
+  if (event["title"] !== undefined || event["text"] !== undefined) findings.push(error("details.input", `details(${detail.id}) records an event's title or text, and a detail's input comes only from identifiers`, { path: "fixtures/conformance.json" }))
+  for (const field of detail.from) {
+    if (event[field] === undefined) findings.push(error("details.input", `details(${detail.id}) records no ${field}, and the declared input needs it`, { path: "fixtures/conformance.json" }))
+  }
+  return findings
+}
+
+/** A suggest answer lists at most 64 values a person may confirm, each `{ id, label? }`, once. */
+export function suggestFindings(source: SourceItem, answer: unknown): Finding[] {
+  const where = `scope.suggest(${source.scope?.suggest?.method ?? "—"})`
+  if (!plain(answer)) return [error("suggest.answer", `${where} records no answer`, { path: "fixtures/conformance.json" })]
+  const options = answer["options"]
+  if (!Array.isArray(options)) return [error("suggest.answer", `${where} options must be a list, empty when there is nothing to offer`, { path: "fixtures/conformance.json" })]
+  const findings: Finding[] = []
+  if (options.length > 64) findings.push(error("suggest.answer", `${where} offers ${options.length} options, over 64`, { path: "fixtures/conformance.json" }))
+  const ids = new Set<string>()
+  for (const [index, option] of options.entries()) {
+    if (!plain(option) || typeof option["id"] !== "string" || option["id"].length === 0 || option["id"].length > 200) {
+      findings.push(error("suggest.answer", `${where} options[${index}] must be { id, label? }`, { path: "fixtures/conformance.json" }))
+      continue
+    }
+    if (ids.has(option["id"])) findings.push(error("suggest.answer", `${where} offers ${option["id"]} twice`, { path: "fixtures/conformance.json" }))
+    ids.add(option["id"])
+    if (option["label"] !== undefined && (typeof option["label"] !== "string" || option["label"].length > 200)) findings.push(error("suggest.answer", `${where} options[${index}].label must be at most 200 characters`, { path: "fixtures/conformance.json" }))
+  }
+  return findings
+}
+
+/** A snapshot validates against its registry output, or an `x-` source's inline outputSchema. */
+export function snapshotFindings(source: Extract<SourceItem, { kind: "snapshot" }>, answer: unknown, account: string): Finding[] {
+  const findings: Finding[] = []
+  const accepted = acceptAnswer(source, account, answer)
+  if (!accepted.ok) findings.push(error("snapshot.shape", `snapshot(${source.id}): ${accepted.failure.message}`, { path: "fixtures/conformance.json" }))
+  if (plain(answer)) {
+    if (typeof answer["asOf"] !== "string" || !Number.isFinite(Date.parse(answer["asOf"]))) findings.push(error("snapshot.shape", `snapshot(${source.id}) has no asOf time`, { path: "fixtures/conformance.json" }))
+    const checked = checkOutput(source.output, answer["data"])
+    if (!checked.ok) findings.push(...checked.problems.map((problem) => error("snapshot.shape", `snapshot(${source.id}) data: ${problem}`, { path: "fixtures/conformance.json" })))
+  }
+  if (source.maxBytes !== undefined && answer !== undefined) {
+    const bytes = Buffer.byteLength(JSON.stringify(answer))
+    if (bytes > maxBytesOf(source)) findings.push(error("snapshot.shape", `snapshot(${source.id}) is ${bytes} bytes, over its maxBytes of ${maxBytesOf(source)}`, { path: "fixtures/conformance.json" }))
+  }
+  return findings
 }

@@ -3,68 +3,69 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Example: github's events_list as the contract declares it, with grants stated verbatim (github_api on a method and path). Every handle and message is invented.",
-  "sources": {
-    "contractVersion": 1,
-    "rpc": "github.activity.tools",
-    "probe": {
-      "action": "github.probe"
+  "description": "Example: GitHub's notifications and search results as the contract declares them. Every handle and message is invented.",
+  "exports": {
+    "./server": "./index.js"
+  },
+  "capabilities": {
+    "version": 1,
+    "plugin": {
+      "name": "github",
+      "title": "GitHub",
+      "summary": "GitHub notifications, issues and commits as contract events.",
+      "vendor": { "id": "github", "name": "GitHub", "domain": "github.com" },
+      "icons": [{ "src": "assets/icon.svg", "type": "image/svg+xml" }],
+      "host": { "opencode": ">=2.4.1 <2.5.0", "tested": ["2.4.1"] }
     },
-    "items": [
+    "accounts": {
+      "via": "integration",
+      "profile": { "$ref": "#/options/properties/accounts/additionalProperties" },
+      "owner": "github"
+    },
+    "options": {
+      "type": "object",
+      "properties": {
+        "access": { "type": "string", "enum": ["all", "ask-changes", "read-only"], "default": "all", "description": "How much the plugin's methods may do." },
+        "accounts": {
+          "type": "object",
+          "description": "One profile per account alias.",
+          "additionalProperties": {
+            "type": "object",
+            "properties": { "host": { "type": "string", "description": "The GitHub host, such as github.com." } },
+            "additionalProperties": false
+          }
+        },
+        "allowUntestedHost": { "type": "boolean", "default": false, "description": "Start outside the tested OpenCode range." }
+      },
+      "additionalProperties": false
+    },
+    "methods": {
+      "status": { "class": "read", "accounts": "none" },
+      "probe": { "class": "read", "accounts": "optional", "operations": ["github.users.get"] },
+      "events_list": {
+        "class": "read",
+        "accounts": "optional",
+        "operations": ["github.users.get", "github.notifications.list", "github.search.issues", "github.search.commits"]
+      }
+    },
+    "sources": [
       {
         "id": "github.activity",
         "kind": "events",
         "reads": "message",
-        "tool": "events_list",
-        "input": {
-          "source": "github"
-        },
-        "accounts": {
-          "named": true
-        },
-        "permission": {
-          "events": "github.events_list",
-          "rules": [
-            {
-              "action": "github_api",
-              "resource": "GET /user"
-            },
-            {
-              "action": "github_api",
-              "resource": "GET /search/issues"
-            },
-            {
-              "action": "github_api",
-              "resource": "GET /search/commits"
-            },
-            {
-              "action": "github_api",
-              "resource": "GET /notifications"
-            }
-          ],
-          "identityRules": [
-            {
-              "action": "github_api",
-              "resource": "GET /user"
-            }
-          ],
-          "readsIdentity": true
-        },
+        "method": "events_list",
+        "input": { "source": "github" },
+        "service": { "id": "github.activity", "label": "Activity" },
+        "operations": ["github.users.get", "github.notifications.list", "github.search.issues", "github.search.commits"],
+        "cadence": { "suggestMinutes": 5 },
+        "signals": ["bus"],
         "private": true,
-        "cost": {
-          "class": "metered",
-          "units": [
-            {
-              "per": "request",
-              "usd": 0
-            }
-          ]
-        },
+        "cost": { "class": "metered", "units": [{ "per": "request", "usd": 0 }] },
         "maxBytes": 262144,
-        "urlHosts": [
-          "github.com"
-        ]
+        "urlHosts": ["github.com"]
       }
-    ]
+    ],
+    "actions": [],
+    "events": { "changed": {} }
   }
 }

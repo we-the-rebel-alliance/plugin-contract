@@ -4,55 +4,73 @@
   "private": true,
   "type": "module",
   "description": "Example: the gws plugin's Gmail source as the contract declares it. Every address and message is invented.",
-  "sources": {
-    "contractVersion": 1,
-    "items": [
+  "exports": {
+    "./server": "./index.js"
+  },
+  "capabilities": {
+    "version": 1,
+    "plugin": {
+      "name": "gws",
+      "title": "Google Workspace",
+      "summary": "Gmail, Calendar and Drive as contract events, with a sign-in per account.",
+      "vendor": { "id": "google", "name": "Google", "domain": "google.com" },
+      "icons": [{ "src": "assets/icon.svg", "type": "image/svg+xml" }],
+      "host": { "opencode": ">=2.4.1 <2.5.0", "tested": ["2.4.1"] }
+    },
+    "accounts": {
+      "via": "integration",
+      "profile": { "$ref": "#/options/properties/accounts/additionalProperties" },
+      "owner": "mailto"
+    },
+    "options": {
+      "type": "object",
+      "properties": {
+        "access": { "type": "string", "enum": ["all", "ask-changes", "read-only"], "default": "all", "description": "How much the plugin's methods may do." },
+        "accounts": {
+          "type": "object",
+          "description": "One profile per account alias.",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "mode": { "type": "string", "enum": ["personal", "work"], "description": "Which Google account mode the alias uses." },
+              "enabledServices": { "type": "array", "items": { "type": "string" }, "description": "The Google services this alias may read." }
+            },
+            "additionalProperties": false
+          }
+        },
+        "allowUntestedHost": { "type": "boolean", "default": false, "description": "Start outside the tested OpenCode range." }
+      },
+      "additionalProperties": false
+    },
+    "methods": {
+      "status": { "class": "read", "accounts": "none" },
+      "probe": { "class": "read", "accounts": "optional", "operations": ["gmail.users.getProfile"] },
+      "events_list": {
+        "class": "read",
+        "accounts": "optional",
+        "operations": ["gmail.users.getProfile", "gmail.users.history.list", "gmail.users.messages.list", "gmail.users.messages.get"]
+      },
+      "read_message": { "class": "read", "accounts": "optional", "operations": ["gmail.users.messages.get"] }
+    },
+    "sources": [
       {
         "id": "gws.gmail",
         "kind": "events",
         "reads": "message",
-        "tool": "events_list",
-        "input": {
-          "source": "gmail"
-        },
-        "accounts": {
-          "named": true
-        },
-        "details": [
-          {
-            "id": "gws.gmail.message",
-            "tool": "read",
-            "from": [
-              "external_id"
-            ]
-          }
-        ],
-        "permission": {
-          "events": "gws.events_list",
-          "operations": [
-            "gmail.users.getProfile",
-            "gmail.users.history.list",
-            "gmail.users.messages.list",
-            "gmail.users.messages.get"
-          ],
-          "identity": [
-            "gmail.users.getProfile"
-          ]
-        },
+        "method": "events_list",
+        "input": { "source": "gmail" },
+        "service": { "id": "gws.gmail", "label": "Gmail" },
+        "operations": ["gmail.users.getProfile", "gmail.users.history.list", "gmail.users.messages.list", "gmail.users.messages.get"],
+        "cadence": { "suggestMinutes": 2 },
+        "signals": ["bus"],
         "private": true,
-        "cost": {
-          "class": "free"
-        },
+        "cost": { "class": "free" },
         "maxBytes": 262144,
-        "retentionDays": 30,
-        "urlHosts": [
-          "mail.google.com"
-        ]
+        "details": [{ "id": "gws.gmail.message", "method": "read_message", "from": ["external_id"] }],
+        "urlHosts": ["mail.google.com"]
       }
     ],
-    "rpc": "google-workspace.gws.tools",
-    "probe": {
-      "action": "gws.probe"
-    }
+    "actions": [],
+    "events": { "changed": {} }
   }
 }

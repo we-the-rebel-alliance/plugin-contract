@@ -1,50 +1,43 @@
 {
   "$comment": "Sanitised: every handle, id and message is invented. The page's runs assert github_api on the four method-and-path resources, with no account prefix.",
   "plugin": "@we-the-rebel-alliance/github-plugin",
-  "account": "octo@example.test",
-  "tools": [
-    {
-      "id": "events_list",
-      "readOnly": true
-    }
-  ],
+  "accounts": {
+    "aliases": [
+      "work",
+      "personal"
+    ],
+    "required": {
+      "method": "events_list",
+      "code": "ACCOUNT_REQUIRED"
+    },
+    "unknown": {
+      "method": "events_list",
+      "account": "nobody_here",
+      "code": "ACCOUNT_UNKNOWN"
+    },
+    "cursors": [
+      {
+        "method": "events_list",
+        "account": "work",
+        "other": "personal",
+        "code": "CURSOR_INVALID"
+      }
+    ]
+  },
   "sources": {
     "github.activity": {
-      "identity": [],
       "cases": [
         {
           "name": "a page of notifications",
           "input": {
             "source": "github",
-            "account": "octo@example.test"
+            "account": "work"
           },
           "expect": "page",
-          "asserts": [
-            {
-              "action": "github.events_list",
-              "resource": "*"
-            },
-            {
-              "action": "github_api",
-              "resource": "GET /user"
-            },
-            {
-              "action": "github_api",
-              "resource": "GET /search/issues"
-            },
-            {
-              "action": "github_api",
-              "resource": "GET /search/commits"
-            },
-            {
-              "action": "github_api",
-              "resource": "GET /notifications"
-            }
-          ],
           "answer": {
             "source": "github",
             "plugin": "@we-the-rebel-alliance/github-plugin",
-            "account": "octo@example.test",
+            "account": "work",
             "owner": {
               "id": "github:octocat",
               "label": "Octocat"
@@ -54,7 +47,7 @@
             "events": [
               {
                 "source": "github",
-                "account": "octo@example.test",
+                "account": "work",
                 "external_id": "notification:1",
                 "kind": "message",
                 "occurred_at": "2026-11-12T09:00:00.000Z",
@@ -72,7 +65,7 @@
                 "labels": [
                   "notification"
                 ],
-                "hash": "sha256:64a9ba54514e1b1368f9301fcb996931e6a849f521f91734d6771b691b5f35ba"
+                "hash": "sha256:3fe0b263f9170df4d8ec453a091439411a48135c2f90ce6dc2f78deb0b8bd1ba"
               }
             ],
             "cursor": "github:1",
@@ -91,20 +84,14 @@
           "name": "an expired cursor answers a gap",
           "input": {
             "source": "github",
-            "account": "octo@example.test",
+            "account": "work",
             "cursor": "github:stale"
           },
           "expect": "expired",
-          "asserts": [
-            {
-              "action": "github.events_list",
-              "resource": "*"
-            }
-          ],
           "answer": {
             "source": "github",
             "plugin": "@we-the-rebel-alliance/github-plugin",
-            "account": "octo@example.test",
+            "account": "work",
             "owner": {
               "id": "github:octocat",
               "label": "Octocat"
@@ -114,7 +101,7 @@
             "events": [
               {
                 "source": "github",
-                "account": "octo@example.test",
+                "account": "work",
                 "external_id": "notification:1",
                 "kind": "message",
                 "occurred_at": "2026-11-12T09:00:00.000Z",
@@ -132,7 +119,7 @@
                 "labels": [
                   "notification"
                 ],
-                "hash": "sha256:64a9ba54514e1b1368f9301fcb996931e6a849f521f91734d6771b691b5f35ba"
+                "hash": "sha256:3fe0b263f9170df4d8ec453a091439411a48135c2f90ce6dc2f78deb0b8bd1ba"
               }
             ],
             "cursor": "github:2",
@@ -155,20 +142,14 @@
           "name": "the restarted window reads on",
           "input": {
             "source": "github",
-            "account": "octo@example.test",
+            "account": "work",
             "cursor": "github:2"
           },
           "expect": "page",
-          "asserts": [
-            {
-              "action": "github.events_list",
-              "resource": "*"
-            }
-          ],
           "answer": {
             "source": "github",
             "plugin": "@we-the-rebel-alliance/github-plugin",
-            "account": "octo@example.test",
+            "account": "work",
             "owner": {
               "id": "github:octocat",
               "label": "Octocat"
@@ -178,7 +159,7 @@
             "events": [
               {
                 "source": "github",
-                "account": "octo@example.test",
+                "account": "work",
                 "external_id": "notification:1",
                 "kind": "message",
                 "occurred_at": "2026-11-12T09:00:00.000Z",
@@ -196,7 +177,7 @@
                 "labels": [
                   "notification"
                 ],
-                "hash": "sha256:64a9ba54514e1b1368f9301fcb996931e6a849f521f91734d6771b691b5f35ba"
+                "hash": "sha256:3fe0b263f9170df4d8ec453a091439411a48135c2f90ce6dc2f78deb0b8bd1ba"
               }
             ],
             "cursor": "github:2",
@@ -214,34 +195,113 @@
               "since": "2026-10-13T09:00:00.000Z"
             }
           }
+        },
+        {
+          "name": "a page of the personal account",
+          "input": {
+            "source": "github",
+            "account": "personal"
+          },
+          "expect": "page",
+          "answer": {
+            "source": "github",
+            "plugin": "@we-the-rebel-alliance/github-plugin",
+            "account": "personal",
+            "owner": {
+              "id": "github:octocat-personal",
+              "label": "Octocat (personal)"
+            },
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "trust": "untrusted",
+            "events": [
+              {
+                "source": "github",
+                "account": "personal",
+                "external_id": "notification:1",
+                "kind": "message",
+                "occurred_at": "2026-11-12T09:00:00.000Z",
+                "thread": null,
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "github:octocat",
+                    "name": "Octocat"
+                  }
+                ],
+                "title": "A review was requested",
+                "text": "Review requested on octo/repo#7",
+                "url": "https://github.com/octo/repo/pull/7",
+                "labels": [
+                  "notification"
+                ],
+                "hash": "sha256:d4711371871fb8f4f6e530901f3f6ba5711f2435208a00cb016bfd3aeca09ab9"
+              }
+            ],
+            "cursor": "github:1",
+            "more": false,
+            "refused": [
+              {
+                "external_id": "notification:2",
+                "reason": "secret",
+                "detail": "token"
+              }
+            ],
+            "failed": []
+          }
         }
       ],
       "probe": {
         "input": {
           "source": "github",
-          "account": "octo@example.test"
+          "account": "work"
         },
-        "asserts": [
-          {
-            "action": "github.probe",
-            "resource": "*"
-          },
-          {
-            "action": "github_api",
-            "resource": "GET /user"
-          }
-        ],
         "answer": {
           "source": "github",
-          "account": "octo@example.test",
+          "account": "work",
           "owner": {
             "id": "github:octocat",
             "label": "Octocat"
           },
           "trust": "untrusted"
         }
+      }
+    }
+  },
+  "events": {
+    "emitted": [
+      "changed"
+    ],
+    "status": {
+      "name": "github",
+      "version": "0.0.0",
+      "host": {
+        "version": "2.4.1",
+        "range": ">=2.4.1 <2.5.0",
+        "tested": [
+          "2.4.1"
+        ]
       },
-      "details": []
+      "state": "ready",
+      "accounts": [
+        {
+          "alias": "work",
+          "state": "ready",
+          "owner": {
+            "id": "github:octocat",
+            "label": "Octocat"
+          }
+        },
+        {
+          "alias": "personal",
+          "state": "ready",
+          "owner": {
+            "id": "github:octocat-personal",
+            "label": "Octocat (personal)"
+          }
+        }
+      ],
+      "unguardedAgents": [],
+      "nextStep": null
     }
   }
 }

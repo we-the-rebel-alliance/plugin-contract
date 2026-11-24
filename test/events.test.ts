@@ -19,7 +19,6 @@ import {
   EVENT_KINDS,
   eventHash,
   eventProblems,
-  eventsListConformance,
   eventsListResult,
   fitPage,
   EXTENSION_KIND,
@@ -46,7 +45,6 @@ import {
   secretKinds,
   SourceError,
   startTime,
-  type ConformanceCall,
   type EventsListInput,
   type SourceEvent,
 } from "../src/events.ts"
@@ -94,28 +92,6 @@ describe("extension kinds and their namespace (Q13, plugin-contract#15)", () => 
     expect(isEventKindIn("x-acme/Run", "acme")).toBe(false)
   })
 
-  test("the conformance refuses an x- kind outside the source's namespace, when told the namespace", async () => {
-    const items = [event(0, { kind: "x-acme/reminder" }), event(1)]
-    const list = async (input: EventsListInput) => {
-      const parsed = parseEventsListInput(input)
-      if (!parsed.ok) throw new SourceError({ code: "INPUT_INVALID", what: parsed.problems.join("; "), next: "Fix it." })
-      if (parsed.value.source !== undefined && parsed.value.source !== "demo") throw new SourceError({ code: "SOURCE_UNKNOWN", what: "no", next: "Pass demo." })
-      if (parsed.value.cursor !== undefined) {
-        const decoded = decodeBoundCursor({ plugin: "acme", source: "demo", account: "work" }, parsed.value.cursor)
-        if (!decoded.ok) throw new SourceError({ code: "CURSOR_INVALID", what: "no", next: "Start again." })
-        const n = decoded.state["n"] as number
-        const page = items.slice(n, n + parsed.value.limit)
-        return eventsListResult(WHOSE, page, encodeBoundCursor({ plugin: "acme", source: "demo", account: "work" }, { n: n + page.length }), n + page.length < items.length)
-      }
-      const from = parsed.value.since !== undefined && parsed.value.since > T0 + 3_600_000 ? items.length : 0
-      const page = items.slice(from, from + parsed.value.limit)
-      return eventsListResult(WHOSE, page, encodeBoundCursor({ plugin: "acme", source: "demo", account: "work" }, { n: from + page.length }), from + page.length < items.length)
-    }
-    const fixtures = { source: "demo", account: "work", since: "2026-11-01T08:00:00Z", expected: ["item-0", "item-1"] }
-    expect(await eventsListConformance(list, { ...fixtures, namespace: "acme" })).toEqual([])
-    expect(await eventsListConformance(list, fixtures)).toEqual([])
-    expect(await eventsListConformance(list, { ...fixtures, namespace: "mem" })).toContainEqual(expect.stringContaining("is a x-acme/reminder, outside the namespace mem"))
-  })
 })
 
 describe("probe (plugin-contract#8, #4)", () => {
@@ -173,33 +149,6 @@ describe("a weak owner (#30, item 13)", () => {
     expect(probeResultProblems({ ...probeResult(WHOSE), owner: { ...OWNER, verified: "no" } })).toEqual(["the probe answer's owner.verified must be false, or left out for an owner the provider named"])
     expect(resultProblems({ ...eventsListResult(WHOSE, [], "c", false), owner: { ...OWNER, verified: 0 } })).toEqual(["the result's owner.verified must be false, or left out for an owner the provider named"])
     expect(probeResultProblems({ ...probeResult(WHOSE), owner: { ...OWNER, trust: "weak" } })).toEqual(['the probe answer\'s owner has the field "trust", which the contract does not define'])
-  })
-})
-
-describe("a weak owner in the conformance (#30, item 13)", () => {
-  const WEAK = { id: "wisprflow:credential:abc123", label: "Wispr Flow sign-in", verified: false as const }
-  const BOUND = { plugin: "acme", source: "demo", account: "work" }
-  const items = [event(0), event(1)]
-  const lister = (owner: typeof OWNER | typeof WEAK) => async (input: EventsListInput) => {
-    const parsed = parseEventsListInput(input)
-    if (!parsed.ok) throw new SourceError({ code: "INPUT_INVALID", what: parsed.problems.join("; "), next: "Fix it." })
-    if (parsed.value.source !== undefined && parsed.value.source !== "demo") throw new SourceError({ code: "SOURCE_UNKNOWN", what: "no", next: "Pass demo." })
-    let n = 0
-    if (parsed.value.cursor !== undefined) {
-      const decoded = decodeBoundCursor(BOUND, parsed.value.cursor)
-      if (!decoded.ok) throw new SourceError({ code: "CURSOR_INVALID", what: "no", next: "Start again." })
-      n = decoded.state["n"] as number
-    } else if (parsed.value.since !== undefined && parsed.value.since > T0 + 3_600_000) n = items.length
-    const page = items.slice(n, n + parsed.value.limit)
-    return eventsListResult({ ...WHOSE, owner }, page, encodeBoundCursor(BOUND, { n: n + page.length }), n + page.length < items.length)
-  }
-  const fixtures = { source: "demo", account: "work", since: "2026-11-01T08:00:00Z", expected: ["item-0", "item-1"] }
-
-  test("an unverified owner passes when the fixture names that same owner, and not when it names the vouched one", async () => {
-    expect(await eventsListConformance(lister(WEAK), { ...fixtures, owner: WEAK })).toEqual([])
-    expect(await eventsListConformance(lister(OWNER), { ...fixtures, owner: OWNER })).toEqual([])
-    expect(await eventsListConformance(lister(WEAK), { ...fixtures, owner: { id: WEAK.id, label: WEAK.label } })).toContainEqual(expect.stringContaining("the owner is not the fixture's owner"))
-    expect(await eventsListConformance(lister(OWNER), { ...fixtures, owner: { ...OWNER, verified: false } })).toContainEqual(expect.stringContaining("the owner is not the fixture's owner"))
   })
 })
 
@@ -365,90 +314,6 @@ describe("the secret-pattern refusal", () => {
       { external_id: "item-4", reason: "instruction" },
     ])
     expect(JSON.stringify(screened.refused)).not.toContain("ghp_")
-  })
-})
-
-/** A reference source that implements the contract: bound cursor, scope, refused, the table's codes. */
-function finalSource(items: readonly SourceEvent[], options: { readonly codes?: boolean; readonly echo?: boolean; readonly unbound?: boolean; readonly leakSecret?: boolean } = {}) {
-  const plugin = "opencode-demo"
-  const refuse = (code: string, what: string) => {
-    throw options.codes === false ? new Error(what) : new SourceError({ code, what, next: "Call events_list with the inputs its schema names." })
-  }
-  return async (input: EventsListInput) => {
-    const parsed = parseEventsListInput(input, { scopeKeys: ["label"] })
-    if (!parsed.ok) return refuse("INPUT_INVALID", parsed.problems.join("; "))
-    const request = parsed.value
-    if (request.source !== undefined && request.source !== "demo") return refuse("SOURCE_UNKNOWN", "This plugin lists only demo")
-    const binding: CursorBinding = { plugin, source: "demo", account: "work", ...(request.scope ? { scope: request.scope } : {}) }
-    const label = request.scope?.["label"]
-    const inScope = items.filter((item) => label === undefined || item.labels.some((l) => (Array.isArray(label) ? label.includes(l) : l === label)))
-    let from = 0
-    if (request.cursor !== undefined) {
-      const decoded = options.unbound ? { ok: true as const, state: JSON.parse(Buffer.from(request.cursor, "base64url").toString()) as Record<string, unknown> } : decodeBoundCursor(binding, request.cursor)
-      if (!decoded.ok || typeof decoded.state["n"] !== "number") return refuse("CURSOR_INVALID", "The cursor was not issued for this source, account and scope")
-      from = decoded.state["n"] as number
-    } else {
-      const since = startTime(request, T0 + 3_600_000)
-      from = inScope.findIndex((item) => Date.parse(item.occurred_at) >= since)
-      if (from === -1) from = inScope.length
-    }
-    const slice = inScope.slice(from, from + request.limit)
-    const screened = options.leakSecret ? { events: slice, refused: [] } : screenEvents(slice)
-    const next = from + slice.length
-    const cursor = options.unbound ? Buffer.from(JSON.stringify({ n: next })).toString("base64url") : encodeBoundCursor(binding, { n: next })
-    return eventsListResult(WHOSE, screened.events, cursor, next < inScope.length, {
-      ...(options.echo === false || request.scope === undefined ? {} : { scope: request.scope }),
-      refused: screened.refused,
-    })
-  }
-}
-
-describe("the conformance's opt-in checks", () => {
-  const items = [event(0, { labels: ["inbox"] }), event(1, { labels: ["inbox"] }), event(2, { labels: ["inbox"], text: "token = ghp_abcdefghijklmnop1234" }), event(3, { labels: ["work"] }), event(4, { labels: ["inbox"] })]
-  const fixtures = {
-    source: "demo",
-    account: "work",
-    owner: OWNER,
-    since: "2026-11-01T08:00:00Z",
-    expected: ["item-0", "item-1", "item-4"],
-    refused: ["item-2"],
-    scope: { label: ["inbox"] },
-    scopeEcho: true,
-    binding: { plugin: "opencode-demo" },
-    codes: true,
-    kinds: ["message"],
-    maxBytes: 65_536,
-  }
-
-  const { refused: _refused, ...withoutRefused } = fixtures
-
-  test("pass a source that implements the final design", async () => {
-    // Its pages hold 2 listed or refused items each, so the walk sees one refusal mid-page.
-    expect(await eventsListConformance(finalSource(items), withoutRefused)).toEqual([])
-    expect(await eventsListConformance(finalSource(items), fixtures)).toEqual([])
-  })
-
-  test("catch a missing echo, a cursor not bound, refusals without the table's codes, a leaked secret and an undeclared kind", async () => {
-    expect(await eventsListConformance(finalSource(items, { echo: false }), fixtures)).toContainEqual("the first page: the result does not echo the scope")
-    const unbound = await eventsListConformance(finalSource(items, { unbound: true }), fixtures)
-    expect(unbound).toContainEqual("the first page's cursor is not the library's cursor bound to this plugin, source, account and scope")
-    const uncoded = await eventsListConformance(finalSource(items, { codes: false }), fixtures)
-    expect(uncoded).toContainEqual("a malformed cursor was refused without the code CURSOR_INVALID")
-    expect(uncoded).toContainEqual(`a limit of 501 was refused without the code INPUT_INVALID`)
-    const leaked = await eventsListConformance(finalSource(items, { leakSecret: true }), { ...fixtures, expected: ["item-0", "item-1", "item-2", "item-4"], refused: [] })
-    expect(leaked).toContainEqual(expect.stringMatching(/the event item-2 holds a secret \(token\); it belongs in refused\[\]/))
-    expect(await eventsListConformance(finalSource(items), { ...fixtures, kinds: ["meeting"] })).toContainEqual(expect.stringContaining("is a message, which the source does not declare"))
-  })
-
-  test("give the kit every call, and add its problems after the walk", async () => {
-    const calls: ConformanceCall[] = []
-    const problems = await eventsListConformance(finalSource(items), {
-      ...fixtures,
-      hooks: { onCall: (call) => calls.push(call), after: ({ pages, whole }) => [`walked ${pages.length} pages; whole lists ${whole?.events.length}`] },
-    })
-    expect(problems).toEqual(["walked 2 pages; whole lists 3"])
-    expect(calls.map((call) => call.what)).toContain("another account's bound cursor")
-    expect(calls.filter((call) => call.error !== undefined).length).toBe(8)
   })
 })
 

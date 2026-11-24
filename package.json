@@ -86,10 +86,6 @@
       "types": "./dist/register.d.ts",
       "default": "./dist/register.js"
     },
-    "./schema": {
-      "types": "./dist/schema.d.ts",
-      "default": "./dist/schema.js"
-    },
     "./schemas": {
       "types": "./dist/schemas.d.ts",
       "default": "./dist/schemas.js"

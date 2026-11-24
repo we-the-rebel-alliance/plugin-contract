@@ -1,112 +1,172 @@
 # Conformance
 
 A plugin proves it keeps the contract by running the conformance kit in its CI and attaching the report to each
-release. An app lists a source plugin only with a passing report for the pinned version.
-
-The kit is the `conformance` module. It ships with every release as one file,
-`plugin-contract-conformance-<version>.mjs`, which needs nothing installed.
-
-## Running it
+release. An app lists a plugin only with a passing report for the pinned version. The kit is the `conformance` module,
+and every check lives here: `plugin-kit` calls these functions and never re-implements one.
 
 ```js
-import { assertDeclaration, assertConformance, sourceConformance } from "@we-the-rebel-alliance/plugin-contract/conformance"
+import { runConformance, t0, t1 } from "@we-the-rebel-alliance/plugin-contract/conformance"
 
-assertDeclaration(pkg.sources, { tools })
-const report = await sourceConformance({ plugin: pkg.name, source, tools, calls, cases })
-assertConformance(report)
+const report = await runConformance("/path/to/the/installed/plugin")
+if (!report.ok) for (const finding of report.findings) console.error(finding.id, finding.message, finding.fix)
 ```
 
-`assertDeclaration` checks the `sources` block: the schema first, then the rules a JSON Schema cannot express — names,
-verbs, `urlHosts`, the namespace of an action, and uniqueness. `sourceConformance` runs one source through the checks
-below against the plugin's own recorded answers. `assertConformance` throws one error naming every problem.
+The plugin is read from the installed package on disk: `readInstalledManifest` validates and hashes its `capabilities`
+key, and its own tests record what it answers under `fixtures/conformance.json`. Nothing said over RPC is trusted as a
+manifest.
 
-Every check that applies must run. A source that never exercises `failed[]`, `gap`, `refused[]` or a detail read has an
-*incomplete* report, which is not ok. A check that does not apply, such as `actor-kind` without a `machineActors`
-fixture, is reported as not applicable.
+## The interface
 
-## What it checks
+```ts
+runConformance(pluginDir: string, options?: { hosts?: string[]; record?: boolean }): Promise<ConformanceReport>
+t0(pluginDir: string): Promise<Finding[]>
+t1(pluginDir: string, host: string): Promise<Finding[]>
+
+interface ConformanceReport { ok: boolean; findings: Finding[] }
+interface Finding { id: string; level: "error" | "warning"; message: string; path?: string; fix?: string }
+```
+
+`id` is stable (`T0.namespace-length`, `T1.permissions`, `accounts.required`), so CI and a reviewer can tell one finding
+from another across releases. `ok` is false when any finding is an error. A warning names something the kit could not
+prove. `record: true` turns a missing recording into a warning while a fixture is being written. `hosts` defaults to the
+manifest's `plugin.host.tested`; the first unsupported release (`2.5.0`) is always run as well, for the clean refusal.
+
+`t0` is static: no model, no network, no host. `t1` loads the plugin on one OpenCode release. `runConformance` runs T0,
+the declaration and its recordings, and T1.
+
+## T0, the static gate
 
 | Check | Proves |
 |---|---|
-| `declaration` | the source validates; every tool it names is a read; names, operations and hosts follow the contract |
-| `hints` | every declared hint file is present, within 1,500 characters, well formed, and names one of the plugin's own sources |
-| `page-result` | every recorded page is `resultProblems`-valid: fields, kinds, actors, facts, hash, order, size and scope |
-| `event-within-max-bytes` | no single event is larger than the source's `maxBytes`, since a page always carries one |
-| `failed-holds-cursor` | `failed[]` is exercised, and a failed entry holds the cursor back |
-| `gap-and-cursor-expired` | `gap` or `CURSOR_EXPIRED` round-trips to a fresh cursor, and the page after it reads on |
-| `gap-once-per-read` | a read answers its gap once; the page its cursor names carries none |
-| `refused-is-final` | a refused event is not delivered, and no secret pattern survives in a title or text |
-| `removals-are-final` | `removals[]` entries are closed, unique, not also `failed[]`, and not later than `asOf` |
-| `actor-kind` | every actor the fixture names as a machine carries `kind` on every page that lists it |
-| `one-author` | an event lists at most one `from` (or `author`) actor |
-| `facts` | every fact type on a page is declared by the source |
-| `commitment-key` | a commitment key names one title and owner, and one item keeps one key |
-| `parts-stable` | a part listed again keeps its text and actor |
-| `billed-cost` | a billed source reports its cost in the units it declares |
-| `probe` | the probe reads no content, asserts only its own grant, and answers `{ source, account, owner: { id, label }, trust }` |
-| `details` | a detail read takes only the event fields it declares, and an out-of-scope call is refused with `PERMISSION_DENIED` |
-| `suggest` | the bind-time read asserts exactly its own operations |
-| `identity-grants` | a content read never asserts an identity operation, unless the source declares `readsIdentity` |
-| `output-schema` | an `x-` snapshot's `data` satisfies its inline `outputSchema` |
-| `rpc-id` | a declared tools-RPC id has the contract's shape, and agrees with `describe` when one is available |
-| `unused-grants` | every grant the declaration names is asserted by a read, and nothing outside it is |
+| `T0.namespace-length` | the namespace line (`capabilities.plugin.summary`) is one line of at most 400 characters |
+| `T0.skill-length` | every `skills/**/SKILL.md` has a description of at most 300 characters |
+| `T0.skill-name` | every skill is `<name>` or `<name>-<topic>` |
+| `T0.tools` | no text names a tool the manifest does not declare (`tools.<name>.<method>`, and `<name>_<method>` in a skill) |
+| `T0.pinned` | a pinned method has session evidence declared in the fixture |
+| `T0.docs-*` | every generated doc section matches the manifest |
 
-An assertion the declaration does not hold is refused where a host would refuse it, and a declared grant no call
-asserts fails as over-granting: declared equals asserted. The kit reports `undeclared-grants` when a read asserts an
-action the declaration does not derive.
+T0 reads `AGENTS.md`, `README.md`, `SUPPORTED.md`, `docs/**/*.md` and `skills/**/*.md`. A file the plugin does not ship
+is not a T0 finding: the file set belongs to the kit's `docs` and `forbidden` checks.
 
-## A recorded fixture
+## T1, the host gate
 
-`examples/*/fixtures/conformance.json` shows the fixture format, and `scripts/examples.ts` replays one. A fixture holds,
-per source, the `events_list` cases and their answers (or their refusals), the `probe` answer, and optionally the detail,
-suggest and snapshot answers, each with the assertions the call made.
+| Check | Proves |
+|---|---|
+| `T1.load` | the package's server entry imports and exports `Plugin.define({ id, setup })` |
+| `T1.id` | the plugin's id is `capabilities.plugin.name` |
+| `T1.doors` | every non-MCP method is an agent tool with permission `<name>.<method>` and an RPC method under id `<name>`, and nothing else is registered |
+| `T1.permissions` | the access matrix holds for every agent at `all`, `ask-changes` and `read-only`, with each method's `effect` last |
+| `T1.rpc-confirmation` | a non-`read` method over RPC without an answered ask is refused (LD-5) |
+| `T1.unsupported-host` | a release outside `>=2.4.1 <2.5.0` is refused with `HOST_UNTESTED` and a next step, unless `allowUntestedHost` is true |
+
+T1 imports the built server entry the way OpenCode 2.4.1's loader does (`@opencode/plugin/host` resolves `./server`,
+then `.`, then `main`) and calls `setup` with a recording context for the public `Plugin.Context` surface the contract
+uses: `ctx.tool`, `ctx.rpc`, `ctx.agent`, `ctx.permission`, `ctx.integration`, `ctx.mcp`, `ctx.storage` and the plugin's
+options. It does not need the plugin's dependencies installed beside the kit.
+
+## The declaration
+
+The manifest schema already refuses a stray top-level key, a name outside §3, a host range other than the contract's,
+and a `delete_*`/`send_*`/`share_*` method whose class disagrees. These findings carry the rest:
+
+| Check | Proves |
+|---|---|
+| `names.package` | the package is `@we-the-rebel-alliance/<name>-plugin` |
+| `methods.class` | a name's prefix and its class agree: a delete, a send, a share, an export, a write, an admin |
+| `methods.plans`, `methods.commits` | a plan is a read, and a commit is not |
+| `sources.method`, `sources.operations` | a source is read by a read, and its operations are among its method's |
+| `sources.details`, `sources.suggest` | a detail and a bind-time read are reads, in the source's namespace, and a suggest's operations stay out of the running grant |
+| `sources.thumbnails` | a source that declares thumbnails declares `urlHosts` (#42) |
+| `actions.preview`, `actions.commit` | a preview is a read, a commit is not, and they are different methods |
+| `options.*` | `access` is the three levels and defaults to `all`; `allowUntestedHost` defaults to false; the defaults satisfy the schema; an account-taking plugin declares `accounts` |
+
+## Recorded sources and accounts
+
+`runConformance` replays what the plugin's own tests recorded. For an events source, every page is checked by
+`read.acceptAnswer` (the same call a consumer makes), its source and plugin names, its kinds, its size, its hash
+stability, `failed` holding the cursor, one `gap` per read, final `removals`, refused secrets and a billed source's
+cost. A thumbnail appears only when the read asked for it, is an https URL of at most 2048 characters with no user info,
+query or fragment, is on a host in `urlHosts`, and is outside the event's hash.
+
+A snapshot validates against its registry output; a probe reads the account and nothing else; a detail read takes only
+the fields its `from` names; a suggest answer lists `{ id, label? }` at most 64 times.
+
+| Check | Proves |
+|---|---|
+| `pages.*` | the pages, their cursor, gap, removals, secrets, kinds, cost and hash |
+| `snapshot.*` | a snapshot's `data` and `asOf` |
+| `probe.*` | the owner, the account and `trust: "untrusted"` |
+| `details.*` | the detail's declared fields, and an out-of-scope read refused |
+| `suggest.*` | the values a person may confirm |
+| `accounts.aliases` | at least two aliases, each a valid alias; `local` has one |
+| `accounts.required`, `accounts.unknown` | `ACCOUNT_REQUIRED` and `ACCOUNT_UNKNOWN` are recorded, on a method that takes an account |
+| `accounts.cursors` | a cursor issued for one account is refused for another |
+
+## Events, status, actions, grants
+
+| Check | Proves |
+|---|---|
+| `events.emitted`, `events.declared` | every emitted bus event is declared, and every declared one is emitted |
+| `status.*` | the status answer's shape, its host range, one entry per alias, and no secret |
+| `actions.preview` | a recorded preview is `{ output, …, trust: "untrusted" }` |
+| `actions.recorded` | every non-local action records a preview and a commit |
+| `grants.*` | the recorded grants verify, and #40's wrong audience, replay, expiry and digest mismatch are refused |
+| `rpc.confirmation` | a recorded non-read RPC call with the ask denied is refused |
+
+The grant check calls the `grant` module over the plugin's recorded host public key and compact tokens; it never carries
+a private key. A non-local action without a recorded grant is a finding. T1 is the live half of the same rule: it calls
+each non-read RPC handler with the ask denied.
+
+## The fixture
+
+`fixtures/conformance.json` holds what the plugin's own tests recorded. Every section is optional, and the check that
+needs one says so:
 
 ```json
 {
   "plugin": "@we-the-rebel-alliance/acme-plugin",
-  "account": "default",
-  "tools": [{ "id": "events_list", "readOnly": true }],
+  "accounts": {
+    "aliases": ["work", "personal"],
+    "required": { "method": "events_list", "code": "ACCOUNT_REQUIRED" },
+    "unknown": { "method": "events_list", "account": "nobody_here", "code": "ACCOUNT_UNKNOWN" },
+    "cursors": [{ "method": "events_list", "account": "work", "other": "personal", "code": "CURSOR_INVALID" }]
+  },
   "sources": {
     "acme.feed": {
-      "cases": [{ "input": { "since": "2026-11-01T00:00:00Z" }, "asserts": [{ "action": "acme.events_list", "resource": "default:feed.list" }], "answer": { } }],
-      "probe": { "asserts": [{ "action": "acme.probe", "resource": "default:users.me" }], "answer": { } }
+      "cases": [
+        { "name": "the work account", "input": { "account": "work" }, "expect": "page", "answer": {} },
+        { "name": "an expired cursor", "input": { "cursor": "stale" }, "expect": "expired", "refuses": "CURSOR_EXPIRED: … Next step: …" }
+      ],
+      "probe": { "answer": { "account": "work", "owner": { "id": "mailto:a@example.test", "label": "A" }, "trust": "untrusted" } },
+      "details": [{ "id": "acme.feed.item", "event": { "external_id": "1" }, "answer": {} }],
+      "suggest": { "answer": { "options": [] } },
+      "snapshot": { "answer": {} },
+      "atomicPages": { "reason": "one provider call answers the page" }
     }
-  }
+  },
+  "events": { "emitted": ["changed"], "status": {} },
+  "actions": [{ "id": "acme.feed.post", "preview": { "answer": {} }, "commit": { "answer": {} } }],
+  "grants": { "publicKey": "-----BEGIN PUBLIC KEY-----…", "cases": [] },
+  "rpc": { "calls": [{ "method": "post", "ask": "denied", "expect": { "code": "PERMISSION_DENIED" } }] },
+  "pinned": { "events_list": "41 of 44 sessions call it" }
 }
 ```
 
-## Options that say a check does not apply
+`plugin-kit record` writes and redacts the file; `record: true` lets a plugin run the kit while it is still being
+written. `examples/*/fixtures/conformance.json` are complete recordings, and `npm run conformance:self-test` runs the
+kit over every example from `dist/` as it ships.
 
-Some sources cannot produce one kind of failure. Each says so, with a non-empty reason that appears in the report:
+## Generated docs
 
-```js
-await sourceConformance({ ...options, atomicPages: { reason: "events.list answers the page in one call" } })
-await sourceConformance({ ...options, noExpiry: { reason: "the provider's ids never expire" } })
-await sourceConformance({ ...options, machineActors: ["acme:B0PILOT01"] })
-await sourceConformance({ ...options, files: (path) => readFileSync(join(here, path), "utf8"), ownSources: ["acme.feed"] })
+`renderGeneratedDocs(manifest)` is exported from the same entry, so `plugin-kit docs` writes exactly what T0 compares.
+A section sits between markers:
+
+```md
+<!-- generated:capabilities -->
+…the table…
+<!-- /generated:capabilities -->
 ```
 
-`atomicPages` turns off `failed-holds-cursor`, `noExpiry` turns off `gap-and-cursor-expired`, and `machineActors` turns
-on `actor-kind`. `files` gives the kit the plugin's own package, so a declared hint is read rather than trusted; a file
-it cannot read fails the check.
-
-## Every public tool is declared
-
-A plugin's CI fails when a public tool is neither a source, an act, nor explicitly excluded with a reason. The plugin
-passes the table: the tools an agent can call, not the provider operations those tools call.
-
-```js
-assertDeclaration(pkg.sources, { tools })
-assertDeclaredTools(pkg.sources, tools)
-```
-
-Each entry is `{ id, readOnly?, exclude? }`. A tool is covered when its id equals a source's `tool`, a detail's `tool`, a
-suggest `tool`, or an act's `preview` or `commit`. `exclude` is the reason the tool is outside the contract, such as a
-status tool that reads no source and commits no act; the reason must be non-empty. A tool left out of the table is not an
-exclusion.
-
-## In this repository
-
-`npm run conformance:self-test` runs on every pull request. It reads each plugin under `examples/` twice: once as an app
-finds it on disk (`readInstalledDescriptor`, which hashes it) and once through the kit. Every recorded page is checked by
-the `events` module first, so the examples keep the page shape the contract defines.
+The sections are `capabilities`, `errors`, `configuration`, `accounts` and `automations`. T0 reads them from `README.md`,
+`docs/capabilities.md`, `docs/configuration.md`, `docs/accounts.md` and `docs/automations.md` when those files exist,
+and fails when a block is missing or differs from the manifest.

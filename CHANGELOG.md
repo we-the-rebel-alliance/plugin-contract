@@ -12,11 +12,15 @@ The first release in `we-the-rebel-alliance`: the contract at wire version 1, gr
 - **The contract and the standard:** `docs/contract.md` and `docs/plugin-standard.md`, with the settled decisions in
   `docs/decisions.md` and the plugin list in `SUPPORTED.md`.
 - **The modules:** `events` (event model, hash, screening, page checks), `cursor` (a bound cursor codec), `outputs` (the
-  snapshot shape registry), `params` and `pick`, `read` and `act`, `permission`, `catalog`, `tools-rpc`, `hints`,
-  `schema`, `schemas` and `conformance`.
+  snapshot shape registry), `params` and `pick`, `read` and `act`, `bus`, `grant`, `catalog`, `hints`, `schemas` and
+  `conformance`.
 - **One error table** (contract §12): `ERROR_CODES`, `SourceError` and `parseSourceError`. There are no aliases;
   `AUTH_REQUIRED` is not a contract code.
 - **Hints, without routines** (decision D10): a plugin may ship a hint file per source for any model-based consumer;
   routines belong to the consumer.
-- **The conformance kit**, with a page walk, the recording permission context and the T0/T1 checks the kit grows into.
-- **The examples** under `examples/`, each read as an app finds it on disk and replayed through the kit.
+- **The conformance kit** (`runConformance`, `t0`, `t1`): T0 (namespace and skill budgets, tool references, pin
+  evidence, generated docs), T1 (the plugin loads on 2.4.1, its doors and permissions hold, LD-5's RPC refusal, a clean
+  `HOST_UNTESTED` for an unsupported host), the declaration and its classes, two-account recordings, events, status,
+  actions, and the #40 grant cases including the four refusals.
+- **The examples** under `examples/`, each an installed package with a manifest, server entry, skills, generated docs
+  and a recorded fixture, read as an app finds it on disk and run through the kit.

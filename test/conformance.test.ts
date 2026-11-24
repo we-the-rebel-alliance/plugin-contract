@@ -1,483 +1,497 @@
 import assert from "node:assert/strict"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { dirname, join } from "node:path"
+import { after, describe, test } from "node:test"
+import { fileURLToPath, pathToFileURL } from "node:url"
+import { readInstalledManifest } from "../src/manifest.ts"
+import { runConformance, t0, t1, renderGeneratedDocs } from "../src/conformance.ts"
+import { manifestHash } from "../src/manifest.ts"
 import { validPage } from "./support/valid-page.ts"
-import { describe, test } from "node:test"
-import { SOURCES_SCHEMA, type SourceItem } from "../src/schema.ts"
-import { eventHash } from "../src/events.ts"
-import {
-  DETAIL_FIELDS,
-  SENTINEL,
-  assertConformance,
-  assertDeclaration,
-  declarationProblems,
-  detailInputProblems,
-  nameProblem,
-  operationProblem,
-  pageProblems,
-  readVerbProblem,
-  recordingPermission,
-  sourceConformance,
-  suggestProblems,
-  urlHostProblem,
-  type ConformanceCalls,
-  type Grant,
-  type PageCase,
-} from "../src/conformance.ts"
+import { staticFindings } from "../src/internal/conformance/static.ts"
 
-const PLUGIN = "@we-the-rebel-alliance/slack-plugin"
-const ACCOUNT = "T0PILOT01"
-const ISO = "2026-11-13T09:00:00.000Z"
+const here = dirname(fileURLToPath(import.meta.url))
+const support = pathToFileURL(join(here, "support", "plugin.mjs")).href
+const root = mkdtempSync(join(tmpdir(), "conformance-"))
+after(() => rmSync(root, { recursive: true, force: true }))
 
-const slackItem = (over: Record<string, unknown> = {}): Record<string, unknown> => validPage({
-  id: "slack.workspace",
-  kind: "events",
-  reads: "message",
-  tool: "events_list",
-  input: { source: "slack" },
-  accounts: { named: false },
-  scope: { keys: ["channels"], describe: "Channels and direct messages to read.", suggest: { tool: "slack_list_user_channels", operations: ["slack_list_user_channels"] } },
-  details: [{ id: "slack.workspace.thread", tool: "slack_read_thread", from: ["thread"] }],
-  permission: {
-    events: "slack_events_list",
-    operations: ["slack_read_user_profile", "slack_read_channel", "slack_read_thread"],
-  },
-  cost: { class: "free" },
-  private: true,
-  ...over,
-})
+let sequence = 0
 
-const TOOLS = [
-  { id: "events_list", readOnly: true },
-  { id: "slack_read_thread", readOnly: true },
-  { id: "slack_list_user_channels", readOnly: true },
-]
-
-const declarationOf = (item: Record<string, unknown>): { contractVersion: 1; items: Record<string, unknown>[] } => ({ contractVersion: 1, items: [item] })
-
-const sourceOf = (item: Record<string, unknown>): SourceItem => {
-  const checked = SOURCES_SCHEMA.check(declarationOf(item))
-  if (!checked.ok) throw new Error(checked.problems.join("; "))
-  const first = checked.value.items[0]
-  if (first === undefined) throw new Error("the declaration parsed to no item")
-  return first
-}
-
-const fullEvent = (over: Record<string, unknown> = {}): Record<string, unknown> => {
-  const rest = { source: "slack", account: ACCOUNT, external_id: "C0PILOT001:1", kind: "message", occurred_at: "2026-11-01T12:30:00.000Z", thread: null, actors: [], title: "a message", text: "", url: null, labels: [], ...over }
-  return { ...rest, hash: eventHash(rest as never) }
-}
-
-const page = (over: Record<string, unknown> = {}): Record<string, unknown> => validPage({
-  source: "slack",
-  plugin: PLUGIN,
-  account: ACCOUNT,
-  owner: { id: "slack:U0PILOTOWN", label: "Pilot Owner" },
-  asOf: ISO,
-  trust: "untrusted",
-  events: [fullEvent()],
-  cursor: "c1",
-  more: false,
-  refused: [],
-  failed: [],
-  ...over,
-})
-
-describe("the page fields Acme's checks read", () => {
-  const options = { source: sourceOf(slackItem()), plugin: PLUGIN, input: {} }
-
-  test("a page that answers to its source and carries a cursor has no problems", () => {
-    assert.deepEqual(pageProblems(page(), options), [])
-  })
-
-  test("the page is attributed to its source and plugin", () => {
-    assert.ok(pageProblems(page({ source: "other" }), options).some((problem) => /names source/.test(problem)))
-    assert.ok(pageProblems(page({ plugin: "other" }), options).some((problem) => /names plugin/.test(problem)))
-    assert.ok(pageProblems(page({ cursor: 7 }), options).some((problem) => /cursor/.test(problem)))
-  })
-
-  test("failed[] holds the cursor back", () => {
-    const held = page({ failed: [{ external_id: "C0PILOT001:2", code: "RATE_LIMITED" }], cursor: "c2" })
-    assert.ok(pageProblems(held, { ...options, input: { cursor: "c1" } }).some((problem) => /holds the cursor back/.test(problem)))
-    assert.deepEqual(pageProblems({ ...held, cursor: "c1" }, { ...options, input: { cursor: "c1" } }), [])
-    assert.ok(pageProblems(held, options).some((problem) => /holds the cursor back/.test(problem)))
-  })
-
-  test("refused[] is final", () => {
-    const refused = page({ refused: [{ external_id: "C0PILOT001:1", reason: "instruction-shaped text" }] })
-    assert.ok(pageProblems(refused, options).some((problem) => /also among the result.s events|refusal is final/.test(problem)))
-    assert.ok(pageProblems(page({ refused: [{ external_id: "x", reason: "nope" }] }), options).some((problem) => /names no reason/.test(problem)))
-  })
-
-  test("gap is shaped and runs forwards", () => {
-    assert.deepEqual(pageProblems(page({ gap: { reason: "window-truncated", since: ISO } }), options), [])
-    assert.ok(pageProblems(page({ gap: { reason: "nope", since: ISO } }), options).some((problem) => /gap/.test(problem)))
-  })
-
-  test("a billed source reports its cost", () => {
-    const billed = sourceOf(slackItem({ cost: { class: "billed", units: [{ per: "post", usd: 0.005 }], probe: { per: "call", usd: 0.01 } } }))
-    assert.ok(pageProblems(page(), { ...options, source: billed }).some((problem) => /cost is missing/.test(problem)))
-    assert.deepEqual(pageProblems(page({ cost: { units: [{ per: "post", count: 1 }], usd: 0.005 } }), { ...options, source: billed }), [])
-  })
-
-  test("an event must name the id a drop refers to, and nothing else is checked here", () => {
-    assert.ok(pageProblems({ ...page(), events: [{ kind: "message" }] }, options).some((problem) => /external_id/.test(problem)))
-    // The event's own shape is the events module's; a spare field is not this kit's to refuse.
-    assert.ok(pageProblems(page({ events: [fullEvent({ anything: true })] }), options).some((problem) => /anything/.test(problem)))
-  })
-
-  test("a page is measured against the source's maxBytes, and the read's limit", () => {
-    const large = Array.from({ length: 20 }, (_, index) => fullEvent({ external_id: `C0PILOT001:${index + 10}`, text: "a".repeat(4000) }))
-    const answer = page({ events: large })
-    const big = sourceOf(slackItem({ maxBytes: 262144 }))
-    assert.deepEqual(pageProblems(answer, { ...options, source: big }), [])
-    assert.ok(pageProblems(answer, options).some((problem) => /over 65536/.test(problem)))
-    const three = page({ events: large.slice(0, 3) })
-    assert.ok(pageProblems(three, { ...options, input: { limit: 2 } }).some((problem) => /over the limit of 2/.test(problem)))
-  })
-
-  test("a detail page has no cursor to hold back, and still carries one", () => {
-    assert.deepEqual(pageProblems(page({ events: [], cursor: "c1" }), { ...options, detail: true }), [])
-    assert.ok(pageProblems({ ...page(), events: [], cursor: "" }, { ...options, detail: true }).some((problem) => /cursor/.test(problem)))
-  })
-})
-
-describe("the declaration rules a JSON Schema cannot carry", () => {
-  const problems = (item: Record<string, unknown>): readonly string[] => declarationProblems(declarationOf(item), { tools: TOOLS })
-
-  test("a well-formed source has no problems, and every named tool is read-only", () => {
-    assert.deepEqual(problems(slackItem()), [])
-    const notReadOnly = [...TOOLS.filter((tool) => tool.id !== "slack_read_thread"), { id: "slack_read_thread", readOnly: false }]
-    assert.ok(declarationProblems(declarationOf(slackItem()), { tools: notReadOnly }).some((problem) => /readOnly: true/.test(problem)))
-    assert.ok(declarationProblems(declarationOf(slackItem()), { tools: [] }).some((problem) => /does not declare/.test(problem)))
-  })
-
-  test("names are tokenised, and a write verb where the verb sits is refused", () => {
-    assert.match(nameProblem("slack_send_message") ?? "", /write verb send/)
-    assert.match(nameProblem("getAndSend") ?? "", /joins two actions/)
-    assert.equal(nameProblem("calendar_today"), undefined)
-    assert.match(readVerbProblem("calendar_today") ?? "", /no read verb/)
-    assert.ok(problems(slackItem({ tool: "slack_send_message" })).some((problem) => /write verb send/.test(problem)))
-  })
-
-  test("an operation's last segment is where its verb sits, and a write verb there is refused", () => {
-    for (const operation of ["gmail.users.messages.insert", "gmail.users.messages.batchModify", "gmail.users.watch", "calendar.events.quickAdd", "gmail.users.messages.emptyTrash", "gmail.users.messages.untrash"]) {
-      assert.ok(operationProblem(operation) !== undefined, operation)
-    }
-    for (const operation of ["gmail.users.messages.get", "slack_read_channel", "slack_list_user_channels", "drive.files.export", "calendar.events.instances", "gmail.users.messages.batchGet"]) {
-      assert.equal(operationProblem(operation), undefined, operation)
-    }
-    assert.match(operationProblem("gmail.users.messages.send") ?? "", /write verb send/)
-    assert.ok(problems(slackItem({ permission: { events: "slack_events_list", operations: ["slack_read_channel", "gmail.users.messages.insert"] } })).some((problem) => /no read verb|write verb insert/.test(problem)))
-  })
-
-  test("an action is in the plugin's namespace and carries no write verb", () => {
-    assert.ok(problems(slackItem({ permission: { events: "gws.events_list", operations: ["slack_read_channel"] } })).some((problem) => /not in the plugin's namespace/.test(problem)))
-    assert.ok(problems(slackItem({ permission: { events: "slack_send_message", operations: ["slack_read_channel"] } })).some((problem) => /write verb send/.test(problem)))
-  })
-
-  test("details name event fields, and their ids are in the namespace and unique", () => {
-    assert.equal(DETAIL_FIELDS.includes("thread"), true)
-    assert.equal(DETAIL_FIELDS.includes("text"), false)
-    assert.ok(problems(slackItem({ details: [{ id: "slack.workspace.thread", tool: "slack_read_thread", from: ["title"] }] })).some((problem) => /item text/.test(problem)))
-    assert.ok(problems(slackItem({ details: [{ id: "other.thread", tool: "slack_read_thread", from: ["thread"] }] })).some((problem) => /namespace/.test(problem)))
-    assert.ok(
-      problems(
-        slackItem({
-          details: [
-            { id: "slack.workspace.thread", tool: "slack_read_thread", from: ["thread"] },
-            { id: "slack.workspace.thread", tool: "slack_read_thread", from: ["thread"] },
-          ],
-        }),
-      ).some((problem) => /two entries with the id/.test(problem)),
-    )
-  })
-
-  test("ids, scope keys, operations and suggest operations are unique", () => {
-    const two = declarationProblems({ contractVersion: 1, items: [slackItem(), slackItem()] }, { tools: TOOLS })
-    assert.ok(two.some((problem) => /share the id/.test(problem)))
-    assert.ok(problems(slackItem({ scope: { keys: ["channels", "channels"], describe: "Which" } })).some((problem) => /names "channels" twice/.test(problem)))
-    assert.ok(
-      problems(slackItem({ permission: { events: "slack_events_list", operations: ["slack_read_channel", "slack_read_channel"] } })).some((problem) => /lists "slack_read_channel" twice/.test(problem)),
-    )
-    assert.ok(
-      problems(slackItem({ scope: { keys: ["channels"], describe: "Which", suggest: { tool: "slack_list_user_channels", operations: ["slack_list_user_channels", "slack_list_user_channels"] } } })).some((problem) =>
-        /twice/.test(problem),
-      ),
-    )
-  })
-
-  test("urlHosts is refused when it names a public suffix, a shared host or a tracker", () => {
-    for (const host of ["*.co.uk", "co.uk", "*.cloudfront.net", "github.io", "evil.herokuapp.com", "*.vercel.app", "doubleclick.net", "*.google-analytics.com", "*.com", "xn--slck-cqa.com", "*.com.de", "files.xn--slck-cqa.com"]) {
-      assert.ok(urlHostProblem(host) !== null, host)
-      assert.ok(problems(slackItem({ urlHosts: [host] })).some((problem) => /urlHosts/.test(problem)), host)
-    }
-    for (const host of ["slack.com", "*.slack.com", "files.example.co.uk", "*.files.example.co.uk"]) {
-      assert.equal(urlHostProblem(host), null, host)
-    }
-    assert.deepEqual(problems(slackItem({ urlHosts: ["slack.com"] })), [])
-  })
-
-  test("suggest names a declared read-only tool, and its operations stay out of the running grant", () => {
-    assert.deepEqual(problems(slackItem()), [])
-    assert.ok(problems(slackItem({ scope: { keys: ["channels"], describe: "Which", suggest: { tool: "slack_delete_channel", operations: ["slack_list_user_channels"] } } })).some((problem) => /write verb delete/.test(problem)))
-    assert.ok(problems(slackItem({ scope: { keys: ["channels"], describe: "Which", suggest: { tool: "slack_list_unknown", operations: ["slack_list_unknown"] } } })).some((problem) => /does not declare/.test(problem)))
-    assert.ok(
-      problems(slackItem({ permission: { events: "slack_events_list", operations: ["slack_read_channel", "slack_list_user_channels"] } })).some((problem) => /must not enter the running grant/.test(problem)),
-    )
-  })
-
-  test("a service's shape and one label per service id are checked with the declaration (#44 item 1)", () => {
-    const workspace = { id: "slack.workspace", label: "Slack" }
-    assert.deepEqual(problems(slackItem({ service: workspace })), [])
-    assert.ok(problems(slackItem({ service: { id: "", label: "Slack" } })).some((problem) => /service\.id/.test(problem)))
-    assert.ok(problems(slackItem({ service: { id: "slack.workspace", label: "S".repeat(65) } })).some((problem) => /service\.label/.test(problem)))
-    const mixed = declarationProblems(
-      { contractVersion: 1, items: [slackItem({ service: workspace }), slackItem({ id: "slack.mentions", details: undefined, service: { id: "slack.workspace", label: "Slack (work)" } })] },
-      { tools: TOOLS },
-    )
-    assert.ok(mixed.some((problem) => /service\.label/.test(problem) && /"slack\.workspace"/.test(problem)), mixed.join("; "))
-    assert.throws(() => assertDeclaration(declarationOf(slackItem({ service: { id: "slack.workspace" } })), { tools: TOOLS }), /^Error: SCHEMA_VIOLATION: [^]*items\[0\]\.service\.label/)
-  })
-
-  test("assertDeclaration throws one error with a code and a next step", () => {
-    assert.doesNotThrow(() => assertDeclaration(declarationOf(slackItem()), { tools: TOOLS }))
-    assert.throws(() => assertDeclaration(declarationOf(slackItem({ tool: "slack_send_message" })), { tools: TOOLS }), /^Error: SCHEMA_VIOLATION: .*Next step: /)
-  })
-})
-
-describe("the recording permission context", () => {
-  test("it holds exactly the grants, refuses anything else, and reports what it saw", async () => {
-    const grants: Grant[] = [{ action: "slack_events_list", resource: "*" }]
-    const recording = recordingPermission(grants)
-    await recording.permission.assert({ action: "slack_events_list" })
-    await assert.rejects(recording.permission.assert({ action: "slack_slack_read_channel" }), /PERMISSION_DENIED: .*Next step: /)
-    assert.deepEqual(recording.assertions.map((assertion) => assertion.action), ["slack_events_list", "slack_slack_read_channel"])
-    assert.deepEqual(recording.undeclared, ["slack_slack_read_channel"])
-  })
-})
-
-describe("sourceConformance", () => {
-  // Every check must run for a report to be ok, so the fixture covers a page, a failed page, a refused page and an
-  // expired cursor, as well as the probe, the detail and the suggestion.
-  const cases: PageCase[] = [
-    { name: "a page", input: { account: ACCOUNT } },
-    { name: "a page with a failed event", input: { cursor: "c2" } },
-    { name: "a page with a refused event", input: { cursor: "c3" } },
-    { name: "an expired cursor", input: { cursor: "stale" }, expect: "expired" },
-  ]
-
-  const list = (): ConformanceCalls["list"] => async (input, context) => {
-    await context.permission.assert({ action: "slack_events_list" })
-    await context.permission.assert({ action: "slack_slack_read_channel" })
-    if (input["cursor"] === "c2") {
-      return page({ failed: [{ external_id: "C0PILOT001:2", code: "RATE_LIMITED" }], cursor: "c2" })
-    }
-    if (input["cursor"] === "c3") {
-      return page({ refused: [{ external_id: "C0PILOT001:3", reason: "instruction" }], cursor: "c3" })
-    }
-    if (input["cursor"] === "stale") return page({ gap: { reason: "expired", since: ISO }, cursor: "fresh" })
-    if (input["cursor"] === "fresh") return page({ cursor: "fresh-2" })
-    return page()
-  }
-
-  const full = (over: Partial<ConformanceCalls> = {}): ConformanceCalls => ({
-    list: list(),
-    probe: async (input, context) => {
-      await context.permission.assert({ action: "slack_events_list" })
-      await context.permission.assert({ action: "slack_slack_read_user_profile" })
-      return { source: "slack", account: (input as { account: string }).account, owner: { id: "slack:U0PILOTOWN", label: "Pilot Owner" }, trust: "untrusted" }
+/** A v0 manifest for a small plugin with accounts, an events source and one non-read method. */
+function manifest(change: (value: any) => void = () => {}): any {
+  const value = {
+    version: 1,
+    plugin: {
+      name: "demo",
+      title: "Demo",
+      summary: "A demo connector for the conformance kit's tests.",
+      vendor: { id: "demo", name: "Demo", domain: "demo.example" },
+      icons: [{ src: "assets/icon.svg", type: "image/svg+xml" }],
+      host: { opencode: ">=2.4.1 <2.5.0", tested: ["2.4.1"] },
     },
-    details: {
-      "slack.workspace.thread": async (input, context) => {
-        if (input.fields["thread"] === "slack-thread:C0PILOT003:1") throw new Error("PERMISSION_DENIED: that thread is in a channel nobody confirmed. Next step: confirm the channel it belongs to.")
-        await context.permission.assert({ action: "slack_slack_read_thread" })
-        return page({ events: [{ external_id: "C0PILOT001:9" }], cursor: "c-detail" })
+    accounts: { via: "integration", profile: { $ref: "#/options/properties/accounts/additionalProperties" }, owner: "mailto" },
+    options: {
+      type: "object",
+      properties: {
+        access: { type: "string", enum: ["all", "ask-changes", "read-only"], default: "all" },
+        accounts: { type: "object", additionalProperties: { type: "object", properties: { region: { type: "string" } }, additionalProperties: false } },
+        allowUntestedHost: { type: "boolean", default: false },
+      },
+      additionalProperties: false,
+    },
+    methods: {
+      status: { class: "read", accounts: "none" },
+      probe: { class: "read", accounts: "optional", operations: ["demo.users.get"] },
+      events_list: { class: "read", accounts: "optional", operations: ["demo.messages.list", "demo.users.get"] },
+      send_message: { class: "send", accounts: "optional", operations: ["demo.messages.create"] },
+    },
+    sources: [
+      {
+        id: "demo.messages",
+        kind: "events",
+        reads: "message",
+        method: "events_list",
+        input: { source: "messages" },
+        operations: ["demo.messages.list", "demo.users.get"],
+        cost: { class: "free" },
+        maxBytes: 65_536,
+        urlHosts: ["example.test"],
+      },
+    ],
+    actions: [],
+    events: { changed: {} },
+  }
+  change(value)
+  return value
+}
+
+/** A page of the test source for one account. */
+function page(account: string, change: (value: any) => void = () => {}): any {
+  const value = validPage({
+    source: "messages",
+    plugin: "@we-the-rebel-alliance/demo-plugin",
+    account,
+    owner: { id: `mailto:${account}@example.test`, label: account },
+    events: [{ external_id: `m-${account}`, occurred_at: "2026-11-01T09:00:00.000Z" }],
+    cursor: `cursor-${account}`,
+    more: false,
+    asOf: "2026-11-13T09:00:00.000Z",
+  })
+  change(value)
+  return value
+}
+
+/** A fixture the base manifest satisfies. */
+function fixture(change: (value: any) => void = () => {}): any {
+  const value = {
+    plugin: "@we-the-rebel-alliance/demo-plugin",
+    accounts: {
+      aliases: ["work", "personal"],
+      required: { method: "events_list", code: "ACCOUNT_REQUIRED" },
+      unknown: { method: "events_list", account: "nobody_here", code: "ACCOUNT_UNKNOWN" },
+      cursors: [{ method: "events_list", account: "work", other: "personal", code: "CURSOR_INVALID" }],
+    },
+    sources: {
+      "demo.messages": {
+        cases: [
+          { name: "the work account", input: { source: "messages", account: "work" }, expect: "page", answer: page("work") },
+          { name: "the personal account", input: { source: "messages", account: "personal" }, expect: "page", answer: page("personal") },
+        ],
+        probe: { answer: { source: "messages", account: "work", owner: { id: "mailto:work@example.test", label: "Work" }, trust: "untrusted" } },
       },
     },
-    suggest: async (_input, context) => {
-      await context.permission.assert({ action: "slack_slack_list_user_channels" })
-      return { options: [{ id: "C0PILOT001", label: "project-harbour" }] }
+    events: {
+      emitted: ["changed"],
+      status: {
+        name: "demo",
+        version: "1.0.0",
+        host: { version: "2.4.1", range: ">=2.4.1 <2.5.0", tested: ["2.4.1"] },
+        state: "ready",
+        accounts: [
+          { alias: "work", state: "ready", owner: { id: "mailto:work@example.test", label: "Work" } },
+          { alias: "personal", state: "ready", owner: { id: "mailto:personal@example.test", label: "Personal" } },
+        ],
+        unguardedAgents: [],
+        nextStep: null,
+      },
     },
-    ...over,
-  })
+  }
+  change(value)
+  return value
+}
 
-  const detailCases = [
-    { id: "slack.workspace.thread", scope: { channels: ["C0PILOT001"] }, event: { thread: "slack-thread:C0PILOT001:1" } },
-    { id: "slack.workspace.thread", scope: { channels: ["C0PILOT001"] }, event: { thread: "slack-thread:C0PILOT003:1" }, expect: { refuses: "PERMISSION_DENIED" } },
-  ]
+/** Write a plugin directory a consumer and T1 can read. */
+function plugin(options: {
+  readonly value?: any
+  readonly recorded?: any
+  readonly entry?: boolean
+  readonly entryOptions?: Record<string, unknown>
+  readonly skills?: boolean
+  readonly skillDescription?: string
+  readonly docs?: boolean
+  readonly extraFiles?: Readonly<Record<string, string>>
+}): string {
+  const value = options.value ?? manifest()
+  const name = value.plugin.name
+  const directory = join(root, `plugin-${++sequence}`)
+  mkdirSync(join(directory, "fixtures"), { recursive: true })
+  writeFileSync(
+    join(directory, "package.json"),
+    `${JSON.stringify({ name: `@we-the-rebel-alliance/${name}-plugin`, version: "1.0.0", type: "module", exports: { "./server": "./index.js" }, capabilities: value }, null, 2)}\n`,
+  )
+  if (options.entry !== false) {
+    writeFileSync(
+      join(directory, "index.js"),
+      `import { defineTestPlugin } from ${JSON.stringify(support)}\nexport default defineTestPlugin(new URL(".", import.meta.url).pathname, ${JSON.stringify(options.entryOptions ?? {})})\n`,
+    )
+  }
+  if (options.recorded !== undefined) writeFileSync(join(directory, "fixtures", "conformance.json"), `${JSON.stringify(options.recorded, null, 2)}\n`)
+  if (options.skills !== false) {
+    mkdirSync(join(directory, "skills", name), { recursive: true })
+    writeFileSync(
+      join(directory, "skills", name, "SKILL.md"),
+      `---\nname: ${name}\ndescription: ${options.skillDescription ?? "Read the demo source, and pick an account. Use for demo data only."}\n---\n\n# ${name}\n\nRead with \`tools.${name}.events_list\`.\n`,
+    )
+  }
+  if (options.docs === true) {
+    mkdirSync(join(directory, "docs"), { recursive: true })
+    const docs = renderGeneratedDocs(value)
+    writeFileSync(join(directory, "README.md"), `# Demo\n\n<!-- generated:capabilities -->\n${docs.capabilities}\n<!-- /generated:capabilities -->\n\n<!-- generated:errors -->\n${docs.errors}\n<!-- /generated:errors -->\n`)
+  }
+  for (const [path, text] of Object.entries(options.extraFiles ?? {})) {
+    mkdirSync(dirname(join(directory, path)), { recursive: true })
+    writeFileSync(join(directory, path), text)
+  }
+  return directory
+}
 
-  const run = (calls: ConformanceCalls, over: Record<string, unknown> = {}) =>
-    sourceConformance({
-      plugin: PLUGIN,
-      source: sourceOf(slackItem()),
-      tools: TOOLS,
-      cases,
-      detailCases,
-      identityOperations: ["slack_read_user_profile"],
-      calls,
-      account: ACCOUNT,
-      ...over,
-    })
+const errors = (findings: readonly { level: string }[]) => findings.filter((finding) => finding.level === "error")
+const ids = (findings: readonly { id: string }[]) => findings.map((finding) => finding.id)
 
-  test("a source that asserts exactly its grants passes every check", async () => {
-    const report = await run(full())
-    assert.deepEqual(report.problems, [])
+describe("the report", () => {
+  test("a plugin that declares, records and loads cleanly has no findings", async () => {
+    const report = await runConformance(plugin({ recorded: fixture() }))
+    assert.deepEqual(report.findings, [])
     assert.equal(report.ok, true)
-    assert.equal(report.incomplete, false)
-    assert.deepEqual(
-      report.checks.map((check) => check.name),
-      ["declaration", "hints", "page-result", "event-within-max-bytes", "failed-holds-cursor", "gap-and-cursor-expired", "gap-once-per-read", "refused-is-final", "removals-are-final", "actor-kind", "one-author", "facts", "commitment-key", "parts-stable", "billed-cost", "probe", "details", "suggest", "identity-grants", "output-schema", "rpc-id", "unused-grants"],
-    )
-    assert.deepEqual(
-      report.checks.filter((check) => !check.ran).map((check) => check.name),
-      ["hints", "removals-are-final", "actor-kind", "one-author", "facts", "commitment-key", "parts-stable", "billed-cost", "output-schema", "rpc-id"],
-    )
   })
 
-  test("the declaration check reads a source's service (#44 item 1)", async () => {
-    const declared = await run(full(), { source: sourceOf(slackItem({ service: { id: "slack.workspace", label: "Slack" } })) })
-    assert.deepEqual(declared.problems, [])
-    const malformed = await run(full(), { source: { ...sourceOf(slackItem()), service: { id: "slack.workspace", label: "" } } as SourceItem })
-    const declaration = malformed.checks.find((check) => check.name === "declaration")
-    assert.ok(declaration?.problems.some((problem) => /service\.label/.test(problem)), JSON.stringify(declaration))
-    assert.equal(malformed.ok, false)
+  test("record: true turns the missing recordings into warnings and is still ok", async () => {
+    const report = await runConformance(plugin({}), { record: true })
+    assert.equal(report.ok, true)
+    assert.ok(report.findings.length > 0)
+    assert.deepEqual(errors(report.findings), [])
   })
 
-  test("a report with a check that did not run is incomplete and not ok", async () => {
-    const report = await run(full(), { cases: [{ name: "a page", input: {} }], detailCases: [] })
+  test("a manifest that does not validate is one finding per problem", async () => {
+    const value = manifest()
+    value.plugin.extra = true
+    const report = await runConformance(plugin({ value, recorded: fixture() }))
     assert.equal(report.ok, false)
-    assert.equal(report.incomplete, true)
-    assert.ok(report.problems.some((problem) => /has no case outside the confirmed scope/.test(problem)))
-    assert.throws(() => assertConformance(report), /^Error: CONFORMANCE_FAILED: .*Next step: /)
+    assert.ok(ids(report.findings).includes("manifest.invalid"))
   })
 
-  test("a declared grant no read asserts is reported", async () => {
-    const report = await run(full({ suggest: async () => ({ options: [] }) }))
-    assert.ok(report.problems.some((problem) => /bind declaration grants slack_slack_list_user_channels/.test(problem)), report.problems.join("; "))
+  test("no host was run is a warning, and the rest still passes", async () => {
+    const report = await runConformance(plugin({ recorded: fixture() }), { hosts: [] })
+    assert.equal(report.ok, true)
+    assert.ok(ids(report.findings).includes("T1.unchecked"))
   })
+})
 
-  test("probe reads no content and asserts only its own grant", async () => {
-    const withContent = await run(full({ probe: async () => ({ account: ACCOUNT, owner: null, events: [] }) }))
-    assert.ok(withContent.problems.some((problem) => /reads no content/.test(problem)))
-    const overAsserting = await run(
-      full({
-        probe: async (input, context) => {
-          await context.permission.assert({ action: "gws.read" })
-          return { source: "slack", account: (input as { account: string }).account, owner: { id: "slack:U0PILOTOWN", label: "Pilot Owner" }, trust: "untrusted" }
-        },
-      }),
-    )
-    assert.ok(overAsserting.problems.some((problem) => /PERMISSION_DENIED|not among the grants/.test(problem)))
-  })
-
-  test("probe: owner null, a missing label, a missing source or trust, and another account all fail (D230)", async () => {
-    const good = (input: unknown) => ({ source: "slack", account: (input as { account: string }).account, owner: { id: "slack:U0PILOTOWN", label: "Pilot Owner" }, trust: "untrusted" })
-    const failing = async (change: (answer: Record<string, unknown>) => Record<string, unknown>) => (await run(full({ probe: async (input, context) => { await context.permission.assert({ action: "slack_events_list" }); await context.permission.assert({ action: "slack_slack_read_user_profile" }); return change(good(input)) } }))).problems.filter((problem) => /^probe\(/.test(problem))
-    assert.deepEqual(await failing((answer) => answer), [])
-    assert.ok((await failing((answer) => ({ ...answer, owner: null }))).some((problem) => /owner: null/.test(problem)))
-    assert.ok((await failing((answer) => ({ ...answer, owner: { id: "slack:U0PILOTOWN" } }))).some((problem) => /owner.label must be one non-empty line/.test(problem)))
-    assert.ok((await failing(({ source: _source, ...answer }) => answer)).some((problem) => /source/.test(problem)))
-    assert.ok((await failing(({ trust: _trust, ...answer }) => answer)).some((problem) => /trust/.test(problem)))
-    assert.ok((await failing((answer) => ({ ...answer, account: "someone-else" }))).some((problem) => /another account/.test(problem)))
-  })
-
-  test("a detail read is called with the fields it names, and asserts only its grant", async () => {
-    const seen: unknown[] = []
-    const report = await run(
-      full({
-        details: {
-          "slack.workspace.thread": async (input, context) => {
-            if (input.fields["thread"] === "slack-thread:C0PILOT003:1") throw new Error("PERMISSION_DENIED: that thread is in a channel nobody confirmed. Next step: confirm the channel it belongs to.")
-            seen.push(input)
-            await context.permission.assert({ action: "slack_slack_read_thread" })
-            return page({ events: [{ external_id: "C0PILOT001:9" }], cursor: "c-detail" })
-          },
-        },
-      }),
-    )
-    assert.equal(report.ok, true, report.problems.join("; "))
-    assert.deepEqual(seen[0], { account: ACCOUNT, scope: { channels: ["C0PILOT001"] }, fields: { thread: "slack-thread:C0PILOT001:1" } })
-    const stray = detailInputProblems({ id: "slack.workspace.thread", tool: "slack_read_thread", from: ["thread"] }, {
-      account: ACCOUNT,
-      scope: {},
-      fields: { thread: "t", text: SENTINEL },
+describe("the declaration", () => {
+  test("a write verb in a read method's name is refused", async () => {
+    const value = manifest((manifest) => {
+      manifest.methods.create_note = { class: "read", accounts: "optional", operations: ["demo.notes.create"] }
     })
-    assert.ok(stray.some((problem) => /which its from does not name/.test(problem)))
-    assert.ok(stray.some((problem) => /title or text/.test(problem)))
+    const report = await runConformance(plugin({ value, recorded: fixture() }))
+    assert.ok(ids(report.findings).includes("methods.class"))
   })
 
-  test("an expired cursor round-trips through a gap, and one that expires again fails", async () => {
-    const good = await run(full())
-    assert.deepEqual(good.problems, [])
-    const again = await run(
-      full({
-        list: async (_input, context) => {
-          await context.permission.assert({ action: "slack_events_list" })
-          await context.permission.assert({ action: "slack_slack_read_channel" })
-          return page({ gap: { reason: "expired", since: ISO }, cursor: "fresh" })
-        },
-      }),
-    )
-    assert.ok(again.problems.some((problem) => /expired again/.test(problem)))
+  test("a package name that does not derive from the plugin's name is refused", async () => {
+    const directory = plugin({ recorded: fixture() })
+    const file = join(directory, "package.json")
+    const pkg = JSON.parse(readFileSync(file, "utf8"))
+    pkg.name = "@example/other-plugin"
+    writeFileSync(file, JSON.stringify(pkg))
+    const report = await runConformance(directory)
+    assert.ok(ids(report.findings).includes("names.package"))
   })
 
-  test("CURSOR_EXPIRED round-trips through the backfill hint", async () => {
-    const report = await run(
-      full({
-        list: async (input, context) => {
-          await context.permission.assert({ action: "slack_events_list" })
-          await context.permission.assert({ action: "slack_slack_read_channel" })
-          if (input["cursor"] === "stale" && input["since"] === undefined) {
-            throw Object.assign(new Error("CURSOR_EXPIRED: the history is gone. Next step: read again with since."), { since: ISO })
-          }
-          return page()
-        },
-      }),
-    )
-    assert.deepEqual(report.problems, [])
+  test("a plan is a read and a commit is not", async () => {
+    const value = manifest((manifest) => {
+      manifest.methods.plan_send = { class: "write", plans: true, accounts: "optional" }
+      manifest.methods.send_message.commits = "plan_send"
+    })
+    const report = await runConformance(plugin({ value, recorded: fixture() }))
+    assert.ok(ids(report.findings).includes("methods.plans"))
   })
 
-  test("an expired cursor restarts with the source's own input", async () => {
-    const base = list()
-    const sourced: PageCase[] = [
-      { name: "a page", input: { source: "slack", account: ACCOUNT } },
-      { name: "a page with a failed event", input: { source: "slack", cursor: "c2" } },
-      { name: "a page with a refused event", input: { source: "slack", cursor: "c3" } },
-      { name: "an expired cursor", input: { source: "slack", cursor: "stale" }, expect: "expired" },
-    ]
-    const gapRestarts: unknown[] = []
-    const gap = await run(
-      full({
-        list: async (input, context) => {
-          if (input["cursor"] === "fresh") gapRestarts.push(input)
-          return base!(input, context)
-        },
-      }),
-      { cases: sourced },
-    )
-    assert.deepEqual(gap.problems, [], gap.problems.join("; "))
-    assert.deepEqual(gapRestarts, [{ source: "slack", cursor: "fresh" }])
-    const errorRestarts: unknown[] = []
-    const error = await run(
-      full({
-        list: async (input, context) => {
-          if (input["since"] !== undefined) errorRestarts.push(input)
-          if (input["cursor"] === "stale" && input["since"] === undefined) {
-            throw Object.assign(new Error("CURSOR_EXPIRED: the history is gone. Next step: read again with since."), { since: ISO })
-          }
-          return base!(input, context)
-        },
-      }),
-      { cases: sourced },
-    )
-    assert.deepEqual(error.problems, [], error.problems.join("; "))
-    // The restart keeps the source's own input: the call answers for the source the case names, not the plugin's default.
-    assert.deepEqual(errorRestarts, [{ source: "slack", cursor: "stale", since: ISO }])
+  test("options must default access to all, and their defaults must validate", async () => {
+    const value = manifest((manifest) => {
+      manifest.options.properties.access.default = "ask-changes"
+      manifest.options.properties.region = { type: "string", default: 3 }
+    })
+    const report = await runConformance(plugin({ value, recorded: fixture() }))
+    assert.ok(ids(report.findings).includes("options.access-default"))
+    assert.ok(ids(report.findings).includes("options.defaults"))
+  })
+})
+
+describe("T0", () => {
+  test("the namespace line is at most 400 characters", () => {
+    const value = manifest((manifest) => {
+      manifest.plugin.summary = "x".repeat(401)
+    })
+    const findings = staticFindings(plugin({ recorded: fixture() }), value)
+    assert.ok(ids(findings).includes("T0.namespace-length"))
   })
 
-  test("a suggestion lists values a person may confirm", () => {
-    assert.deepEqual(suggestProblems({ options: [] }, "suggest"), [])
-    assert.ok(suggestProblems({ options: [{ id: "" }] }, "suggest").length > 0)
-    assert.ok(suggestProblems({ options: [{ id: "a" }, { id: "a" }] }, "suggest").some((problem) => /twice/.test(problem)))
-    assert.ok(suggestProblems({ values: [] }, "suggest").some((problem) => /options must be/.test(problem)))
+  test("a skill description over 300 characters is refused", async () => {
+    const directory = plugin({ recorded: fixture(), skillDescription: "x".repeat(301) })
+    assert.ok(ids(await t0(directory)).includes("T0.skill-length"))
+  })
+
+  test("no skill is a warning", async () => {
+    const findings = await t0(plugin({ recorded: fixture(), skills: false }))
+    assert.deepEqual(errors(findings), [])
+    assert.ok(ids(findings).includes("T0.skills-missing"))
+  })
+
+  test("a text naming a tool that does not exist is refused", async () => {
+    const directory = plugin({ recorded: fixture(), extraFiles: { "AGENTS.md": "Call `tools.demo.missing_method`." } })
+    assert.ok(ids(await t0(directory)).includes("T0.tools"))
+  })
+
+  test("a pinned method without evidence is refused, and with evidence it is not", async () => {
+    const value = manifest((manifest) => {
+      manifest.methods.events_list.pinned = true
+    })
+    const without = await t0(plugin({ value, recorded: fixture() }))
+    assert.ok(ids(without).includes("T0.pinned"))
+    const withEvidence = await t0(plugin({ value, recorded: fixture((fixture) => (fixture.pinned = { events_list: "41 of 44 sessions call it" })) }))
+    assert.ok(!ids(withEvidence).includes("T0.pinned"))
+  })
+
+  test("generated docs are current, and drift is refused", async () => {
+    const current = await t0(plugin({ recorded: fixture(), docs: true }))
+    assert.ok(!ids(current).some((id) => id.startsWith("T0.docs-")))
+    const drifted = await t0(plugin({ recorded: fixture(), extraFiles: { "README.md": "<!-- generated:capabilities -->\nstale\n<!-- /generated:capabilities -->\n" } }))
+    assert.ok(ids(drifted).includes("T0.docs-capabilities"))
+    const unmarked = await t0(plugin({ recorded: fixture(), extraFiles: { "docs/capabilities.md": "# Capabilities\n" } }))
+    assert.ok(ids(unmarked).includes("T0.docs-capabilities"))
+  })
+
+  test("a manifest that does not validate is a T0.manifest finding", async () => {
+    const value = manifest()
+    value.version = 2
+    assert.ok(ids(await t0(plugin({ value, recorded: fixture() }))).includes("T0.manifest"))
+  })
+})
+
+describe("T1", () => {
+  test("a plugin loads, its doors and permissions hold, and it refuses an unsupported host", async () => {
+    const directory = plugin({ recorded: fixture() })
+    assert.deepEqual(await t1(directory, "2.4.1"), [])
+    assert.deepEqual(await t1(directory, "2.5.0"), [])
+  })
+
+  test("a plugin id that is not the manifest's name is refused", async () => {
+    const findings = await t1(plugin({ recorded: fixture(), entryOptions: { id: "other" } }), "2.4.1")
+    assert.ok(ids(findings).includes("T1.id"))
+  })
+
+  test("a plugin with no permission rules is refused", async () => {
+    const findings = await t1(plugin({ recorded: fixture(), entryOptions: { noRules: true } }), "2.4.1")
+    assert.ok(ids(findings).includes("T1.permissions"))
+  })
+
+  test("a plugin with no tool namespace is refused", async () => {
+    const findings = await t1(plugin({ recorded: fixture(), entryOptions: { noNamespace: true } }), "2.4.1")
+    assert.ok(ids(findings).includes("T1.doors"))
+  })
+
+  test("LD-5: a non-read method over RPC without an answered ask is refused", async () => {
+    const good = await t1(plugin({ recorded: fixture() }), "2.4.1")
+    assert.ok(!ids(good).includes("T1.rpc-confirmation"))
+    const bad = await t1(plugin({ recorded: fixture(), entryOptions: { uncheckedRpc: true } }), "2.4.1")
+    assert.ok(ids(bad).includes("T1.rpc-confirmation"))
+  })
+
+  test("a plugin that does not refuse an unsupported host is refused", async () => {
+    const findings = await t1(plugin({ recorded: fixture(), entryOptions: { refuseUntested: false } }), "2.5.0")
+    assert.ok(ids(findings).includes("T1.unsupported-host"))
+  })
+
+  test("a plugin with no server entry does not load", async () => {
+    const findings = await t1(plugin({ recorded: fixture(), entry: false }), "2.4.1")
+    assert.ok(ids(findings).includes("T1.load"))
+  })
+})
+
+describe("accounts", () => {
+  test("one alias is not two-account behaviour", async () => {
+    const report = await runConformance(plugin({ recorded: fixture((fixture) => (fixture.accounts.aliases = ["work"])) }))
+    assert.ok(ids(report.findings).includes("accounts.aliases"))
+  })
+
+  test("the two refusals carry ACCOUNT_REQUIRED and ACCOUNT_UNKNOWN", async () => {
+    const report = await runConformance(
+      plugin({
+        recorded: fixture((fixture) => {
+          fixture.accounts.required.code = "INPUT_INVALID"
+          fixture.accounts.unknown.code = "INPUT_INVALID"
+        }),
+      }),
+    )
+    assert.ok(ids(report.findings).includes("accounts.required"))
+    assert.ok(ids(report.findings).includes("accounts.unknown"))
+  })
+
+  test("a cursor is bound to its account", async () => {
+    const report = await runConformance(plugin({ recorded: fixture((fixture) => (fixture.accounts.cursors = [])) }))
+    assert.ok(ids(report.findings).includes("accounts.cursors"))
+  })
+
+  test("a local plugin has one account", async () => {
+    const value = manifest((manifest) => {
+      manifest.accounts.via = "local"
+    })
+    const report = await runConformance(plugin({ value, recorded: fixture() }))
+    assert.ok(ids(report.findings).includes("accounts.local"))
+  })
+})
+
+describe("events and thumbnails", () => {
+  const withThumbnails = (change: (value: any) => void = () => {}) =>
+    manifest((manifest) => {
+      manifest.sources[0].thumbnails = true
+      manifest.sources[0].urlHosts = ["example.test"]
+      change(manifest)
+    })
+
+  test("a thumbnail appears when asked, on a declared host, outside the hash", async () => {
+    const value = withThumbnails()
+    const directory = plugin({
+      value,
+      recorded: fixture((fixture) => {
+        fixture.sources["demo.messages"].cases[0].input.thumbnails = true
+        fixture.sources["demo.messages"].cases[0].answer = page("work", (page) => {
+          page.events[0].thumbnail = "https://example.test/thumb.png"
+        })
+      }),
+    })
+    const report = await runConformance(directory)
+    assert.equal(report.ok, true)
+    assert.ok(!ids(report.findings).includes("pages.thumbnail"))
+  })
+
+  test("a thumbnail with a query string is refused", async () => {
+    const report = await runConformance(
+      plugin({
+        value: withThumbnails(),
+        recorded: fixture((fixture) => {
+          fixture.sources["demo.messages"].cases[0].input.thumbnails = true
+          fixture.sources["demo.messages"].cases[0].answer = page("work", (page) => {
+            page.events[0].thumbnail = "https://example.test/thumb.png?token=1"
+          })
+        }),
+      }),
+    )
+    assert.ok(ids(report.findings).includes("pages.shape"))
+  })
+
+  test("a thumbnail on a source that does not declare thumbnails is refused", async () => {
+    const report = await runConformance(
+      plugin({
+        recorded: fixture((fixture) => {
+          fixture.sources["demo.messages"].cases[0].answer = page("work", (page) => {
+            page.events[0].thumbnail = "https://example.test/thumb.png"
+          })
+        }),
+      }),
+    )
+    assert.ok(ids(report.findings).includes("pages.thumbnail") || ids(report.findings).includes("pages.shape"))
+  })
+
+  test("a failed entry holds the cursor back", async () => {
+    const report = await runConformance(
+      plugin({
+        recorded: fixture((fixture) => {
+          fixture.sources["demo.messages"].cases[0].answer = page("work", (page) => {
+            page.failed = [{ external_id: "m-missing", code: "RATE_LIMITED" }]
+            page.cursor = "another"
+          })
+        }),
+      }),
+    )
+    assert.ok(ids(report.findings).includes("pages.cursor"))
+  })
+
+  test("a secret in an event is refused", async () => {
+    const report = await runConformance(
+      plugin({
+        recorded: fixture((fixture) => {
+          fixture.sources["demo.messages"].cases[0].answer = page("work", (page) => {
+            const { hash, ...rest } = page.events[0]
+            page.events[0] = { ...rest, text: "token ghp_0123456789abcdefghijklmnopqrstuvwxyz", hash }
+          })
+        }),
+      }),
+    )
+    assert.ok(ids(report.findings).includes("pages.secrets") || ids(report.findings).includes("pages.shape"))
+  })
+})
+
+describe("grants and the RPC door", () => {
+  const withAction = () =>
+    manifest((manifest) => {
+      manifest.methods.plan_send = { class: "read", plans: true, accounts: "optional" }
+      manifest.methods.send_message.commits = "plan_send"
+      manifest.actions = [
+        { id: "demo.messages.send", effect: "notify", preview: "plan_send", commit: "send_message", input: { type: "object" }, output: { type: "object" } },
+        { id: "demo.mail.send", effect: "notify", preview: "plan_send", commit: "send_message", input: { type: "object" }, output: { type: "object" } },
+      ]
+    })
+
+  test("recorded grants verify, including #40's four refusals", async () => {
+    const names = ["valid", "wrong-aud", "replayed", "expired", "digest-mismatch"]
+    const cases = names.map((name) => JSON.parse(readFileSync(join(here, "fixtures", "grant", `${name}.json`), "utf8")))
+    const publicKey = readFileSync(join(here, "fixtures", "grant", "public-key.pem"), "utf8")
+    const recorded = fixture((fixture) => {
+      fixture.grants = { publicKey, cases: cases.map((entry) => ({ name: entry.name, token: entry.token, input: entry.input, request: entry.request, store: entry.store, expect: entry.expect })) }
+    })
+    const report = await runConformance(plugin({ value: withAction(), recorded }))
+    assert.deepEqual(report.findings.filter((finding) => finding.id.startsWith("grants")), [])
+  })
+
+  test("a missing negative case is a finding", async () => {
+    const cases = ["valid"].map((name) => JSON.parse(readFileSync(join(here, "fixtures", "grant", `${name}.json`), "utf8")))
+    const publicKey = readFileSync(join(here, "fixtures", "grant", "public-key.pem"), "utf8")
+    const recorded = fixture((fixture) => {
+      fixture.grants = { publicKey, cases: cases.map((entry) => ({ name: entry.name, token: entry.token, input: entry.input, request: entry.request, store: entry.store, expect: entry.expect })) }
+    })
+    const report = await runConformance(plugin({ value: withAction(), recorded }))
+    assert.ok(ids(report.findings).includes("grants.cases"))
+  })
+
+  test("LD-5 recorded: a non-read RPC call with the ask denied is refused", async () => {
+    const report = await runConformance(
+      plugin({
+        recorded: fixture((fixture) => {
+          fixture.rpc = { calls: [{ method: "send_message", ask: "denied", expect: { code: "UNAVAILABLE" } }] }
+        }),
+      }),
+    )
+    assert.ok(ids(report.findings).includes("rpc.confirmation"))
+  })
+})
+
+describe("the manifest a report is keyed on", () => {
+  test("a manifest read from disk hashes canonically, and the report uses that package", () => {
+    const directory = plugin({ recorded: fixture() })
+    const installed = readInstalledManifest(directory)
+    assert.ok(installed.ok)
+    const value = manifest()
+    assert.equal(installed.value.hash, manifestHash(value))
+    assert.equal(installed.value.package, "@we-the-rebel-alliance/demo-plugin")
   })
 })

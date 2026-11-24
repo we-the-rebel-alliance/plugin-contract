@@ -1,29 +1,29 @@
 {
   "$comment": "Sanitised from the off-line Slack pilot fixture: every workspace, person, channel id and message is invented. Recorded as page results of the contract, including a thread, a reply Slack never sent to the channel, instruction-shaped text and a pasted block. The kit replays each case by its input exactly.",
   "plugin": "@we-the-rebel-alliance/slack-plugin",
-  "account": "T0PILOT01",
-  "tools": [
-    {
-      "id": "events_list",
-      "readOnly": true
+  "accounts": {
+    "aliases": [
+      "work",
+      "personal"
+    ],
+    "required": {
+      "method": "events_list",
+      "code": "ACCOUNT_REQUIRED"
     },
-    {
-      "id": "slack_read_channel",
-      "readOnly": true
+    "unknown": {
+      "method": "events_list",
+      "account": "nobody_here",
+      "code": "ACCOUNT_UNKNOWN"
     },
-    {
-      "id": "slack_read_thread",
-      "readOnly": true
-    },
-    {
-      "id": "slack_read_user_profile",
-      "readOnly": true
-    },
-    {
-      "id": "slack_list_user_channels",
-      "readOnly": true
-    }
-  ],
+    "cursors": [
+      {
+        "method": "events_list",
+        "account": "work",
+        "other": "personal",
+        "code": "CURSOR_INVALID"
+      }
+    ]
+  },
   "sources": {
     "slack.workspace": {
       "cases": [
@@ -31,7 +31,7 @@
           "name": "a page of messages from the confirmed channels",
           "input": {
             "source": "slack",
-            "account": "T0PILOT01",
+            "account": "work",
             "scope": {
               "channels": [
                 "C0PILOT001",
@@ -40,20 +40,10 @@
             }
           },
           "expect": "page",
-          "asserts": [
-            {
-              "action": "slack_events_list",
-              "resource": "*"
-            },
-            {
-              "action": "slack_slack_read_channel",
-              "resource": "*"
-            }
-          ],
           "answer": {
             "source": "slack",
             "plugin": "@we-the-rebel-alliance/slack-plugin",
-            "account": "T0PILOT01",
+            "account": "work",
             "owner": {
               "id": "slack:U0PILOTOWN",
               "label": "Pilot Owner"
@@ -81,8 +71,8 @@
                   "channel:D0PILOT002"
                 ],
                 "source": "slack",
-                "account": "T0PILOT01",
-                "hash": "sha256:a6315918e3297da4df60061a35624f5c5f04ffbad5c1ac536f34d648f2ca66c7"
+                "account": "work",
+                "hash": "sha256:2fe58424a92d5a7cf5ab5462558b0a26c92b19f80996a7b0cf158a030d09d01c"
               },
               {
                 "kind": "message",
@@ -104,8 +94,8 @@
                   "channel:C0PILOT001"
                 ],
                 "source": "slack",
-                "account": "T0PILOT01",
-                "hash": "sha256:bd2d1f91e2dbf91efe874b0f7a8da32761d2f64ca2494e89f362e37a93ba7469"
+                "account": "work",
+                "hash": "sha256:9f4529eae0e24fe5aaac89cfdafed5883f64799743e82cd1996a99f787cf62ac"
               },
               {
                 "kind": "message",
@@ -128,8 +118,8 @@
                   "thread-parent"
                 ],
                 "source": "slack",
-                "account": "T0PILOT01",
-                "hash": "sha256:ef0d651127de6d025815d21a9d7246b6818a60cc3b0d08e57d778fc7418ff627"
+                "account": "work",
+                "hash": "sha256:fcb6adf3792ca7a5429edf7866ca316ae202add87cf686bc8dc9f3dc5c5b8f00"
               },
               {
                 "kind": "message",
@@ -152,8 +142,8 @@
                   "thread-reply"
                 ],
                 "source": "slack",
-                "account": "T0PILOT01",
-                "hash": "sha256:74b4bbd3be1b7af5023b723a8fa42cb269f2156e6f8e49a50069d0dabf033bef"
+                "account": "work",
+                "hash": "sha256:775031c8fbeacdc01c2bdf4bbf67a82198aa207f278afb245c36d0aaf962df98"
               },
               {
                 "kind": "message",
@@ -175,8 +165,8 @@
                   "channel:C0PILOT001"
                 ],
                 "source": "slack",
-                "account": "T0PILOT01",
-                "hash": "sha256:ca00adc668b0a32c414f148901534fd3e25cdd37d047e8ca5498736cd8d27ed4"
+                "account": "work",
+                "hash": "sha256:df9a463e55810540d3ea6e618fddba46330ba3ff58629e4b9b64ce9ffffb88f5"
               },
               {
                 "kind": "message",
@@ -198,8 +188,8 @@
                   "channel:D0PILOT002"
                 ],
                 "source": "slack",
-                "account": "T0PILOT01",
-                "hash": "sha256:1d1a162918468863c2e42770ebb76d3d949f62ddd08c950c0590bd9e7a7ae8d3"
+                "account": "work",
+                "hash": "sha256:a1fc49fc8d1515ae0a85ac8e679537bc9690df0243da6080f6ddd6f43627d967"
               }
             ],
             "cursor": "slack:C0PILOT001:C0PILOT003:1761998000.000100",
@@ -218,20 +208,14 @@
           "name": "one message that could not be read holds the cursor back",
           "input": {
             "source": "slack",
-            "account": "T0PILOT01",
+            "account": "work",
             "cursor": "slack:C0PILOT001:C0PILOT003:1761998000.000100:held"
           },
           "expect": "page",
-          "asserts": [
-            {
-              "action": "slack_slack_read_channel",
-              "resource": "*"
-            }
-          ],
           "answer": {
             "source": "slack",
             "plugin": "@we-the-rebel-alliance/slack-plugin",
-            "account": "T0PILOT01",
+            "account": "work",
             "owner": {
               "id": "slack:U0PILOTOWN",
               "label": "Pilot Owner"
@@ -259,8 +243,8 @@
                   "channel:D0PILOT002"
                 ],
                 "source": "slack",
-                "account": "T0PILOT01",
-                "hash": "sha256:a6315918e3297da4df60061a35624f5c5f04ffbad5c1ac536f34d648f2ca66c7"
+                "account": "work",
+                "hash": "sha256:2fe58424a92d5a7cf5ab5462558b0a26c92b19f80996a7b0cf158a030d09d01c"
               },
               {
                 "kind": "message",
@@ -282,8 +266,8 @@
                   "channel:C0PILOT001"
                 ],
                 "source": "slack",
-                "account": "T0PILOT01",
-                "hash": "sha256:bd2d1f91e2dbf91efe874b0f7a8da32761d2f64ca2494e89f362e37a93ba7469"
+                "account": "work",
+                "hash": "sha256:9f4529eae0e24fe5aaac89cfdafed5883f64799743e82cd1996a99f787cf62ac"
               },
               {
                 "kind": "message",
@@ -306,8 +290,8 @@
                   "thread-parent"
                 ],
                 "source": "slack",
-                "account": "T0PILOT01",
-                "hash": "sha256:ef0d651127de6d025815d21a9d7246b6818a60cc3b0d08e57d778fc7418ff627"
+                "account": "work",
+                "hash": "sha256:fcb6adf3792ca7a5429edf7866ca316ae202add87cf686bc8dc9f3dc5c5b8f00"
               },
               {
                 "kind": "message",
@@ -330,8 +314,8 @@
                   "thread-reply"
                 ],
                 "source": "slack",
-                "account": "T0PILOT01",
-                "hash": "sha256:74b4bbd3be1b7af5023b723a8fa42cb269f2156e6f8e49a50069d0dabf033bef"
+                "account": "work",
+                "hash": "sha256:775031c8fbeacdc01c2bdf4bbf67a82198aa207f278afb245c36d0aaf962df98"
               },
               {
                 "kind": "message",
@@ -353,8 +337,8 @@
                   "channel:C0PILOT001"
                 ],
                 "source": "slack",
-                "account": "T0PILOT01",
-                "hash": "sha256:ca00adc668b0a32c414f148901534fd3e25cdd37d047e8ca5498736cd8d27ed4"
+                "account": "work",
+                "hash": "sha256:df9a463e55810540d3ea6e618fddba46330ba3ff58629e4b9b64ce9ffffb88f5"
               },
               {
                 "kind": "message",
@@ -376,8 +360,8 @@
                   "channel:D0PILOT002"
                 ],
                 "source": "slack",
-                "account": "T0PILOT01",
-                "hash": "sha256:1d1a162918468863c2e42770ebb76d3d949f62ddd08c950c0590bd9e7a7ae8d3"
+                "account": "work",
+                "hash": "sha256:a1fc49fc8d1515ae0a85ac8e679537bc9690df0243da6080f6ddd6f43627d967"
               }
             ],
             "cursor": "slack:C0PILOT001:C0PILOT003:1761998000.000100:held",
@@ -401,7 +385,7 @@
           "name": "an empty page still carries a cursor",
           "input": {
             "source": "slack",
-            "account": "T0PILOT01",
+            "account": "work",
             "since": "2026-11-13T00:00:00.000Z",
             "scope": {
               "channels": [
@@ -411,16 +395,10 @@
             }
           },
           "expect": "empty",
-          "asserts": [
-            {
-              "action": "slack_slack_read_channel",
-              "resource": "*"
-            }
-          ],
           "answer": {
             "source": "slack",
             "plugin": "@we-the-rebel-alliance/slack-plugin",
-            "account": "T0PILOT01",
+            "account": "work",
             "owner": {
               "id": "slack:U0PILOTOWN",
               "label": "Pilot Owner"
@@ -444,20 +422,14 @@
           "name": "an expired cursor answers a gap and a fresh cursor",
           "input": {
             "source": "slack",
-            "account": "T0PILOT01",
+            "account": "work",
             "cursor": "slack:unknown:1761000000.000100"
           },
           "expect": "expired",
-          "asserts": [
-            {
-              "action": "slack_slack_read_channel",
-              "resource": "*"
-            }
-          ],
           "answer": {
             "source": "slack",
             "plugin": "@we-the-rebel-alliance/slack-plugin",
-            "account": "T0PILOT01",
+            "account": "work",
             "owner": {
               "id": "slack:U0PILOTOWN",
               "label": "Pilot Owner"
@@ -485,8 +457,8 @@
                   "channel:D0PILOT002"
                 ],
                 "source": "slack",
-                "account": "T0PILOT01",
-                "hash": "sha256:a6315918e3297da4df60061a35624f5c5f04ffbad5c1ac536f34d648f2ca66c7"
+                "account": "work",
+                "hash": "sha256:2fe58424a92d5a7cf5ab5462558b0a26c92b19f80996a7b0cf158a030d09d01c"
               },
               {
                 "kind": "message",
@@ -508,8 +480,8 @@
                   "channel:C0PILOT001"
                 ],
                 "source": "slack",
-                "account": "T0PILOT01",
-                "hash": "sha256:bd2d1f91e2dbf91efe874b0f7a8da32761d2f64ca2494e89f362e37a93ba7469"
+                "account": "work",
+                "hash": "sha256:9f4529eae0e24fe5aaac89cfdafed5883f64799743e82cd1996a99f787cf62ac"
               },
               {
                 "kind": "message",
@@ -532,8 +504,8 @@
                   "thread-parent"
                 ],
                 "source": "slack",
-                "account": "T0PILOT01",
-                "hash": "sha256:ef0d651127de6d025815d21a9d7246b6818a60cc3b0d08e57d778fc7418ff627"
+                "account": "work",
+                "hash": "sha256:fcb6adf3792ca7a5429edf7866ca316ae202add87cf686bc8dc9f3dc5c5b8f00"
               },
               {
                 "kind": "message",
@@ -556,8 +528,8 @@
                   "thread-reply"
                 ],
                 "source": "slack",
-                "account": "T0PILOT01",
-                "hash": "sha256:74b4bbd3be1b7af5023b723a8fa42cb269f2156e6f8e49a50069d0dabf033bef"
+                "account": "work",
+                "hash": "sha256:775031c8fbeacdc01c2bdf4bbf67a82198aa207f278afb245c36d0aaf962df98"
               },
               {
                 "kind": "message",
@@ -579,8 +551,8 @@
                   "channel:C0PILOT001"
                 ],
                 "source": "slack",
-                "account": "T0PILOT01",
-                "hash": "sha256:ca00adc668b0a32c414f148901534fd3e25cdd37d047e8ca5498736cd8d27ed4"
+                "account": "work",
+                "hash": "sha256:df9a463e55810540d3ea6e618fddba46330ba3ff58629e4b9b64ce9ffffb88f5"
               },
               {
                 "kind": "message",
@@ -602,8 +574,8 @@
                   "channel:D0PILOT002"
                 ],
                 "source": "slack",
-                "account": "T0PILOT01",
-                "hash": "sha256:1d1a162918468863c2e42770ebb76d3d949f62ddd08c950c0590bd9e7a7ae8d3"
+                "account": "work",
+                "hash": "sha256:a1fc49fc8d1515ae0a85ac8e679537bc9690df0243da6080f6ddd6f43627d967"
               }
             ],
             "cursor": "slack:C0PILOT001:C0PILOT003:1761998000.000100:restarted",
@@ -626,20 +598,14 @@
           "name": "the restarted window reads on",
           "input": {
             "source": "slack",
-            "account": "T0PILOT01",
+            "account": "work",
             "cursor": "slack:C0PILOT001:C0PILOT003:1761998000.000100:restarted"
           },
           "expect": "page",
-          "asserts": [
-            {
-              "action": "slack_slack_read_channel",
-              "resource": "*"
-            }
-          ],
           "answer": {
             "source": "slack",
             "plugin": "@we-the-rebel-alliance/slack-plugin",
-            "account": "T0PILOT01",
+            "account": "work",
             "owner": {
               "id": "slack:U0PILOTOWN",
               "label": "Pilot Owner"
@@ -667,8 +633,8 @@
                   "channel:D0PILOT002"
                 ],
                 "source": "slack",
-                "account": "T0PILOT01",
-                "hash": "sha256:a6315918e3297da4df60061a35624f5c5f04ffbad5c1ac536f34d648f2ca66c7"
+                "account": "work",
+                "hash": "sha256:2fe58424a92d5a7cf5ab5462558b0a26c92b19f80996a7b0cf158a030d09d01c"
               },
               {
                 "kind": "message",
@@ -690,8 +656,8 @@
                   "channel:C0PILOT001"
                 ],
                 "source": "slack",
-                "account": "T0PILOT01",
-                "hash": "sha256:bd2d1f91e2dbf91efe874b0f7a8da32761d2f64ca2494e89f362e37a93ba7469"
+                "account": "work",
+                "hash": "sha256:9f4529eae0e24fe5aaac89cfdafed5883f64799743e82cd1996a99f787cf62ac"
               },
               {
                 "kind": "message",
@@ -714,8 +680,8 @@
                   "thread-parent"
                 ],
                 "source": "slack",
-                "account": "T0PILOT01",
-                "hash": "sha256:ef0d651127de6d025815d21a9d7246b6818a60cc3b0d08e57d778fc7418ff627"
+                "account": "work",
+                "hash": "sha256:fcb6adf3792ca7a5429edf7866ca316ae202add87cf686bc8dc9f3dc5c5b8f00"
               },
               {
                 "kind": "message",
@@ -738,8 +704,8 @@
                   "thread-reply"
                 ],
                 "source": "slack",
-                "account": "T0PILOT01",
-                "hash": "sha256:74b4bbd3be1b7af5023b723a8fa42cb269f2156e6f8e49a50069d0dabf033bef"
+                "account": "work",
+                "hash": "sha256:775031c8fbeacdc01c2bdf4bbf67a82198aa207f278afb245c36d0aaf962df98"
               },
               {
                 "kind": "message",
@@ -761,8 +727,8 @@
                   "channel:C0PILOT001"
                 ],
                 "source": "slack",
-                "account": "T0PILOT01",
-                "hash": "sha256:ca00adc668b0a32c414f148901534fd3e25cdd37d047e8ca5498736cd8d27ed4"
+                "account": "work",
+                "hash": "sha256:df9a463e55810540d3ea6e618fddba46330ba3ff58629e4b9b64ce9ffffb88f5"
               },
               {
                 "kind": "message",
@@ -784,8 +750,8 @@
                   "channel:D0PILOT002"
                 ],
                 "source": "slack",
-                "account": "T0PILOT01",
-                "hash": "sha256:1d1a162918468863c2e42770ebb76d3d949f62ddd08c950c0590bd9e7a7ae8d3"
+                "account": "work",
+                "hash": "sha256:a1fc49fc8d1515ae0a85ac8e679537bc9690df0243da6080f6ddd6f43627d967"
               }
             ],
             "cursor": "slack:C0PILOT001:C0PILOT003:1761998000.000100:restarted",
@@ -804,7 +770,7 @@
           "name": "a scope key this source does not declare is refused",
           "input": {
             "source": "slack",
-            "account": "T0PILOT01",
+            "account": "work",
             "scope": {
               "users": [
                 "U0PILOTOWN"
@@ -815,26 +781,193 @@
             "refuses": "INPUT_INVALID"
           },
           "refuses": "INPUT_INVALID: this source reads channels, not users. Next step: confirm the channels to read."
+        },
+        {
+          "name": "a page of the personal account",
+          "input": {
+            "source": "slack",
+            "account": "personal",
+            "scope": {
+              "channels": [
+                "C0PILOT001",
+                "D0PILOT002"
+              ]
+            }
+          },
+          "expect": "page",
+          "answer": {
+            "source": "slack",
+            "plugin": "@we-the-rebel-alliance/slack-plugin",
+            "account": "personal",
+            "owner": {
+              "id": "slack:U0PILOTPERSON",
+              "label": "Personal Owner"
+            },
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "trust": "untrusted",
+            "events": [
+              {
+                "kind": "message",
+                "external_id": "D0PILOT002:1761992000.000100",
+                "occurred_at": "2025-11-01T10:13:20.000Z",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "slack:U0PILOTAMA",
+                    "name": "Ama Mensah"
+                  }
+                ],
+                "text": "Can you review the doc?",
+                "thread": "slack-thread:D0PILOT002:1761992000.000100",
+                "title": "Can you review the doc?",
+                "url": "https://pilot.slack.com/archives/D0PILOT002/p1761992000000100",
+                "labels": [
+                  "dm",
+                  "channel:D0PILOT002"
+                ],
+                "source": "slack",
+                "account": "personal",
+                "hash": "sha256:f273f307378b98b9ba4194fe7bb05654bfc71c380ac9c6d7b728fbad4ba1387e"
+              },
+              {
+                "kind": "message",
+                "external_id": "C0PILOT001:1761992800.000100",
+                "occurred_at": "2025-11-01T10:26:40.000Z",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "slack:U0PILOTOWN",
+                    "name": "Pilot Owner"
+                  }
+                ],
+                "text": "Harbour kickoff notes are in the canvas.",
+                "thread": "slack-thread:C0PILOT001:1761992800.000100",
+                "title": "Harbour kickoff notes are in the canvas.",
+                "url": "https://pilot.slack.com/archives/C0PILOT001/p1761992800000100",
+                "labels": [
+                  "channel",
+                  "channel:C0PILOT001"
+                ],
+                "source": "slack",
+                "account": "personal",
+                "hash": "sha256:e91ef9cd272f599fea326c2a7a9c332781fd6843ba5c6fa67494775502cd8650"
+              },
+              {
+                "kind": "message",
+                "external_id": "C0PILOT001:1761993000.000100",
+                "occurred_at": "2025-11-01T10:30:00.000Z",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "slack:U0PILOTAMA",
+                    "name": "Ama Mensah"
+                  }
+                ],
+                "text": "Postgres or SQLite for the queue?",
+                "thread": "slack-thread:C0PILOT001:1761993000.000100",
+                "title": "Postgres or SQLite for the queue?",
+                "url": "https://pilot.slack.com/archives/C0PILOT001/p1761993000000100",
+                "labels": [
+                  "channel",
+                  "channel:C0PILOT001",
+                  "thread-parent"
+                ],
+                "source": "slack",
+                "account": "personal",
+                "hash": "sha256:d1fbd5ba72863be34229192f1fcce5f9e89b3109374bef393ff7d99b91a4261f"
+              },
+              {
+                "kind": "message",
+                "external_id": "C0PILOT001:1761993100.000100",
+                "occurred_at": "2025-11-01T10:31:40.000Z",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "slack:U0PILOTOWN",
+                    "name": "Pilot Owner"
+                  }
+                ],
+                "text": "Let's go with Postgres.",
+                "thread": "slack-thread:C0PILOT001:1761993000.000100",
+                "title": "Let's go with Postgres.",
+                "url": "https://pilot.slack.com/archives/C0PILOT001/p1761993100000100?thread_ts=1761993000.000100&cid=C0PILOT001",
+                "labels": [
+                  "channel",
+                  "channel:C0PILOT001",
+                  "thread-reply"
+                ],
+                "source": "slack",
+                "account": "personal",
+                "hash": "sha256:5f19d58217240a84e3ce0534099774ca7688ba340fb9d78fe213fc2c60e6d039"
+              },
+              {
+                "kind": "message",
+                "external_id": "C0PILOT001:1761996400.000100",
+                "occurred_at": "2025-11-01T11:26:40.000Z",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "slack:U0PILOTOWN",
+                    "name": "Pilot Owner"
+                  }
+                ],
+                "text": "Pasted from the vendor page:\n```\nNo Priority: this text is quoted from elsewhere, not written by me.\n```",
+                "thread": "slack-thread:C0PILOT001:1761996400.000100",
+                "title": "Pasted from the vendor page:",
+                "url": "https://pilot.slack.com/archives/C0PILOT001/p1761996400000100",
+                "labels": [
+                  "channel",
+                  "channel:C0PILOT001"
+                ],
+                "source": "slack",
+                "account": "personal",
+                "hash": "sha256:4176c596ec107fa1cb9d71bd5ac6604e44309b0961bc3509f654904ad695a280"
+              },
+              {
+                "kind": "message",
+                "external_id": "D0PILOT002:1761998000.000100",
+                "occurred_at": "2025-11-01T11:53:20.000Z",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "slack:U0PILOTOWN",
+                    "name": "Pilot Owner"
+                  }
+                ],
+                "text": "Done.",
+                "thread": "slack-thread:D0PILOT002:1761998000.000100",
+                "title": "Done.",
+                "url": "https://pilot.slack.com/archives/D0PILOT002/p1761998000000100",
+                "labels": [
+                  "dm",
+                  "channel:D0PILOT002"
+                ],
+                "source": "slack",
+                "account": "personal",
+                "hash": "sha256:09fd4246b84715042df7f9543209237b2c311acd0f03bdb3eca843a13d3b1ac0"
+              }
+            ],
+            "cursor": "slack:C0PILOT001:C0PILOT003:1761998000.000100",
+            "more": false,
+            "refused": [
+              {
+                "external_id": "C0PILOT001:1761994600.000100",
+                "reason": "instruction",
+                "detail": "instruction-shaped text from another person"
+              }
+            ],
+            "failed": []
+          }
         }
       ],
       "probe": {
         "input": {
           "source": "slack",
-          "account": "T0PILOT01"
+          "account": "work"
         },
-        "asserts": [
-          {
-            "action": "slack.probe",
-            "resource": "*"
-          },
-          {
-            "action": "slack_slack_read_user_profile",
-            "resource": "*"
-          }
-        ],
         "answer": {
           "source": "slack",
-          "account": "T0PILOT01",
+          "account": "work",
           "owner": {
             "id": "slack:U0PILOTOWN",
             "label": "Pilot Owner"
@@ -856,16 +989,10 @@
           "event": {
             "thread": "slack-thread:C0PILOT001:1761993000.000100"
           },
-          "asserts": [
-            {
-              "action": "slack_slack_read_thread",
-              "resource": "*"
-            }
-          ],
           "answer": {
             "source": "slack",
             "plugin": "@we-the-rebel-alliance/slack-plugin",
-            "account": "T0PILOT01",
+            "account": "work",
             "owner": {
               "id": "slack:U0PILOTOWN",
               "label": "Pilot Owner"
@@ -894,8 +1021,8 @@
                   "thread-parent"
                 ],
                 "source": "slack",
-                "account": "T0PILOT01",
-                "hash": "sha256:ef0d651127de6d025815d21a9d7246b6818a60cc3b0d08e57d778fc7418ff627"
+                "account": "work",
+                "hash": "sha256:fcb6adf3792ca7a5429edf7866ca316ae202add87cf686bc8dc9f3dc5c5b8f00"
               },
               {
                 "kind": "message",
@@ -918,8 +1045,8 @@
                   "thread-reply"
                 ],
                 "source": "slack",
-                "account": "T0PILOT01",
-                "hash": "sha256:74b4bbd3be1b7af5023b723a8fa42cb269f2156e6f8e49a50069d0dabf033bef"
+                "account": "work",
+                "hash": "sha256:775031c8fbeacdc01c2bdf4bbf67a82198aa207f278afb245c36d0aaf962df98"
               },
               {
                 "kind": "message",
@@ -942,8 +1069,8 @@
                   "thread-reply"
                 ],
                 "source": "slack",
-                "account": "T0PILOT01",
-                "hash": "sha256:6932bb358e1627459793370936ae69a9a438242f442a13647be9da79a1244291"
+                "account": "work",
+                "hash": "sha256:8ecaa5b3b35ee0919cc46b6b80bab2c080b3bf0f208785f8c61ec228906bfecd"
               }
             ],
             "cursor": "detail:C0PILOT001:1761993000.000100",
@@ -979,12 +1106,6 @@
           "source": "slack.workspace",
           "account": "T0PILOT01"
         },
-        "asserts": [
-          {
-            "action": "slack_slack_list_user_channels",
-            "resource": "*"
-          }
-        ],
         "answer": {
           "options": [
             {
@@ -997,10 +1118,44 @@
             }
           ]
         }
+      }
+    }
+  },
+  "events": {
+    "emitted": [
+      "changed"
+    ],
+    "status": {
+      "name": "slack",
+      "version": "0.0.0",
+      "host": {
+        "version": "2.4.1",
+        "range": ">=2.4.1 <2.5.0",
+        "tested": [
+          "2.4.1"
+        ]
       },
-      "identity": [
-        "slack_read_user_profile"
-      ]
+      "state": "ready",
+      "accounts": [
+        {
+          "alias": "work",
+          "state": "ready",
+          "owner": {
+            "id": "slack:U0PILOTOWN",
+            "label": "Pilot Owner"
+          }
+        },
+        {
+          "alias": "personal",
+          "state": "ready",
+          "owner": {
+            "id": "slack:U0PILOTPERSON",
+            "label": "Personal Owner"
+          }
+        }
+      ],
+      "unguardedAgents": [],
+      "nextStep": null
     }
   }
 }

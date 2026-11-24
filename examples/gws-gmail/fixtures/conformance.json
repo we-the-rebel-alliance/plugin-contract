@@ -1,17 +1,29 @@
 {
   "$comment": "Sanitised from the off-line gws pilot fixture: every address, message and id is invented. Recorded as page results of the contract. The kit replays each case by its input exactly.",
   "plugin": "@we-the-rebel-alliance/gws-plugin",
-  "account": "sam.rivera@example.com",
-  "tools": [
-    {
-      "id": "events_list",
-      "readOnly": true
+  "accounts": {
+    "aliases": [
+      "work",
+      "personal"
+    ],
+    "required": {
+      "method": "events_list",
+      "code": "ACCOUNT_REQUIRED"
     },
-    {
-      "id": "read",
-      "readOnly": true
-    }
-  ],
+    "unknown": {
+      "method": "events_list",
+      "account": "nobody_here",
+      "code": "ACCOUNT_UNKNOWN"
+    },
+    "cursors": [
+      {
+        "method": "events_list",
+        "account": "work",
+        "other": "personal",
+        "code": "CURSOR_INVALID"
+      }
+    ]
+  },
   "sources": {
     "gws.gmail": {
       "cases": [
@@ -19,32 +31,14 @@
           "name": "a page of messages, oldest first",
           "input": {
             "source": "gmail",
-            "account": "sam.rivera@example.com",
+            "account": "work",
             "limit": 10
           },
           "expect": "page",
-          "asserts": [
-            {
-              "action": "gws.events_list",
-              "resource": "*"
-            },
-            {
-              "action": "gws.read",
-              "resource": "sam.rivera@example.com:gmail.users.history.list"
-            },
-            {
-              "action": "gws.read",
-              "resource": "sam.rivera@example.com:gmail.users.messages.list"
-            },
-            {
-              "action": "gws.read",
-              "resource": "sam.rivera@example.com:gmail.users.messages.get"
-            }
-          ],
           "answer": {
             "source": "gmail",
             "plugin": "@we-the-rebel-alliance/gws-plugin",
-            "account": "sam.rivera@example.com",
+            "account": "work",
             "owner": {
               "id": "mailto:sam.rivera@example.com",
               "label": "Sam Rivera"
@@ -84,8 +78,8 @@
                   "UNREAD"
                 ],
                 "source": "gmail",
-                "account": "sam.rivera@example.com",
-                "hash": "sha256:66bfc85bda3b58d4de94bb09ddac25fab89998d4604300b0cb86aaba29b53adb"
+                "account": "work",
+                "hash": "sha256:370df689699bb5d92b1d60cc8b6131303a37e781158e35d85be1716763a62f97"
               },
               {
                 "kind": "message",
@@ -114,8 +108,8 @@
                   "SENT"
                 ],
                 "source": "gmail",
-                "account": "sam.rivera@example.com",
-                "hash": "sha256:9bb2e0ae2eb3dc699709675f388bfdda02b7a44716cda7b4e9be38de98f232c2"
+                "account": "work",
+                "hash": "sha256:381af3efdd105216fcd91af820dd652bb16898fc93a0488c6312c1fac9fc333c"
               },
               {
                 "kind": "message",
@@ -137,8 +131,8 @@
                   "STARRED"
                 ],
                 "source": "gmail",
-                "account": "sam.rivera@example.com",
-                "hash": "sha256:4be48341187827d37f7d69fc9a25ec68776ceac2aef55df9375e404038b6065e"
+                "account": "work",
+                "hash": "sha256:20f3398d0a47af29458a8aff7d6d986eef83277d85b08db796ac551bbae84b35"
               }
             ],
             "cursor": "gmail:sam.rivera@example.com:history:1009",
@@ -162,33 +156,26 @@
           "name": "a cursor this source did not issue is refused",
           "input": {
             "source": "gmail",
-            "account": "sam.rivera@example.com",
+            "account": "work",
             "cursor": "another-plugin:cursor"
           },
           "expect": {
             "refuses": "CURSOR_INVALID"
           },
-          "refuses": "CURSOR_INVALID: this cursor was not issued by gws for this account. Next step: read again without a cursor to restart the window.",
-          "asserts": []
+          "refuses": "CURSOR_INVALID: this cursor was not issued by gws for this account. Next step: read again without a cursor to restart the window."
         },
         {
           "name": "one message that could not be read holds the cursor back",
           "input": {
             "source": "gmail",
-            "account": "sam.rivera@example.com",
+            "account": "work",
             "cursor": "gmail:sam.rivera@example.com:history:1009:held"
           },
           "expect": "page",
-          "asserts": [
-            {
-              "action": "gws.read",
-              "resource": "sam.rivera@example.com:gmail.users.messages.get"
-            }
-          ],
           "answer": {
             "source": "gmail",
             "plugin": "@we-the-rebel-alliance/gws-plugin",
-            "account": "sam.rivera@example.com",
+            "account": "work",
             "owner": {
               "id": "mailto:sam.rivera@example.com",
               "label": "Sam Rivera"
@@ -228,8 +215,8 @@
                   "UNREAD"
                 ],
                 "source": "gmail",
-                "account": "sam.rivera@example.com",
-                "hash": "sha256:66bfc85bda3b58d4de94bb09ddac25fab89998d4604300b0cb86aaba29b53adb"
+                "account": "work",
+                "hash": "sha256:370df689699bb5d92b1d60cc8b6131303a37e781158e35d85be1716763a62f97"
               },
               {
                 "kind": "message",
@@ -258,8 +245,8 @@
                   "SENT"
                 ],
                 "source": "gmail",
-                "account": "sam.rivera@example.com",
-                "hash": "sha256:9bb2e0ae2eb3dc699709675f388bfdda02b7a44716cda7b4e9be38de98f232c2"
+                "account": "work",
+                "hash": "sha256:381af3efdd105216fcd91af820dd652bb16898fc93a0488c6312c1fac9fc333c"
               },
               {
                 "kind": "message",
@@ -281,8 +268,8 @@
                   "STARRED"
                 ],
                 "source": "gmail",
-                "account": "sam.rivera@example.com",
-                "hash": "sha256:4be48341187827d37f7d69fc9a25ec68776ceac2aef55df9375e404038b6065e"
+                "account": "work",
+                "hash": "sha256:20f3398d0a47af29458a8aff7d6d986eef83277d85b08db796ac551bbae84b35"
               }
             ],
             "cursor": "gmail:sam.rivera@example.com:history:1009:held",
@@ -306,33 +293,26 @@
           "name": "a cursor whose history Gmail no longer keeps is CURSOR_EXPIRED",
           "input": {
             "source": "gmail",
-            "account": "sam.rivera@example.com",
+            "account": "work",
             "cursor": "gmail:sam.rivera@example.com:history:0001"
           },
           "expect": "expired",
           "refuses": "CURSOR_EXPIRED: Gmail no longer keeps the history this cursor names. Next step: read again with since to restart the window.",
-          "since": "2026-10-13T09:00:00.000Z",
-          "asserts": []
+          "since": "2026-10-13T09:00:00.000Z"
         },
         {
           "name": "the restarted window reads on",
           "input": {
             "source": "gmail",
-            "account": "sam.rivera@example.com",
+            "account": "work",
             "cursor": "gmail:sam.rivera@example.com:history:0001",
             "since": "2026-10-13T09:00:00.000Z"
           },
           "expect": "page",
-          "asserts": [
-            {
-              "action": "gws.read",
-              "resource": "sam.rivera@example.com:gmail.users.history.list"
-            }
-          ],
           "answer": {
             "source": "gmail",
             "plugin": "@we-the-rebel-alliance/gws-plugin",
-            "account": "sam.rivera@example.com",
+            "account": "work",
             "owner": {
               "id": "mailto:sam.rivera@example.com",
               "label": "Sam Rivera"
@@ -372,8 +352,8 @@
                   "UNREAD"
                 ],
                 "source": "gmail",
-                "account": "sam.rivera@example.com",
-                "hash": "sha256:66bfc85bda3b58d4de94bb09ddac25fab89998d4604300b0cb86aaba29b53adb"
+                "account": "work",
+                "hash": "sha256:370df689699bb5d92b1d60cc8b6131303a37e781158e35d85be1716763a62f97"
               },
               {
                 "kind": "message",
@@ -402,8 +382,8 @@
                   "SENT"
                 ],
                 "source": "gmail",
-                "account": "sam.rivera@example.com",
-                "hash": "sha256:9bb2e0ae2eb3dc699709675f388bfdda02b7a44716cda7b4e9be38de98f232c2"
+                "account": "work",
+                "hash": "sha256:381af3efdd105216fcd91af820dd652bb16898fc93a0488c6312c1fac9fc333c"
               },
               {
                 "kind": "message",
@@ -425,8 +405,8 @@
                   "STARRED"
                 ],
                 "source": "gmail",
-                "account": "sam.rivera@example.com",
-                "hash": "sha256:4be48341187827d37f7d69fc9a25ec68776ceac2aef55df9375e404038b6065e"
+                "account": "work",
+                "hash": "sha256:20f3398d0a47af29458a8aff7d6d986eef83277d85b08db796ac551bbae84b35"
               }
             ],
             "cursor": "gmail:sam.rivera@example.com:history:1010",
@@ -440,26 +420,141 @@
             ],
             "failed": []
           }
+        },
+        {
+          "name": "a page of the personal account",
+          "input": {
+            "source": "gmail",
+            "account": "personal",
+            "limit": 10
+          },
+          "expect": "page",
+          "answer": {
+            "source": "gmail",
+            "plugin": "@we-the-rebel-alliance/gws-plugin",
+            "account": "personal",
+            "owner": {
+              "id": "mailto:sam.rivera.personal@example.com",
+              "label": "Sam Rivera (personal)"
+            },
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "trust": "untrusted",
+            "events": [
+              {
+                "kind": "message",
+                "external_id": "18f0000000000001",
+                "occurred_at": "2026-11-01T09:00:00.000Z",
+                "thread": "gmail-thread:18f0000000000001",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "mailto:ama.mensah@example.com",
+                    "name": "Ama Mensah"
+                  },
+                  {
+                    "role": "to",
+                    "id": "mailto:sam.rivera@example.com",
+                    "name": "Sam Rivera"
+                  },
+                  {
+                    "role": "cc",
+                    "id": "mailto:jordan.lee@example.org",
+                    "name": "Lee, Jordan"
+                  }
+                ],
+                "title": "Q4 numbers",
+                "text": "Hi Sam,\n\nCan you send the Q4 numbers by Friday? Finance needs them for the board pack.\n\nThanks,\nAma",
+                "url": "https://mail.google.com/mail/u/0/#all/18f0000000000001",
+                "labels": [
+                  "INBOX",
+                  "IMPORTANT",
+                  "CATEGORY_PERSONAL",
+                  "UNREAD"
+                ],
+                "source": "gmail",
+                "account": "personal",
+                "hash": "sha256:5f022cfb41dd334680510a0dad52b20b83488183f9eb6295c82a1524b2c23add"
+              },
+              {
+                "kind": "message",
+                "external_id": "18f0000000000002",
+                "occurred_at": "2026-11-01T10:30:00.000Z",
+                "thread": "gmail-thread:18f0000000000001",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "mailto:sam.rivera@example.com",
+                    "name": "Sam Rivera"
+                  },
+                  {
+                    "role": "to",
+                    "id": "mailto:ama.mensah@example.com"
+                  },
+                  {
+                    "role": "bcc",
+                    "id": "mailto:records@example.com"
+                  }
+                ],
+                "title": "Re: Q4 numbers",
+                "text": "Yes, I'll send them Wednesday.\n\nSent from my phone",
+                "url": "https://mail.google.com/mail/u/0/#all/18f0000000000001",
+                "labels": [
+                  "SENT"
+                ],
+                "source": "gmail",
+                "account": "personal",
+                "hash": "sha256:f2415563e91809434444e152c2189abdb7c25d027d5ae4589e8759c48ede5a3e"
+              },
+              {
+                "kind": "message",
+                "external_id": "18f0000000000008",
+                "occurred_at": "2026-11-01T15:00:00.000Z",
+                "thread": "gmail-thread:18f0000000000008",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "mailto:ama.mensah@example.com",
+                    "name": "Ama Mensah"
+                  }
+                ],
+                "title": "Lunch?",
+                "text": "Free for lunch on Thursday? I'll book a table & send the address.",
+                "url": "https://mail.google.com/mail/u/0/#all/18f0000000000008",
+                "labels": [
+                  "INBOX",
+                  "STARRED"
+                ],
+                "source": "gmail",
+                "account": "personal",
+                "hash": "sha256:5995b309188b2ae5ebfc2486a7365428f7acb70f2b584cf127a49d9283dee1c4"
+              }
+            ],
+            "cursor": "gmail:sam.rivera@example.com:history:1009",
+            "more": false,
+            "refused": [
+              {
+                "external_id": "18f0000000000005",
+                "reason": "instruction",
+                "detail": "instruction-shaped text from another person"
+              },
+              {
+                "external_id": "18f00000000000aa",
+                "reason": "secret",
+                "detail": "api key"
+              }
+            ],
+            "failed": []
+          }
         }
       ],
       "probe": {
         "input": {
           "source": "gmail",
-          "account": "sam.rivera@example.com"
+          "account": "work"
         },
-        "asserts": [
-          {
-            "action": "gws.probe",
-            "resource": "*"
-          },
-          {
-            "action": "gws.read",
-            "resource": "sam.rivera@example.com:gmail.users.getProfile"
-          }
-        ],
         "answer": {
           "source": "gmail",
-          "account": "sam.rivera@example.com",
+          "account": "work",
           "owner": {
             "id": "mailto:sam.rivera@example.com",
             "label": "Sam Rivera"
@@ -475,16 +570,10 @@
           "event": {
             "external_id": "18f0000000000001"
           },
-          "asserts": [
-            {
-              "action": "gws.read",
-              "resource": "sam.rivera@example.com:gmail.users.messages.get"
-            }
-          ],
           "answer": {
             "source": "gmail",
             "plugin": "@we-the-rebel-alliance/gws-plugin",
-            "account": "sam.rivera@example.com",
+            "account": "work",
             "owner": {
               "id": "mailto:sam.rivera@example.com",
               "label": "Sam Rivera"
@@ -524,8 +613,8 @@
                   "UNREAD"
                 ],
                 "source": "gmail",
-                "account": "sam.rivera@example.com",
-                "hash": "sha256:66bfc85bda3b58d4de94bb09ddac25fab89998d4604300b0cb86aaba29b53adb"
+                "account": "work",
+                "hash": "sha256:370df689699bb5d92b1d60cc8b6131303a37e781158e35d85be1716763a62f97"
               }
             ],
             "cursor": "detail:18f0000000000001",
@@ -534,10 +623,44 @@
             "failed": []
           }
         }
-      ],
-      "identity": [
-        "gmail.users.getProfile"
       ]
+    }
+  },
+  "events": {
+    "emitted": [
+      "changed"
+    ],
+    "status": {
+      "name": "gws",
+      "version": "0.0.0",
+      "host": {
+        "version": "2.4.1",
+        "range": ">=2.4.1 <2.5.0",
+        "tested": [
+          "2.4.1"
+        ]
+      },
+      "state": "ready",
+      "accounts": [
+        {
+          "alias": "work",
+          "state": "ready",
+          "owner": {
+            "id": "mailto:sam.rivera@example.com",
+            "label": "Sam Rivera"
+          }
+        },
+        {
+          "alias": "personal",
+          "state": "ready",
+          "owner": {
+            "id": "mailto:sam.rivera.personal@example.com",
+            "label": "Sam Rivera (personal)"
+          }
+        }
+      ],
+      "unguardedAgents": [],
+      "nextStep": null
     }
   }
 }
