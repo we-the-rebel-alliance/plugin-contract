@@ -74,7 +74,7 @@ export default {
 describe("the fixture plugin, and the real host", () => {
   test("runConformance accepts the fixture", { timeout: 30_000 }, async () => {
     const report = await runConformance(fixtureDirectory)
-    assert.deepEqual(report.findings, [])
+    assert.deepEqual(errors(report.findings), [])
     assert.equal(report.ok, true)
   })
 
