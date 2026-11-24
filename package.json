@@ -58,10 +58,6 @@
       "types": "./dist/hints.d.ts",
       "default": "./dist/hints.js"
     },
-    "./list": {
-      "types": "./dist/list.d.ts",
-      "default": "./dist/list.js"
-    },
     "./outputs": {
       "types": "./dist/outputs.d.ts",
       "default": "./dist/outputs.js"

@@ -69,10 +69,9 @@ The module map of the contract (§15), and what this package ships today:
 | `kit` | dev | the `plugin-kit` binary | landing |
 | `mcp-events` | plugin | optional MCP Events adapter | later |
 
-The package also ships the pieces `register` and `catalog` will replace — `descriptor` (reads the current `sources`
-block from an installed package), `list` (lists installed declarations), `permission` (exact session rules from a grant)
-and `tools-rpc` (the tools-RPC transport) — and [`hints`](docs/hints.md),
-the hint file format. They keep working until their replacements land.
+The package also ships the pieces `access` and `register` will replace — `permission` (exact session rules from a
+grant) and `tools-rpc` (the tools-RPC transport) — and [`hints`](docs/hints.md), the hint file format. They keep
+working until their replacements land.
 
 `docs/conformance.md` describes the kit. `docs/events.md` describes the feed model. `docs/outputs.md` describes the
 snapshot shapes. `docs/read.md`, `docs/act.md`, `docs/params.md` and `docs/pick.md` describe the app side, and

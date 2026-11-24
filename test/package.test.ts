@@ -14,6 +14,7 @@ describe("the package", () => {
     assert.deepEqual(pkg.exports["./outputs"], { types: "./dist/outputs.d.ts", default: "./dist/outputs.js" })
     assert.deepEqual(pkg.exports["./catalog"], { types: "./dist/catalog.d.ts", default: "./dist/catalog.js" })
     assert.equal(pkg.exports["./registry"], undefined)
+    assert.equal(pkg.exports["./list"], undefined)
     assert.equal(pkg.exports["./broker-client"], undefined)
   })
 

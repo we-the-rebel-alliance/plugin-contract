@@ -35,7 +35,7 @@ export interface BrokerRequest {
   readonly version: string
   /** The manifest hash the consumer consented under; a broker whose own copy differs refuses with PERMISSION_DENIED. */
   readonly manifestHash: string
-  /** Who reads, such as `memory`: the broker's grant key and its audit line. */
+  /** Who reads, such as `notes`: the broker's grant key and its audit line. */
   readonly consumer: string
   readonly source: string
   readonly account?: string
@@ -91,6 +91,9 @@ export function brokerRequest(request: ReadRequest): BrokerRequest {
 
 const plain = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
 
+/** Every key a broker request may carry; any other is refused. */
+const REQUEST_KEYS = new Set(["package", "version", "manifestHash", "consumer", "source", "account", "scope", "cursor", "since", "limit", "pick"])
+
 /** True when `answer` has a broker answer's shape. */
 export function isBrokerAnswer(answer: unknown): answer is BrokerAnswer {
   if (!plain(answer)) return false
@@ -102,14 +105,18 @@ export function isBrokerAnswer(answer: unknown): answer is BrokerAnswer {
 
 /**
  * True when `request` has a broker request's shape, for a broker reading one from an untrusted channel. `consumer` is
- * required and non-empty: it is the grant key, so a request without one cannot be served.
+ * required and non-empty: it is the grant key, so a request without one cannot be served. `manifestHash` is the
+ * contract's `sha256:…` hash, and no key outside the request is allowed.
  */
 export function isBrokerRequest(request: unknown): request is BrokerRequest {
   if (!plain(request)) return false
-  for (const key of ["package", "version", "manifestHash", "consumer", "source"] as const) {
+  for (const key of Object.keys(request)) if (!REQUEST_KEYS.has(key)) return false
+  for (const key of ["package", "version", "consumer", "source"] as const) {
     const value = request[key]
     if (typeof value !== "string" || value.length === 0) return false
   }
+  const manifestHash = request["manifestHash"]
+  if (typeof manifestHash !== "string" || !/^sha256:[0-9a-f]{64}$/.test(manifestHash)) return false
   if (request["account"] !== undefined && typeof request["account"] !== "string") return false
   if (request["cursor"] !== undefined && typeof request["cursor"] !== "string") return false
   if (request["since"] !== undefined && typeof request["since"] !== "string") return false

@@ -1,10 +1,12 @@
 import { type InstalledManifest } from "../manifest.js";
 /**
  * One plugin as the host lists it: the part of `ctx.plugin.list()` the catalog reads. A package names its target; a
- * local plugin names its directory; a builtin or SDK plugin has no package manifest.
+ * local plugin names its directory; a builtin or SDK plugin has no package manifest. A failed plugin is still listed,
+ * because its failure belongs in the catalog's report.
  */
 export interface HostPlugin {
     readonly id?: string;
+    readonly state: HostPluginState;
     readonly source: {
         readonly type: "package";
         readonly target: string;
@@ -18,6 +20,14 @@ export interface HostPlugin {
         readonly type: "sdk";
     };
 }
+/** The host's plugin state: loaded, or failed with the message and reference its status show. */
+export type HostPluginState = {
+    readonly status: "active";
+} | {
+    readonly status: "failed";
+    readonly error: string;
+    readonly ref?: string;
+};
 /**
  * The part of OpenCode's plugin context the catalog uses, written structurally so the package needs no
  * `@opencode/plugin`. A plugin passes its own `ctx`.
@@ -32,15 +42,12 @@ export interface CatalogHost {
             readonly data: readonly HostPlugin[];
         }>;
     };
-    readonly location?: {
-        readonly directory: string;
-    };
 }
-/** Where to look for package targets. The host's own directory is the default root. */
+/** Where the OpenCode cache is, and a host's own resolution of a target it installed elsewhere. */
 export interface CatalogOptions {
-    /** Directories whose `node_modules` hold installed packages, searched in order. Default: the host's directory. */
-    readonly roots?: readonly string[];
-    /** The directory a target resolved to, when the host knows it: a package cache, a checkout, a linked package. */
+    /** The OpenCode cache directory, the one holding `npm/`. Default: `<XDG_CACHE_HOME or ~/.cache>/opencode`. */
+    readonly cacheDirectory?: string;
+    /** The directory a target resolved to, when the host knows better than the cache: a checkout, a linked package. */
     readonly resolve?: (target: string) => string | undefined;
 }
 /** One installed plugin whose manifest validated, and the host target it came from. */
@@ -61,7 +68,8 @@ export interface CatalogListing {
 }
 /**
  * The manifests of the host's installed plugins. Each package on disk is read with `readInstalledManifest`, so there
- * is one parser, one validator and one hash. A missing package, a version the install does not match, or an invalid
- * manifest is reported and the rest of the list is still read. The function never throws for a plugin's own package.
+ * is one parser, one validator and one hash. A failed plugin, a missing package, a registry version the install does
+ * not match, or an invalid manifest is reported and the rest of the list is still read. The function never throws for
+ * a plugin's own package.
  */
 export declare function listInstalledPlugins(host: CatalogHost, options?: CatalogOptions): Promise<CatalogListing>;

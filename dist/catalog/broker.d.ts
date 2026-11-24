@@ -7,7 +7,7 @@ export interface BrokerRequest {
     readonly version: string;
     /** The manifest hash the consumer consented under; a broker whose own copy differs refuses with PERMISSION_DENIED. */
     readonly manifestHash: string;
-    /** Who reads, such as `memory`: the broker's grant key and its audit line. */
+    /** Who reads, such as `notes`: the broker's grant key and its audit line. */
     readonly consumer: string;
     readonly source: string;
     readonly account?: string;
@@ -55,7 +55,8 @@ export declare function brokerRequest(request: ReadRequest): BrokerRequest;
 export declare function isBrokerAnswer(answer: unknown): answer is BrokerAnswer;
 /**
  * True when `request` has a broker request's shape, for a broker reading one from an untrusted channel. `consumer` is
- * required and non-empty: it is the grant key, so a request without one cannot be served.
+ * required and non-empty: it is the grant key, so a request without one cannot be served. `manifestHash` is the
+ * contract's `sha256:…` hash, and no key outside the request is allowed.
  */
 export declare function isBrokerRequest(request: unknown): request is BrokerRequest;
 /**

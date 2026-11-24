@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -31,69 +32,160 @@ function writePackage(directory: string, capabilities: unknown, name = "@example
   writeFileSync(join(directory, "package.json"), JSON.stringify(pkg))
 }
 
-const hostOf = (data: readonly HostPlugin[], root?: string): CatalogHost => ({
-  plugin: { list: async () => ({ data }) },
-  ...(root === undefined ? {} : { location: { directory: root } }),
-})
+/** A generation root as arborist writes it: the root package.json names the added dependency. */
+function writeGeneration(cache: string, key: string, generation: string, dependencies: Record<string, string> = {}): string {
+  const root = join(cache, "npm", key, generation)
+  mkdirSync(root, { recursive: true })
+  writeFileSync(join(root, "package.json"), JSON.stringify({ dependencies }))
+  return root
+}
+
+/** A registry install at `<cache>/npm/<key>/<generation>/node_modules/<name>`. */
+function installRegistry(cache: string, key: string, generation: string, name = "@example/demo", version = "1.0.0"): string {
+  const root = writeGeneration(cache, key, generation)
+  const directory = join(root, "node_modules", name)
+  writePackage(directory, manifest(), name, version)
+  return directory
+}
+
+/** The cache key 2.4.1 builds for a Git target: `git-<slug>-<sha256(target)[0..12]>`. */
+const gitKey = (target: string, slug: string) => `git-${slug}-${createHash("sha256").update(target).digest("hex").slice(0, 12)}`
+
+const active = (source: HostPlugin["source"]): HostPlugin => ({ state: { status: "active" }, source })
+
+const hostOf = (data: readonly HostPlugin[]): CatalogHost => ({ plugin: { list: async () => ({ data }) } })
 
 describe("listInstalledPlugins", () => {
-  test("lists a local plugin and a package target, each validated and hashed from disk", async () => {
-    const root = join(scratch, "lists", "root")
-    const local = join(scratch, "lists", "local")
-    writePackage(local, manifest(), "@example/local")
-    writePackage(join(root, "node_modules", "@example", "demo"), manifest(), "@example/demo")
+  test("locates scoped and unscoped registry packages in the 2.4.1 cache", async () => {
+    const cache = join(scratch, "registry", "opencode")
+    const scoped = installRegistry(cache, "@example/demo@1.0.0", "1700000000000", "@example/demo", "1.0.0")
+    const plain = installRegistry(cache, "plain@latest", "1700000000001", "plain", "2.0.0")
     const listing = await listInstalledPlugins(
       hostOf([
-        { id: "local", source: { type: "local", path: local } },
-        { id: "demo", source: { type: "package", target: "@example/demo", version: "1.0.0" } },
-        { id: "builtin", source: { type: "builtin" } },
-        { id: "sdk", source: { type: "sdk" } },
+        active({ type: "package", target: "@example/demo", version: "1.0.0" }),
+        active({ type: "package", target: "plain", version: "2.0.0" }),
+        active({ type: "builtin" }),
+        active({ type: "sdk" }),
       ]),
-      { roots: [root] },
+      { cacheDirectory: cache },
     )
     assert.deepEqual(listing.problems, [])
     assert.equal(listing.plugins.length, 2)
+    const byTarget = new Map(listing.plugins.map((plugin) => [plugin.target, plugin]))
+    assert.equal(byTarget.get("@example/demo")?.directory, scoped)
+    assert.equal(byTarget.get("@example/demo")?.package, "@example/demo")
+    assert.equal(byTarget.get("@example/demo")?.manifest.sources[0]?.id, "demo.messages")
+    assert.equal(byTarget.get("plain")?.directory, plain)
+    assert.equal(byTarget.get("plain")?.version, "2.0.0")
     for (const plugin of listing.plugins) {
       assert.equal(plugin.hash, manifestHash(plugin.manifest))
       assert.match(plugin.hash, /^sha256:[0-9a-f]{64}$/)
     }
-    const byTarget = new Map(listing.plugins.map((plugin) => [plugin.target, plugin]))
-    assert.equal(byTarget.get(local)?.package, "@example/local")
-    assert.equal(byTarget.get(local)?.version, "1.0.0")
-    assert.equal(byTarget.get(local)?.directory, local)
-    assert.equal(byTarget.get("@example/demo")?.package, "@example/demo")
-    assert.equal(byTarget.get("@example/demo")?.directory, join(root, "node_modules", "@example", "demo"))
-    assert.equal(byTarget.get("@example/demo")?.manifest.sources[0]?.id, "demo.messages")
   })
 
-  test("uses the host's directory as the default root, and a host resolve for a target no root holds", async () => {
-    const root = join(scratch, "default", "root")
-    const checkout = join(scratch, "default", "checkout")
-    writePackage(join(root, "node_modules", "@example", "demo"), manifest(), "@example/demo")
-    writePackage(checkout, manifest(), "@example/checkout")
-    const fromRoot = await listInstalledPlugins(hostOf([{ source: { type: "package", target: "@example/demo" } }], root))
-    assert.equal(fromRoot.plugins.length, 1)
-    const resolved = await listInstalledPlugins(hostOf([{ source: { type: "package", target: "github:example/checkout", version: "e40fee4" } }], root), {
-      resolve: (target) => (target === "github:example/checkout" ? checkout : undefined),
+  test("locates a Git target by its 2.4.1 key and the generation's dependency name", async () => {
+    const cache = join(scratch, "git", "opencode")
+    const target = "github:example/checkout#v1.0.0"
+    const key = gitKey(target, "checkout")
+    assert.match(key, /^git-checkout-[0-9a-f]{12}$/)
+    const generation = writeGeneration(cache, key, "1700000000100", { "@example/checkout": target })
+    const directory = join(generation, "node_modules", "@example", "checkout")
+    writePackage(directory, manifest(), "@example/checkout", "1.0.0")
+    const listing = await listInstalledPlugins(hostOf([active({ type: "package", target, version: "e40fee4" })]), { cacheDirectory: cache })
+    assert.deepEqual(listing.problems, [])
+    assert.equal(listing.plugins.length, 1)
+    assert.equal(listing.plugins[0]?.directory, directory)
+    assert.equal(listing.plugins[0]?.target, target)
+    // A Git target's version is a commit revision, so it is not compared with the package's version.
+    assert.equal(listing.plugins[0]?.version, "1.0.0")
+  })
+
+  test("chooses the newest generation that has no .rejected sibling", async () => {
+    const cache = join(scratch, "rejected", "opencode")
+    const older = installRegistry(cache, "@example/demo@latest", "100", "@example/demo", "1.0.0")
+    installRegistry(cache, "@example/demo@latest", "200", "@example/demo", "2.0.0")
+    writeFileSync(join(cache, "npm", "@example/demo@latest", "200.rejected"), "")
+    const listing = await listInstalledPlugins(hostOf([active({ type: "package", target: "@example/demo", version: "1.0.0" })]), { cacheDirectory: cache })
+    assert.deepEqual(listing.problems, [])
+    assert.equal(listing.plugins[0]?.directory, older)
+    assert.equal(listing.plugins[0]?.version, "1.0.0")
+  })
+
+  test("finds a range's own cache entry by the host's version", async () => {
+    const cache = join(scratch, "range", "opencode")
+    installRegistry(cache, "@example/demo@latest", "299", "@example/demo", "2.0.0")
+    const directory = installRegistry(cache, "@example/demo@^1.0.0", "300", "@example/demo", "1.2.0")
+    const listing = await listInstalledPlugins(hostOf([active({ type: "package", target: "@example/demo", version: "1.2.0" })]), { cacheDirectory: cache })
+    assert.deepEqual(listing.problems, [])
+    assert.equal(listing.plugins[0]?.directory, directory)
+  })
+
+  test("a host resolve wins over the cache", async () => {
+    const cache = join(scratch, "resolve", "opencode")
+    installRegistry(cache, "@example/demo@latest", "400", "@example/demo", "1.0.0")
+    const checkout = join(scratch, "resolve", "checkout")
+    writePackage(checkout, manifest(), "@example/demo", "9.9.9")
+    const listing = await listInstalledPlugins(hostOf([active({ type: "package", target: "@example/demo", version: "9.9.9" })]), {
+      cacheDirectory: cache,
+      resolve: (target) => (target === "@example/demo" ? checkout : undefined),
     })
-    assert.deepEqual(resolved.problems, [])
-    assert.equal(resolved.plugins[0]?.directory, checkout)
-    assert.equal(resolved.plugins[0]?.target, "github:example/checkout")
+    assert.deepEqual(listing.problems, [])
+    assert.equal(listing.plugins[0]?.directory, checkout)
+  })
+
+  test("defaults to <XDG_CACHE_HOME>/opencode", async () => {
+    const xdg = join(scratch, "xdg")
+    const previous = process.env["XDG_CACHE_HOME"]
+    process.env["XDG_CACHE_HOME"] = xdg
+    try {
+      const directory = installRegistry(join(xdg, "opencode"), "plain@latest", "1", "plain")
+      const listing = await listInstalledPlugins(hostOf([active({ type: "package", target: "plain" })]))
+      assert.deepEqual(listing.problems, [])
+      assert.equal(listing.plugins[0]?.directory, directory)
+    } finally {
+      if (previous === undefined) delete process.env["XDG_CACHE_HOME"]
+      else process.env["XDG_CACHE_HOME"] = previous
+    }
+  })
+
+  test("reports a failed plugin with the host's error and reference, and does not list it", async () => {
+    const directory = join(scratch, "failed", "local")
+    writePackage(directory, manifest(), "@example/failed")
+    const listing = await listInstalledPlugins(
+      hostOf([{ state: { status: "failed", error: "the setup threw", ref: "err_abc123" }, source: { type: "local", path: directory } }]),
+    )
+    assert.deepEqual(listing.plugins, [])
+    assert.equal(listing.problems.length, 1)
+    assert.match(listing.problems[0]?.problems[0] ?? "", /failed to load: the setup threw \(err_abc123\)/)
+  })
+
+  test("reports a single-file local plugin accurately", async () => {
+    const file = join(scratch, "single", "index.ts")
+    mkdirSync(join(scratch, "single"), { recursive: true })
+    writeFileSync(file, "export default {}\n")
+    const listing = await listInstalledPlugins(hostOf([active({ type: "local", path: file })]))
+    assert.deepEqual(listing.plugins, [])
+    assert.match(listing.problems[0]?.problems[0] ?? "", /a single-file local plugin has no package\.json manifest/)
+    assert.doesNotMatch(listing.problems[0]?.problems[0] ?? "", /not JSON/)
   })
 
   test("reports a missing package, a package with no manifest, an invalid manifest and another version", async () => {
-    const root = join(scratch, "problems", "root")
-    writePackage(join(root, "node_modules", "@example", "demo"), manifest(), "@example/demo", "1.0.0")
-    writePackage(join(root, "node_modules", "@example", "bare"), undefined, "@example/bare")
-    writePackage(join(root, "node_modules", "@example", "broken"), { version: 1 }, "@example/broken")
+    const cache = join(scratch, "problems", "opencode")
+    installRegistry(cache, "@example/demo@2.0.0", "500", "@example/demo", "1.0.0")
+    const bare = join(writeGeneration(cache, "@example/bare@latest", "501"), "node_modules", "@example", "bare")
+    mkdirSync(bare, { recursive: true })
+    writeFileSync(join(bare, "package.json"), JSON.stringify({ name: "@example/bare", version: "1.0.0" }))
+    const broken = join(writeGeneration(cache, "@example/broken@latest", "502"), "node_modules", "@example", "broken")
+    mkdirSync(broken, { recursive: true })
+    writeFileSync(join(broken, "package.json"), JSON.stringify({ name: "@example/broken", version: "1.0.0", capabilities: { version: 1 } }))
     const listing = await listInstalledPlugins(
       hostOf([
-        { source: { type: "package", target: "@example/demo", version: "2.0.0" } },
-        { source: { type: "package", target: "@example/bare" } },
-        { source: { type: "package", target: "@example/broken" } },
-        { source: { type: "package", target: "@example/missing" } },
+        active({ type: "package", target: "@example/demo", version: "2.0.0" }),
+        active({ type: "package", target: "@example/bare" }),
+        active({ type: "package", target: "@example/broken" }),
+        active({ type: "package", target: "@example/missing" }),
       ]),
-      { roots: [root] },
+      { cacheDirectory: cache },
     )
     assert.deepEqual(listing.plugins, [])
     assert.equal(listing.problems.length, 4)
@@ -118,15 +210,11 @@ describe("listInstalledPlugins", () => {
   })
 
   test("lists one entry for a package that is installed twice by two targets", async () => {
-    const root = join(scratch, "twice", "root")
-    const directory = join(root, "node_modules", "@example", "demo")
-    writePackage(directory, manifest(), "@example/demo")
+    const cache = join(scratch, "twice", "opencode")
+    const directory = installRegistry(cache, "@example/demo@latest", "600", "@example/demo")
     const listing = await listInstalledPlugins(
-      hostOf([
-        { source: { type: "package", target: "@example/demo" } },
-        { source: { type: "local", path: directory } },
-      ]),
-      { roots: [root] },
+      hostOf([active({ type: "package", target: "@example/demo" }), active({ type: "local", path: directory })]),
+      { cacheDirectory: cache },
     )
     assert.equal(listing.plugins.length, 1)
     assert.deepEqual(listing.problems, [])
@@ -206,7 +294,7 @@ describe("the broker request", () => {
     assert.equal("manifest" in request, false)
   })
 
-  test("is recognised only with a consumer, the source and its manifest hash", () => {
+  test("is recognised only with a consumer, the source, the manifest hash and no unknown key", () => {
     const request = brokerRequest(todayRequest())
     assert.equal(isBrokerRequest(request), true)
     assert.equal(isBrokerRequest({ ...request, consumer: "" }), false)
@@ -214,6 +302,10 @@ describe("the broker request", () => {
     assert.equal(isBrokerRequest(withoutConsumer), false)
     assert.equal(isBrokerRequest({ ...request, package: "" }), false)
     assert.equal(isBrokerRequest({ ...request, manifestHash: undefined }), false)
+    assert.equal(isBrokerRequest({ ...request, manifestHash: "sha256:abc" }), false)
+    assert.equal(isBrokerRequest({ ...request, manifestHash: `sha256:${"a".repeat(63)}` }), false)
+    assert.equal(isBrokerRequest({ ...request, manifestHash: `SHA256:${"a".repeat(64)}` }), false)
+    assert.equal(isBrokerRequest({ ...request, unknown: true }), false)
     assert.equal(isBrokerRequest({ ...request, limit: 0 }), false)
     assert.equal(isBrokerRequest({ ...request, pick: ["ok", 2] }), false)
     assert.equal(isBrokerRequest({ ...request, scope: { channels: ["C1"] } }), true)

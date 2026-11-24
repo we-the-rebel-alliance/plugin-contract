@@ -16,4 +16,4 @@
 export { brokerRequest, isBrokerAnswer, isBrokerRequest, sourceReader } from "./catalog/broker.ts"
 export type { BrokerAnswer, BrokerRequest, BrokerTransport, ReaderOutcome, SourceReader } from "./catalog/broker.ts"
 export { listInstalledPlugins } from "./catalog/list.ts"
-export type { CatalogHost, CatalogListing, CatalogOptions, CatalogPlugin, CatalogProblem, HostPlugin } from "./catalog/list.ts"
+export type { CatalogHost, CatalogListing, CatalogOptions, CatalogPlugin, CatalogProblem, HostPlugin, HostPluginState } from "./catalog/list.ts"

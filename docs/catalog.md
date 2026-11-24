@@ -26,33 +26,53 @@ for (const plugin of listing.plugins) {
 listing.problems            // packages that could not be read, one entry each
 ```
 
-`ctx.plugin.list()` answers one entry per installed plugin. The catalog reads only its `source`:
+`ctx.plugin.list()` answers one entry per installed plugin. The catalog reads its `source` and `state`:
 
 | `source.type` | What the catalog does |
 |---|---|
-| `local` | reads the manifest at `source.path` |
-| `package` | resolves `source.target`, then reads the manifest; a registry target's `source.version` is checked against the installed package |
+| `local` | reads the manifest at `source.path`; a single-file local plugin has no manifest and is reported |
+| `package` | resolves `source.target` through the OpenCode 2.4.1 cache, then reads the manifest |
 | `builtin`, `sdk` | skipped: there is no package on disk to read |
 
-A package target is a package name such as `@we-the-rebel-alliance/slack-plugin`. The host's own directory is the
-default root for `node_modules`, and `options.roots` replaces it:
+A plugin whose host state is `failed` is reported with the host's error and reference, never listed as healthy.
 
-```ts
-const listing = await listInstalledPlugins(ctx, { roots: ["/home/ana/.cache/opencode/npm"] })
+### The 2.4.1 cache
+
+OpenCode 2.4.1 installs package plugins here:
+
+```
+<XDG_CACHE_HOME or ~/.cache>/opencode/npm/<key>/<generation>/node_modules/<name>
 ```
 
-When the host already knows where a target lives, such as a package cache or a linked checkout, it passes a resolver
-instead:
+The catalog mirrors `@opencode/util@2.4.1` (`dist/npm.js`: `key`, `gitSlug`, `directory`, `generations`, `current`,
+`installedName`; `dist/global-roots.js`: `cache`):
+
+- **`<key>`** is `name@latest` for a bare registry target, `name@<spec>` for a version, range or tag, and
+  `git-<slug>-<sha256(target)[0..12]>` for a Git target (`github:owner/repo#ref`, `git+…`, `git://`, `owner/repo`).
+- **`<generation>`** is a numeric install. The newest generation wins unless a sibling `<generation>.rejected` file
+  exists; then the newest generation without one is the installed copy.
+- **`<name>`** is the package name for a registry target. For a Git target it is the first key of the generation root's
+  `package.json` `dependencies`, falling back to the repository name in the target.
+
+`cacheDirectory` names the OpenCode cache directory, the one that holds `npm/`. It defaults to
+`<XDG_CACHE_HOME or ~/.cache>/opencode`:
+
+```ts
+const listing = await listInstalledPlugins(ctx, { cacheDirectory: "/home/ana/.cache/opencode" })
+```
+
+A host that installed a plugin elsewhere, such as a linked checkout, passes `resolve` instead; it wins over the cache:
 
 ```ts
 const listing = await listInstalledPlugins(ctx, {
-  resolve: (target) => cacheDirectory(target),
+  resolve: (target) => (target === "@example/demo" ? "/home/ana/src/demo" : undefined),
 })
 ```
 
-`listInstalledPlugins` never throws for a plugin's own package. A missing package, a registry package whose version is
-not the one the host names, or a manifest that does not validate is reported in `problems`, and every other plugin is
-still listed. Manifests are read with `readInstalledManifest`, so there is one parser, one validator and one hash.
+`listInstalledPlugins` never throws for a plugin's own package. A failed plugin, a missing package, a registry package
+whose version is not the one the host names, or a manifest that does not validate is reported in `problems`, and every
+other plugin is still listed. Manifests are read with `readInstalledManifest`, so there is one parser, one validator
+and one hash.
 
 Each listed plugin carries the host's `target` beside the `InstalledManifest` fields (`package`, `version`,
 `directory`, `manifest`, `hash`). Two targets that resolve to the same directory are one entry.
@@ -60,7 +80,7 @@ Each listed plugin carries the host's `target` beside the `InstalledManifest` fi
 ### The host shape
 
 `CatalogHost` is written structurally, so a plugin passes `ctx` as it is; the `@opencode/plugin` types stay out of the
-published declarations. It needs `plugin.list()`, and `location.directory` for the default root.
+published declarations. It needs `plugin.list()` and nothing else.
 
 ## The broker
 
@@ -85,7 +105,7 @@ grant never cross the wire.
 
 | Field | Meaning |
 |---|---|
-| `consumer` | who reads, such as `memory`. **This is the grant key**, and the broker's audit line |
+| `consumer` | who reads, such as `notes`. **This is the grant key**, and the broker's audit line |
 | `package` | the installed package the consumer read its manifest from |
 | `version` | that package's installed version |
 | `manifestHash` | the `sha256:…` hash the consumer consented under |
@@ -144,6 +164,8 @@ A broker therefore never needs to be trusted for shape, and a refused read is ne
 
 | Case | What happens |
 |---|---|
+| A plugin the host reports as failed | reported in `problems` with the host's error and reference, never listed |
+| A single-file local plugin | reported: it has no `package.json` manifest |
 | A package target with no installed package | reported in `problems`, never thrown |
 | A package with no manifest, or one that does not validate | reported in `problems` with the validator's paths |
 | A registry package whose version is not the host's | reported in `problems` |
@@ -161,7 +183,7 @@ A broker therefore never needs to be trusted for shape, and a refused read is ne
 | `sourceReader({ host, broker? })` | a consumer's reader: broker first when offered, embedded otherwise |
 | `isBrokerRequest(value)` | true when a value has a broker request's shape, including its `consumer` |
 | `isBrokerAnswer(value)` | true when a value has a broker answer's shape |
-| `CatalogHost`, `CatalogOptions`, `CatalogListing`, `CatalogPlugin`, `CatalogProblem`, `HostPlugin` | the host, its options and the listing |
+| `CatalogHost`, `CatalogOptions`, `CatalogListing`, `CatalogPlugin`, `CatalogProblem`, `HostPlugin`, `HostPluginState` | the host, its options and the listing |
 | `BrokerRequest`, `BrokerAnswer`, `BrokerTransport`, `SourceReader`, `ReaderOutcome` | the wire shapes and the reader |
 
 The listing's `hash` is the same hash `readInstalledManifest` gives and a grant stores. A changed manifest changes the

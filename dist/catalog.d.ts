@@ -16,4 +16,4 @@
 export { brokerRequest, isBrokerAnswer, isBrokerRequest, sourceReader } from "./catalog/broker.js";
 export type { BrokerAnswer, BrokerRequest, BrokerTransport, ReaderOutcome, SourceReader } from "./catalog/broker.js";
 export { listInstalledPlugins } from "./catalog/list.js";
-export type { CatalogHost, CatalogListing, CatalogOptions, CatalogPlugin, CatalogProblem, HostPlugin } from "./catalog/list.js";
+export type { CatalogHost, CatalogListing, CatalogOptions, CatalogPlugin, CatalogProblem, HostPlugin, HostPluginState } from "./catalog/list.js";
