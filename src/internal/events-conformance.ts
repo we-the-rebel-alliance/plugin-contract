@@ -135,6 +135,8 @@ export function eventsFindings(options: {
     }
     if (!plain(answer)) continue
     const page = answer as unknown as EventsListResult
+    const requestedAccount = typeof input["account"] === "string" ? input["account"] : undefined
+    if (requestedAccount !== undefined && page.account !== requestedAccount) findings.push(error("pages.account", `${where} was read for ${requestedAccount} and names ${page.account}`, { path: "fixtures/conformance.json" }))
     if (page.plugin !== undefined && page.plugin !== plugin) findings.push(error("pages.plugin", `${where} names the plugin ${page.plugin}, not ${plugin}`, { path: "fixtures/conformance.json" }))
     if (typeof source.input?.["source"] === "string" && page.source !== pageSourceName(source)) {
       findings.push(error("pages.source", `${where} names the source ${page.source}, not ${pageSourceName(source)}`, { path: `capabilities.sources.${source.id}.input` }))

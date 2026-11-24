@@ -154,7 +154,7 @@ export function staticFindings(directory: string, manifest: Manifest, options: {
     }
     if (/[\r\n]/.test(line)) findings.push(error("T0.namespace-length", "the registered namespace line is more than one line", { path: "src/index.ts", fix: "Write the namespace description as one line." }))
   } else {
-    findings.push(warning("T0.namespace-unmeasured", "the registered namespace line was not measured, because no real host run happened", { fix: "Run T1 on Node 24, or run plugin-kit check, which measures it from the host." }))
+    findings.push(warning("T0.namespace-unmeasured", "the registered namespace line was not measured, because no real host run happened", { fix: "Record the namespace text with plugin-kit record, or run plugin-kit check, whose T1 reading measures it live." }))
   }
 
   const skills = skillsOf(directory)

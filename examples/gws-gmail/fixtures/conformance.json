@@ -662,5 +662,6 @@
       "unguardedAgents": [],
       "nextStep": null
     }
-  }
+  },
+  "namespace": "Gmail, Calendar and Drive as contract events, with a sign-in per account."
 }

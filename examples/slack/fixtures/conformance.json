@@ -1157,5 +1157,6 @@
       "unguardedAgents": [],
       "nextStep": null
     }
-  }
+  },
+  "namespace": "Channels, threads and direct messages as contract events."
 }

@@ -32,6 +32,8 @@ export interface RecordedAction {
 /** The whole fixture. */
 export interface Fixture {
   readonly plugin?: string | undefined
+  /** The namespace text a real T1 run recorded, so static T0 can measure it without a host. */
+  readonly namespace?: string | undefined
   readonly accounts?: RecordedAccounts | undefined
   readonly sources?: Readonly<Record<string, RecordedSource>> | undefined
   readonly events?: RecordedEvents | undefined

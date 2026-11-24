@@ -44,7 +44,7 @@ export interface HostInspection {
 }
 
 /** Every T1 finding for one host, and the real run when it happened. */
-export async function inspectHost(directory: string, manifest: Manifest, host: string, options: { readonly accounts?: readonly string[]; readonly realAccounts?: boolean | undefined; readonly accountMethod?: string | undefined; readonly inputs?: Readonly<Record<string, unknown>> } = {}): Promise<HostInspection> {
+export async function inspectHost(directory: string, manifest: Manifest, host: string, options: { readonly accounts?: readonly string[]; readonly realAccounts?: boolean | undefined; readonly accountMethod?: string | undefined; readonly accountCursor?: { readonly method?: unknown; readonly account?: unknown; readonly other?: unknown } | undefined; readonly inputs?: Readonly<Record<string, unknown>> } = {}): Promise<HostInspection> {
   if (nodeMajor < 24) {
     return {
       findings: [
@@ -101,7 +101,7 @@ export async function inspectHost(directory: string, manifest: Manifest, host: s
     findings.push(...pinnedFindings(manifest, run))
     findings.push(...(await permissionFindings(directory, manifest, host, run, pluginOptions)))
     findings.push(...(await rpcFindings(manifest, run, options.inputs ?? {}, options.accounts ?? [])))
-    if (options.realAccounts === true) findings.push(...(await accountFindings(manifest, run, options.accounts ?? [], options.inputs ?? {}, options.accountMethod)))
+    if (options.realAccounts === true) findings.push(...(await accountFindings(manifest, run, options.accounts ?? [], options.inputs ?? {}, options.accountMethod, options.accountCursor)))
     return { run, findings }
   } finally {
     await run.close()
@@ -124,7 +124,7 @@ export async function namespaceOf(directory: string, manifest: Manifest, host = 
 }
 
 /** T1 findings only, for `t1`. */
-export async function hostFindings(directory: string, manifest: Manifest, host: string, options: { readonly accounts?: readonly string[]; readonly realAccounts?: boolean | undefined; readonly accountMethod?: string | undefined; readonly inputs?: Readonly<Record<string, unknown>> } = {}): Promise<Finding[]> {
+export async function hostFindings(directory: string, manifest: Manifest, host: string, options: { readonly accounts?: readonly string[]; readonly realAccounts?: boolean | undefined; readonly accountMethod?: string | undefined; readonly accountCursor?: { readonly method?: unknown; readonly account?: unknown; readonly other?: unknown } | undefined; readonly inputs?: Readonly<Record<string, unknown>> } = {}): Promise<Finding[]> {
   return [...(await inspectHost(directory, manifest, host, options)).findings]
 }
 
@@ -238,7 +238,10 @@ async function rpcFindings(manifest: Manifest, run: HostRun, inputs: Readonly<Re
       // A commit takes only the planId its planning method answered; plan first, as a person would.
       const planned = await run.call(item.commits, { ...(inputs[item.commits] ?? {}), ...(account === undefined ? {} : { account }) }, { rules })
       const planId = planned.ok && planned.output !== null && typeof planned.output === "object" ? (planned.output as { planId?: unknown }).planId : undefined
-      if (typeof planId !== "string") continue
+      if (typeof planId !== "string") {
+        findings.push(warning("T1.rpc-confirmation", `${method} commits ${item.commits}, whose plan did not answer a planId, so LD-5 is unproven for it`, { path: `capabilities.methods.${method}` }))
+        continue
+      }
       input = { planId }
     } else if (account !== undefined && item.accounts === "optional" && input["account"] === undefined) {
       input = { ...input, account }
@@ -252,7 +255,7 @@ async function rpcFindings(manifest: Manifest, run: HostRun, inputs: Readonly<Re
 }
 
 /** Two aliases, on the running plugin: a missing account and an unknown one are the contract's refusals. */
-async function accountFindings(manifest: Manifest, run: HostRun, aliases: readonly string[], inputs: Readonly<Record<string, unknown>>, preferred?: string): Promise<Finding[]> {
+async function accountFindings(manifest: Manifest, run: HostRun, aliases: readonly string[], inputs: Readonly<Record<string, unknown>>, preferred?: string, cursor?: { readonly method?: unknown; readonly account?: unknown; readonly other?: unknown }): Promise<Finding[]> {
   if (manifest.accounts === undefined || aliases.length < 2) return []
   const method = preferred !== undefined && manifest.methods[preferred]?.accounts === "optional" ? preferred : Object.keys(manifest.methods).find((name) => manifest.methods[name]?.accounts === "optional" && !name.startsWith("mcp:"))
   if (method === undefined) return []
@@ -262,13 +265,15 @@ async function accountFindings(manifest: Manifest, run: HostRun, aliases: readon
   if (missing.ok || missing.code !== "ACCOUNT_REQUIRED") findings.push(error("T1.accounts", `${method} with two aliases and no account answered ${missing.ok ? "a result" : missing.code}, not ACCOUNT_REQUIRED`, { path: `capabilities.methods.${method}.accounts` }))
   const unknown = await run.call(method, { ...base, account: "nobodyhere" }, {})
   if (unknown.ok || unknown.code !== "ACCOUNT_UNKNOWN") findings.push(error("T1.accounts", `${method} with the unknown alias nobodyhere answered ${unknown.ok ? "a result" : unknown.code}, not ACCOUNT_UNKNOWN`, { path: `capabilities.methods.${method}.accounts` }))
-  const [first, second] = aliases
-  if (first !== undefined && second !== undefined && method === "events_list") {
-    const issued = await run.call(method, { ...base, account: first }, {})
-    const cursor = issued.ok && issued.output !== null && typeof issued.output === "object" ? (issued.output as { cursor?: unknown }).cursor : undefined
-    if (typeof cursor === "string") {
-      const crossed = await run.call(method, { ...base, account: second, cursor }, {})
-      if (crossed.ok || crossed.code !== "CURSOR_INVALID") findings.push(error("T1.accounts", `${first}'s cursor read under ${second} answered ${crossed.ok ? "a page" : crossed.code}, not CURSOR_INVALID`, { path: `capabilities.methods.${method}.accounts` }))
+  const cursorMethod = typeof cursor?.method === "string" && manifest.methods[cursor.method] !== undefined ? cursor.method : method === "events_list" ? method : undefined
+  const first = typeof cursor?.account === "string" && aliases.includes(cursor.account) ? cursor.account : aliases[0]
+  const second = typeof cursor?.other === "string" && aliases.includes(cursor.other) ? cursor.other : aliases[1]
+  if (cursorMethod !== undefined && first !== undefined && second !== undefined && first !== second) {
+    const issued = await run.call(cursorMethod, { ...(inputs[cursorMethod] ?? {}), account: first }, {})
+    const token = issued.ok && issued.output !== null && typeof issued.output === "object" ? (issued.output as { cursor?: unknown }).cursor : undefined
+    if (typeof token === "string") {
+      const crossed = await run.call(cursorMethod, { ...(inputs[cursorMethod] ?? {}), account: second, cursor: token }, {})
+      if (crossed.ok || crossed.code !== "CURSOR_INVALID") findings.push(error("T1.accounts", `${first}'s cursor read under ${second} answered ${crossed.ok ? "a page" : crossed.code}, not CURSOR_INVALID`, { path: `capabilities.methods.${cursorMethod}.accounts` }))
     }
   }
   return findings

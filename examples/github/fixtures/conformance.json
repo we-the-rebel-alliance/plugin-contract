@@ -303,5 +303,6 @@
       "unguardedAgents": [],
       "nextStep": null
     }
-  }
+  },
+  "namespace": "GitHub notifications, issues and commits as contract events."
 }

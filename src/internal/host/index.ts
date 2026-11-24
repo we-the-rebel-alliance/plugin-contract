@@ -18,6 +18,7 @@
  * free of runtime dependencies.
  */
 import type { PermissionRule } from "../../access.ts"
+import { secretKinds } from "../secrets.ts"
 import { waitForActivation } from "./activation.ts"
 import { HostError } from "./errors.ts"
 
@@ -172,7 +173,12 @@ function toolOf(registration: Record<string, unknown>, namespace: string): Recor
 
 /** Run the plugin in the real host and record what it registered. */
 export async function createHost(options: HostOptions): Promise<HostRun> {
-  const loaded = await pluginEntry(options.directory)
+  let loaded: { readonly entry: string; readonly module: unknown }
+  try {
+    loaded = await pluginEntry(options.directory)
+  } catch (cause) {
+    return emptyRun(options, undefined, cause instanceof Error ? cause.message : String(cause))
+  }
   const definition = definitionOf(loaded.module)
   if (definition === undefined) {
     return emptyRun(options, loaded.entry, `the server entry exports no Plugin.define({ id, setup }) value`)
@@ -272,7 +278,9 @@ export async function createHost(options: HostOptions): Promise<HostRun> {
         if (typeof cleanup === "function") return cleanup
         return undefined
       } catch (cause) {
-        setupError = cause instanceof Error ? cause.message : String(cause)
+        const message = cause instanceof Error ? cause.message : String(cause)
+        const secrets = secretKinds(message)
+        setupError = secrets.length === 0 ? message.slice(0, 300) : `the plugin's setup error held a secret (${secrets.join(", ")}), which the kit did not print`
         throw cause
       } finally {
         setupDone = true
@@ -280,12 +288,17 @@ export async function createHost(options: HostOptions): Promise<HostRun> {
     },
   }
 
-  const host = await sdk.OpenCode.create({
-    plugins: [wrapper],
-    config: { directory: options.directory },
-    app: { name: "opencode", version: options.version },
-    log: { level: "error", emit: () => undefined },
-  })
+  let host: SdkHost
+  try {
+    host = await sdk.OpenCode.create({
+      plugins: [wrapper],
+      config: { directory: options.directory },
+      app: { name: "opencode", version: options.version },
+      log: { level: "error", emit: () => undefined },
+    })
+  } catch (cause) {
+    return emptyRun(options, loaded.entry, `the embedded OpenCode host did not start: ${cause instanceof Error ? cause.message : String(cause)}`)
+  }
   let sessionID: string | undefined
   try {
     const session = await host.sessions.create({

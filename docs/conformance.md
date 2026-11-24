@@ -32,9 +32,10 @@ prove. `record: true` turns a missing recording into a warning while a fixture i
 manifest's `plugin.host.tested`; when any host is requested, the first unsupported release (`2.5.0`) is run as well,
 for the clean refusal.
 
-`t0` is static except for one host reading: the registered namespace line, which only the real host can show, is
-measured from T1 (or from a short host run on Node 24). `t1` loads the plugin on one OpenCode release. `runConformance`
-runs T0, the declaration and its recordings, and T1.
+`t0` is static: it reads the namespace text recorded in `fixtures/conformance.json` (a real T1 run writes it through
+`plugin-kit record`). `runConformance` measures it live from T1 instead, so the CI gate always uses the registered
+text. `t1` loads the plugin on one OpenCode release. `runConformance` runs T0, the declaration and its recordings, and
+T1.
 
 ## T0, the static gate
 
@@ -61,14 +62,14 @@ is not a T0 finding: the file set belongs to the kit's `docs` and `forbidden` ch
 | `T1.codemode` | every tool is exposed to Code Mode, and only a declared pinned method is pinned |
 | `T1.events` | the one RPC registration carries exactly the manifest's bus events |
 | `T1.pinned-budget` | a pinned tool's signature is within about 1,000 tokens |
-| `T1.rpc-confirmation` | a non-`read` method over RPC with an allow rule and no grant is refused (LD-5) |
+| `T1.rpc-confirmation` | a non-`read` method over RPC with an allow rule and no grant is refused (LD-5); a commit is planned first, and an unplannable commit is a warning |
 | `T1.accounts` | with two aliases and `accounts.real`, a missing account is `ACCOUNT_REQUIRED`, an unknown one is `ACCOUNT_UNKNOWN`, and a cursor does not cross accounts |
 | `T1.unsupported-host` | a release outside `>=2.4.1 <2.5.0` is refused with `HOST_UNTESTED` and a next step |
 
 T1 loads the built server entry through OpenCode's own `Plugin.Host.resolve` (`./server`, then `.`; never `main` or
 `dist/index.js`) and runs it in the embedded `@opencode/sdk` 2.4.1 host: it creates a session, prompts once so the
 plugin instance activates, waits for the plugin list, and records the real `ctx` registrations. It imports no private
-OpenCode code. The host harness lives in `src/internal/host/` and is owned by conformance; `plugin-kit` imports it. It
+OpenCode code. The host harness lives in `src/internal/host/` and is owned by conformance, so `plugin-kit` imports it rather than carrying a copy. It
 handles the six 2.4 behaviours standard §8 lists: activation before the first RPC, the embedded host never running
 automations, no `experimental.schedule`, MCP `server/discover` with 401/403 final, nested Code Mode call ids, and a
 turn's first tool step arriving before the start. A plugin repository carries `@opencode/plugin` and `@opencode/sdk`

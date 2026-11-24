@@ -11143,7 +11143,12 @@ function toolOf(registration, namespace) {
   };
 }
 async function createHost(options) {
-  const loaded = await pluginEntry(options.directory);
+  let loaded;
+  try {
+    loaded = await pluginEntry(options.directory);
+  } catch (cause) {
+    return emptyRun(options, void 0, cause instanceof Error ? cause.message : String(cause));
+  }
   const definition = definitionOf(loaded.module);
   if (definition === void 0) {
     return emptyRun(options, loaded.entry, `the server entry exports no Plugin.define({ id, setup }) value`);
@@ -11240,19 +11245,26 @@ async function createHost(options) {
         if (typeof cleanup === "function") return cleanup;
         return void 0;
       } catch (cause) {
-        setupError = cause instanceof Error ? cause.message : String(cause);
+        const message = cause instanceof Error ? cause.message : String(cause);
+        const secrets = secretKinds(message);
+        setupError = secrets.length === 0 ? message.slice(0, 300) : `the plugin's setup error held a secret (${secrets.join(", ")}), which the kit did not print`;
         throw cause;
       } finally {
         setupDone = true;
       }
     }
   };
-  const host = await sdk.OpenCode.create({
-    plugins: [wrapper],
-    config: { directory: options.directory },
-    app: { name: "opencode", version: options.version },
-    log: { level: "error", emit: () => void 0 }
-  });
+  let host;
+  try {
+    host = await sdk.OpenCode.create({
+      plugins: [wrapper],
+      config: { directory: options.directory },
+      app: { name: "opencode", version: options.version },
+      log: { level: "error", emit: () => void 0 }
+    });
+  } catch (cause) {
+    return emptyRun(options, loaded.entry, `the embedded OpenCode host did not start: ${cause instanceof Error ? cause.message : String(cause)}`);
+  }
   let sessionID;
   try {
     const session = await host.sessions.create({
@@ -11335,7 +11347,6 @@ function emptyRun(options, entry, failure) {
 }
 
 // src/internal/conformance/host.ts
-var SUPPORTED_HOST = "2.4.1";
 var UNSUPPORTED_HOST = "2.5.0";
 function hostInRange(host) {
   const match = /^(\d+)\.(\d+)\.(\d+)/.exec(host);
@@ -11398,23 +11409,10 @@ async function inspectHost(directory, manifest, host, options = {}) {
     findings.push(...pinnedFindings(manifest, run));
     findings.push(...await permissionFindings(directory, manifest, host, run, pluginOptions));
     findings.push(...await rpcFindings(manifest, run, options.inputs ?? {}, options.accounts ?? []));
-    if (options.realAccounts === true) findings.push(...await accountFindings2(manifest, run, options.accounts ?? [], options.inputs ?? {}, options.accountMethod));
+    if (options.realAccounts === true) findings.push(...await accountFindings2(manifest, run, options.accounts ?? [], options.inputs ?? {}, options.accountMethod, options.accountCursor));
     return { run, findings };
   } finally {
     await run.close();
-  }
-}
-async function namespaceOf(directory, manifest, host = SUPPORTED_HOST) {
-  if (nodeMajor < 24) return void 0;
-  try {
-    const run = await createHost({ directory, version: host, pluginId: manifest.plugin.name, options: { access: "all" } });
-    try {
-      return run.namespace?.description;
-    } finally {
-      await run.close();
-    }
-  } catch {
-    return void 0;
   }
 }
 async function hostFindings(directory, manifest, host, options = {}) {
@@ -11516,7 +11514,10 @@ async function rpcFindings(manifest, run, inputs, aliases) {
     if (item.commits !== void 0) {
       const planned = await run.call(item.commits, { ...inputs[item.commits] ?? {}, ...account === void 0 ? {} : { account } }, { rules });
       const planId = planned.ok && planned.output !== null && typeof planned.output === "object" ? planned.output.planId : void 0;
-      if (typeof planId !== "string") continue;
+      if (typeof planId !== "string") {
+        findings.push(warning("T1.rpc-confirmation", `${method} commits ${item.commits}, whose plan did not answer a planId, so LD-5 is unproven for it`, { path: `capabilities.methods.${method}` }));
+        continue;
+      }
       input = { planId };
     } else if (account !== void 0 && item.accounts === "optional" && input["account"] === void 0) {
       input = { ...input, account };
@@ -11528,7 +11529,7 @@ async function rpcFindings(manifest, run, inputs, aliases) {
   }
   return findings;
 }
-async function accountFindings2(manifest, run, aliases, inputs, preferred) {
+async function accountFindings2(manifest, run, aliases, inputs, preferred, cursor) {
   if (manifest.accounts === void 0 || aliases.length < 2) return [];
   const method = preferred !== void 0 && manifest.methods[preferred]?.accounts === "optional" ? preferred : Object.keys(manifest.methods).find((name) => manifest.methods[name]?.accounts === "optional" && !name.startsWith("mcp:"));
   if (method === void 0) return [];
@@ -11538,13 +11539,15 @@ async function accountFindings2(manifest, run, aliases, inputs, preferred) {
   if (missing.ok || missing.code !== "ACCOUNT_REQUIRED") findings.push(error("T1.accounts", `${method} with two aliases and no account answered ${missing.ok ? "a result" : missing.code}, not ACCOUNT_REQUIRED`, { path: `capabilities.methods.${method}.accounts` }));
   const unknown = await run.call(method, { ...base, account: "nobodyhere" }, {});
   if (unknown.ok || unknown.code !== "ACCOUNT_UNKNOWN") findings.push(error("T1.accounts", `${method} with the unknown alias nobodyhere answered ${unknown.ok ? "a result" : unknown.code}, not ACCOUNT_UNKNOWN`, { path: `capabilities.methods.${method}.accounts` }));
-  const [first, second] = aliases;
-  if (first !== void 0 && second !== void 0 && method === "events_list") {
-    const issued = await run.call(method, { ...base, account: first }, {});
-    const cursor = issued.ok && issued.output !== null && typeof issued.output === "object" ? issued.output.cursor : void 0;
-    if (typeof cursor === "string") {
-      const crossed = await run.call(method, { ...base, account: second, cursor }, {});
-      if (crossed.ok || crossed.code !== "CURSOR_INVALID") findings.push(error("T1.accounts", `${first}'s cursor read under ${second} answered ${crossed.ok ? "a page" : crossed.code}, not CURSOR_INVALID`, { path: `capabilities.methods.${method}.accounts` }));
+  const cursorMethod = typeof cursor?.method === "string" && manifest.methods[cursor.method] !== void 0 ? cursor.method : method === "events_list" ? method : void 0;
+  const first = typeof cursor?.account === "string" && aliases.includes(cursor.account) ? cursor.account : aliases[0];
+  const second = typeof cursor?.other === "string" && aliases.includes(cursor.other) ? cursor.other : aliases[1];
+  if (cursorMethod !== void 0 && first !== void 0 && second !== void 0 && first !== second) {
+    const issued = await run.call(cursorMethod, { ...inputs[cursorMethod] ?? {}, account: first }, {});
+    const token = issued.ok && issued.output !== null && typeof issued.output === "object" ? issued.output.cursor : void 0;
+    if (typeof token === "string") {
+      const crossed = await run.call(cursorMethod, { ...inputs[cursorMethod] ?? {}, account: second, cursor: token }, {});
+      if (crossed.ok || crossed.code !== "CURSOR_INVALID") findings.push(error("T1.accounts", `${first}'s cursor read under ${second} answered ${crossed.ok ? "a page" : crossed.code}, not CURSOR_INVALID`, { path: `capabilities.methods.${cursorMethod}.accounts` }));
     }
   }
   return findings;
@@ -11838,7 +11841,7 @@ function staticFindings(directory, manifest, options = {}) {
     }
     if (/[\r\n]/.test(line)) findings.push(error("T0.namespace-length", "the registered namespace line is more than one line", { path: "src/index.ts", fix: "Write the namespace description as one line." }));
   } else {
-    findings.push(warning("T0.namespace-unmeasured", "the registered namespace line was not measured, because no real host run happened", { fix: "Run T1 on Node 24, or run plugin-kit check, which measures it from the host." }));
+    findings.push(warning("T0.namespace-unmeasured", "the registered namespace line was not measured, because no real host run happened", { fix: "Record the namespace text with plugin-kit record, or run plugin-kit check, whose T1 reading measures it live." }));
   }
   const skills = skillsOf(directory);
   if (skills.length === 0) {
@@ -12042,6 +12045,8 @@ function eventsFindings(options) {
     }
     if (!plain3(answer)) continue;
     const page = answer;
+    const requestedAccount = typeof input["account"] === "string" ? input["account"] : void 0;
+    if (requestedAccount !== void 0 && page.account !== requestedAccount) findings.push(error("pages.account", `${where} was read for ${requestedAccount} and names ${page.account}`, { path: "fixtures/conformance.json" }));
     if (page.plugin !== void 0 && page.plugin !== plugin) findings.push(error("pages.plugin", `${where} names the plugin ${page.plugin}, not ${plugin}`, { path: "fixtures/conformance.json" }));
     if (typeof source.input?.["source"] === "string" && page.source !== pageSourceName(source)) {
       findings.push(error("pages.source", `${where} names the source ${page.source}, not ${pageSourceName(source)}`, { path: `capabilities.sources.${source.id}.input` }));
@@ -12209,7 +12214,7 @@ async function t0(pluginDir) {
   const directory = resolve(pluginDir);
   const installed = readInstalledManifest(directory);
   if (!installed.ok) return installed.problems.map((problem) => error("T0.manifest", problem, { path: "package.json", fix: "Fix capabilities in package.json, then run T0 again." }));
-  const namespace = await namespaceOf(directory, installed.value.manifest);
+  const namespace = readFixture(directory).fixture?.namespace;
   return staticFindings(directory, installed.value.manifest, { ...namespace === void 0 ? {} : { namespace } });
 }
 async function t1(pluginDir, host) {
@@ -12221,6 +12226,7 @@ async function t1(pluginDir, host) {
     ...read?.accounts?.aliases === void 0 ? {} : { accounts: read.accounts.aliases },
     ...read?.accounts?.real === true ? { realAccounts: true } : {},
     ...typeof read?.accounts?.required?.method === "string" ? { accountMethod: read.accounts.required.method } : {},
+    ...read?.accounts?.cursors?.[0] === void 0 ? {} : { accountCursor: read.accounts.cursors[0] },
     ...read?.rpc?.inputs === void 0 ? {} : { inputs: read.rpc.inputs }
   });
 }
@@ -12311,13 +12317,15 @@ async function runConformance(pluginDir, options = {}) {
       ...aliases.length === 0 ? {} : { accounts: aliases },
       ...fixture?.accounts?.real === true ? { realAccounts: true } : {},
       ...typeof fixture?.accounts?.required?.method === "string" ? { accountMethod: fixture.accounts.required.method } : {},
+      ...fixture?.accounts?.cursors?.[0] === void 0 ? {} : { accountCursor: fixture.accounts.cursors[0] },
       ...fixture?.rpc?.inputs === void 0 ? {} : { inputs: fixture.rpc.inputs }
     });
     findings.push(...inspection.findings);
     if (namespace === void 0 && inspection.run?.namespace !== void 0) namespace = inspection.run.namespace.description;
   }
   if (hosts.length > 0 && !hosts.includes(UNSUPPORTED_HOST)) findings.push(...await hostFindings(directory, manifest, UNSUPPORTED_HOST, aliases.length === 0 ? {} : { accounts: aliases }));
-  findings.unshift(...staticFindings(directory, manifest, { ...namespace === void 0 ? {} : { namespace }, record }));
+  const recordedNamespace = namespace ?? fixture?.namespace;
+  findings.unshift(...staticFindings(directory, manifest, { ...recordedNamespace === void 0 ? {} : { namespace: recordedNamespace }, record }));
   return { ok: isOk(findings), findings };
 }
 export {

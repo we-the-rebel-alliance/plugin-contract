@@ -45,7 +45,7 @@ function copy(): string {
 }
 
 /** A real plugin entry built from the fixture manifest, for one broken property at a time. */
-function writeCustom(directory: string, options: { readonly rules?: boolean; readonly unchecked?: boolean; readonly codemode?: boolean; readonly events?: boolean; readonly hostRange?: boolean; readonly pinned?: boolean; readonly id?: string } = {}): void {
+function writeCustom(directory: string, options: { readonly rules?: boolean; readonly unchecked?: boolean; readonly codemode?: boolean; readonly events?: boolean; readonly hostRange?: boolean; readonly pinned?: boolean; readonly id?: string; readonly missingTool?: string } = {}): void {
   const settings = { rules: true, unchecked: false, codemode: true, events: true, hostRange: true, pinned: true, id: "fixture", ...options }
   writeFileSync(
     join(directory, "index.js"),
@@ -61,7 +61,7 @@ export default {
     const methods = Object.entries(manifest.methods).filter(([method]) => !method.startsWith("mcp:"))
     await context.tool.transform((tool) => {
       tool.namespace({ name: "fixture", description: manifest.plugin.summary })
-      for (const [method, item] of methods) tool.add({ name: method, description: method, input: { type: "object" }, output: { type: "object" }, options: { namespace: "fixture", permission: "fixture." + method, codemode: settings.codemode ? (item.pinned === true && settings.pinned ? { pinned: true } : true) : false }, execute: async () => ({}) })
+      for (const [method, item] of methods) { if (method === settings.missingTool) continue; tool.add({ name: method, description: method, input: { type: "object" }, output: { type: "object" }, options: { namespace: "fixture", permission: "fixture." + method, codemode: settings.codemode ? (item.pinned === true && settings.pinned ? { pinned: true } : true) : false }, execute: async () => ({}) }) }
     })
     await context.rpc.register({ id: "fixture", methods: Object.fromEntries(methods.map(([method]) => [method, { input: { type: "object" }, output: { type: "object" } }])), events: settings.events ? Object.fromEntries(Object.keys(manifest.events).map((event) => [event, { schema: { type: "object" } }])) : {} }, Object.fromEntries(methods.map(([method, item]) => [method, async (input) => { if (!settings.unchecked && item.class !== "read") await context.permission.assert({ sessionID: input.sessionID ?? "ses_conformance", action: "fixture." + method, resources: ["*"] }); return { ok: true } }])))
     if (settings.rules) await context.agent.transform((agents) => { for (const agent of agents.list()) agents.update(agent.id, (info) => { const additions = [{ action: "fixture.*", resource: "*", effect: "allow" }]; for (const [method, item] of methods) { const effect = effectFor(item, context.options?.access ?? "all"); if (effect !== "allow") additions.push({ action: "fixture." + method, resource: "*", effect }) } info.permissions = withRules(info.permissions, additions) }) })
@@ -139,6 +139,18 @@ describe("the fixture plugin, and the real host", () => {
     const directory = copy()
     writeCustom(directory, {})
     assert.ok(ids(await t1(directory, "2.4.1")).includes("T1.accounts"))
+  })
+
+  test("a plugin with no server entry does not load", { skip: skipHost, timeout: 30_000 }, async () => {
+    const directory = copy()
+    rmSync(join(directory, "index.js"))
+    assert.ok(ids(await t1(directory, "2.4.1")).includes("T1.load"))
+  })
+
+  test("a declared method with no tool is a doors finding", { skip: skipHost, timeout: 30_000 }, async () => {
+    const directory = copy()
+    writeCustom(directory, { missingTool: "status" })
+    assert.ok(ids(await t1(directory, "2.4.1")).includes("T1.doors"))
   })
 
   test("a plugin with the wrong id is refused", { skip: skipHost, timeout: 30_000 }, async () => {

@@ -409,5 +409,6 @@
   },
   "pinned": {
     "pinned_status": "Every fixture session reads the pinned status before anything else."
-  }
+  },
+  "namespace": "A fixture plugin for the conformance kit, with reads, writes and an action."
 }

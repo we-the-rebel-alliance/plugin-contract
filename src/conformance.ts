@@ -26,7 +26,7 @@ import { actionFindings } from "./internal/conformance/actions.ts"
 import { declarationFindings, optionsFindings } from "./internal/conformance/declaration.ts"
 import { readFixture } from "./internal/conformance/fixture.ts"
 import { grantFindings, rpcConfirmationFindings } from "./internal/conformance/grants.ts"
-import { hostFindings, inspectHost, namespaceOf, UNSUPPORTED_HOST } from "./internal/conformance/host.ts"
+import { hostFindings, inspectHost, UNSUPPORTED_HOST } from "./internal/conformance/host.ts"
 import { error, isOk, warning, type ConformanceReport, type Finding } from "./internal/conformance/report.ts"
 import { staticFindings } from "./internal/conformance/static.ts"
 import { busFindings, statusFindings } from "./internal/conformance/status.ts"
@@ -51,7 +51,7 @@ export async function t0(pluginDir: string): Promise<Finding[]> {
   const directory = resolve(pluginDir)
   const installed = readInstalledManifest(directory)
   if (!installed.ok) return installed.problems.map((problem) => error("T0.manifest", problem, { path: "package.json", fix: "Fix capabilities in package.json, then run T0 again." }))
-  const namespace = await namespaceOf(directory, installed.value.manifest)
+  const namespace = readFixture(directory).fixture?.namespace
   return staticFindings(directory, installed.value.manifest, { ...(namespace === undefined ? {} : { namespace }) })
 }
 
@@ -69,6 +69,7 @@ export async function t1(pluginDir: string, host: string): Promise<Finding[]> {
     ...(read?.accounts?.aliases === undefined ? {} : { accounts: read.accounts.aliases }),
     ...(read?.accounts?.real === true ? { realAccounts: true } : {}),
     ...(typeof read?.accounts?.required?.method === "string" ? { accountMethod: read.accounts.required.method } : {}),
+    ...(read?.accounts?.cursors?.[0] === undefined ? {} : { accountCursor: read.accounts.cursors[0] }),
     ...(read?.rpc?.inputs === undefined ? {} : { inputs: read.rpc.inputs }),
   })
 }
@@ -175,13 +176,15 @@ export async function runConformance(pluginDir: string, options: ConformanceOpti
       ...(aliases.length === 0 ? {} : { accounts: aliases }),
       ...(fixture?.accounts?.real === true ? { realAccounts: true } : {}),
       ...(typeof fixture?.accounts?.required?.method === "string" ? { accountMethod: fixture.accounts.required.method } : {}),
+      ...(fixture?.accounts?.cursors?.[0] === undefined ? {} : { accountCursor: fixture.accounts.cursors[0] }),
       ...(fixture?.rpc?.inputs === undefined ? {} : { inputs: fixture.rpc.inputs }),
     })
     findings.push(...inspection.findings)
     if (namespace === undefined && inspection.run?.namespace !== undefined) namespace = inspection.run.namespace.description
   }
   if (hosts.length > 0 && !hosts.includes(UNSUPPORTED_HOST)) findings.push(...(await hostFindings(directory, manifest, UNSUPPORTED_HOST, aliases.length === 0 ? {} : { accounts: aliases })))
-  findings.unshift(...staticFindings(directory, manifest, { ...(namespace === undefined ? {} : { namespace }), record }))
+  const recordedNamespace = namespace ?? fixture?.namespace
+  findings.unshift(...staticFindings(directory, manifest, { ...(recordedNamespace === undefined ? {} : { namespace: recordedNamespace }), record }))
 
   return { ok: isOk(findings), findings }
 }
