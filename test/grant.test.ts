@@ -1,6 +1,6 @@
 // The action-grant verifier (issue #40): the token, the canonical input, every refusal code and the durable single-use
 // store. Keys are generated here with `node:crypto`; no fixture, no file and no clock is read.
-import { generateKeyPairSync, sign as signBytes, type KeyObject } from "node:crypto"
+import { generateKeyPairSync, randomUUID, sign as signBytes, type KeyObject } from "node:crypto"
 import { describe, test } from "node:test"
 import { expect } from "./support/expect.ts"
 import {
@@ -307,8 +307,8 @@ describe("the token", () => {
 
   test("signGrant throws on an invalid request or input and needs an explicit private key", async () => {
     expect(() => signed({ kid: "bad kid" })).toThrow(/key id/)
-    expect(() => signed({ kid: "host-2026-11" })).toThrow(/key id/)
-    expect(() => signed({ jti: "grant-0001" })).toThrow(/grant id/)
+    expect(() => signed({ kid: "host/2026" })).toThrow(/key id/)
+    expect(() => signed({ jti: "grant/0001" })).toThrow(/grant id/)
     expect(() => signed({ account: "Work" })).toThrow(/account/)
     expect(() => signed({ manifest: "abc" })).toThrow(/manifest hash/)
     expect(() => signed({ iat: NOW, exp: NOW })).toThrow(/lifetime/)
@@ -346,6 +346,26 @@ describe("verifyGrant: valid grants", () => {
     expect(outcome.claims.manifest).toBe(MANIFEST)
     expect(outcome.claims.scope).toEqual({ label: ["IMPORTANT", "INBOX"] })
     expect(outcome.claims.cfm).toBe(true)
+  })
+
+  test("accepts a base64url thumbprint key id with a hyphen and an underscore", async () => {
+    const thumbprint = "NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs"
+    expect(thumbprint).toContain("-")
+    expect(thumbprint).toContain("_")
+    const grant = signed({ kid: thumbprint })
+    const { outcome } = await attempt({ grant, keys: { keys: { [thumbprint]: HOST.publicKey } } })
+    if (!outcome.ok) throw new Error(outcome.reason)
+    expect(outcome.kid).toBe(thumbprint)
+    expect(outcome.claims.act).toBe(ACT)
+  })
+
+  test("accepts a crypto.randomUUID() jti", async () => {
+    const jti = randomUUID()
+    expect(jti).toContain("-")
+    const { outcome, calls } = await attempt({ grant: signed({ jti }) })
+    if (!outcome.ok) throw new Error(outcome.reason)
+    expect(outcome.claims.jti).toBe(jti)
+    expect(calls.map((claims) => claims.jti)).toEqual([jti])
   })
 
   test("accepts a scope in any key or value order, and returns it canonical", async () => {
@@ -435,7 +455,7 @@ describe("verifyGrant: malformed tokens, headers and claims", () => {
       { alg: GRANT_ALG, kid: KID },
       { ...HEADER, typ: "JWT" },
       { ...HEADER, kid: "bad kid" },
-      { ...HEADER, kid: "host-2026-11" },
+      { ...HEADER, kid: "host/2026" },
       [{ ...HEADER }],
     ]) {
       await refuses("GRANT_MALFORMED", { grant: raw(header as Record<string, unknown>, CLAIMS) })

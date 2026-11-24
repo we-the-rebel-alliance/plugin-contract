@@ -11,11 +11,11 @@ const CONTROL = /[\u0000-\u001f\u007f-\u009f]/
 /** An account alias: contract §5. */
 const ACCOUNT_ALIAS = /^[a-z][a-z0-9_]{0,31}$/
 
-/** A key id: letters, digits, dot, underscore and colon, starting with a letter or a digit. No hyphen. */
-const KID = /^[A-Za-z0-9][A-Za-z0-9._:]{0,63}$/
+/** A key id: letters, digits, dot, underscore, colon and hyphen, starting with a letter or a digit. */
+const KID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/
 
-/** A single-use key: the same alphabet as a key id, at most 128 characters. No hyphen. */
-const JTI = /^[A-Za-z0-9][A-Za-z0-9._:]{0,127}$/
+/** A single-use key: the same alphabet as a key id, at most 128 characters. */
+const JTI = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
 
 /** A hash as the manifest and input digests write it. */
 const HASH = /^sha256:[0-9a-f]{64}$/
@@ -64,14 +64,14 @@ export function accountProblem(value: unknown): string | undefined {
 export function kidProblem(value: unknown): string | undefined {
   const text = textProblem(value, "the key id", 64)
   if (text !== undefined) return text
-  return KID.test(value as string) ? undefined : "the key id holds a character other than letters, digits, dot, underscore or colon"
+  return KID.test(value as string) ? undefined : "the key id holds a character other than letters, digits, dot, underscore, colon or hyphen"
 }
 
 /** Why a single-use key is not usable, or nothing. */
 export function jtiProblem(value: unknown): string | undefined {
   const text = textProblem(value, "the grant id", 128)
   if (text !== undefined) return text
-  return JTI.test(value as string) ? undefined : "the grant id holds a character other than letters, digits, dot, underscore or colon"
+  return JTI.test(value as string) ? undefined : "the grant id holds a character other than letters, digits, dot, underscore, colon or hyphen"
 }
 
 /** Why a hash is not `sha256:<64 lowercase hex digits>`, or nothing. */
