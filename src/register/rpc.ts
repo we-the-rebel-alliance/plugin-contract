@@ -242,7 +242,10 @@ async function invoke(
               : checked.refusal
           throw new RegisterError(failure)
         }
-        // The grant is the confirmation; do not ask again (item 6).
+        // A valid grant is the confirmation, so no ask is needed. A session deny still narrows the plugin's level.
+        if (callEffect(environment.name, entry, prepared.account, resolved.rules) === "deny") {
+          throw new RegisterError(refusal("PERMISSION_DENIED", `${environment.name}.${entry.name} is denied for this session's agent`, "Use a session whose agent allows it."))
+        }
         gated = true
       } else {
         prepared = prepareCall(entry, input, environment.accounts, environment.plans)

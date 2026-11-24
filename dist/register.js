@@ -107,7 +107,7 @@ function permissionRefusal(error, what) {
   const own = refusalOf(error);
   if (own) return own;
   const message = (error instanceof Error ? error.message.split(/\r?\n/, 1)[0] : String(error)) ?? String(error);
-  return refusal("PERMISSION_DENIED", `${what} was refused: ${message}`, "Ask the person to allow it, or use a session whose agent allows it.");
+  return refusal("PERMISSION_DENIED", `${what} was refused: ${redactReason(message)}`, "Ask the person to allow it, or use a session whose agent allows it.");
 }
 function reasonOf(error) {
   return redactReason(error instanceof Error ? error.message : String(error));
@@ -446,6 +446,9 @@ async function invoke(context, environment, level, entry, wiring, raw, rpc, fres
         if (!checked.ok) {
           const failure = entry.item.commits !== void 0 && checked.code === "GRANT_ACCOUNT_MISMATCH" ? refusal("ACCOUNT_MISMATCH", "the grant names another account than the plan", "Issue the grant for the account the plan was made for.") : checked.refusal;
           throw new RegisterError(failure);
+        }
+        if (callEffect(environment.name, entry, prepared.account, resolved.rules) === "deny") {
+          throw new RegisterError(refusal("PERMISSION_DENIED", `${environment.name}.${entry.name} is denied for this session's agent`, "Use a session whose agent allows it."));
         }
         gated = true;
       } else {

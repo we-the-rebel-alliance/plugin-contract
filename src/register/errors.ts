@@ -71,7 +71,7 @@ export function permissionRefusal(error: unknown, what: string): Refusal {
   const own = refusalOf(error)
   if (own) return own
   const message = (error instanceof Error ? error.message.split(/\r?\n/, 1)[0] : String(error)) ?? String(error)
-  return refusal("PERMISSION_DENIED", `${what} was refused: ${message}`, "Ask the person to allow it, or use a session whose agent allows it.")
+  return refusal("PERMISSION_DENIED", `${what} was refused: ${redactReason(message)}`, "Ask the person to allow it, or use a session whose agent allows it.")
 }
 
 /** The one-line reason of an unknown failure, redacted and cut to 160 characters. */

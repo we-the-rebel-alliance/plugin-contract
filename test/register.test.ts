@@ -366,6 +366,13 @@ describe("register: door 3", () => {
     // A session allow rule appended after the generated ask makes the grant the confirmation, and the gate allows it.
     h.sessions.get("s1")!.permissions = [{ action: "*", resource: "*", effect: "allow" }]
     assert.deepEqual(await h.rpc.call("demo", "send_message", { sessionID: "s1", input, grant: token, consumer: "consumer:demo" }), { sent: true })
+    // A valid grant is a confirmation, not a bypass of a session deny.
+    h.sessions.get("s1")!.permissions = [{ action: "demo.send_message", resource: "*", effect: "deny" }]
+    await assert.rejects(h.rpc.call("demo", "send_message", { sessionID: "s1", input, grant: token, consumer: "consumer:demo" }), (error: unknown) => {
+      assert.ok(error instanceof RpcDeclaredFailure)
+      assert.equal((error.data as { code: string }).code, "PERMISSION_DENIED")
+      return true
+    })
   })
 
   test("a non-read with an allow rule and no ask or grant is refused (LD-5)", async () => {
