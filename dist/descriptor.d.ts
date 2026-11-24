@@ -2,11 +2,11 @@ import type { Checked } from "./internal/checked.js";
 /** The most bytes a source may declare for one answer (1 MB), and the default when it declares none (64 KB): `events`' `MAX_BYTES`. */
 export declare const MAX_BYTES_LIMIT: number;
 export declare const DEFAULT_MAX_BYTES: number;
-/** Who may be asked, and how (design §2.2 `permission`): Memory's schema type, so there is one definition (#30, item 8). */
+/** Who may be asked, and how: the schema's type, so there is one definition. */
 export type SourcePermission = Permission;
-/** A detail read, a declared read per event whose inputs come only from the event's own fields: Memory's schema type (#30, item 8). */
+/** A detail read, a declared read per event whose inputs come only from the event's own fields: the schema's type. */
 export type SourceDetail = Detail;
-/** One source a plugin declares: Memory's schema type, the one `SourceItem` the package exports (#30, item 8). */
+/** One source a plugin declares: the schema's type, the one `SourceItem` the package exports. */
 export type { ActItem, SourceItem } from "./internal/schema/types.js";
 import type { ActItem, Detail, Permission, SourceItem } from "./internal/schema/types.js";
 /** The `sources` key. */
@@ -33,9 +33,9 @@ export interface InstalledDescriptor {
     /** `sha256:` and the hex digest of the canonical JSON of `sources`. */
     readonly hash: string;
 }
-/** The event fields a detail read may take its input from (Memory's schema): identifiers and metadata, never `title` or `text`. */
+/** The event fields a detail read may take its input from: identifiers and metadata, never `title` or `text`. */
 export declare const DETAIL_FIELDS: readonly ["external_id", "kind", "occurred_at", "url", "thread", "actors", "labels", "hash"];
-/** The `sources` value checked against Memory's schema, then the frame; its problems, one sentence each, when it breaks them. */
+/** The `sources` value checked against the schema, then the frame; its problems, one sentence each, when it breaks them. */
 export declare function checkSources(value: unknown): Checked<SourcesDescriptor>;
 /** Canonical JSON: object keys sorted at every depth, no spaces. Arrays keep their order. */
 export declare function canonicalJson(value: unknown): string;

@@ -1,37 +1,37 @@
-// @we-the-rebel-alliance/source-contract 0.3.0. Built by scripts/build.mjs; do not edit.
+// @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   resolveParams,
   resolveSince
-} from "./chunk-EUDLXWG4.js";
+} from "./chunk-6WEY3U6L.js";
 import {
   pick,
   pickProblemsForOutput
-} from "./chunk-IIUWLSGP.js";
+} from "./chunk-3FUJ7MS6.js";
 import {
   failure,
   failureFromError
-} from "./chunk-66HYKMBI.js";
+} from "./chunk-WXGC4JGY.js";
 import {
   findSource,
   maxBytesOf
-} from "./chunk-UXBQEPWK.js";
+} from "./chunk-ZWKV37GW.js";
 import {
   checkOutput
-} from "./chunk-GDBKZBG7.js";
+} from "./chunk-6E62CHFC.js";
 import {
   detailRules,
   grantCovers,
   probeRules,
   sessionRules
-} from "./chunk-DEXO7HMA.js";
+} from "./chunk-2V4VLI45.js";
 import {
   PAGE,
   probeResultProblems,
   resultProblems
-} from "./chunk-LJL3EALP.js";
+} from "./chunk-577LF5CA.js";
 import {
   canonicalScope
-} from "./chunk-NUBUQFLH.js";
+} from "./chunk-7KJXMIQH.js";
 
 // src/read.ts
 var rpcOf = (installed) => installed.sources.rpc === void 0 ? {} : { rpc: installed.sources.rpc };

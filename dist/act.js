@@ -1,26 +1,26 @@
-// @we-the-rebel-alliance/source-contract 0.3.0. Built by scripts/build.mjs; do not edit.
+// @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   failure,
   failureFromError
-} from "./chunks/chunk-66HYKMBI.js";
+} from "./chunks/chunk-WXGC4JGY.js";
 import {
   DEFAULT_MAX_BYTES,
   findAct
-} from "./chunks/chunk-UXBQEPWK.js";
-import "./chunks/chunk-YWD23SKJ.js";
-import "./chunks/chunk-GDBKZBG7.js";
-import "./chunks/chunk-WOH6G62Y.js";
+} from "./chunks/chunk-ZWKV37GW.js";
+import "./chunks/chunk-6E62CHFC.js";
+import "./chunks/chunk-RGWXXX65.js";
+import "./chunks/chunk-T2QSLHBQ.js";
 import {
   actSessionRules
-} from "./chunks/chunk-DEXO7HMA.js";
-import "./chunks/chunk-KXQYSM2Z.js";
+} from "./chunks/chunk-2V4VLI45.js";
+import "./chunks/chunk-65FTIXYZ.js";
 import {
   fromJSONSchema,
   problemsOf
-} from "./chunks/chunk-6ZSJSJMV.js";
-import "./chunks/chunk-LJL3EALP.js";
-import "./chunks/chunk-NUBUQFLH.js";
-import "./chunks/chunk-CUITXC5J.js";
+} from "./chunks/chunk-BQEBNVNU.js";
+import "./chunks/chunk-577LF5CA.js";
+import "./chunks/chunk-7KJXMIQH.js";
+import "./chunks/chunk-WLRWVIVP.js";
 
 // src/act.ts
 var rpcOf = (installed) => installed.sources.rpc === void 0 ? {} : { rpc: installed.sources.rpc };

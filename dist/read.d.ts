@@ -1,16 +1,16 @@
 /**
- * `read`: the consumer-side call (design §3). Every project reads a source the same way, with no host required:
+ * `read`: the consumer-side call (contract §7 and §9). Every app reads a source the same way, with no host required:
  *
- * 1. the descriptor comes from the installed package (`readInstalledDescriptor`), and the grant must be for the same
- *    descriptor hash, consumer source, account and scope;
+ * 1. the manifest comes from the installed package (`readInstalledDescriptor`), and the grant must be for the same
+ *    manifest hash, consumer source, account and scope;
  * 2. params, `since` and `pick` are resolved and checked before anything is called;
  * 3. the call runs in a session fenced by exactly the grant's rules (`sessionRules`), opened and closed by the host;
  * 4. the answer is checked: its account, `trust: "untrusted"`, its size against `maxBytes`, and a snapshot's `data`
  *    against its output schema; then `pick` keeps only the picked paths.
  *
- * The host is two calls: open a session with given rules, and call a plugin's tools-RPC method in it. jelly, Memory
- * standalone and Artifacts each implement them over their own OpenCode server. A project keeps its own cursor: `read`
- * returns the page and never stores anything.
+ * The host is two calls: open a session with given rules, and call a plugin's tools-RPC method in it. Each app
+ * implements them over its own OpenCode server. An app keeps its own cursor: `read` returns the page and never stores
+ * anything.
  */
 import type { InstalledDescriptor, SourceItem } from "./descriptor.js";
 import type { Checked } from "./internal/checked.js";
@@ -61,7 +61,7 @@ export interface ReadRequest {
     readonly context: ParamsContext;
     readonly signal?: AbortSignal;
 }
-/** An events page, as the plugin answered it (design §2.1). */
+/** An events page, as the plugin answered it (contract §7). */
 export interface EventsPage {
     readonly source: string;
     readonly account: string;
@@ -121,7 +121,7 @@ export declare function acceptAnswer(source: SourceItem, account: string, answer
     readonly limit?: number;
     readonly pick?: readonly string[];
 }): ReadOutcome;
-/** A detail read of one event (design §2.2 `details`). */
+/** A detail read of one event (contract §7, `details`). */
 export interface DetailRequest {
     readonly installed: InstalledDescriptor;
     readonly source: string;
@@ -138,9 +138,9 @@ export interface DetailRequest {
  */
 export declare function detailFields(source: SourceItem, detailId: string, event: Readonly<Record<string, unknown>>): Checked<Record<string, unknown>>;
 /**
- * Reads a declared detail of one event, in a session fenced by the source's own rules. The call is what Memory's
- * conformance kit checks a plugin with: `{ account, scope, fields }`, with the confirmed scope, so the plugin refuses an
- * event outside it.
+ * Reads a declared detail of one event, in a session fenced by the source's own rules. The call is what the conformance
+ * kit checks a plugin with: `{ account, scope, fields }`, with the confirmed scope, so the plugin refuses an event
+ * outside it.
  */
 export declare function readDetail(host: ReadHost, request: DetailRequest): Promise<{
     readonly ok: true;

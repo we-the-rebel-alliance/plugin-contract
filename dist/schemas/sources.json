@@ -7,12 +7,12 @@
       "const": 1
     },
     "rpc": {
-      "description": "The plugin's tools-RPC id (#4, #8), which a consumer calls instead of mapping the package.",
+      "description": "The plugin's tools-RPC id, which a consumer calls instead of mapping the package.",
       "type": "string",
       "maxLength": 200
     },
     "probe": {
-      "description": "The plugin's one probe tool, and the permission action it asserts (#4, #8).",
+      "description": "The plugin's one probe tool, and the permission action it asserts.",
       "type": "object",
       "properties": {
         "action": {
@@ -58,7 +58,7 @@
                     "description": "True when the source reads more than one account, so a read names one."
                   },
                   "server": {
-                    "description": "For a plugin with one MCP server per account (#30, item 9): the server a named account's MCP tools live on, with {account} for the account, such as plaud-{account}. A bare operation is then <server>_<operation> for an account other than default; the default account keeps the namespace.",
+                    "description": "For a plugin with one MCP server per account: the server a named account's MCP tools live on, with {account} for the account, such as plaud-{account}. A bare operation is then <server>_<operation> for an account other than default; the default account keeps the namespace.",
                     "type": "string",
                     "maxLength": 64,
                     "pattern": "^[a-z][a-z0-9_-]*\\{account\\}[a-z0-9_-]*$"
@@ -364,7 +364,7 @@
                   "label"
                 ],
                 "additionalProperties": false,
-                "description": "The outside system this source belongs to (#44 item 1), such as Gmail or Calendar. Absent: the plugin is one service, named after the plugin. It is part of the descriptor, so moving a source to another service changes the hash."
+                "description": "The outside system this source belongs to, such as Gmail or Calendar. Absent: the plugin is one service, named after the plugin. It is part of the manifest, so moving a source to another service changes the hash."
               },
               "kind": {
                 "type": "string",
@@ -419,7 +419,7 @@
                 }
               },
               "facts": {
-                "description": "The fact types this source's events carry (#45 §3), each a core type. An event may carry a fact of a declared type and of no other; Memory stamps the installed package's version on each fact it files.",
+                "description": "The fact types this source's events carry, each a core type. An event may carry a fact of a declared type and of no other.",
                 "minItems": 1,
                 "type": "array",
                 "items": {
@@ -432,17 +432,7 @@
                 }
               },
               "hints": {
-                "description": "The hint files the package ships for this source (#45 §4): how to read one kind of item, at most 1,500 characters each.",
-                "minItems": 1,
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "maxLength": 200,
-                  "pattern": "^[a-z0-9][a-z0-9._-]*(?:\\/[a-z0-9][a-z0-9._-]*)*\\.md$"
-                }
-              },
-              "routines": {
-                "description": "The routine files the package ships for this source (#45 §5). Memory's first engine runs only its own core routines, so a plugin ships one only later.",
+                "description": "The hint files the package ships for this source: how to read one kind of item, at most 1,500 characters each.",
                 "minItems": 1,
                 "type": "array",
                 "items": {
@@ -463,7 +453,7 @@
                     "not": {}
                   },
                   "identity": {
-                    "description": "The identity operations probe asserts for this source (#4, #8); each is among permission.operations, and no content read asserts it. Empty when the probe asserts only sources.probe.action; absent when the source does not declare it, so a consumer uses its fallback.",
+                    "description": "The identity operations probe asserts for this source; each is among permission.operations, and no content read asserts it. Empty when the probe asserts only sources.probe.action; absent when the source does not declare it, so a consumer uses its fallback.",
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -472,7 +462,7 @@
                     }
                   },
                   "readsIdentity": {
-                    "description": "True when the source's content reads assert an identity operation (#30, item 4); every identity operation is still declared.",
+                    "description": "True when the source's content reads assert an identity operation; every identity operation is still declared.",
                     "type": "boolean"
                   },
                   "operations": {
@@ -511,7 +501,7 @@
                     }
                   },
                   "identityRules": {
-                    "description": "For a rules source: the grants probe asserts for this source, verbatim, each among permission.rules (#30, item 10). Empty when the probe asserts only sources.probe.action; absent when undeclared. A rules source's equivalent of identity.",
+                    "description": "For a rules source: the grants probe asserts for this source, verbatim, each among permission.rules. Empty when the probe asserts only sources.probe.action; absent when undeclared. A rules source's equivalent of identity.",
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -589,7 +579,7 @@
                     "description": "True when the source reads more than one account, so a read names one."
                   },
                   "server": {
-                    "description": "For a plugin with one MCP server per account (#30, item 9): the server a named account's MCP tools live on, with {account} for the account, such as plaud-{account}. A bare operation is then <server>_<operation> for an account other than default; the default account keeps the namespace.",
+                    "description": "For a plugin with one MCP server per account: the server a named account's MCP tools live on, with {account} for the account, such as plaud-{account}. A bare operation is then <server>_<operation> for an account other than default; the default account keeps the namespace.",
                     "type": "string",
                     "maxLength": 64,
                     "pattern": "^[a-z][a-z0-9_-]*\\{account\\}[a-z0-9_-]*$"
@@ -895,7 +885,7 @@
                   "label"
                 ],
                 "additionalProperties": false,
-                "description": "The outside system this source belongs to (#44 item 1), such as Gmail or Calendar. Absent: the plugin is one service, named after the plugin. It is part of the descriptor, so moving a source to another service changes the hash."
+                "description": "The outside system this source belongs to, such as Gmail or Calendar. Absent: the plugin is one service, named after the plugin. It is part of the manifest, so moving a source to another service changes the hash."
               },
               "kind": {
                 "type": "string",
@@ -926,17 +916,7 @@
                 "additionalProperties": {}
               },
               "hints": {
-                "description": "The hint files the package ships for this source (#45 §4): how to read one kind of item, at most 1,500 characters each.",
-                "minItems": 1,
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "maxLength": 200,
-                  "pattern": "^[a-z0-9][a-z0-9._-]*(?:\\/[a-z0-9][a-z0-9._-]*)*\\.md$"
-                }
-              },
-              "routines": {
-                "description": "The routine files the package ships for this source (#45 §5). Memory's first engine runs only its own core routines, so a plugin ships one only later.",
+                "description": "The hint files the package ships for this source: how to read one kind of item, at most 1,500 characters each.",
                 "minItems": 1,
                 "type": "array",
                 "items": {
@@ -957,7 +937,7 @@
                     "not": {}
                   },
                   "identity": {
-                    "description": "The identity operations probe asserts for this source (#4, #8); each is among permission.operations, and no content read asserts it. Empty when the probe asserts only sources.probe.action; absent when the source does not declare it, so a consumer uses its fallback.",
+                    "description": "The identity operations probe asserts for this source; each is among permission.operations, and no content read asserts it. Empty when the probe asserts only sources.probe.action; absent when the source does not declare it, so a consumer uses its fallback.",
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -966,7 +946,7 @@
                     }
                   },
                   "readsIdentity": {
-                    "description": "True when the source's content reads assert an identity operation (#30, item 4); every identity operation is still declared.",
+                    "description": "True when the source's content reads assert an identity operation; every identity operation is still declared.",
                     "type": "boolean"
                   },
                   "operations": {
@@ -1005,7 +985,7 @@
                     }
                   },
                   "identityRules": {
-                    "description": "For a rules source: the grants probe asserts for this source, verbatim, each among permission.rules (#30, item 10). Empty when the probe asserts only sources.probe.action; absent when undeclared. A rules source's equivalent of identity.",
+                    "description": "For a rules source: the grants probe asserts for this source, verbatim, each among permission.rules. Empty when the probe asserts only sources.probe.action; absent when undeclared. A rules source's equivalent of identity.",
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -1067,7 +1047,7 @@
       "description": "The plugin's sources. A source id is unique across the declaration."
     },
     "acts": {
-      "description": "The plugin's acts, beside its sources in the same descriptor. Absent when the plugin declares no write. Additive: an older consumer refuses the key.",
+      "description": "The plugin's acts, beside its sources in the same manifest. Absent when the plugin declares no write.",
       "minItems": 1,
       "type": "array",
       "items": {

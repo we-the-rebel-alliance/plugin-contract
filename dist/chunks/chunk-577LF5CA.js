@@ -1,8 +1,8 @@
-// @we-the-rebel-alliance/source-contract 0.3.0. Built by scripts/build.mjs; do not edit.
+// @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   MAX_CURSOR_LENGTH,
   canonicalScope
-} from "./chunk-NUBUQFLH.js";
+} from "./chunk-7KJXMIQH.js";
 
 // src/internal/secrets.ts
 var PRIVATE_KEY_BLOCK = /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----[\s\S]*?(?:-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----|$)/g;
@@ -153,10 +153,10 @@ var EVENT_LIMITS = {
   failed: 500,
   detail: 200,
   costUnits: 8,
-  /** #45 §1: the identities one actor may carry, and the lengths of each part of one. */
+  /** The identities one actor may carry, and the lengths of each part of one. */
   identities: 10,
   identityBasis: 64,
-  /** #45 §2: the metadata one event may carry. */
+  /** The metadata one event may carry. */
   replyTo: 512,
   domains: 20,
   domain: 253,
@@ -164,7 +164,7 @@ var EVENT_LIMITS = {
   sectionHeading: 300,
   parts: 50,
   partId: 512,
-  /** #45 §3: the facts one event may carry, and the lengths of their fields. */
+  /** The facts one event may carry, and the lengths of their fields. */
   facts: 20,
   factKey: 200,
   factTitle: 300,
@@ -195,30 +195,28 @@ var REMOVAL_REASONS = ["deleted", "withheld", "expired"];
 var GAP_REASONS = ["expired", "window-truncated"];
 var ERROR_CODES = [
   "NEEDS_SIGN_IN",
+  "SCOPE_MISSING",
+  "ACCOUNT_REQUIRED",
+  "ACCOUNT_UNKNOWN",
   "ACCOUNT_MISMATCH",
   "CURSOR_INVALID",
   "CURSOR_EXPIRED",
   "RATE_LIMITED",
-  "TOO_LARGE",
-  "SCHEMA_VIOLATION",
-  "PERMISSION_DENIED",
-  "UNAVAILABLE",
-  "SCOPE_MISSING",
   "BUDGET_EXCEEDED",
   "SOURCE_DISABLED",
+  "TOO_LARGE",
   "INPUT_INVALID",
-  "SOURCE_UNKNOWN"
+  "SOURCE_UNKNOWN",
+  "SCHEMA_VIOLATION",
+  "PERMISSION_DENIED",
+  "PLAN_INVALID",
+  "GRANT_INVALID",
+  "HOST_UNTESTED",
+  "OPTIONS_INVALID",
+  "UNAVAILABLE"
 ];
-var PROPOSED_CODES = [];
-var ERROR_ALIASES = { AUTH_REQUIRED: "NEEDS_SIGN_IN", ACCOUNT_UNKNOWN: "ACCOUNT_MISMATCH" };
-var CONTRACT1_CODES = {
-  EVENTS_INVALID_INPUT: "INPUT_INVALID",
-  EVENTS_CURSOR_INVALID: "CURSOR_INVALID",
-  EVENTS_SOURCE_UNKNOWN: "SOURCE_UNKNOWN"
-};
 function canonicalCode(code) {
-  if (ERROR_CODES.includes(code) || PROPOSED_CODES.includes(code)) return code;
-  return ERROR_ALIASES[code] ?? CONTRACT1_CODES[code];
+  return ERROR_CODES.includes(code) ? code : void 0;
 }
 var SourceError = class extends Error {
   code;
@@ -888,9 +886,6 @@ export {
   REMOVAL_REASONS,
   GAP_REASONS,
   ERROR_CODES,
-  PROPOSED_CODES,
-  ERROR_ALIASES,
-  CONTRACT1_CODES,
   canonicalCode,
   SourceError,
   parseSourceError,

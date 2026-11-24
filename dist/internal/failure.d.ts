@@ -1,13 +1,12 @@
 /**
- * A read's failure, in the family's form: `CODE: what happened. Next step: …`.
+ * A read's failure, in the contract's form: `CODE: what happened. Next step: …` (contract §12).
  *
- * The codes are the one error table in `events` (`ERROR_CODES`, design §2.1). A plugin's code is read through
- * `canonicalCode`: `AUTH_REQUIRED` is `NEEDS_SIGN_IN`, and contract 1's names (`EVENTS_CURSOR_INVALID`) are the
- * table's.
+ * The codes are the one error table in `events` (`ERROR_CODES`). A plugin's own code is read through `canonicalCode`;
+ * a code the table does not hold is `UNAVAILABLE`.
  */
 import { type ErrorCode } from "./events.js";
 /** The codes a read answers: the events table. */
-export declare const FAILURE_CODES: readonly ["NEEDS_SIGN_IN", "ACCOUNT_MISMATCH", "CURSOR_INVALID", "CURSOR_EXPIRED", "RATE_LIMITED", "TOO_LARGE", "SCHEMA_VIOLATION", "PERMISSION_DENIED", "UNAVAILABLE", "SCOPE_MISSING", "BUDGET_EXCEEDED", "SOURCE_DISABLED", "INPUT_INVALID", "SOURCE_UNKNOWN"];
+export declare const FAILURE_CODES: readonly ["NEEDS_SIGN_IN", "SCOPE_MISSING", "ACCOUNT_REQUIRED", "ACCOUNT_UNKNOWN", "ACCOUNT_MISMATCH", "CURSOR_INVALID", "CURSOR_EXPIRED", "RATE_LIMITED", "BUDGET_EXCEEDED", "SOURCE_DISABLED", "TOO_LARGE", "INPUT_INVALID", "SOURCE_UNKNOWN", "SCHEMA_VIOLATION", "PERMISSION_DENIED", "PLAN_INVALID", "GRANT_INVALID", "HOST_UNTESTED", "OPTIONS_INVALID", "UNAVAILABLE"];
 export type FailureCode = ErrorCode;
 /** A read that did not happen, or whose answer was refused. */
 export interface ReadFailure {
@@ -21,10 +20,10 @@ export interface ReadFailure {
 export declare function failure(code: FailureCode, what: string, next: string, retryAfterSec?: number): ReadFailure;
 /**
  * A plugin's or a host's error as a read failure: its `code` (or the code its message starts with) when the contract
- * knows it, with `AUTH_REQUIRED` read as `NEEDS_SIGN_IN`; anything else is UNAVAILABLE, with the message's first line.
+ * knows it; anything else is UNAVAILABLE, with the message's first line.
  *
  * A plugin's `INPUT_INVALID` or `SOURCE_UNKNOWN` (a malformed input, or a source the plugin does not have) passes
- * through as itself (D3 (a)). Trying again will not help, so its fallback next step says to compare the descriptor with
- * the installed plugin rather than to try again.
+ * through as itself. Trying again will not help, so its fallback next step says to compare the installed plugin with
+ * the manifest rather than to try again.
  */
 export declare function failureFromError(error: unknown): ReadFailure;

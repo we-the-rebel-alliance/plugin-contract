@@ -11,7 +11,7 @@
  *
  * The method's action is allowed on `*`, because the tools RPC resolves a method before dispatch on `*` (version 2; a
  * method with a version 2.3 resource resolver is resolved on its resource, which the operation rules cover). Each
- * operation is allowed as Memory's schema and conformance kit read it (`operationRule`): a dotted operation as
+ * operation is allowed as the schema and conformance kit read it (`operationRule`): a dotted operation as
  * `<namespace>.read` on `<account>:<operation>` (gws: `gws.read` on `ana@example.com:gmail.users.messages.get`), and a
  * bare one, an MCP tool, as `<namespace>_<operation>` on `*` (Slack: `slack_slack_read_channel`). The namespace is the
  * source id's first segment. A source whose provider's resources are not `<account>:<operation>` states its grants
@@ -33,7 +33,7 @@ export interface PermissionRule {
  * (consumer, source, account, scope)").
  */
 export interface Grant {
-    /** Who reads: a project's consumer, such as `memory`, `jelly.home`, or an Artifacts app with its viewer. */
+    /** Who reads: a consumer, such as `notes` or `notes.home`, or an app with its viewer. */
     readonly consumer: string;
     /** The source id. */
     readonly source: string;
@@ -51,7 +51,7 @@ export interface Grant {
  * hash they consented to. The same shape as a read grant, for an act id.
  */
 export interface ActGrant {
-    /** Who acts: a project's consumer, such as `memory` or an Artifacts app with its viewer. */
+    /** Who acts: a consumer, such as `notes`, or an app with its viewer. */
     readonly consumer: string;
     /** The act id. */
     readonly act: string;
@@ -77,7 +77,7 @@ export declare function accountProblem(account: unknown): string | undefined;
 export declare function namespaceOf(source: Pick<SourceItem, "id">): string;
 /**
  * The rule that allows one operation for `account`: a dotted operation as `<namespace>.read` on
- * `<account>:<operation>`, a bare one (an MCP tool) as `<namespace>_<operation>` on `*`. The same derivation as Memory's
+ * `<account>:<operation>`, a bare one (an MCP tool) as `<namespace>_<operation>` on `*`. The same derivation as the
  * conformance kit, so declared equals asserted means the same thing in a plugin's CI and in a consumer's session.
  */
 export declare function operationRule(source: Pick<SourceItem, "id" | "accounts">, operation: string, account: string): PermissionRule;

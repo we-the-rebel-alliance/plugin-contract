@@ -1,46 +1,32 @@
-// @we-the-rebel-alliance/source-contract 0.3.0. Built by scripts/build.mjs; do not edit.
+// @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   _enum,
   array,
   object,
   string,
   validator
-} from "./chunk-6ZSJSJMV.js";
+} from "./chunk-BQEBNVNU.js";
 import {
   isEventKind
-} from "./chunk-LJL3EALP.js";
+} from "./chunk-577LF5CA.js";
 
 // src/hints.ts
 var HINT_MAX = 1500;
-var ROUTINE_BODY_MAX = 4e3;
 var HINT_KEYS = ["source", "kinds", "produces"];
-var ROUTINE_KEYS = ["id", "title", "reads", "produces"];
 var FORBIDDEN_HINT_KEYS = ["apply", "stated_by", "space", "budget", "priority"];
-var FORBIDDEN_ROUTINE_KEYS = ["tier", "schedule", "budget", "priority", "apply", "stated_by", "namespace"];
 var PRODUCES_TYPES = ["commitment", "decision", "fact", "preference", "constraint", "person", "project"];
 var PRODUCES_LIST = "commitment, decision, fact, preference, constraint, person or project";
 var SOURCE_ID = /^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$/;
-var ROUTINE_ID = /^[a-z][a-z0-9-]{0,63}$/;
 var KEY = /^[a-z][a-z0-9_]*$/;
-var producesType = _enum(PRODUCES_TYPES, { error: `must be a type Memory's core extractor finds (${PRODUCES_LIST})` });
+var producesType = _enum(PRODUCES_TYPES, { error: `must be a knowledge type (${PRODUCES_LIST})` });
 var kind = string().max(64).refine(isEventKind, { error: "must be an event kind, such as meeting or x-<namespace>/<name>" });
-var sourceId = string().max(64).regex(SOURCE_ID, { error: "must be a source id such as granola.meetings" });
+var sourceId = string().max(64).regex(SOURCE_ID, { error: "must be a source id such as acme.meetings" });
 var hintFrontmatter = object({
   source: sourceId.describe("One of the plugin's own source ids."),
   kinds: array(kind, { error: "must be a list such as [meeting]" }).min(1, "must name at least one kind"),
   produces: array(producesType, { error: "must be a list such as [commitment]" }).min(1, "must name at least one type").optional()
 }).strict();
-var routineFrontmatter = object({
-  id: string().max(64).regex(ROUTINE_ID, { error: "must be a lowercase word such as meeting-actions" }),
-  title: string().min(1).max(200),
-  reads: object({
-    sources: array(sourceId, { error: "must be a list such as [granola.meetings]" }).min(1, "must name at least one source").describe("The plugin's own sources only."),
-    kinds: array(kind, { error: "must be a list such as [meeting]" }).min(1, "must name at least one kind")
-  }).strict(),
-  produces: array(producesType, { error: "must be a list such as [commitment]" }).min(1, "must name at least one type")
-}).strict();
 var HINT_SCHEMA = validator("hint", hintFrontmatter);
-var ROUTINE_SCHEMA = validator("routine", routineFrontmatter);
 function scalar(raw) {
   const text = raw.trim();
   if (text.startsWith('"') || text.startsWith("'")) {
@@ -144,8 +130,7 @@ function keyProblems(frontmatter, known, forbidden, what, why) {
   }
   return problems;
 }
-var HINT_WHY = "a hint is data, and Memory decides how its text is used";
-var ROUTINE_WHY = "the namespace, the tier, the schedule, the budget, the priority and the apply mode are Memory's";
+var HINT_WHY = "a hint is data, and the consumer decides how its text is used";
 function hintProblems(text, options) {
   if (typeof text !== "string") return ["the hint is not text"];
   const problems = [];
@@ -159,33 +144,13 @@ function hintProblems(text, options) {
   if (!options.sources.includes(checked.value.source)) problems.push(`the hint names the source "${checked.value.source}", which is not one of the plugin's own`);
   return problems;
 }
-function routineProblems(text, options) {
-  if (typeof text !== "string") return ["the routine is not text"];
-  const problems = [];
-  const parsed = parseFrontmatter(text, "routine");
-  if (!parsed.ok) return parsed.problems;
-  if (parsed.value.body.length > ROUTINE_BODY_MAX) problems.push(`the routine's body is ${parsed.value.body.length} characters, over the ${ROUTINE_BODY_MAX} its instructions may take`);
-  const keys = keyProblems(parsed.value.frontmatter, ROUTINE_KEYS, FORBIDDEN_ROUTINE_KEYS, "routine", ROUTINE_WHY);
-  if (keys.length > 0) return [...problems, ...keys];
-  const checked = ROUTINE_SCHEMA.check(parsed.value.frontmatter);
-  if (!checked.ok) return [...problems, ...checked.problems];
-  for (const source of checked.value.reads.sources) {
-    if (!options.sources.includes(source)) problems.push(`the routine reads the source "${source}", which is not one of the plugin's own`);
-  }
-  return problems;
-}
 
 export {
   HINT_MAX,
-  ROUTINE_BODY_MAX,
   HINT_KEYS,
-  ROUTINE_KEYS,
   FORBIDDEN_HINT_KEYS,
-  FORBIDDEN_ROUTINE_KEYS,
   PRODUCES_TYPES,
   HINT_SCHEMA,
-  ROUTINE_SCHEMA,
   parseFrontmatter,
-  hintProblems,
-  routineProblems
+  hintProblems
 };

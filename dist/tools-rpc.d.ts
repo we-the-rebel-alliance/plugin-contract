@@ -27,7 +27,7 @@ export declare const isToolsRpcId: (id: unknown) => id is string;
 /** The plugin id of a tools-RPC id; undefined when it is not one. */
 export declare const pluginIdOf: (id: string) => string | undefined;
 /**
- * The problems with the tools-RPC id a descriptor declares (source-contract#4), one sentence each: it must be a
+ * The problems with the tools-RPC id a descriptor declares (plugin-contract#4), one sentence each: it must be a
  * tools-RPC id, and, when the consumer has the plugin's `describe` answer, the id that `describe` reports. `describe`
  * is a diagnostic (RPC ids have no owner in OpenCode), so a mismatch means the descriptor or the install is wrong, never
  * that the RPC answer wins.
@@ -89,11 +89,11 @@ export interface PluginMethod {
      *
      * A resolver may refuse with its own code and next step: a throw the plugin's `pluginError` maps, or any error that
      * carries `code`, `what` (or a message) and `next`, such as `events`' `SourceError`, reaches the caller as that
-     * failure (source-contract#22). `null`, a malformed resource, or an error with no code is RESOURCE_UNRESOLVED.
+     * failure (plugin-contract#22). `null`, a malformed resource, or an error with no code is RESOURCE_UNRESOLVED.
      */
     resource?(input: unknown): string | null;
     /**
-     * (Opt-in, source-contract#22) What the resolver may name. `"read"`, the default: a `class: "read"` method's
+     * (Opt-in, plugin-contract#22) What the resolver may name. `"read"`, the default: a `class: "read"` method's
      * operation must be a read operation (`readOperation`). `"any"`: the method may resolve a change's operation, as gws's
      * `schema` and `plan` do (they read a change's parameters or dry-run it, and write nothing). Either way the session's
      * rules are evaluated on the exact `<account>:<operation>`; the read-verb rule is a heuristic about names, not a grant,
@@ -266,7 +266,7 @@ export interface ToolCall {
 /** The header and query an external caller uses to name the location whose plugins and sessions it means. */
 export declare const LOCATION_HEADER = "x-opencode-directory";
 export declare const LOCATION_HINT = "Send the call to the location you mean: run it in that project with \"opencode api ... -H \\\"x-opencode-directory:$PWD\\\"\", or pass the location[directory] query parameter to the HTTP request.";
-/** (v2.3) The read verbs a read method's operation starts its last dotted segment with: Memory's `READ_VERBS`. */
+/** (v2.3) The read verbs a read method's operation starts its last dotted segment with. */
 export declare const READ_VERBS: readonly string[];
 /**
  * (v2.3) A resource a resolver may name: `<account>:<operation>`. The account is `permission`'s `ACCOUNT_PATTERN` (no

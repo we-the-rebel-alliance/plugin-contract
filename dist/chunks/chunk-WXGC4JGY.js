@@ -1,8 +1,8 @@
-// @we-the-rebel-alliance/source-contract 0.3.0. Built by scripts/build.mjs; do not edit.
+// @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   ERROR_CODES,
   canonicalCode
-} from "./chunk-LJL3EALP.js";
+} from "./chunk-577LF5CA.js";
 
 // src/internal/failure.ts
 var FAILURE_CODES = ERROR_CODES;
@@ -23,7 +23,7 @@ function failureFromError(error) {
   const refusedInput = canonical === "INPUT_INVALID" || canonical === "SOURCE_UNKNOWN";
   const code = canonical !== void 0 && FAILURE_CODES.includes(canonical) ? canonical : void 0;
   const first = message.split(/\r?\n/, 1)[0].slice(0, 300);
-  const fallback = refusedInput ? "Check the source's descriptor against the installed plugin's version; if they match, report it to the plugin's maintainers." : "Try again later; if it keeps failing, check the plugin's status.";
+  const fallback = refusedInput ? "Check the installed plugin against its manifest; if they match, report it to the plugin's maintainers." : "Try again later; if it keeps failing, check the plugin's status.";
   const next = typeof data["next"] === "string" ? data["next"] : /Next step: (.*)$/.exec(first)?.[1] ?? fallback;
   const what = first.replace(/^[A-Z][A-Z_]+:\s*/, "").replace(/\s*Next step:.*$/, "");
   const retry = typeof record["retryAfterSec"] === "number" ? record["retryAfterSec"] : typeof data["retryAfterSec"] === "number" ? data["retryAfterSec"] : void 0;

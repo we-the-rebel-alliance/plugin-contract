@@ -1,4 +1,4 @@
-// @we-the-rebel-alliance/source-contract 0.3.0. Built by scripts/build.mjs; do not edit.
+// @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   _enum,
   _null,
@@ -13,9 +13,9 @@ import {
   string,
   union,
   validator
-} from "./chunk-6ZSJSJMV.js";
+} from "./chunk-BQEBNVNU.js";
 
-// src/registry.ts
+// src/outputs.ts
 var text = (max) => string().max(max);
 var httpsUrl = string().max(2048).refine((value) => {
   try {

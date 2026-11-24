@@ -1,7 +1,7 @@
-// @we-the-rebel-alliance/source-contract 0.3.0. Built by scripts/build.mjs; do not edit.
+// @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   isToolsRpcId
-} from "./chunk-WOH6G62Y.js";
+} from "./chunk-T2QSLHBQ.js";
 import {
   _enum,
   array,
@@ -16,14 +16,14 @@ import {
   string,
   union,
   validator
-} from "./chunk-6ZSJSJMV.js";
+} from "./chunk-BQEBNVNU.js";
 import {
   ATTENDANCE_RESPONSES,
   COMMITMENT_STATES,
   EVENT_LIMITS,
   FACT_TYPES,
   isEventKind
-} from "./chunk-LJL3EALP.js";
+} from "./chunk-577LF5CA.js";
 
 // src/internal/schema/types.ts
 var MAX_BYTES_DEFAULT = 65536;
@@ -67,7 +67,7 @@ var ACCOUNT_SERVER = /^[a-z][a-z0-9_-]*\{account\}[a-z0-9_-]*$/;
 var accounts = object({
   named: boolean().describe("True when the source reads more than one account, so a read names one."),
   server: string().max(64).regex(ACCOUNT_SERVER, { error: "must be lowercase words holding {account} once, such as plaud-{account}" }).optional().describe(
-    "For a plugin with one MCP server per account (#30, item 9): the server a named account's MCP tools live on, with {account} for the account, such as plaud-{account}. A bare operation is then <server>_<operation> for an account other than default; the default account keeps the namespace."
+    "For a plugin with one MCP server per account: the server a named account's MCP tools live on, with {account} for the account, such as plaud-{account}. A bare operation is then <server>_<operation> for an account other than default; the default account keeps the namespace."
   )
 }).strict().describe("Which signed-in accounts a source reads.");
 var scope = object({
@@ -87,14 +87,14 @@ var detail = object({
 }).strict().describe("One read of an event's detail: the tool, and the event fields its input comes from.");
 var permissionBase = {
   identity: array(string().max(200).regex(OPERATION, { error: "must be a provider operation or an MCP tool name" })).optional().describe(
-    "The identity operations probe asserts for this source (#4, #8); each is among permission.operations, and no content read asserts it. Empty when the probe asserts only sources.probe.action; absent when the source does not declare it, so a consumer uses its fallback."
+    "The identity operations probe asserts for this source; each is among permission.operations, and no content read asserts it. Empty when the probe asserts only sources.probe.action; absent when the source does not declare it, so a consumer uses its fallback."
   ),
   /**
    * True when the source's content reads legitimately assert an identity operation, such as reading mentions needing
    * the signed-in user's id. Each identity operation is still declared in `permission.identity` and among
    * `permission.operations`. Absent means content reads never assert one.
    */
-  readsIdentity: boolean().optional().describe("True when the source's content reads assert an identity operation (#30, item 4); every identity operation is still declared."),
+  readsIdentity: boolean().optional().describe("True when the source's content reads assert an identity operation; every identity operation is still declared."),
   operations: array(string().max(200).regex(OPERATION, { error: "must be a provider operation or an MCP tool name" })).min(1).optional().describe("Every operation the source's reads assert, and nothing else. Absent when `rules` states them."),
   rules: array(
     object({
@@ -108,7 +108,7 @@ var permissionBase = {
       resource: string().max(200).describe("The resource the action is asserted on, such as GET /user.")
     }).strict()
   ).optional().describe(
-    "For a rules source: the grants probe asserts for this source, verbatim, each among permission.rules (#30, item 10). Empty when the probe asserts only sources.probe.action; absent when undeclared. A rules source's equivalent of identity."
+    "For a rules source: the grants probe asserts for this source, verbatim, each among permission.rules. Empty when the probe asserts only sources.probe.action; absent when undeclared. A rules source's equivalent of identity."
   )
 };
 var permissionEither = (value, ctx) => {
@@ -143,7 +143,7 @@ var service = object({
   id: string().min(1).max(SERVICE_ID_MAX).describe("The service's id. Sources with the same id belong to one outside system that a person turns on or off as a unit."),
   label: string().min(1).max(SERVICE_LABEL_MAX).describe("What a person sees, such as Gmail. Every source with the same service id has the same label.")
 }).strict().describe(
-  "The outside system this source belongs to (#44 item 1), such as Gmail or Calendar. Absent: the plugin is one service, named after the plugin. It is part of the descriptor, so moving a source to another service changes the hash."
+  "The outside system this source belongs to, such as Gmail or Calendar. Absent: the plugin is one service, named after the plugin. It is part of the manifest, so moving a source to another service changes the hash."
 );
 var common = {
   id: string().max(64).regex(SOURCE_ID, { error: "must be a dotted source id such as gws.gmail" }),
@@ -165,10 +165,9 @@ var events = object({
   reads: string().max(64).refine(isEventKind, { error: "must be a core kind such as message, or x-<namespace>/<name>" }).describe("The thing it reads: a core kind, or x-<namespace>/<name>, whose namespace is the source's."),
   details: array(detail).optional(),
   facts: array(_enum(FACT_TYPES, { error: "must be a core fact type (commitment, person.attribute, meeting.attended)" })).min(1, "must name at least one fact type").optional().describe(
-    "The fact types this source's events carry (#45 \xA73), each a core type. An event may carry a fact of a declared type and of no other; Memory stamps the installed package's version on each fact it files."
+    "The fact types this source's events carry, each a core type. An event may carry a fact of a declared type and of no other."
   ),
-  hints: array(filePath).min(1, "must name at least one hint file").optional().describe("The hint files the package ships for this source (#45 \xA74): how to read one kind of item, at most 1,500 characters each."),
-  routines: array(filePath).min(1, "must name at least one routine file").optional().describe("The routine files the package ships for this source (#45 \xA75). Memory's first engine runs only its own core routines, so a plugin ships one only later."),
+  hints: array(filePath).min(1, "must name at least one hint file").optional().describe("The hint files the package ships for this source: how to read one kind of item, at most 1,500 characters each."),
   permission: permissionEvents,
   output: never({ error: "an events source has no output: output belongs to a snapshot" }).optional(),
   maxAgeSec: never({ error: "an events source has no maxAgeSec: a snapshot may be reused, an events page is read once" }).optional(),
@@ -180,8 +179,7 @@ var snapshot = object({
   output: string().max(64).refine(isOutputName, { error: "must be a registry name such as agenda, or x-<namespace>/<name>" }).describe("A registry name, or x-<namespace>/<name>; an x- output carries its schema inline."),
   outputSchema: union([boolean(), looseObject({})]).optional().describe("An x- output's schema, inline: JSON Schema draft 2020-12. Required for x-, absent for a registry name."),
   params: looseObject({}).optional().describe("The parameters a consumer may pass, resolved by the library at read time."),
-  hints: array(filePath).min(1, "must name at least one hint file").optional().describe("The hint files the package ships for this source (#45 \xA74): how to read one kind of item, at most 1,500 characters each."),
-  routines: array(filePath).min(1, "must name at least one routine file").optional().describe("The routine files the package ships for this source (#45 \xA75). Memory's first engine runs only its own core routines, so a plugin ships one only later."),
+  hints: array(filePath).min(1, "must name at least one hint file").optional().describe("The hint files the package ships for this source: how to read one kind of item, at most 1,500 characters each."),
   permission: permissionTool,
   maxAgeSec: int().min(1).optional().describe("How long a result may be reused before it is read again."),
   facts: never({ error: "a snapshot has no facts: a fact is derived from an event's provider fields" }).optional(),
@@ -232,10 +230,10 @@ var act = object({
 });
 var sourcesSchema = object({
   contractVersion: literal(1),
-  rpc: string().max(200).refine(isToolsRpcId, { error: "must be a tools-RPC id: the plugin id and .tools, such as google-workspace.gws.tools" }).optional().describe("The plugin's tools-RPC id (#4, #8), which a consumer calls instead of mapping the package."),
-  probe: object({ action: string().max(80).regex(ACTION, { error: "must be a dotted action such as gws.probe" }) }).strict().optional().describe("The plugin's one probe tool, and the permission action it asserts (#4, #8)."),
+  rpc: string().max(200).refine(isToolsRpcId, { error: "must be a tools-RPC id: the plugin id and .tools, such as google-workspace.gws.tools" }).optional().describe("The plugin's tools-RPC id, which a consumer calls instead of mapping the package."),
+  probe: object({ action: string().max(80).regex(ACTION, { error: "must be a dotted action such as gws.probe" }) }).strict().optional().describe("The plugin's one probe tool, and the permission action it asserts."),
   items: array(source).min(1).describe("The plugin's sources. A source id is unique across the declaration."),
-  acts: array(act).min(1, "must name at least one act, or be left out").optional().describe("The plugin's acts, beside its sources in the same descriptor. Absent when the plugin declares no write. Additive: an older consumer refuses the key.")
+  acts: array(act).min(1, "must name at least one act, or be left out").optional().describe("The plugin's acts, beside its sources in the same manifest. Absent when the plugin declares no write.")
 }).strict().superRefine((value, ctx) => {
   const labels = /* @__PURE__ */ new Map();
   for (const [index, item] of value.items.entries()) {

@@ -1,6 +1,6 @@
 /**
  * Params: what a read's inputs may say that only the reader can resolve, resolved by the library at read time
- * (design §2.3). A plugin receives plain values and never resolves them itself.
+ * (contract §7). A plugin receives plain values and never resolves them itself.
  *
  * - **Relative times**, in the person's time zone: `"now"`, or a signed whole number of minutes, hours, days or weeks,
  *   `"-90m"`, `"+2h"`, `"-7d"`, `"+1w"`. Minutes and hours are exact; days and weeks move the date in the person's time
@@ -11,21 +11,18 @@
  *   midnight to midnight; or `{ since, until }` with each a relative or absolute time.
  * - **`$me`**: the signed-in account, as the source's `probe` names its owner (`owner.id`).
  *
- * Which params a snapshot source takes, and which may be relative or `$me`, its descriptor says
+ * Which params a snapshot source takes, and which may be relative or `$me`, its manifest says
  * (`"params": { "window": { "relative": true } }`); an events source's `since` may always be relative.
- *
- * Seeded from Artifacts' relative-time resolver (ADR 0046, `resolveRelativeTimes` in we-the-rebel-alliance/artifacts):
- * the same rounding to the minute and the same 366-day bound, written as plain strings instead of `{"$now": …}`.
  */
 import type { Checked } from "./internal/checked.js";
-/** How far a relative time reaches, either way (Artifacts' default). */
+/** How far a relative time reaches, either way. */
 export declare const MAX_RELATIVE_DAYS = 366;
 /** The windows a param may name. */
 export declare const WINDOWS: readonly ["today", "yesterday", "tomorrow"];
 export type WindowName = (typeof WINDOWS)[number];
 /** The whole-value marker for the signed-in account. */
 export declare const ME = "$me";
-/** What a descriptor says about one param. Keys this module does not know are left for the plugin. */
+/** What a manifest says about one param. Keys this module does not know are left for the plugin. */
 export interface ParamSpec {
     /** The param takes a relative time or a window, which the library resolves. */
     readonly relative?: boolean;

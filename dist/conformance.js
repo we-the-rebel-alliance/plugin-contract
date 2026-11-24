@@ -1,26 +1,25 @@
-// @we-the-rebel-alliance/source-contract 0.3.0. Built by scripts/build.mjs; do not edit.
-import {
-  hintProblems,
-  routineProblems
-} from "./chunks/chunk-ITQZIF2U.js";
+// @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   maxBytesOf
-} from "./chunks/chunk-UXBQEPWK.js";
+} from "./chunks/chunk-ZWKV37GW.js";
+import "./chunks/chunk-6E62CHFC.js";
 import {
   SOURCES_SCHEMA
-} from "./chunks/chunk-YWD23SKJ.js";
-import "./chunks/chunk-GDBKZBG7.js";
+} from "./chunks/chunk-RGWXXX65.js";
 import {
   toolsRpcIdProblems
-} from "./chunks/chunk-WOH6G62Y.js";
+} from "./chunks/chunk-T2QSLHBQ.js";
 import {
   operationRule,
   sessionRules
-} from "./chunks/chunk-DEXO7HMA.js";
-import "./chunks/chunk-KXQYSM2Z.js";
+} from "./chunks/chunk-2V4VLI45.js";
+import "./chunks/chunk-65FTIXYZ.js";
+import {
+  hintProblems
+} from "./chunks/chunk-NY4JZ3MG.js";
 import {
   fromJSONSchema
-} from "./chunks/chunk-6ZSJSJMV.js";
+} from "./chunks/chunk-BQEBNVNU.js";
 import {
   AUTHOR_ROLES,
   PAGE,
@@ -31,9 +30,9 @@ import {
   resultProblems,
   secretKinds,
   sourceNamespace
-} from "./chunks/chunk-LJL3EALP.js";
-import "./chunks/chunk-NUBUQFLH.js";
-import "./chunks/chunk-CUITXC5J.js";
+} from "./chunks/chunk-577LF5CA.js";
+import "./chunks/chunk-7KJXMIQH.js";
+import "./chunks/chunk-WLRWVIVP.js";
 
 // src/internal/conformance/public-suffix-list.ts
 var RULES = `ac
@@ -10768,11 +10767,9 @@ function declarationProblems(sources, options = {}) {
     for (const type of unique(factTypes)) {
       if (factTypes.filter((entry) => entry === type).length > 1) problems.push(`${at}.facts lists "${type}" twice: a fact type is declared once`);
     }
-    for (const key2 of ["hints", "routines"]) {
-      const paths = item[key2] ?? [];
-      for (const path of unique(paths)) {
-        if (paths.filter((entry) => entry === path).length > 1) problems.push(`${at}.${key2} lists "${path}" twice: one file is declared once`);
-      }
+    const hintPaths = item.hints ?? [];
+    for (const path of unique(hintPaths)) {
+      if (hintPaths.filter((entry) => entry === path).length > 1) problems.push(`${at}.hints lists "${path}" twice: one file is declared once`);
     }
   }
   problems.push(...actDeclarationProblems(sources, tools));
@@ -11176,10 +11173,10 @@ async function sourceConformance(options) {
   add("declaration", declarationProblems({ contractVersion: 1, items: [source] }, { tools }));
   const ownSources = options.ownSources ?? [source.id];
   const readFile = options.files;
-  const fileCheck = (paths, kind) => {
+  const fileCheck = (paths) => {
     const problems2 = [];
     for (const path of paths) {
-      const where = `${kind}("${path}")`;
+      const where = `hints("${path}")`;
       if (readFile === void 0) {
         problems2.push(`${where} is declared and the kit has no file reader: pass files, (path) => the file's text`);
         continue;
@@ -11189,15 +11186,13 @@ async function sourceConformance(options) {
         problems2.push(`${where} is declared and the package holds no such file`);
         continue;
       }
-      const found = kind === "hints" ? hintProblems(text, { sources: ownSources }) : routineProblems(text, { sources: ownSources });
+      const found = hintProblems(text, { sources: ownSources });
       problems2.push(...found.map((problem) => `${where}: ${problem}`));
     }
     return problems2;
   };
   const declaredHints = source.hints ?? [];
-  const declaredRoutines = source.routines ?? [];
-  add("hints", fileCheck(declaredHints, "hints"), declaredHints.length > 0, declaredHints.length === 0);
-  add("routines", fileCheck(declaredRoutines, "routines"), declaredRoutines.length > 0, declaredRoutines.length === 0);
+  add("hints", fileCheck(declaredHints), declaredHints.length > 0, declaredHints.length === 0);
   const shape = [];
   const cursor = [];
   const gap = [];

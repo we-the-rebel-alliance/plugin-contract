@@ -1,17 +1,17 @@
 /**
- * The plain types of the §2.2 `sources` descriptor, and its constants. Its one import is the package's own: a
- * published declaration reaches this file, and must reach nothing outside the package (`npm run check:dist`).
+ * The plain types of the `sources` manifest block, and its constants. Its one import is the package's own: a published
+ * declaration reaches this file, and must reach nothing outside the package (`npm run check:dist`).
  */
 import type { FactType } from "../events.js";
-/** `maxBytes`: the default and the ceiling (§2.2). */
+/** `maxBytes`: the default and the ceiling. */
 export declare const MAX_BYTES_DEFAULT = 65536;
 export declare const MAX_BYTES_LIMIT = 1048576;
-/** A source's `service` (#44 item 1): the most characters its id and its label may take. */
+/** A source's `service`: the most characters its id and its label may take. */
 export declare const SERVICE_ID_MAX = 128;
 export declare const SERVICE_LABEL_MAX = 64;
 /**
- * The outside system a source belongs to (#44 item 1). Sources with the same `id` are one service, which a person turns
- * on or off as a unit; `label` is what they see, and is the same on every source of that service.
+ * The outside system a source belongs to. Sources with the same `id` are one service, which a person turns on or off as
+ * a unit; `label` is what they see, and is the same on every source of that service.
  */
 export interface Service {
     /** At most 128 characters, such as `gws.gmail`. */
@@ -26,20 +26,17 @@ export interface Service {
 export declare const ACT_EFFECTS: readonly ["local", "notify", "spend", "irreversible"];
 /** An act's effect: `local`, or one that reaches someone, spends, or cannot be undone. */
 export type ActEffect = (typeof ACT_EFFECTS)[number];
-/** The value of a plugin's top-level `sources` key: the contract version, its sources, and its acts once it declares any. */
+/** The value of a plugin's top-level `sources` key: the wire version, its sources, and its acts once it declares any. */
 export interface Sources {
     readonly contractVersion: 1;
-    /** The plugin's tools-RPC id (#4, #8): the plugin id and `.tools`. */
+    /** The plugin's tools-RPC id: the plugin id and `.tools`. */
     readonly rpc?: string | undefined;
-    /** The plugin's one probe tool, and the permission action it asserts (#4, #8). */
+    /** The plugin's one probe tool, and the permission action it asserts. */
     readonly probe?: {
         readonly action: string;
     } | undefined;
     readonly items: readonly SourceItem[];
-    /**
-     * The plugin's acts, beside its sources in the same descriptor. Absent when the plugin declares no write. Additive:
-     * a consumer on an older package refuses the key.
-     */
+    /** The plugin's acts, beside its sources in the same manifest. Absent when the plugin declares no write. */
     readonly acts?: readonly ActItem[] | undefined;
 }
 /** An events feed or a snapshot. */
@@ -52,7 +49,7 @@ export interface SourceCommon {
     readonly tool: string;
     /** The input the tool needs to reach this source, such as `{ source: "gmail" }`. */
     readonly input?: Readonly<Record<string, unknown>> | undefined;
-    /** Which signed-in accounts a source reads. Optional: §2.2's X item names none. */
+    /** Which signed-in accounts a source reads. Optional. */
     readonly accounts?: Accounts | undefined;
     /** What a person confirms at consent, and the sentence that asks them. */
     readonly scope?: Scope | undefined;
@@ -68,7 +65,7 @@ export interface SourceCommon {
     readonly retentionDays?: number | undefined;
     /** The hosts an event's `url` may point at, for display. */
     readonly urlHosts?: readonly string[] | undefined;
-    /** The outside system this source belongs to (#44 item 1). Absent: the plugin is one service, named after the plugin. */
+    /** The outside system this source belongs to. Absent: the plugin is one service, named after the plugin. */
     readonly service?: Service | undefined;
 }
 /** An events source: append-only items read with a cursor. */
@@ -78,12 +75,10 @@ export interface SourceEvents extends SourceCommon {
     readonly reads: string;
     /** Reads of one event's detail, called only with the event fields they name. */
     readonly details?: readonly Detail[] | undefined;
-    /** The fact types this source's events carry (#45 §3), each a core type. */
+    /** The fact types this source's events carry, each a core type. */
     readonly facts?: readonly FactType[] | undefined;
-    /** The hint files the package ships for this source (#45 §4). */
+    /** The hint files the package ships for this source. */
     readonly hints?: readonly string[] | undefined;
-    /** The routine files the package ships for this source (#45 §5). */
-    readonly routines?: readonly string[] | undefined;
     /** The action `events_list` asserts. */
     readonly permission: PermissionEvents;
     /** Not allowed on an events source. */
@@ -131,10 +126,8 @@ export interface SourceSnapshot extends SourceCommon {
     readonly outputSchema?: Readonly<Record<string, unknown>> | boolean | undefined;
     /** The parameters a consumer may pass, resolved by the library at read time. */
     readonly params?: Readonly<Record<string, unknown>> | undefined;
-    /** The hint files the package ships for this source (#45 §4). */
+    /** The hint files the package ships for this source. */
     readonly hints?: readonly string[] | undefined;
-    /** The routine files the package ships for this source (#45 §5). */
-    readonly routines?: readonly string[] | undefined;
     /** The action its read tool asserts. */
     readonly permission: PermissionTool;
     /** How long a result may be reused before it is read again. */
@@ -150,7 +143,7 @@ export interface SourceSnapshot extends SourceCommon {
 export interface Accounts {
     /** True when the source reads more than one account, so a read names one. */
     readonly named: boolean;
-    /** For one MCP server per account (#30, item 9): a named account's server, with `{account}`, such as `plaud-{account}`. */
+    /** For one MCP server per account: a named account's server, with `{account}`, such as `plaud-{account}`. */
     readonly server?: string | undefined;
 }
 /** What a person confirms at consent. */
@@ -164,7 +157,7 @@ export interface Scope {
 }
 /**
  * A bind-time read: the values a person may pick for a scope key. It runs only at bind, in the probe session, with its
- * results shown and never stored, so its operations never enter a running grant (§2.2, accepted addition).
+ * results shown and never stored, so its operations never enter a running grant.
  */
 export interface Suggest {
     /** The read-only tool that lists the values. */
@@ -198,11 +191,11 @@ export interface PermissionEvents {
     readonly operations?: readonly string[] | undefined;
     /** The grants verbatim, for a provider whose resources are not `<account>:<operation>` such as GitHub's `github_api` on `GET /user`. */
     readonly rules?: readonly PermissionRuleLike[] | undefined;
-    /** For a rules source: the grants `probe` asserts, verbatim, each among `rules` (#30, item 10). Empty when the probe asserts only its action; absent when undeclared. */
+    /** For a rules source: the grants `probe` asserts, verbatim, each among `rules`. Empty when the probe asserts only its action; absent when undeclared. */
     readonly identityRules?: readonly PermissionRuleLike[] | undefined;
-    /** The identity operations `probe` asserts for this source (#4, #8); each is among permission.operations, and no content read asserts it. Empty when the probe asserts only its action; absent when undeclared. */
+    /** The identity operations `probe` asserts for this source; each is among permission.operations, and no content read asserts it. Empty when the probe asserts only its action; absent when undeclared. */
     readonly identity?: readonly string[] | undefined;
-    /** True when the source's content reads assert an identity operation (#30, item 4); every identity operation is still declared. */
+    /** True when the source's content reads assert an identity operation; every identity operation is still declared. */
     readonly readsIdentity?: boolean | undefined;
 }
 /** A snapshot's permission: the read tool's action, and the provider operations it asserts. */
@@ -213,11 +206,11 @@ export interface PermissionTool {
     readonly operations?: readonly string[] | undefined;
     /** The grants verbatim, when the provider's resources are not `<account>:<operation>`. */
     readonly rules?: readonly PermissionRuleLike[] | undefined;
-    /** For a rules source: the grants `probe` asserts, verbatim, each among `rules` (#30, item 10). Empty when the probe asserts only its action; absent when undeclared. */
+    /** For a rules source: the grants `probe` asserts, verbatim, each among `rules`. Empty when the probe asserts only its action; absent when undeclared. */
     readonly identityRules?: readonly PermissionRuleLike[] | undefined;
-    /** The identity operations `probe` asserts for this source (#4, #8); each is among permission.operations, and no content read asserts it. Empty when the probe asserts only its action; absent when undeclared. */
+    /** The identity operations `probe` asserts for this source; each is among permission.operations, and no content read asserts it. Empty when the probe asserts only its action; absent when undeclared. */
     readonly identity?: readonly string[] | undefined;
-    /** True when the source's content reads assert an identity operation (#30, item 4); every identity operation is still declared. */
+    /** True when the source's content reads assert an identity operation; every identity operation is still declared. */
     readonly readsIdentity?: boolean | undefined;
 }
 /** What one read costs: `free` charges nothing, `metered` charges per unit, `billed` charges per call. */
