@@ -1,0 +1,107 @@
+{
+  "name": "@we-the-rebel-alliance/source-contract",
+  "version": "0.3.0",
+  "description": "One source contract for every plugin and every project: the data model, the descriptor, the protocol, the library and the conformance kit.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/we-the-rebel-alliance/source-contract.git"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./act": {
+      "types": "./dist/act.d.ts",
+      "default": "./dist/act.js"
+    },
+    "./broker-client": {
+      "types": "./dist/broker-client.d.ts",
+      "default": "./dist/broker-client.js"
+    },
+    "./cursor": {
+      "types": "./dist/cursor.d.ts",
+      "default": "./dist/cursor.js"
+    },
+    "./descriptor": {
+      "types": "./dist/descriptor.d.ts",
+      "default": "./dist/descriptor.js"
+    },
+    "./events": {
+      "types": "./dist/events.d.ts",
+      "default": "./dist/events.js"
+    },
+    "./hints": {
+      "types": "./dist/hints.d.ts",
+      "default": "./dist/hints.js"
+    },
+    "./list": {
+      "types": "./dist/list.d.ts",
+      "default": "./dist/list.js"
+    },
+    "./params": {
+      "types": "./dist/params.d.ts",
+      "default": "./dist/params.js"
+    },
+    "./permission": {
+      "types": "./dist/permission.d.ts",
+      "default": "./dist/permission.js"
+    },
+    "./pick": {
+      "types": "./dist/pick.d.ts",
+      "default": "./dist/pick.js"
+    },
+    "./read": {
+      "types": "./dist/read.d.ts",
+      "default": "./dist/read.js"
+    },
+    "./registry": {
+      "types": "./dist/registry.d.ts",
+      "default": "./dist/registry.js"
+    },
+    "./schemas": {
+      "types": "./dist/schemas.d.ts",
+      "default": "./dist/schemas.js"
+    },
+    "./tools-rpc": {
+      "types": "./dist/tools-rpc.d.ts",
+      "default": "./dist/tools-rpc.js"
+    },
+    "./package.json": "./package.json",
+    "./conformance": {
+      "types": "./dist/conformance.d.ts",
+      "default": "./dist/conformance.js"
+    },
+    "./schema": {
+      "types": "./dist/schema.d.ts",
+      "default": "./dist/schema.js"
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "npm run test:node && npm run test:bun",
+    "test:node": "node --test \"test/**/*.test.ts\"",
+    "test:bun": "bun test ./test",
+    "check:dist": "node scripts/check-dist.mjs",
+    "conformance:self-test": "node scripts/conformance-self-test.mjs",
+    "check": "npm run typecheck && npm run build && npm run check:dist && npm test && npm run conformance:self-test"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3",
+    "zod": "4.6.7"
+  }
+}

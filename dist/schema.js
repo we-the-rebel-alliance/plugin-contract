@@ -1,0 +1,27 @@
+// @we-the-rebel-alliance/source-contract 0.3.0. Built by scripts/build.mjs; do not edit.
+import {
+  ACT_EFFECTS,
+  FACT_SCHEMAS,
+  MAX_BYTES_DEFAULT,
+  MAX_BYTES_LIMIT,
+  SERVICE_ID_MAX,
+  SERVICE_LABEL_MAX,
+  SOURCES_SCHEMA,
+  factSchema
+} from "./chunks/chunk-YWD23SKJ.js";
+import "./chunks/chunk-WOH6G62Y.js";
+import "./chunks/chunk-DEXO7HMA.js";
+import "./chunks/chunk-6ZSJSJMV.js";
+import "./chunks/chunk-LJL3EALP.js";
+import "./chunks/chunk-NUBUQFLH.js";
+import "./chunks/chunk-CUITXC5J.js";
+export {
+  ACT_EFFECTS,
+  FACT_SCHEMAS,
+  MAX_BYTES_DEFAULT,
+  MAX_BYTES_LIMIT,
+  SERVICE_ID_MAX,
+  SERVICE_LABEL_MAX,
+  SOURCES_SCHEMA,
+  factSchema
+};

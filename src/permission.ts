@@ -1,0 +1,232 @@
+/**
+ * Permission: the exact OpenCode session rules a grant allows (design §3, "the trust rule").
+ *
+ * Every read runs in a session limited to these rules. OpenCode checks each inner tool call a plugin makes against the
+ * calling session's rules, and the last matching rule wins, so the rules are a deny of everything, then one allow per
+ * action and resource the source declares:
+ *
+ *   [{ action: "*", resource: "*", effect: "deny" },
+ *    { action: "gws.events_list", resource: "*", effect: "allow" },
+ *    { action: "gws.read", resource: "ana@example.com:gmail.users.messages.list", effect: "allow" }, …]
+ *
+ * The method's action is allowed on `*`, because the tools RPC resolves a method before dispatch on `*` (version 2; a
+ * method with a version 2.3 resource resolver is resolved on its resource, which the operation rules cover). Each
+ * operation is allowed as Memory's schema and conformance kit read it (`operationRule`): a dotted operation as
+ * `<namespace>.read` on `<account>:<operation>` (gws: `gws.read` on `ana@example.com:gmail.users.messages.get`), and a
+ * bare one, an MCP tool, as `<namespace>_<operation>` on `*` (Slack: `slack_slack_read_channel`). The namespace is the
+ * source id's first segment. A source whose provider's resources are not `<account>:<operation>` states its grants
+ * verbatim in `permission.rules` (GitHub's `github_api` on `GET /user`), and those are allowed as written.
+ *
+ * The broker and a project may only narrow these rules, and the plugin's own `access` setting stays final.
+ */
+import type { Checked } from "./internal/checked.ts"
+import type { SourceItem } from "./descriptor.ts"
+import type { ActItem } from "./internal/schema/types.ts"
+
+/** One OpenCode permission rule, as a session or an agent holds it. */
+export interface PermissionRule {
+  readonly action: string
+  readonly resource: string
+  readonly effect: "allow" | "deny" | "ask"
+}
+
+/**
+ * A person's grant: one consumer may read one source, for one account, within one scope (design §2, "consent per
+ * (consumer, source, account, scope)").
+ */
+export interface Grant {
+  /** Who reads: a project's consumer, such as `memory`, `jelly.home`, or an Artifacts app with its viewer. */
+  readonly consumer: string
+  /** The source id. */
+  readonly source: string
+  /** The account the person confirmed. */
+  readonly account: string
+  /** The scope the person confirmed, by scope key: channel ids, label names. Absent for a source without a scope. */
+  readonly scope?: Readonly<Record<string, readonly string[]>>
+  /** The descriptor hash the person consented to; a changed descriptor asks again. */
+  readonly descriptorHash: string
+  /** The person turned this binding off: a read answers SOURCE_DISABLED, which is not an error state. */
+  readonly disabled?: boolean
+}
+
+/**
+ * A person's grant for one act: one consumer may preview and commit one act, for one account, against the descriptor
+ * hash they consented to. The same shape as a read grant, for an act id.
+ */
+export interface ActGrant {
+  /** Who acts: a project's consumer, such as `memory` or an Artifacts app with its viewer. */
+  readonly consumer: string
+  /** The act id. */
+  readonly act: string
+  /** The account the person confirmed. */
+  readonly account: string
+  /** The descriptor hash the person consented to; a changed descriptor asks again. */
+  readonly descriptorHash: string
+  /** The person turned this binding off. An act then answers SOURCE_DISABLED, the table's existing code. */
+  readonly disabled?: boolean
+}
+
+/** Which call a fenced act session allows. Preview never allows the commit action. */
+export type ActPhase = "preview" | "commit"
+
+/** The first rule of every fenced session: nothing is allowed that a later rule does not allow. */
+export const DENY_ALL: PermissionRule = { action: "*", resource: "*", effect: "deny" }
+
+/**
+ * An account a rule may name: no wildcard (`*`, `?`), no `:` (it separates account and operation), no whitespace or
+ * control character, at most 320 characters. A wildcard here would widen the grant to other accounts.
+ */
+export const ACCOUNT_PATTERN = /^[^\s*?:\u0000-\u001f\u007f]{1,320}$/
+
+/** The wildcard characters OpenCode's rules read: an action or operation with one would widen a rule. */
+const WILDCARD = /[*?]/
+
+/** Why `account` cannot be named in a rule, or undefined when it can. */
+export function accountProblem(account: unknown): string | undefined {
+  if (typeof account !== "string" || !ACCOUNT_PATTERN.test(account)) {
+    return "the account must be 1 to 320 characters with no wildcard (* or ?), no colon and no whitespace"
+  }
+  return undefined
+}
+
+const allow = (action: string, resource: string): PermissionRule => ({ action, resource, effect: "allow" })
+
+/** A source's namespace: its id's first segment, which every action of the source begins with. */
+export function namespaceOf(source: Pick<SourceItem, "id">): string {
+  return source.id.split(".")[0] ?? source.id
+}
+
+/**
+ * The rule that allows one operation for `account`: a dotted operation as `<namespace>.read` on
+ * `<account>:<operation>`, a bare one (an MCP tool) as `<namespace>_<operation>` on `*`. The same derivation as Memory's
+ * conformance kit, so declared equals asserted means the same thing in a plugin's CI and in a consumer's session.
+ */
+export function operationRule(source: Pick<SourceItem, "id" | "accounts">, operation: string, account: string): PermissionRule {
+  const namespace = namespaceOf(source)
+  return operation.includes(".") ? allow(`${namespace}.read`, `${account}:${operation}`) : allow(`${serverOf(source, account)}_${operation}`, "*")
+}
+
+/** The account the default MCP server serves: its tools are `<namespace>_<tool>`, whatever `accounts.server` says. */
+export const DEFAULT_ACCOUNT = "default"
+
+/** An account that may stand in a per-account server's name: a tool id's characters only. */
+export const SERVER_ACCOUNT_PATTERN = /^[A-Za-z0-9_-]{1,64}$/
+
+/**
+ * The MCP server a bare operation of `source` runs on for `account` (#30, item 9): the namespace, or, for a plugin with
+ * one MCP server per account (`accounts.server`, such as `plaud-{account}`), that server for every account but
+ * `default`. Plaud's `list_files` is `plaud_list_files` for the default account and `plaud-work_list_files` for work.
+ */
+export function serverOf(source: Pick<SourceItem, "id" | "accounts">, account: string): string {
+  const template = source.accounts?.server
+  if (template === undefined || account === DEFAULT_ACCOUNT) return namespaceOf(source)
+  return template.replace("{account}", account)
+}
+
+/** Why `account` cannot name `source`'s per-account server, or undefined when it can (or the source has none). */
+function serverAccountProblem(source: Pick<SourceItem, "accounts">, account: string): string | undefined {
+  if (source.accounts?.server === undefined || account === DEFAULT_ACCOUNT || SERVER_ACCOUNT_PATTERN.test(account)) return undefined
+  return `the account must be letters, digits, _ or - (at most 64), since it names the MCP server ${source.accounts.server}`
+}
+
+function fenced(rules: readonly PermissionRule[]): Checked<readonly PermissionRule[]> {
+  const loose = rules.find((rule) => WILDCARD.test(rule.action) || (rule.resource !== "*" && WILDCARD.test(rule.resource)))
+  if (loose) return { ok: false, problems: [`the rule for ${loose.action} on ${loose.resource} has a wildcard, which would widen the grant`] }
+  const seen = new Set<string>()
+  const unique = rules.filter((rule) => {
+    const key = `${rule.action}\u0000${rule.resource}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+  return { ok: true, value: [DENY_ALL, ...unique] }
+}
+
+/** The method action a source's read asserts. */
+export function methodAction(source: SourceItem): string | undefined {
+  return source.kind === "events" ? source.permission.events : source.permission.tool
+}
+
+/**
+ * The session rules for reading `source` under `grant`: deny everything, then allow the method and each declared
+ * operation for the granted account. Refused when the grant is for another source, its account cannot be named in a
+ * rule, or the source does not name its method's action.
+ */
+export function sessionRules(source: SourceItem, grant: Pick<Grant, "source" | "account">): Checked<readonly PermissionRule[]> {
+  if (grant.source !== source.id) return { ok: false, problems: [`the grant is for ${grant.source}, not ${source.id}`] }
+  const problem = accountProblem(grant.account)
+  if (problem) return { ok: false, problems: [problem] }
+  const method = methodAction(source)
+  if (method === undefined) return { ok: false, problems: [`${source.id} names no action for its method`] }
+  const declared = source.permission.rules
+  if (declared !== undefined) return fenced([allow(method, "*"), ...declared.map((rule) => allow(rule.action, rule.resource))])
+  const operations = source.permission.operations ?? []
+  if (operations.length === 0) return { ok: false, problems: [`${source.id} declares neither operations nor rules`] }
+  const server = serverAccountProblem(source, grant.account)
+  if (server) return { ok: false, problems: [server] }
+  return fenced([allow(method, "*"), ...operations.map((operation) => operationRule(source, operation, grant.account))])
+}
+
+/**
+ * The session rules for one phase of `act` under `grant`: deny everything, then allow that phase's action and each
+ * declared operation for the granted account. A preview session allows the preview action and not the commit action,
+ * so the commit tool cannot run while previewing. Operations are derived like a source's (`operationRule`).
+ */
+export function actSessionRules(act: Pick<ActItem, "id" | "permission">, grant: Pick<ActGrant, "act" | "account">, phase: ActPhase): Checked<readonly PermissionRule[]> {
+  if (grant.act !== act.id) return { ok: false, problems: [`the grant is for ${grant.act}, not ${act.id}`] }
+  const problem = accountProblem(grant.account)
+  if (problem) return { ok: false, problems: [problem] }
+  const method = phase === "preview" ? act.permission.preview : act.permission.commit
+  const operations = act.permission.operations
+  if (operations.length === 0) return { ok: false, problems: [`${act.id} declares no operations`] }
+  return fenced([allow(method, "*"), ...operations.map((operation) => operationRule({ id: act.id }, operation, grant.account))])
+}
+
+/**
+ * The session rules for one detail read of `source` under `grant`: the source's own rules. A detail read is part of
+ * the source's read (Slack's thread read is one of its declared operations), so it asserts nothing the source does not
+ * declare. Refused when the source declares no such detail.
+ */
+export function detailRules(source: SourceItem, detailId: string, grant: Pick<Grant, "source" | "account">): Checked<readonly PermissionRule[]> {
+  if (!source.details?.some((entry) => entry.id === detailId)) return { ok: false, problems: [`${source.id} declares no detail read ${detailId}`] }
+  return sessionRules(source, grant)
+}
+
+/**
+ * The session rules for the source's `probe` on `account`: deny everything, then allow the probe's action (the
+ * plugin's declared `sources.probe.action`, or else the source's own action) and its identity operations, which are
+ * among the source's `operations` (#21). A source that states its rules verbatim declares its probe's grants as
+ * `identityRules`, allowed as written (#30, item 10). That a probe reads no content is the kit's check of its answer.
+ */
+export function probeRules(source: SourceItem, account: string, identityOperations: readonly string[], probeAction?: string): Checked<readonly PermissionRule[]> {
+  const problem = accountProblem(account)
+  if (problem) return { ok: false, problems: [problem] }
+  const method = probeAction ?? methodAction(source)
+  if (method === undefined) return { ok: false, problems: [`${source.id} names no action for its method`] }
+  const server = serverAccountProblem(source, account)
+  if (server) return { ok: false, problems: [server] }
+  const verbatim = source.permission.identityRules
+  if (verbatim !== undefined) return fenced([allow(method, "*"), ...verbatim.map((rule) => allow(rule.action, rule.resource))])
+  return fenced([allow(method, "*"), ...identityOperations.map((operation) => operationRule(source, operation, account))])
+}
+
+/**
+ * How OpenCode decides an action on a resource under `rules`: the last rule whose action and resource match wins (`*`
+ * matches any run of characters and `?` one), and no match asks. The same evaluation the tools RPC runs.
+ */
+export function evaluate(rules: readonly PermissionRule[], action: string, resource = "*"): PermissionRule["effect"] {
+  return rules.findLast((rule) => wildcard(rule.action, action) && wildcard(rule.resource, resource))?.effect ?? "ask"
+}
+
+const wildcard = (pattern: string, value: string) =>
+  new RegExp(`^${pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".")}$`).test(value)
+
+/** True when `grant` covers a read of `source` for `account` within `scope`: the same source and account, and every scope value granted. */
+export function grantCovers(grant: Grant, request: { readonly source: string; readonly account: string; readonly scope?: Readonly<Record<string, readonly string[]>> }): boolean {
+  if (grant.source !== request.source || grant.account !== request.account) return false
+  for (const [key, values] of Object.entries(request.scope ?? {})) {
+    const granted = grant.scope?.[key]
+    if (!granted || values.some((value) => !granted.includes(value))) return false
+  }
+  return true
+}

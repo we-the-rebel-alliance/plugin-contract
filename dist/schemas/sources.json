@@ -1,0 +1,1166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "contractVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "rpc": {
+      "description": "The plugin's tools-RPC id (#4, #8), which a consumer calls instead of mapping the package.",
+      "type": "string",
+      "maxLength": 200
+    },
+    "probe": {
+      "description": "The plugin's one probe tool, and the permission action it asserts (#4, #8).",
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "maxLength": 80,
+          "pattern": "^(?:[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*|[a-z][a-z0-9]*_[a-z][a-z0-9_]*)$"
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "additionalProperties": false
+    },
+    "items": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+$"
+              },
+              "tool": {
+                "type": "string",
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9_]{0,63}$"
+              },
+              "input": {
+                "description": "The input the tool needs to reach this source. It carries no account and no secret.",
+                "type": "object",
+                "properties": {},
+                "additionalProperties": {}
+              },
+              "accounts": {
+                "type": "object",
+                "properties": {
+                  "named": {
+                    "type": "boolean",
+                    "description": "True when the source reads more than one account, so a read names one."
+                  },
+                  "server": {
+                    "description": "For a plugin with one MCP server per account (#30, item 9): the server a named account's MCP tools live on, with {account} for the account, such as plaud-{account}. A bare operation is then <server>_<operation> for an account other than default; the default account keeps the namespace.",
+                    "type": "string",
+                    "maxLength": 64,
+                    "pattern": "^[a-z][a-z0-9_-]*\\{account\\}[a-z0-9_-]*$"
+                  }
+                },
+                "required": [
+                  "named"
+                ],
+                "additionalProperties": false,
+                "description": "Which signed-in accounts a source reads."
+              },
+              "scope": {
+                "type": "object",
+                "properties": {
+                  "keys": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 32,
+                      "pattern": "^[a-z][a-z0-9_]{0,31}$"
+                    },
+                    "description": "The scope keys a person confirms: labels, channels, repositories. Empty when there is nothing to choose."
+                  },
+                  "describe": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "The sentence shown at consent, such as Which labels."
+                  },
+                  "suggest": {
+                    "description": "The read-only tool that lists the values a person may pick, and the operations it asserts. It runs only at bind, in the probe session; its results are shown and never stored, so its operations never enter a running grant.",
+                    "type": "object",
+                    "properties": {
+                      "tool": {
+                        "type": "string",
+                        "maxLength": 64,
+                        "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                      },
+                      "operations": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 200,
+                          "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,199}$"
+                        }
+                      }
+                    },
+                    "required": [
+                      "tool",
+                      "operations"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "keys",
+                  "describe"
+                ],
+                "additionalProperties": false,
+                "description": "What a person confirms at consent, and the sentence that asks them."
+              },
+              "private": {
+                "description": "True when everything this source reads is personal: shown at consent.",
+                "type": "boolean"
+              },
+              "cost": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "class": {
+                        "type": "string",
+                        "const": "free"
+                      },
+                      "units": {
+                        "not": {}
+                      },
+                      "probe": {
+                        "not": {}
+                      }
+                    },
+                    "required": [
+                      "class"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "class": {
+                        "type": "string",
+                        "const": "metered"
+                      },
+                      "units": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "per": {
+                              "type": "string",
+                              "maxLength": 32,
+                              "pattern": "^[a-z][a-z0-9-]{0,31}$"
+                            },
+                            "usd": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "conditions": {
+                              "description": "The short sentence shown at consent when this price applies, such as X app owners only.",
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "min": {
+                              "description": "The lowest rate that may apply, in US dollars: at most usd.",
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "per",
+                            "usd"
+                          ],
+                          "additionalProperties": false,
+                          "description": "One price unit, in US dollars, from the plugin's own price table."
+                        }
+                      },
+                      "probe": {
+                        "type": "object",
+                        "properties": {
+                          "per": {
+                            "type": "string",
+                            "maxLength": 32,
+                            "pattern": "^[a-z][a-z0-9-]{0,31}$"
+                          },
+                          "usd": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "conditions": {
+                            "description": "The short sentence shown at consent when this price applies, such as X app owners only.",
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "min": {
+                            "description": "The lowest rate that may apply, in US dollars: at most usd.",
+                            "type": "number",
+                            "minimum": 0
+                          }
+                        },
+                        "required": [
+                          "per",
+                          "usd"
+                        ],
+                        "additionalProperties": false,
+                        "description": "One price unit, in US dollars, from the plugin's own price table."
+                      }
+                    },
+                    "required": [
+                      "class",
+                      "units"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "class": {
+                        "type": "string",
+                        "const": "billed"
+                      },
+                      "units": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "per": {
+                              "type": "string",
+                              "maxLength": 32,
+                              "pattern": "^[a-z][a-z0-9-]{0,31}$"
+                            },
+                            "usd": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "conditions": {
+                              "description": "The short sentence shown at consent when this price applies, such as X app owners only.",
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "min": {
+                              "description": "The lowest rate that may apply, in US dollars: at most usd.",
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "per",
+                            "usd"
+                          ],
+                          "additionalProperties": false,
+                          "description": "One price unit, in US dollars, from the plugin's own price table."
+                        }
+                      },
+                      "probe": {
+                        "type": "object",
+                        "properties": {
+                          "per": {
+                            "type": "string",
+                            "maxLength": 32,
+                            "pattern": "^[a-z][a-z0-9-]{0,31}$"
+                          },
+                          "usd": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "conditions": {
+                            "description": "The short sentence shown at consent when this price applies, such as X app owners only.",
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "min": {
+                            "description": "The lowest rate that may apply, in US dollars: at most usd.",
+                            "type": "number",
+                            "minimum": 0
+                          }
+                        },
+                        "required": [
+                          "per",
+                          "usd"
+                        ],
+                        "additionalProperties": false,
+                        "description": "One price unit, in US dollars, from the plugin's own price table."
+                      }
+                    },
+                    "required": [
+                      "class",
+                      "units",
+                      "probe"
+                    ],
+                    "additionalProperties": false
+                  }
+                ],
+                "description": "What one read costs, including a probe call, which reads no content."
+              },
+              "cadence": {
+                "type": "object",
+                "properties": {
+                  "providerMinMinutes": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10080
+                  }
+                },
+                "additionalProperties": false,
+                "description": "A provider's own floor between reads. Only where the provider imposes one."
+              },
+              "maxBytes": {
+                "default": 65536,
+                "description": "The most bytes one result may take: default 65536 (64 KB), at most 1048576 (1 MB).",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1048576
+              },
+              "retentionDays": {
+                "description": "How many days an events consumer keeps what it read.",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "urlHosts": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 253,
+                  "pattern": "^(?:\\*\\.)?[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$"
+                },
+                "description": "The hosts an event's url may point at, for display. A consumer renders a url only when its host matches."
+              },
+              "service": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "description": "The service's id. Sources with the same id belong to one outside system that a person turns on or off as a unit."
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "description": "What a person sees, such as Gmail. Every source with the same service id has the same label."
+                  }
+                },
+                "required": [
+                  "id",
+                  "label"
+                ],
+                "additionalProperties": false,
+                "description": "The outside system this source belongs to (#44 item 1), such as Gmail or Calendar. Absent: the plugin is one service, named after the plugin. It is part of the descriptor, so moving a source to another service changes the hash."
+              },
+              "kind": {
+                "type": "string",
+                "const": "events"
+              },
+              "reads": {
+                "type": "string",
+                "maxLength": 64,
+                "description": "The thing it reads: a core kind, or x-<namespace>/<name>, whose namespace is the source's."
+              },
+              "details": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "maxLength": 64,
+                      "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+$"
+                    },
+                    "tool": {
+                      "type": "string",
+                      "maxLength": 64,
+                      "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                    },
+                    "from": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "external_id",
+                          "kind",
+                          "occurred_at",
+                          "url",
+                          "thread",
+                          "actors",
+                          "labels",
+                          "hash"
+                        ]
+                      },
+                      "description": "The event fields the detail's input comes from. Identifiers only: an event's title and text are never an input."
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "tool",
+                    "from"
+                  ],
+                  "additionalProperties": false,
+                  "description": "One read of an event's detail: the tool, and the event fields its input comes from."
+                }
+              },
+              "facts": {
+                "description": "The fact types this source's events carry (#45 §3), each a core type. An event may carry a fact of a declared type and of no other; Memory stamps the installed package's version on each fact it files.",
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "commitment",
+                    "person.attribute",
+                    "meeting.attended"
+                  ]
+                }
+              },
+              "hints": {
+                "description": "The hint files the package ships for this source (#45 §4): how to read one kind of item, at most 1,500 characters each.",
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "pattern": "^[a-z0-9][a-z0-9._-]*(?:\\/[a-z0-9][a-z0-9._-]*)*\\.md$"
+                }
+              },
+              "routines": {
+                "description": "The routine files the package ships for this source (#45 §5). Memory's first engine runs only its own core routines, so a plugin ships one only later.",
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "pattern": "^[a-z0-9][a-z0-9._-]*(?:\\/[a-z0-9][a-z0-9._-]*)*\\.md$"
+                }
+              },
+              "permission": {
+                "type": "object",
+                "properties": {
+                  "events": {
+                    "type": "string",
+                    "maxLength": 80,
+                    "pattern": "^(?:[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*|[a-z][a-z0-9]*_[a-z][a-z0-9_]*)$"
+                  },
+                  "tool": {
+                    "not": {}
+                  },
+                  "identity": {
+                    "description": "The identity operations probe asserts for this source (#4, #8); each is among permission.operations, and no content read asserts it. Empty when the probe asserts only sources.probe.action; absent when the source does not declare it, so a consumer uses its fallback.",
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 200,
+                      "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,199}$"
+                    }
+                  },
+                  "readsIdentity": {
+                    "description": "True when the source's content reads assert an identity operation (#30, item 4); every identity operation is still declared.",
+                    "type": "boolean"
+                  },
+                  "operations": {
+                    "description": "Every operation the source's reads assert, and nothing else. Absent when `rules` states them.",
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 200,
+                      "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,199}$"
+                    }
+                  },
+                  "rules": {
+                    "description": "The grants verbatim, for a provider whose resources are not <account>:<operation> (GitHub's github_api on GET /user).",
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "action": {
+                          "type": "string",
+                          "maxLength": 80,
+                          "pattern": "^(?:[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*|[a-z][a-z0-9]*_[a-z][a-z0-9_]*)$"
+                        },
+                        "resource": {
+                          "type": "string",
+                          "maxLength": 200,
+                          "description": "The resource the action is asserted on, such as GET /user."
+                        }
+                      },
+                      "required": [
+                        "action",
+                        "resource"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "identityRules": {
+                    "description": "For a rules source: the grants probe asserts for this source, verbatim, each among permission.rules (#30, item 10). Empty when the probe asserts only sources.probe.action; absent when undeclared. A rules source's equivalent of identity.",
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "action": {
+                          "type": "string",
+                          "maxLength": 80,
+                          "pattern": "^(?:[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*|[a-z][a-z0-9]*_[a-z][a-z0-9_]*)$"
+                        },
+                        "resource": {
+                          "type": "string",
+                          "maxLength": 200,
+                          "description": "The resource the action is asserted on, such as GET /user."
+                        }
+                      },
+                      "required": [
+                        "action",
+                        "resource"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "events"
+                ],
+                "additionalProperties": false,
+                "description": "The events_list action, and the provider operations the source asserts."
+              },
+              "output": {
+                "not": {}
+              },
+              "maxAgeSec": {
+                "not": {}
+              },
+              "params": {
+                "not": {}
+              }
+            },
+            "required": [
+              "id",
+              "tool",
+              "cost",
+              "kind",
+              "reads",
+              "permission"
+            ],
+            "additionalProperties": false,
+            "description": "An events source: append-only, ordered, read with a cursor."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+$"
+              },
+              "tool": {
+                "type": "string",
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9_]{0,63}$"
+              },
+              "input": {
+                "description": "The input the tool needs to reach this source. It carries no account and no secret.",
+                "type": "object",
+                "properties": {},
+                "additionalProperties": {}
+              },
+              "accounts": {
+                "type": "object",
+                "properties": {
+                  "named": {
+                    "type": "boolean",
+                    "description": "True when the source reads more than one account, so a read names one."
+                  },
+                  "server": {
+                    "description": "For a plugin with one MCP server per account (#30, item 9): the server a named account's MCP tools live on, with {account} for the account, such as plaud-{account}. A bare operation is then <server>_<operation> for an account other than default; the default account keeps the namespace.",
+                    "type": "string",
+                    "maxLength": 64,
+                    "pattern": "^[a-z][a-z0-9_-]*\\{account\\}[a-z0-9_-]*$"
+                  }
+                },
+                "required": [
+                  "named"
+                ],
+                "additionalProperties": false,
+                "description": "Which signed-in accounts a source reads."
+              },
+              "scope": {
+                "type": "object",
+                "properties": {
+                  "keys": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 32,
+                      "pattern": "^[a-z][a-z0-9_]{0,31}$"
+                    },
+                    "description": "The scope keys a person confirms: labels, channels, repositories. Empty when there is nothing to choose."
+                  },
+                  "describe": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "The sentence shown at consent, such as Which labels."
+                  },
+                  "suggest": {
+                    "description": "The read-only tool that lists the values a person may pick, and the operations it asserts. It runs only at bind, in the probe session; its results are shown and never stored, so its operations never enter a running grant.",
+                    "type": "object",
+                    "properties": {
+                      "tool": {
+                        "type": "string",
+                        "maxLength": 64,
+                        "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                      },
+                      "operations": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 200,
+                          "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,199}$"
+                        }
+                      }
+                    },
+                    "required": [
+                      "tool",
+                      "operations"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "keys",
+                  "describe"
+                ],
+                "additionalProperties": false,
+                "description": "What a person confirms at consent, and the sentence that asks them."
+              },
+              "private": {
+                "description": "True when everything this source reads is personal: shown at consent.",
+                "type": "boolean"
+              },
+              "cost": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "class": {
+                        "type": "string",
+                        "const": "free"
+                      },
+                      "units": {
+                        "not": {}
+                      },
+                      "probe": {
+                        "not": {}
+                      }
+                    },
+                    "required": [
+                      "class"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "class": {
+                        "type": "string",
+                        "const": "metered"
+                      },
+                      "units": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "per": {
+                              "type": "string",
+                              "maxLength": 32,
+                              "pattern": "^[a-z][a-z0-9-]{0,31}$"
+                            },
+                            "usd": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "conditions": {
+                              "description": "The short sentence shown at consent when this price applies, such as X app owners only.",
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "min": {
+                              "description": "The lowest rate that may apply, in US dollars: at most usd.",
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "per",
+                            "usd"
+                          ],
+                          "additionalProperties": false,
+                          "description": "One price unit, in US dollars, from the plugin's own price table."
+                        }
+                      },
+                      "probe": {
+                        "type": "object",
+                        "properties": {
+                          "per": {
+                            "type": "string",
+                            "maxLength": 32,
+                            "pattern": "^[a-z][a-z0-9-]{0,31}$"
+                          },
+                          "usd": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "conditions": {
+                            "description": "The short sentence shown at consent when this price applies, such as X app owners only.",
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "min": {
+                            "description": "The lowest rate that may apply, in US dollars: at most usd.",
+                            "type": "number",
+                            "minimum": 0
+                          }
+                        },
+                        "required": [
+                          "per",
+                          "usd"
+                        ],
+                        "additionalProperties": false,
+                        "description": "One price unit, in US dollars, from the plugin's own price table."
+                      }
+                    },
+                    "required": [
+                      "class",
+                      "units"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "class": {
+                        "type": "string",
+                        "const": "billed"
+                      },
+                      "units": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "per": {
+                              "type": "string",
+                              "maxLength": 32,
+                              "pattern": "^[a-z][a-z0-9-]{0,31}$"
+                            },
+                            "usd": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "conditions": {
+                              "description": "The short sentence shown at consent when this price applies, such as X app owners only.",
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "min": {
+                              "description": "The lowest rate that may apply, in US dollars: at most usd.",
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "per",
+                            "usd"
+                          ],
+                          "additionalProperties": false,
+                          "description": "One price unit, in US dollars, from the plugin's own price table."
+                        }
+                      },
+                      "probe": {
+                        "type": "object",
+                        "properties": {
+                          "per": {
+                            "type": "string",
+                            "maxLength": 32,
+                            "pattern": "^[a-z][a-z0-9-]{0,31}$"
+                          },
+                          "usd": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "conditions": {
+                            "description": "The short sentence shown at consent when this price applies, such as X app owners only.",
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "min": {
+                            "description": "The lowest rate that may apply, in US dollars: at most usd.",
+                            "type": "number",
+                            "minimum": 0
+                          }
+                        },
+                        "required": [
+                          "per",
+                          "usd"
+                        ],
+                        "additionalProperties": false,
+                        "description": "One price unit, in US dollars, from the plugin's own price table."
+                      }
+                    },
+                    "required": [
+                      "class",
+                      "units",
+                      "probe"
+                    ],
+                    "additionalProperties": false
+                  }
+                ],
+                "description": "What one read costs, including a probe call, which reads no content."
+              },
+              "cadence": {
+                "type": "object",
+                "properties": {
+                  "providerMinMinutes": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10080
+                  }
+                },
+                "additionalProperties": false,
+                "description": "A provider's own floor between reads. Only where the provider imposes one."
+              },
+              "maxBytes": {
+                "default": 65536,
+                "description": "The most bytes one result may take: default 65536 (64 KB), at most 1048576 (1 MB).",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1048576
+              },
+              "retentionDays": {
+                "description": "How many days an events consumer keeps what it read.",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "urlHosts": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 253,
+                  "pattern": "^(?:\\*\\.)?[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$"
+                },
+                "description": "The hosts an event's url may point at, for display. A consumer renders a url only when its host matches."
+              },
+              "service": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "description": "The service's id. Sources with the same id belong to one outside system that a person turns on or off as a unit."
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "description": "What a person sees, such as Gmail. Every source with the same service id has the same label."
+                  }
+                },
+                "required": [
+                  "id",
+                  "label"
+                ],
+                "additionalProperties": false,
+                "description": "The outside system this source belongs to (#44 item 1), such as Gmail or Calendar. Absent: the plugin is one service, named after the plugin. It is part of the descriptor, so moving a source to another service changes the hash."
+              },
+              "kind": {
+                "type": "string",
+                "const": "snapshot"
+              },
+              "output": {
+                "type": "string",
+                "maxLength": 64,
+                "description": "A registry name, or x-<namespace>/<name>; an x- output carries its schema inline."
+              },
+              "outputSchema": {
+                "description": "An x- output's schema, inline: JSON Schema draft 2020-12. Required for x-, absent for a registry name.",
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": {}
+                  }
+                ]
+              },
+              "params": {
+                "description": "The parameters a consumer may pass, resolved by the library at read time.",
+                "type": "object",
+                "properties": {},
+                "additionalProperties": {}
+              },
+              "hints": {
+                "description": "The hint files the package ships for this source (#45 §4): how to read one kind of item, at most 1,500 characters each.",
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "pattern": "^[a-z0-9][a-z0-9._-]*(?:\\/[a-z0-9][a-z0-9._-]*)*\\.md$"
+                }
+              },
+              "routines": {
+                "description": "The routine files the package ships for this source (#45 §5). Memory's first engine runs only its own core routines, so a plugin ships one only later.",
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "pattern": "^[a-z0-9][a-z0-9._-]*(?:\\/[a-z0-9][a-z0-9._-]*)*\\.md$"
+                }
+              },
+              "permission": {
+                "type": "object",
+                "properties": {
+                  "tool": {
+                    "type": "string",
+                    "maxLength": 80,
+                    "pattern": "^(?:[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*|[a-z][a-z0-9]*_[a-z][a-z0-9_]*)$"
+                  },
+                  "events": {
+                    "not": {}
+                  },
+                  "identity": {
+                    "description": "The identity operations probe asserts for this source (#4, #8); each is among permission.operations, and no content read asserts it. Empty when the probe asserts only sources.probe.action; absent when the source does not declare it, so a consumer uses its fallback.",
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 200,
+                      "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,199}$"
+                    }
+                  },
+                  "readsIdentity": {
+                    "description": "True when the source's content reads assert an identity operation (#30, item 4); every identity operation is still declared.",
+                    "type": "boolean"
+                  },
+                  "operations": {
+                    "description": "Every operation the source's reads assert, and nothing else. Absent when `rules` states them.",
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 200,
+                      "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,199}$"
+                    }
+                  },
+                  "rules": {
+                    "description": "The grants verbatim, for a provider whose resources are not <account>:<operation> (GitHub's github_api on GET /user).",
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "action": {
+                          "type": "string",
+                          "maxLength": 80,
+                          "pattern": "^(?:[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*|[a-z][a-z0-9]*_[a-z][a-z0-9_]*)$"
+                        },
+                        "resource": {
+                          "type": "string",
+                          "maxLength": 200,
+                          "description": "The resource the action is asserted on, such as GET /user."
+                        }
+                      },
+                      "required": [
+                        "action",
+                        "resource"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "identityRules": {
+                    "description": "For a rules source: the grants probe asserts for this source, verbatim, each among permission.rules (#30, item 10). Empty when the probe asserts only sources.probe.action; absent when undeclared. A rules source's equivalent of identity.",
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "action": {
+                          "type": "string",
+                          "maxLength": 80,
+                          "pattern": "^(?:[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*|[a-z][a-z0-9]*_[a-z][a-z0-9_]*)$"
+                        },
+                        "resource": {
+                          "type": "string",
+                          "maxLength": 200,
+                          "description": "The resource the action is asserted on, such as GET /user."
+                        }
+                      },
+                      "required": [
+                        "action",
+                        "resource"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "tool"
+                ],
+                "additionalProperties": false,
+                "description": "The read tool's action, and the provider operations the source asserts."
+              },
+              "maxAgeSec": {
+                "description": "How long a result may be reused before it is read again.",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "facts": {
+                "not": {}
+              },
+              "reads": {
+                "not": {}
+              },
+              "details": {
+                "not": {}
+              }
+            },
+            "required": [
+              "id",
+              "tool",
+              "cost",
+              "kind",
+              "output",
+              "permission"
+            ],
+            "additionalProperties": false,
+            "description": "A snapshot source: the latest state, read on demand."
+          }
+        ]
+      },
+      "description": "The plugin's sources. A source id is unique across the declaration."
+    },
+    "acts": {
+      "description": "The plugin's acts, beside its sources in the same descriptor. Absent when the plugin declares no write. Additive: an older consumer refuses the key.",
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+$"
+          },
+          "input": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": {},
+            "description": "JSON Schema for the caller's input. The library adds account; the schema need not name it."
+          },
+          "output": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": {},
+            "description": "JSON Schema for the answer's output."
+          },
+          "effect": {
+            "type": "string",
+            "enum": [
+              "local",
+              "notify",
+              "spend",
+              "irreversible"
+            ]
+          },
+          "preview": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "description": "The preview tool. It writes nothing."
+          },
+          "commit": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "description": "The commit tool. A different tool from preview."
+          },
+          "permission": {
+            "type": "object",
+            "properties": {
+              "preview": {
+                "type": "string",
+                "maxLength": 80,
+                "pattern": "^(?:[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*|[a-z][a-z0-9]*_[a-z][a-z0-9_]*)$"
+              },
+              "commit": {
+                "type": "string",
+                "maxLength": 80,
+                "pattern": "^(?:[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*|[a-z][a-z0-9]*_[a-z][a-z0-9_]*)$"
+              },
+              "operations": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,199}$"
+                },
+                "description": "Every operation the act asserts, derived like a source's permission.operations."
+              }
+            },
+            "required": [
+              "preview",
+              "commit",
+              "operations"
+            ],
+            "additionalProperties": false,
+            "description": "The preview action, the commit action, and the operations the act asserts."
+          }
+        },
+        "required": [
+          "id",
+          "input",
+          "output",
+          "effect",
+          "preview",
+          "commit",
+          "permission"
+        ],
+        "additionalProperties": false,
+        "description": "A declared write: preview, then commit. A non-local effect needs a confirmation the host issued before commit."
+      }
+    }
+  },
+  "required": [
+    "contractVersion",
+    "items"
+  ],
+  "additionalProperties": false
+}

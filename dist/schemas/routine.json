@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9-]{0,63}$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "reads": {
+      "type": "object",
+      "properties": {
+        "sources": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+$"
+          },
+          "description": "The plugin's own sources only."
+        },
+        "kinds": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 64
+          }
+        }
+      },
+      "required": [
+        "sources",
+        "kinds"
+      ],
+      "additionalProperties": false
+    },
+    "produces": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "commitment",
+          "decision",
+          "fact",
+          "preference",
+          "constraint",
+          "person",
+          "project"
+        ]
+      }
+    }
+  },
+  "required": [
+    "id",
+    "title",
+    "reads",
+    "produces"
+  ],
+  "additionalProperties": false
+}

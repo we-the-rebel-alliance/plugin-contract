@@ -1,0 +1,24 @@
+// @we-the-rebel-alliance/source-contract 0.3.0. Built by scripts/build.mjs; do not edit.
+import {
+  HINT_SCHEMA,
+  ROUTINE_SCHEMA
+} from "./chunks/chunk-ITQZIF2U.js";
+import {
+  FACT_SCHEMAS,
+  SOURCES_SCHEMA
+} from "./chunks/chunk-YWD23SKJ.js";
+import {
+  OUTPUTS
+} from "./chunks/chunk-GDBKZBG7.js";
+import "./chunks/chunk-WOH6G62Y.js";
+import "./chunks/chunk-DEXO7HMA.js";
+import "./chunks/chunk-6ZSJSJMV.js";
+import "./chunks/chunk-LJL3EALP.js";
+import "./chunks/chunk-NUBUQFLH.js";
+import "./chunks/chunk-CUITXC5J.js";
+
+// src/schemas.ts
+var SCHEMAS = [SOURCES_SCHEMA, ...Object.values(OUTPUTS), ...Object.values(FACT_SCHEMAS), HINT_SCHEMA, ROUTINE_SCHEMA];
+export {
+  SCHEMAS
+};
