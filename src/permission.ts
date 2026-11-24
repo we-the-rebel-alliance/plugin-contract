@@ -1,5 +1,5 @@
 /**
- * Permission: the exact OpenCode session rules a grant allows (design §3, "the trust rule").
+ * Permission: the exact OpenCode session rules a grant allows (contract §6 and §13).
  *
  * Every read runs in a session limited to these rules. OpenCode checks each inner tool call a plugin makes against the
  * calling session's rules, and the last matching rule wins, so the rules are a deny of everything, then one allow per
@@ -29,8 +29,7 @@ export interface PermissionRule {
 }
 
 /**
- * A person's grant: one consumer may read one source, for one account, within one scope (design §2, "consent per
- * (consumer, source, account, scope)").
+ * A person's grant: one consumer may read one source, for one account, within one scope (contract §6 and §13).
  */
 export interface Grant {
   /** Who reads: a consumer, such as `notes` or `notes.home`, or an app with its viewer. */
@@ -55,7 +54,7 @@ export interface ActGrant {
   /** Who acts: a consumer, such as `notes`, or an app with its viewer. */
   readonly consumer: string
   /** The action id. */
-  readonly act: string
+  readonly action: string
   /** The account the person confirmed. */
   readonly account: string
   /** The manifest hash the person consented to; a changed manifest asks again. */
@@ -157,8 +156,8 @@ export function sessionRules(source: SourceItem, grant: Pick<Grant, "source" | "
  * declared operation for the granted account. A preview session allows the preview action and not the commit action,
  * so the commit method cannot run while previewing. Operations are derived like a source's (`operationRule`).
  */
-export function actSessionRules(manifest: Manifest, act: Pick<ActionItem, "id" | "preview" | "commit">, grant: Pick<ActGrant, "act" | "account">, phase: ActPhase): Checked<readonly PermissionRule[]> {
-  if (grant.act !== act.id) return { ok: false, problems: [`the grant is for ${grant.act}, not ${act.id}`] }
+export function actSessionRules(manifest: Manifest, act: Pick<ActionItem, "id" | "preview" | "commit">, grant: Pick<ActGrant, "action" | "account">, phase: ActPhase): Checked<readonly PermissionRule[]> {
+  if (grant.action !== act.id) return { ok: false, problems: [`the grant is for ${grant.action}, not ${act.id}`] }
   const problem = accountProblem(grant.account)
   if (problem) return { ok: false, problems: [problem] }
   const method = phase === "preview" ? act.preview : act.commit

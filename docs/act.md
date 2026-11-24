@@ -22,24 +22,27 @@ OpenCode permission ask in a session or as a host-signed action grant.
 |---|---|
 | `act(host, request)` | previews or commits an act under a grant; never throws for a refusal |
 | `ActHost` | a `ReadHost` plus optional `issuedConfirmation(check)` |
-| `ActRequest` | the act, grant, consumer, `phase`, input and confirmation |
+| `ActRequest` | the action, grant, consumer, `phase`, input and confirmation |
 | `ActAnswer` | `{ trust, output, reaches?, changes?, cost?, account? }` |
 | `ActOutcome` | a preview, a commit, or a failure |
 | `ActParty` | who a commit reaches: `{ id, label? }` |
-| `ActGrant`, `ActPhase` | the grant and `"preview" \| "commit"` |
+| `ActGrant`, `ActPhase` | the grant and `"preview" \| "commit"`; the grant's `action` names the write |
 
 ## Example
 
 ```js
 import { act } from "@we-the-rebel-alliance/plugin-contract/act"
 
-const preview = await act(host, { installed, act: "acme.save", grant, consumer: "notes", phase: "preview", input: { title: "Draft" } })
+const preview = await act(host, { installed, action: "acme.save", grant, consumer: "notes", phase: "preview", input: { title: "Draft" } })
 if (!preview.ok) throw new Error(preview.failure.message)
 
 // The person confirms through the host's own issuer. The contract never issues a confirmation.
 const confirmation = await askPerson(preview.preview)
-const commit = await act(host, { installed, act: "acme.save", grant, consumer: "notes", phase: "commit", input: { title: "Draft" }, confirmation })
+const commit = await act(host, { installed, action: "acme.save", grant, consumer: "notes", phase: "commit", input: { title: "Draft" }, confirmation })
 ```
+
+`ActRequest.action` names the write on a call, and the host's `issuedConfirmation` receives the same `action`, its
+`effect`, `account` and `consumer`.
 
 A host without an issuer can render a preview but cannot commit a non-local act. That is deliberate: the contract
 verifies a confirmation, it never creates one.
