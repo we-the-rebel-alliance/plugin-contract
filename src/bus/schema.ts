@@ -8,14 +8,13 @@
  * every emit if one appeared in the schema. The writer and the reader always apply the full validator.
  */
 import * as z from "zod"
+import { ALIAS_PATTERN } from "../accounts.ts"
 import { validator, type Validator } from "../internal/validator.ts"
 import {
-  ACCOUNT_ALIAS,
   assertPluginName,
   BUS_EVENTS,
   BUS_STATES,
   capabilityPattern,
-  ONE_LINE,
   REASON_MAX,
   type AccountData,
   type BusEventData,
@@ -38,8 +37,8 @@ interface BusValidators {
   readonly account: Validator<AccountData>
 }
 
-const ACCOUNT = new RegExp(ACCOUNT_ALIAS)
-const ONE_LINE_RE = new RegExp(ONE_LINE)
+const ACCOUNT = ALIAS_PATTERN
+const ONE_LINE_RE = /^[^\r\n]+$/
 const ACCOUNT_EXPECTATION = "must be an account alias: lowercase letters, digits and underscores, starting with a letter (contract §5)"
 
 function validatorsFor(name: string): BusValidators {

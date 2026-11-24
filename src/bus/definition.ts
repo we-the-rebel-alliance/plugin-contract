@@ -22,12 +22,6 @@ export type BusState = (typeof BUS_STATES)[number]
 /** The most characters a `changed.reason` takes, matching the one-line rule for status reasons (standard §4 rule 9). */
 export const REASON_MAX = 160
 
-/** An account alias (contract §5): lowercase letters, digits and underscores, starting with a letter, at most 32. */
-export const ACCOUNT_ALIAS = "^[a-z][a-z0-9_]{0,31}$"
-
-/** A reason stays on one line. Applied by the validator, but not emitted as a JSON Schema pattern (see `schema.ts`). */
-export const ONE_LINE = "^[^\\r\\n]+$"
-
 /** `changed`: the plugin knows a source changed. `reason` is a short machine word such as `write` or `webhook`. */
 export type ChangedData = {
   readonly capability: string
