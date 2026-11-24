@@ -18,7 +18,7 @@ import {
 } from "./chunk-3GQYQSG2.js";
 import {
   EXTENSION_NAME
-} from "./chunk-OKHHHVM5.js";
+} from "./chunk-OGAJDQ7Z.js";
 
 // src/outputs.ts
 var text = (max) => string().max(max);

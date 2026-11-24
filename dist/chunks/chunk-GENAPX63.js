@@ -2,7 +2,7 @@
 import {
   isExtensionOutput,
   isOutputName
-} from "./chunk-TLI6ZXDE.js";
+} from "./chunk-34YMSPZQ.js";
 import {
   _enum,
   array,
@@ -39,7 +39,7 @@ import {
   SOURCE_SIGNALS,
   TESTED_OPENCODE,
   isEventKindIn
-} from "./chunk-OKHHHVM5.js";
+} from "./chunk-OGAJDQ7Z.js";
 
 // src/manifest/canonical.ts
 import { createHash } from "node:crypto";

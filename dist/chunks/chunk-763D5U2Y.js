@@ -1,7 +1,7 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   findMethod
-} from "./chunk-SC2WF2IE.js";
+} from "./chunk-GENAPX63.js";
 
 // src/permission.ts
 var DENY_ALL = { action: "*", resource: "*", effect: "deny" };

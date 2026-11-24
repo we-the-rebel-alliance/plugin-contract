@@ -1,7 +1,7 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   isToolsRpcId
-} from "./chunk-2BC7PGVU.js";
+} from "./chunk-JTUNLYC6.js";
 import {
   validator
 } from "./chunk-S3ZVQTGH.js";
@@ -25,7 +25,7 @@ import {
   EVENT_LIMITS,
   FACT_TYPES,
   isEventKind
-} from "./chunk-OKHHHVM5.js";
+} from "./chunk-OGAJDQ7Z.js";
 
 // src/internal/schema/types.ts
 var MAX_BYTES_DEFAULT = 65536;

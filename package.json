@@ -34,6 +34,10 @@
       "types": "./dist/broker-client.d.ts",
       "default": "./dist/broker-client.js"
     },
+    "./bus": {
+      "types": "./dist/bus.d.ts",
+      "default": "./dist/bus.js"
+    },
     "./conformance": {
       "types": "./dist/conformance.d.ts",
       "default": "./dist/conformance.js"
@@ -105,6 +109,7 @@
   "devDependencies": {
     "@opencode/plugin": "2.4.1",
     "@types/node": "24.19.2",
+    "effect": "4.1.0",
     "esbuild": "0.28.2",
     "typescript": "5.9.3",
     "zod": "4.6.7"
