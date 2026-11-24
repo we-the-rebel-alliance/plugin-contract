@@ -55,6 +55,7 @@ is not a T0 finding: the file set belongs to the kit's `docs` and `forbidden` ch
 | Check | Proves |
 |---|---|
 | `T1.load` | the package's server entry imports and exports `Plugin.define({ id, setup })` |
+| `T1.host` | `@opencode/plugin` and `@opencode/sdk` 2.4.1 are installed as the plugin repository's devDependencies |
 | `T1.id` | the plugin's id is `capabilities.plugin.name` |
 | `T1.doors` | every non-MCP method is an agent tool with permission `<name>.<method>` and an RPC method under id `<name>`, and nothing else is registered |
 | `T1.permissions` | the access matrix holds for every real primary agent at `all`, `ask-changes` and `read-only` (a plugin whose methods are all reads has one matrix, so only `all` is run), using the one `effectFor` from `./access` |

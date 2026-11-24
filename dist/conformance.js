@@ -11397,7 +11397,15 @@ async function inspectHost(directory, manifest, host, options = {}) {
         findings: [error("T1.load", `the plugin refused OpenCode ${host}, which its manifest says it supports: ${run.refusal.slice(0, 160)}`, { path: "capabilities.plugin.host" })]
       };
     }
-    if (run.failure !== void 0) return { run, findings: [error("T1.load", `${manifest.plugin.name} does not load on OpenCode ${host}: ${run.failure}`, { path: run.entry ?? "package.json", fix: "Build the plugin and fix the error setup reports." })] };
+    if (run.failure !== void 0) {
+      const dependency = run.failure.includes("@opencode/sdk") ? "@opencode/sdk" : run.failure.includes("@opencode/plugin") ? "@opencode/plugin" : void 0;
+      return {
+        run,
+        findings: [
+          dependency === void 0 ? error("T1.load", `${manifest.plugin.name} does not load on OpenCode ${host}: ${run.failure}`, { path: run.entry ?? "package.json", fix: "Build the plugin and fix the error setup reports." }) : error("T1.host", `the conformance host cannot load ${dependency}`, { path: "package.json", fix: `Add ${dependency} 2.4.1 as a devDependency and run T1 again.` })
+        ]
+      };
+    }
     if (run.definition === void 0) return { run, findings: [error("T1.load", `${manifest.plugin.name} loads on OpenCode ${host} and exports no Plugin.define({ id, setup }) value`, { path: "package.json" })] };
     const findings = [];
     if (run.definition.id !== manifest.plugin.name) findings.push(error("T1.id", `the plugin's id is ${run.definition.id}, and capabilities.plugin.name is ${manifest.plugin.name}`, { path: "package.json" }));

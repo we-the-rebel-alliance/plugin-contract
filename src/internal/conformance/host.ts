@@ -88,7 +88,17 @@ export async function inspectHost(directory: string, manifest: Manifest, host: s
         findings: [error("T1.load", `the plugin refused OpenCode ${host}, which its manifest says it supports: ${run.refusal.slice(0, 160)}`, { path: "capabilities.plugin.host" })],
       }
     }
-    if (run.failure !== undefined) return { run, findings: [error("T1.load", `${manifest.plugin.name} does not load on OpenCode ${host}: ${run.failure}`, { path: run.entry ?? "package.json", fix: "Build the plugin and fix the error setup reports." })] }
+    if (run.failure !== undefined) {
+      const dependency = run.failure.includes("@opencode/sdk") ? "@opencode/sdk" : run.failure.includes("@opencode/plugin") ? "@opencode/plugin" : undefined
+      return {
+        run,
+        findings: [
+          dependency === undefined
+            ? error("T1.load", `${manifest.plugin.name} does not load on OpenCode ${host}: ${run.failure}`, { path: run.entry ?? "package.json", fix: "Build the plugin and fix the error setup reports." })
+            : error("T1.host", `the conformance host cannot load ${dependency}`, { path: "package.json", fix: `Add ${dependency} 2.4.1 as a devDependency and run T1 again.` }),
+        ],
+      }
+    }
     if (run.definition === undefined) return { run, findings: [error("T1.load", `${manifest.plugin.name} loads on OpenCode ${host} and exports no Plugin.define({ id, setup }) value`, { path: "package.json" })] }
 
     const findings: Finding[] = []
