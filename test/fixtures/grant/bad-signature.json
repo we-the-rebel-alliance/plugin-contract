@@ -1,0 +1,32 @@
+{
+  "name": "bad-signature",
+  "token": "eyJhbGciOiJFZDI1NTE5Iiwia2lkIjoiaG9zdF8yMDI2XzExIiwidHlwIjoicGx1Z2luLWNvbnRyYWN0LWFjdCtqd3QifQ.eyJhdWQiOiJAd2UtdGhlLXJlYmVsLWFsbGlhbmNlL2RlbW8tcGx1Z2luIiwiY29uc3VtZXIiOiJjb25zdW1lcjpkZW1vIiwiY2FwYWJpbGl0eSI6ImRlbW8ubWFpbC5zZW5kIiwiYWNjb3VudCI6IndvcmsiLCJzY29wZSI6eyJsYWJlbCI6WyJJTkJPWCJdfSwiYWN0IjoiZGVtby5tYWlsLnNlbmQiLCJkaWdlc3QiOiJzaGEyNTY6MGVmNTg2YWQ3YTM3ZjUwZGE1YmUwZDE2MmI1ZDAxYmQxMmVkYWFkNzk1YWYxMDk3MTJmZWYxZDkzNjBkMzk1OCIsIm1hbmlmZXN0Ijoic2hhMjU2OmFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLCJpYXQiOjE3OTk5OTk5OTUsImV4cCI6MTgwMDAwMDA1NSwianRpIjoiZml4dHVyZV9iYWRfc2lnbmF0dXJlXzEiLCJjZm0iOnRydWV9.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "input": {
+    "to": "person@example.com",
+    "body": "hello"
+  },
+  "request": {
+    "act": "demo.mail.send",
+    "actions": {
+      "demo.mail.send": "required"
+    },
+    "audience": "@we-the-rebel-alliance/demo-plugin",
+    "consumer": "consumer:demo",
+    "capability": "demo.mail.send",
+    "account": "work",
+    "scope": {
+      "label": [
+        "INBOX"
+      ]
+    },
+    "manifest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "now": 1800000000
+  },
+  "store": {
+    "used": []
+  },
+  "expect": {
+    "ok": false,
+    "code": "GRANT_SIGNATURE_INVALID"
+  }
+}

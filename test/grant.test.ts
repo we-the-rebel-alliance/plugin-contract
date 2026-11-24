@@ -27,11 +27,11 @@ import {
 const NOW = 1_800_000_000
 const MANIFEST = `sha256:${"a".repeat(64)}`
 const OTHER_MANIFEST = `sha256:${"b".repeat(64)}`
-const KID = "host-2026-11"
-const NEW_KID = "host-2026-12"
+const KID = "host_2026_11"
+const NEW_KID = "host_2026_12"
 const ACT = "demo.mail.send"
 const PREVIEW = "demo.mail.preview"
-const AUDIENCE = "app:demo"
+const AUDIENCE = "@we-the-rebel-alliance/demo-plugin"
 const CONSUMER = "consumer:demo"
 const CAPABILITY = "demo.mail.send"
 const ACCOUNT = "work"
@@ -56,7 +56,7 @@ const BASE_SIGN: Omit<SignGrantRequest, "cfm"> = {
   manifest: MANIFEST,
   iat: NOW - 5,
   exp: NOW + 55,
-  jti: "grant-0001",
+  jti: "grant_0001",
 }
 
 /** A valid grant, with or without the confirmation claim. */
@@ -66,22 +66,22 @@ function signed(overrides: Partial<SignGrantRequest> = {}, confirmed = true): st
 
 interface Ledger {
   readonly used: Set<string>
-  readonly calls: string[]
+  readonly calls: GrantClaims[]
   readonly store: GrantStore
 }
 
-/** A durable ledger's shape: insert-if-absent by `jti`, shared across verifier calls. */
+/** A durable ledger's shape: atomic insert-if-absent by `jti`, shared across verifier calls. */
 function newLedger(): Ledger {
   const used = new Set<string>()
-  const calls: string[] = []
+  const calls: GrantClaims[] = []
   return {
     used,
     calls,
     store: {
-      async consume(jti) {
-        calls.push(jti)
-        if (used.has(jti)) return false
-        used.add(jti)
+      async consume(claims) {
+        calls.push(claims)
+        if (used.has(claims.jti)) return false
+        used.add(claims.jti)
         return true
       },
     },
@@ -107,7 +107,7 @@ function makeRequest(overrides: Partial<GrantRequest>, ledger: Ledger): GrantReq
   }
 }
 
-async function attempt(overrides: Partial<GrantRequest> = {}, ledger: Ledger = newLedger()): Promise<{ outcome: GrantOutcome; calls: string[] }> {
+async function attempt(overrides: Partial<GrantRequest> = {}, ledger: Ledger = newLedger()): Promise<{ outcome: GrantOutcome; calls: GrantClaims[] }> {
   return { outcome: await verifyGrant(makeRequest(overrides, ledger)), calls: ledger.calls }
 }
 
@@ -136,7 +136,7 @@ const CLAIMS: Record<string, unknown> = {
   manifest: MANIFEST,
   iat: NOW - 5,
   exp: NOW + 55,
-  jti: "grant-0002",
+  jti: "grant_0002",
 }
 
 function encode(value: unknown): string {
@@ -155,6 +155,14 @@ function raw(header: Record<string, unknown>, claims: unknown, key: KeyObject = 
   const encodedClaims = encode(claims)
   const signature = signBytes(null, Buffer.from(`${encodedHeader}.${encodedClaims}`, "ascii"), key)
   return `${encodedHeader}.${encodedClaims}.${signature.toString("base64url")}`
+}
+
+/** A token over exact header and payload text, so a test can write two keys with the same name. */
+function rawText(headerText: string, payloadText: string): string {
+  const encodedHeader = Buffer.from(headerText, "utf8").toString("base64url")
+  const encodedPayload = Buffer.from(payloadText, "utf8").toString("base64url")
+  const signature = signBytes(null, Buffer.from(`${encodedHeader}.${encodedPayload}`, "ascii"), HOST.privateKey)
+  return `${encodedHeader}.${encodedPayload}.${signature.toString("base64url")}`
 }
 
 function payloadOf(token: string): Record<string, unknown> {
@@ -283,7 +291,7 @@ describe("the token", () => {
       manifest: MANIFEST,
       iat: NOW - 5,
       exp: NOW + 55,
-      jti: "grant-0001",
+      jti: "grant_0001",
       cfm: true,
     })
     expect(Object.hasOwn(payloadOf(signed({}, false)), "cfm")).toBe(false)
@@ -294,11 +302,13 @@ describe("the token", () => {
     const { outcome, calls } = await attempt({ grant: token })
     if (!outcome.ok) throw new Error(outcome.reason)
     expect(outcome.claims).toEqual({ ...CLAIMS, scope: { label: ["IMPORTANT", "INBOX"] }, cfm: true } as unknown as GrantClaims)
-    expect(calls).toEqual(["grant-0002"])
+    expect(calls.map((claims) => claims.jti)).toEqual(["grant_0002"])
   })
 
   test("signGrant throws on an invalid request or input and needs an explicit private key", async () => {
     expect(() => signed({ kid: "bad kid" })).toThrow(/key id/)
+    expect(() => signed({ kid: "host-2026-11" })).toThrow(/key id/)
+    expect(() => signed({ jti: "grant-0001" })).toThrow(/grant id/)
     expect(() => signed({ account: "Work" })).toThrow(/account/)
     expect(() => signed({ manifest: "abc" })).toThrow(/manifest hash/)
     expect(() => signed({ iat: NOW, exp: NOW })).toThrow(/lifetime/)
@@ -326,7 +336,8 @@ describe("verifyGrant: valid grants", () => {
   test("verifies a grant and returns its claims, spending the jti once", async () => {
     const { outcome, calls } = await attempt()
     if (!outcome.ok) throw new Error(outcome.reason)
-    expect(calls).toEqual(["grant-0001"])
+    expect(calls.map((claims) => claims.jti)).toEqual(["grant_0001"])
+    expect(outcome.kid).toBe(KID)
     expect(outcome.claims.aud).toBe(AUDIENCE)
     expect(outcome.claims.consumer).toBe(CONSUMER)
     expect(outcome.claims.capability).toBe(CAPABILITY)
@@ -380,7 +391,7 @@ describe("verifyGrant: keys, rotation and signatures", () => {
   })
 
   test("refuses a kid no trusted key names", async () => {
-    await refuses("GRANT_KEY_UNKNOWN", { grant: signed({ kid: "host-unknown" }) })
+    await refuses("GRANT_KEY_UNKNOWN", { grant: signed({ kid: "host_unknown" }) })
   })
 
   test("refuses a grant signed by another key under a trusted kid", async () => {
@@ -399,6 +410,15 @@ describe("verifyGrant: keys, rotation and signatures", () => {
     await refuses("GRANT_REQUEST_INVALID", { keys: { keys: { [KID]: ec.publicKey } } })
     await refuses("GRANT_REQUEST_INVALID", { keys: { keys: { [KID]: "not a key" } } })
   })
+
+  test("refuses private key material as a trusted key on every path", async () => {
+    const privatePem = HOST.privateKey.export({ type: "pkcs8", format: "pem" }) as string
+    const encryptedPem = HOST.privateKey.export({ type: "pkcs8", format: "pem", cipher: "aes-256-cbc", passphrase: "fixture-passphrase" }) as string
+    const privateDer = HOST.privateKey.export({ type: "pkcs8", format: "der" })
+    for (const material of [HOST.privateKey, privatePem, encryptedPem, privateDer] as GrantKeyMaterial[]) {
+      await refuses("GRANT_REQUEST_INVALID", { keys: { keys: { [KID]: material } } })
+    }
+  })
 })
 
 describe("verifyGrant: malformed tokens, headers and claims", () => {
@@ -415,6 +435,7 @@ describe("verifyGrant: malformed tokens, headers and claims", () => {
       { alg: GRANT_ALG, kid: KID },
       { ...HEADER, typ: "JWT" },
       { ...HEADER, kid: "bad kid" },
+      { ...HEADER, kid: "host-2026-11" },
       [{ ...HEADER }],
     ]) {
       await refuses("GRANT_MALFORMED", { grant: raw(header as Record<string, unknown>, CLAIMS) })
@@ -422,6 +443,18 @@ describe("verifyGrant: malformed tokens, headers and claims", () => {
     const signature = Buffer.alloc(64).toString("base64url")
     await refuses("GRANT_MALFORMED", { grant: `${Buffer.from([0xff]).toString("base64url")}.${encode(CLAIMS)}.${signature}` })
     await refuses("GRANT_MALFORMED", { grant: `${encode(HEADER)}.${Buffer.from([0xff]).toString("base64url")}.${signature}` })
+  })
+
+  test("refuses a duplicate key at any depth in the header or the claims", async () => {
+    const headerText = JSON.stringify(HEADER)
+    const duplicatedKid = headerText.replace(`"kid":${JSON.stringify(KID)}`, `"kid":"first","kid":${JSON.stringify(KID)}`)
+    await refuses("GRANT_MALFORMED", { grant: rawText(duplicatedKid, JSON.stringify({ ...CLAIMS, cfm: true })) })
+
+    const claimsText = JSON.stringify({ ...CLAIMS, cfm: true })
+    const duplicatedAud = claimsText.replace(/^\{/, '{"aud":"other",')
+    await refuses("GRANT_CLAIMS_INVALID", { grant: rawText(headerText, duplicatedAud) })
+    const duplicatedScope = claimsText.replace(/"scope":\{[^}]*\}/, '"scope":{"label":["INBOX"],"label":["IMPORTANT"]}')
+    await refuses("GRANT_CLAIMS_INVALID", { grant: rawText(headerText, duplicatedScope) })
   })
 
   test("refuses an algorithm other than Ed25519, never downgrading", async () => {
@@ -499,15 +532,17 @@ describe("verifyGrant: time window", () => {
     await refuses("GRANT_EXPIRED", { grant: signed({ iat: NOW - 60, exp: NOW }) })
   })
 
-  test("refuses a grant that is not valid yet, beyond the clock skew", async () => {
+  test("refuses a grant that is not valid yet, beyond the 5 second clock skew", async () => {
     await refuses("GRANT_NOT_YET_VALID", { grant: signed({ iat: NOW + 100, exp: NOW + 160 }) })
-    await refuses("GRANT_NOT_YET_VALID", { grant: signed({ iat: NOW + 40, exp: NOW + 100 }) })
+    await refuses("GRANT_NOT_YET_VALID", { grant: signed({ iat: NOW + 6, exp: NOW + 66 }) })
   })
 
   test("accepts a grant inside the clock skew and at the last valid second", async () => {
-    const early = await attempt({ grant: signed({ iat: NOW + 20, exp: NOW + 80 }) })
+    const early = await attempt({ grant: signed({ iat: NOW + 3, exp: NOW + 63 }) })
     expect(early.outcome.ok).toBe(true)
-    const last = await attempt({ grant: signed({ iat: NOW - 100, exp: NOW + 1 }) })
+    const boundary = await attempt({ grant: signed({ iat: NOW + 5, exp: NOW + 65 }) })
+    expect(boundary.outcome.ok).toBe(true)
+    const last = await attempt({ grant: signed({ iat: NOW - 59, exp: NOW + 1 }) })
     expect(last.outcome.ok).toBe(true)
   })
 
@@ -517,11 +552,16 @@ describe("verifyGrant: time window", () => {
     await refuses("GRANT_LIFETIME_INVALID", { grant: raw(HEADER, { ...CLAIMS, iat: NOW, exp: NOW - 1, cfm: true }) })
   })
 
-  test("takes a shorter or longer maximum from the request, within the hard ceiling", async () => {
-    const grant = signed({ iat: NOW - 5, exp: NOW + 400 })
-    await refuses("GRANT_LIFETIME_INVALID", { grant, maxLifetimeSec: 100 })
-    const { outcome } = await attempt({ grant, maxLifetimeSec: 600 })
-    expect(outcome.ok).toBe(true)
+  test("caps the maximum lifetime at 300 seconds and the clock skew at 30", async () => {
+    const long = signed({ iat: NOW - 100, exp: NOW + 100 }) // 200 seconds
+    await refuses("GRANT_LIFETIME_INVALID", { grant: long })
+    const accepted = await attempt({ grant: long, maxLifetimeSec: 300 })
+    expect(accepted.outcome.ok).toBe(true)
+    await refuses("GRANT_REQUEST_INVALID", { grant: long, maxLifetimeSec: 301 })
+    await refuses("GRANT_REQUEST_INVALID", { grant: long, maxLifetimeSec: 600 })
+    const wide = await attempt({ grant: signed({ iat: NOW + 30, exp: NOW + 90 }), clockSkewSec: 30 })
+    expect(wide.outcome.ok).toBe(true)
+    await refuses("GRANT_REQUEST_INVALID", { clockSkewSec: 31 })
   })
 })
 
@@ -574,7 +614,28 @@ describe("verifyGrant: single use and the store", () => {
     const first = await attempt({ grant }, ledger)
     expect(first.outcome.ok).toBe(true)
     await refuses("GRANT_REPLAYED", { grant }, ledger)
-    expect(ledger.calls).toEqual(["grant-0001", "grant-0001"])
+    expect(ledger.calls.map((claims) => claims.jti)).toEqual(["grant_0001", "grant_0001"])
+  })
+
+  test("passes the full verified claims to the store, including exp and cfm", async () => {
+    const ledger = newLedger()
+    const { outcome } = await attempt({ grant: signed() }, ledger)
+    if (!outcome.ok) throw new Error(outcome.reason)
+    expect(ledger.calls).toHaveLength(1)
+    expect(ledger.calls[0]).toEqual(outcome.claims)
+    expect(ledger.calls[0]!.exp).toBe(NOW + 55)
+    expect(ledger.calls[0]!.cfm).toBe(true)
+  })
+
+  test("two concurrent verifications of one grant spend it once", async () => {
+    const ledger = newLedger()
+    const grant = signed()
+    const outcomes = await Promise.all([verifyGrant(makeRequest({ grant }, ledger)), verifyGrant(makeRequest({ grant }, ledger))])
+    expect(outcomes.filter((outcome) => outcome.ok)).toHaveLength(1)
+    const refused = outcomes.find((outcome) => !outcome.ok)
+    if (refused === undefined || refused.ok) throw new Error("both verifications succeeded")
+    expect(refused.code).toBe("GRANT_REPLAYED")
+    expect(ledger.calls).toHaveLength(2)
   })
 
   test("a fresh verifier over the same durable store still refuses a spent grant", async () => {
