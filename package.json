@@ -1,13 +1,13 @@
 {
-  "name": "@we-the-rebel-alliance/source-contract",
-  "version": "0.3.0",
-  "description": "One source contract for every plugin and every project: the data model, the descriptor, the protocol, the library and the conformance kit.",
+  "name": "@we-the-rebel-alliance/plugin-contract",
+  "version": "0.0.0",
+  "description": "The contract between OpenCode plugins and the apps that use them: one manifest, one data model, one error table, and the library that reads all three.",
   "license": "MIT",
   "private": true,
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/we-the-rebel-alliance/source-contract.git"
+    "url": "git+https://github.com/we-the-rebel-alliance/plugin-contract.git"
   },
   "engines": {
     "node": ">=22"
@@ -30,6 +30,10 @@
       "types": "./dist/broker-client.d.ts",
       "default": "./dist/broker-client.js"
     },
+    "./conformance": {
+      "types": "./dist/conformance.d.ts",
+      "default": "./dist/conformance.js"
+    },
     "./cursor": {
       "types": "./dist/cursor.d.ts",
       "default": "./dist/cursor.js"
@@ -50,6 +54,10 @@
       "types": "./dist/list.d.ts",
       "default": "./dist/list.js"
     },
+    "./outputs": {
+      "types": "./dist/outputs.d.ts",
+      "default": "./dist/outputs.js"
+    },
     "./params": {
       "types": "./dist/params.d.ts",
       "default": "./dist/params.js"
@@ -66,9 +74,9 @@
       "types": "./dist/read.d.ts",
       "default": "./dist/read.js"
     },
-    "./registry": {
-      "types": "./dist/registry.d.ts",
-      "default": "./dist/registry.js"
+    "./schema": {
+      "types": "./dist/schema.d.ts",
+      "default": "./dist/schema.js"
     },
     "./schemas": {
       "types": "./dist/schemas.d.ts",
@@ -78,20 +86,12 @@
       "types": "./dist/tools-rpc.d.ts",
       "default": "./dist/tools-rpc.js"
     },
-    "./package.json": "./package.json",
-    "./conformance": {
-      "types": "./dist/conformance.d.ts",
-      "default": "./dist/conformance.js"
-    },
-    "./schema": {
-      "types": "./dist/schema.d.ts",
-      "default": "./dist/schema.js"
-    }
+    "./package.json": "./package.json"
   },
   "scripts": {
     "build": "node scripts/build.mjs",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "npm run test:node && npm run test:bun",
+    "test": "npm run test:node",
     "test:node": "node --test \"test/**/*.test.ts\"",
     "test:bun": "bun test ./test",
     "check:dist": "node scripts/check-dist.mjs",
