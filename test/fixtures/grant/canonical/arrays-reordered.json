@@ -1,0 +1,21 @@
+{
+  "name": "arrays reordered",
+  "input": {
+    "order": [
+      "third",
+      "second",
+      "first"
+    ],
+    "nested": [
+      [
+        1,
+        2
+      ],
+      [
+        3,
+        4
+      ]
+    ]
+  },
+  "digest": "sha256:c8c8a4afaf53ceb5cfae0128a1c10f5ea758e574f77a3b4d69149a3d9542fdf6"
+}

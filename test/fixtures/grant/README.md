@@ -20,3 +20,10 @@ Each `<name>.json` records:
 `test/grant-fixtures.test.ts` runs every vector and fails if one of the six names is missing. To add a vector, sign a
 token in a one-off host harness with a throwaway key, copy its public key here if the key is new, and never commit a
 private key.
+
+## Canonical JSON vectors
+
+`canonical/` holds `{ name, input, digest }` pairs generated from the published canonical rules (`canonicalJson` and
+`digestInput`). No private key is involved. The two `key-order` files hold the same object with a different key order
+and share a digest; `arrays` and `arrays-reordered` differ only in array order and have different digests.
+`test/grant-canonical.test.ts` runs every file and asserts the digest.

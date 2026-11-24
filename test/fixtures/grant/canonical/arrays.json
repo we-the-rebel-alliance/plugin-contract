@@ -1,0 +1,21 @@
+{
+  "name": "arrays keep their order",
+  "input": {
+    "order": [
+      "third",
+      "first",
+      "second"
+    ],
+    "nested": [
+      [
+        1,
+        2
+      ],
+      [
+        3,
+        4
+      ]
+    ]
+  },
+  "digest": "sha256:350c1fb66bf35f67c572c723d6d4924e53c821bcc22d32ea5bde1a5ed109aced"
+}
