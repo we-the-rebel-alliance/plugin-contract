@@ -8,7 +8,7 @@
  *
  * The transforms are cheap, synchronous and never throw: a failure is recorded in `problems` and shown in status.
  */
-import type { Plugin } from "@opencode/plugin"
+import type { Mcp, Plugin } from "@opencode/plugin"
 import type { AccountMechanism, Manifest } from "../manifest/types.ts"
 import type { AccountProfile } from "./profiles.ts"
 import { accountsOf } from "./profiles.ts"
@@ -53,7 +53,11 @@ export interface AccountsContext {
  * `@opencode/plugin` types stay out of the published declarations (`npm run check:dist`).
  */
 const hostContextIsAccountsContext = (context: Pick<Plugin.Context, "integration" | "mcp">): AccountsContext => context
-void hostContextIsAccountsContext
+type HostIntegrationEditor = Plugin.Context["integration"]["transform"] extends (callback: (editor: infer E) => void) => Promise<unknown> ? E : never
+type HostRegistration = Parameters<HostIntegrationEditor["method"]["update"]>[0]
+const hostRegistrationIsRegistration = (registration: HostRegistration): IntegrationMethodRegistration => registration
+const hostServerConfigIsServerConfig = (config: Mcp.ServerConfig): MCPServerConfig => config
+void [hostContextIsAccountsContext, hostRegistrationIsRegistration, hostServerConfigIsServerConfig]
 
 /** What to register: the manifest, the plugin's options, and its own sign-in wiring. */
 export interface RegisterAccountsRequest {
