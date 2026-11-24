@@ -18,11 +18,13 @@ A grant is a compact, JWS-like token: three base64url segments, no padding, sepa
 The signature is Ed25519 over the ASCII bytes of `<header>.<claims>`, exactly as they appear in the token. This is not
 a JWT: the header has exactly three members, the claims are the ones below, and there is no `nbf`, `iss` or `sub`.
 Anything else is refused rather than ignored, so a host and a plugin cannot read two different meanings from one token.
+Duplicate keys are refused at any depth before the document is read: the last-one-wins behaviour of `JSON.parse` is
+never used, in the header or in the claims.
 
 The header is exactly:
 
 ```json
-{ "alg": "Ed25519", "kid": "host-2026-11", "typ": "plugin-contract-act+jwt" }
+{ "alg": "Ed25519", "kid": "host_2026_11", "typ": "plugin-contract-act+jwt" }
 ```
 
 | Member | Rule |
@@ -35,9 +37,9 @@ The claims are exactly these and no others:
 
 | Claim | Meaning | Rule |
 |---|---|---|
-| `aud` | The app or audience the grant is for | Non-empty text, at most 200 characters, no control characters |
+| `aud` | The plugin's package name as the host uses it, for example `@we-the-rebel-alliance/slack-plugin` | Non-empty text, at most 200 characters, no control characters |
 | `consumer` | The grant key (contract §14): who the grant was issued to | Same text rule |
-| `capability` | The `<name>.<capability>` or method id | Same text rule |
+| `capability` | The method id `<name>.<method>`, for example `slack.events_list`; the source capability id where the contract calls it that | Same text rule |
 | `account` | The account alias | `^[a-z][a-z0-9_]{0,31}$` (contract §5) |
 | `scope` | What the capability reads or changes | A canonical scope object (see below) |
 | `act` | The action id, `<name>.<action>` | Same text rule as `capability` |
@@ -49,9 +51,9 @@ The claims are exactly these and no others:
 | `cfm` | A person confirmed this action and input | Present only as `true`; see "Confirmation" |
 
 `exp` is exclusive: a grant is valid while `now < exp`. There is no grace period after `exp`; a clock that runs behind
-the signer's refuses a grant early, which is the safe direction. `iat` may run at most `clockSkewSec` (default 30)
+the signer's refuses a grant early, which is the safe direction. `iat` may run at most `clockSkewSec` (default 5)
 ahead of the verifier's clock. A grant's lifetime, `exp - iat`, must be positive and at most `maxLifetimeSec` (default
-300); a plugin may lower that, never raise it past 86,400.
+60); a plugin may lower that, never raise it past 300.
 
 The limits are fixed in the published format:
 
@@ -62,8 +64,8 @@ The limits are fixed in the published format:
 | Nesting | At most 16 objects or arrays inside one another |
 | Claim text (`aud`, `consumer`, `capability`, `act`) | At most 200 characters |
 | Scope key or value | At most 200 characters |
-| Clock skew | Default 30 seconds, at most 3,600 |
-| Grant lifetime | Default and recommended 300 seconds, at most 86,400 |
+| Clock skew | Default 5 seconds, at most 30 |
+| Grant lifetime | Default and recommended 60 seconds, at most 300 |
 
 The claims are signed; the token is not encrypted. It holds no secret, but it is a bearer capability until `exp` (the
 store makes it single-use), so do not log the token itself.
@@ -74,7 +76,7 @@ store makes it single-use), so do not log the token itself.
 |---|---|---|
 | Someone writes their own grant | Ed25519 signature checked with a trusted public key | `GRANT_SIGNATURE_INVALID` |
 | A token says `alg: none` or an HMAC algorithm | The header must say `Ed25519`, and the trusted key must be Ed25519 | `GRANT_UNSUPPORTED_ALGORITHM` |
-| A grant is replayed | The `jti` is spent through a durable store, after every other check | `GRANT_REPLAYED` |
+| A grant is replayed | The verified claims' `jti` is spent through a durable store, after every other check | `GRANT_REPLAYED` |
 | The input is swapped after signing | The digest of the exact canonical input is bound in the claims | `GRANT_DIGEST_MISMATCH` |
 | The input cannot be canonicalised identically twice | Numbers must be safe integers, strings must be well-formed Unicode, nesting and size are capped | `GRANT_INPUT_INVALID` |
 | A grant for one action is used for another | `act` is compared with the requested action | `GRANT_ACTION_MISMATCH` |
@@ -149,13 +151,16 @@ key, and an unknown `kid` is `GRANT_KEY_UNKNOWN`. Revocation is checked before t
 refused even while its public key is still in the map.
 
 Key material is a `KeyObject`, a PEM string, or SPKI DER bytes. The key must be an Ed25519 public key: an RSA or EC key
-is a configuration error (`GRANT_REQUEST_INVALID`), not a fallback algorithm. Loading a key file, a key store or a
-secret manager is the plugin's job; this module never reads one.
+is a configuration error (`GRANT_REQUEST_INVALID`), not a fallback algorithm. Private key material is refused on every
+path — a private `KeyObject`, a private PEM (including an encrypted one) and PKCS#8 DER are never turned into a trusted
+public key, even though a PEM reader could derive one. Loading a key file, a key store or a secret manager is the
+plugin's job; this module never reads one.
 
 To rotate:
 
 1. Add the new public key under a new `kid` before the host starts signing with it.
-2. Keep the old `kid` trusted until every grant it signed has expired (at most the plugin's `maxLifetimeSec`).
+2. Keep the old `kid` trusted until every grant it signed has expired: **lifetime plus clock skew** (65 seconds with the
+   60-second and 5-second defaults).
 3. Remove the old key, or put its `kid` in `revoked` first if it may have been compromised.
 
 A plugin holds public keys only. `signGrant` exists for the host (and for tests) and requires the Ed25519 private key
@@ -168,15 +173,17 @@ spent `jti` would resurrect the grant, so the plugin backs this interface:
 
 ```ts
 interface GrantStore {
-  /** True when this call recorded the jti; false when it was already recorded. */
-  consume(jti: string): Promise<boolean>
+  /** True when this call recorded the claims' jti; false when it was already recorded. */
+  consume(claims: GrantClaims): Promise<boolean>
 }
 ```
 
-The store must implement an atomic insert-if-absent keyed by `jti`. Two verifier calls with the same grant at the same
-moment must produce exactly one `true`; the other gets `false` and `GRANT_REPLAYED`. A unique constraint, a conditional
-write or a transaction is the right shape; "select, then insert" is not. The store should record the first use even
-though the grant's own `exp` will soon make pruning safe: after `exp`, the row may be deleted.
+The store receives the full verified claims (including `cfm` when the grant carried it), so it can write its receipt —
+action, digest, `exp` — in the same insert as the first use and prune by `claims.exp`. The store must implement an
+atomic insert-if-absent keyed by `claims.jti`. Two verifier calls with the same grant at the same moment must produce
+exactly one `true`; the other gets `false` and `GRANT_REPLAYED`. A unique constraint, a conditional write or a
+transaction is the right shape; "select, then insert" is not. The store should keep the receipt at least until
+`claims.exp`; after that, the grant can never verify again and the row may be deleted.
 
 The verifier calls `consume` **last**, after the signature, every binding, the time window, the input digest and the
 confirmation rule. A refusal before that point writes nothing. A store that throws, or answers anything other than
@@ -186,15 +193,21 @@ A sketch, with SQLite's insert-if-absent spelling:
 
 ```ts
 const store: GrantStore = {
-  async consume(jti) {
-    const result = await db.run("INSERT OR IGNORE INTO action_grants (jti, first_used_at) VALUES (?, ?)", jti, Date.now())
+  async consume(claims) {
+    const result = await db.run(
+      "INSERT OR IGNORE INTO action_grants (jti, act, digest, first_used_at, expires_at) VALUES (?, ?, ?, ?, ?)",
+      claims.jti,
+      claims.act,
+      claims.digest,
+      Date.now(),
+      claims.exp,
+    )
     return result.changes === 1
   },
 }
 ```
 
-The store needs the `jti` only. A receipt that names the action, digest and time can be written beside it by the
-plugin, from the verified claims, after `verifyGrant` answers `ok: true`.
+`verifyGrant` returns `kid`, the key id that verified the signature, beside the claims, so a receipt can name the key.
 
 ## Confirmation
 
@@ -261,15 +274,16 @@ GRANT_INVALID: That confirmation has expired. Next step: confirm the action agai
 The verifier answers the first refusal and never goes further:
 
 1. the request is well formed, and the requested action is allowed and has a confirmation rule;
-2. the token is three canonical base64url segments, and the header is exactly `alg`, `kid`, `typ`;
+2. the token is three canonical base64url segments, and the header is strict JSON with exactly `alg`, `kid`, `typ`
+   and no duplicate key;
 3. the `kid` is trusted and not revoked;
 4. the Ed25519 signature verifies over the exact header and claims segments;
-5. the claims are a JSON object with exactly the published claims and values;
+5. the claims are strict JSON with exactly the published claims and values, and no duplicate key at any depth;
 6. `aud`, `consumer`, `capability`, `account`, `scope`, `manifest`, then `act` match the request;
 7. the lifetime is positive and within the maximum, `iat` is not ahead, `exp` is not past;
 8. the input canonicalises and its digest is `digest`;
 9. the confirmation rule holds;
-10. the store records the `jti` for the first time.
+10. the store records the verified claims' `jti` for the first time.
 
 A failure at any step before 10 writes nothing to the store. A positive answer means the store recorded the grant.
 
@@ -283,10 +297,10 @@ const outcome = await verifyGrant({
   input, // the exact input this call will run with, before validation changes it
   act: "demo.mail.send",
   actions: { "demo.mail.send": "required" }, // from the manifest's action effect
-  keys: { keys: { "host-2026-11": publicPem }, revoked: [] },
-  audience: "app:mail",
+  keys: { keys: { host_2026_11: publicPem }, revoked: [] },
+  audience: "@we-the-rebel-alliance/demo-plugin", // the plugin's package name, as the host uses it
   consumer: "consumer:mail",
-  capability: "demo.mail.send",
+  capability: "demo.mail.send", // the method id
   account: "work",
   scope: { label: ["INBOX"] },
   manifest: "sha256:…", // the installed manifest's hash
@@ -298,7 +312,7 @@ if (!outcome.ok) {
   // outcome.code is precise; outcome.contractCode is GRANT_INVALID
   return { code: "GRANT_INVALID", message: `GRANT_INVALID: ${sentenceFor(outcome.code)}` }
 }
-// Run the action with the exact input, and record the receipt from outcome.claims.
+// Run the action with the exact input, and record the receipt from outcome.claims and outcome.kid.
 ```
 
 `verifyGrant` is asynchronous because the store is. It never throws for a bad grant, a bad input or a store failure: a
