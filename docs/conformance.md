@@ -68,7 +68,7 @@ is not a T0 finding: the file set belongs to the kit's `docs` and `forbidden` ch
 T1 loads the built server entry through OpenCode's own `Plugin.Host.resolve` (`./server`, then `.`; never `main` or
 `dist/index.js`) and runs it in the embedded `@opencode/sdk` 2.4.1 host: it creates a session, prompts once so the
 plugin instance activates, waits for the plugin list, and records the real `ctx` registrations. It imports no private
-OpenCode code. The host harness lives in `src/internal/host/` and is owned by conformance, so `plugin-kit` imports it rather than carrying a copy. It
+OpenCode code. The host harness lives in `src/internal/host/` and is owned by conformance; `plugin-kit` is to import this module rather than carry a copy. It
 handles the six 2.4 behaviours standard §8 lists: activation before the first RPC, the embedded host never running
 automations, no `experimental.schedule`, MCP `server/discover` with 401/403 final, nested Code Mode call ids, and a
 turn's first tool step arriving before the start. A plugin repository carries `@opencode/plugin` and `@opencode/sdk`
