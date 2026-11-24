@@ -1,22 +1,14 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   SOURCES_SCHEMA
-} from "./chunks/chunk-SNWDFCSO.js";
-import {
-  toolsRpcIdProblems
-} from "./chunks/chunk-UDTV67VT.js";
+} from "./chunks/chunk-5G3NN4JP.js";
 import {
   hintProblems
-} from "./chunks/chunk-F5PV73BQ.js";
-import "./chunks/chunk-GTCKBHY7.js";
+} from "./chunks/chunk-TLTKVIYI.js";
 import {
   maxBytesOf
-} from "./chunks/chunk-GENAPX63.js";
-import "./chunks/chunk-34YMSPZQ.js";
-import "./chunks/chunk-S3ZVQTGH.js";
-import {
-  fromJSONSchema
-} from "./chunks/chunk-3GQYQSG2.js";
+} from "./chunks/chunk-5CSIUNS2.js";
+import "./chunks/chunk-V4DNAPX5.js";
 import {
   AUTHOR_ROLES,
   PAGE,
@@ -27,9 +19,13 @@ import {
   resultProblems,
   sourceNamespace
 } from "./chunks/chunk-OGAJDQ7Z.js";
+import "./chunks/chunk-S3ZVQTGH.js";
 import {
   secretKinds
 } from "./chunks/chunk-L3NVT2DE.js";
+import {
+  fromJSONSchema
+} from "./chunks/chunk-3GQYQSG2.js";
 import "./chunks/chunk-7KJXMIQH.js";
 import "./chunks/chunk-WLRWVIVP.js";
 
@@ -11395,7 +11391,7 @@ async function sourceConformance(options) {
   const rpc = options.sources?.rpc;
   add(
     "rpc-id",
-    rpc === void 0 ? [] : [...toolsRpcIdProblems(rpc, options.describe)],
+    rpc === void 0 ? [] : [...oldToolsRpcIdProblems(rpc, options.describe)],
     rpc !== void 0,
     rpc === void 0
   );
@@ -11649,6 +11645,12 @@ function versionProblems(answer, where, state) {
   return { actorKind, oneAuthor, facts, commitmentKey, partsStable };
 }
 var MACHINE_KINDS = ["agent", "bot", "service"];
+function oldToolsRpcIdProblems(declared, described) {
+  const pattern = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*\.tools$/;
+  if (typeof declared !== "string" || declared.length > 214 || !pattern.test(declared)) return ["the tools-RPC id must be the plugin id and .tools, such as google-workspace.gws.tools"];
+  if (described !== void 0 && described.id !== declared) return [`the plugin's describe reports the tools-RPC id ${String(described.id)}, not ${declared}`];
+  return [];
+}
 export {
   DETAIL_FIELDS,
   EVENT_FIELDS,

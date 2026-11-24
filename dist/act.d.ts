@@ -1,9 +1,9 @@
 import { type ActionEffect, type InstalledManifest } from "./manifest.js";
 import { type ReadFailure } from "./internal/failure.js";
-import { type ActGrant, type ActPhase } from "./permission.js";
+import { type ActGrant, type ActPhase } from "./access.js";
 import type { ReadHost } from "./read.js";
 export type { ReadFailure } from "./internal/failure.js";
-export type { ActGrant, ActPhase } from "./permission.js";
+export type { ActGrant, ActPhase } from "./access.js";
 /** What a project's host does for `act`: a read host, plus a confirmation check when it can issue one. */
 export interface ActHost extends ReadHost {
     /**

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 import { checkManifest } from "../src/manifest.ts"
-import { evaluate, type Grant, type PermissionRule } from "../src/permission.ts"
+import { evaluate, type Grant, type PermissionRule } from "../src/access.ts"
 import { probeProblems } from "../src/conformance.ts"
 import { probeResultProblems } from "../src/internal/events.ts"
 import { detailFields, probe, read, readDetail, type ProbeAnswer, type ReadHost, type ReadRequest } from "../src/read.ts"

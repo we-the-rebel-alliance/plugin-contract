@@ -1,5 +1,8 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
+  isEventKind
+} from "./chunk-OGAJDQ7Z.js";
+import {
   validator
 } from "./chunk-S3ZVQTGH.js";
 import {
@@ -8,9 +11,6 @@ import {
   object,
   string
 } from "./chunk-3GQYQSG2.js";
-import {
-  isEventKind
-} from "./chunk-OGAJDQ7Z.js";
 
 // src/hints.ts
 var HINT_MAX = 1500;

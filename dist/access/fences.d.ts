@@ -1,24 +1,25 @@
 /**
- * Permission: the exact OpenCode session rules a grant allows (contract §6 and §13).
+ * The fenced session rules a grant compiles to (contract §6 and §13), kept beside the access levels that decide what
+ * an agent may call in the first place.
  *
- * Every read runs in a session limited to these rules. OpenCode checks each inner tool call a plugin makes against the
- * calling session's rules, and the last matching rule wins, so the rules are a deny of everything, then one allow per
- * action and resource the source declares:
+ * Every read or act runs in a session limited to these rules. OpenCode checks each inner tool call a plugin makes
+ * against the calling session's rules, and the last matching rule wins, so the rules are a deny of everything, then one
+ * allow per action and resource the source declares:
  *
  *   [{ action: "*", resource: "*", effect: "deny" },
  *    { action: "gws.events_list", resource: "*", effect: "allow" },
  *    { action: "gws.read", resource: "ana@example.com:gmail.users.messages.list", effect: "allow" }, …]
  *
- * The method's action is allowed on `*`, because the tools RPC resolves a method before dispatch on `*`. Each
- * operation is allowed as the conformance kit reads it (`operationRule`): a dotted operation as `<namespace>.read` on
+ * The method's action is allowed on `*`, because a grant resolves a method before dispatch on `*`. Each operation is
+ * allowed as the conformance kit reads it (`operationRule`): a dotted operation as `<namespace>.read` on
  * `<account>:<operation>`, and a bare one, an MCP tool, as `<server>_<operation>` on `*`, where the server is the
  * plugin's name for the `default` account and `<plugin>-<alias>` for any other (§5: MCP tools are
  * `<name>-<alias>_<tool>`). The namespace is the source id's first segment.
  *
  * The broker and a project may only narrow these rules, and the plugin's own `access` setting stays final.
  */
-import type { Checked } from "./internal/checked.js";
-import type { ActionItem, Manifest, SourceItem } from "./manifest.js";
+import type { Checked } from "../internal/checked.js";
+import type { ActionItem, Manifest, SourceItem } from "../manifest.js";
 /** One OpenCode permission rule, as a session or an agent holds it. */
 export interface PermissionRule {
     readonly action: string;
@@ -71,25 +72,15 @@ export declare const ACCOUNT_PATTERN: RegExp;
 export declare function accountProblem(account: unknown): string | undefined;
 /** A source's namespace: its id's first segment, which every action of the source begins with. */
 export declare function namespaceOf(source: Pick<SourceItem, "id">): string;
-/** The account the default MCP server serves: its tools are `<namespace>_<tool>`, the plugin's own name. */
-export declare const DEFAULT_ACCOUNT = "default";
-/** An account that may stand in a per-account server's name: a tool id's characters only. */
-export declare const SERVER_ACCOUNT_PATTERN: RegExp;
-/**
- * The MCP server a bare operation of the plugin runs on for `account` (§5): the plugin's namespace for `default`, and
- * `<namespace>-<account>` for any other alias (`list_files` is `plugin_list_files` for `default` and
- * `plugin-work_list_files` for `work`). The same rule as `accounts/names.ts`, derived here so permission has no import
- * cycle.
- */
-export declare function serverOf(namespace: string, account: string): string;
 /**
  * The rule that allows one operation for `account`: a dotted operation as `<namespace>.read` on
  * `<account>:<operation>`, a bare one (an MCP tool) as `<server>_<operation>` on `*`. The same derivation as the
  * conformance kit, so declared equals asserted means the same thing in a plugin's CI and in a consumer's session.
+ *
+ * The alias is the grant's own account, which the app resolved from the plugin's manifest before it issued the grant;
+ * `serverOf` in `./rules.ts` is the deriving form that also refuses an alias the plugin does not declare.
  */
 export declare function operationRule(source: Pick<SourceItem, "id">, operation: string, account: string): PermissionRule;
-/** The method action a source's read asserts: `<namespace>.<method>`. */
-export declare function methodAction(source: SourceItem): string;
 /**
  * The session rules for reading `source` under `grant`: deny everything, then allow the method and each declared
  * operation for the granted account. Refused when the grant is for another source or its account cannot be named in a
@@ -114,7 +105,7 @@ export declare function detailRules(source: SourceItem, detailId: string, grant:
 export declare function probeRules(source: SourceItem, account: string, identityOperations: readonly string[], probeAction?: string): Checked<readonly PermissionRule[]>;
 /**
  * How OpenCode decides an action on a resource under `rules`: the last rule whose action and resource match wins (`*`
- * matches any run of characters and `?` one), and no match asks. The same evaluation the tools RPC runs.
+ * matches any run of characters and `?` one), and no match asks. The same evaluation the register and the tools RPC run.
  */
 export declare function evaluate(rules: readonly PermissionRule[], action: string, resource?: string): PermissionRule["effect"];
 /** True when `grant` covers a read of `source` for `account` within `scope`: the same source and account, and every scope value granted. */

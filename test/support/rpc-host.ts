@@ -47,6 +47,19 @@ export class RpcFailure extends Error {
   }
 }
 
+/** A declared method error, as a handler's `context.error` answers it: the type and its data. */
+export class RpcDeclaredFailure extends Error {
+  readonly type: string
+  readonly data?: unknown
+
+  constructor(type: string, message: string, data?: unknown) {
+    super(message)
+    this.name = "RpcDeclaredFailure"
+    this.type = type
+    this.data = data
+  }
+}
+
 /** A registration as core returns it: a disposer and the event emitter. */
 export interface HostRegistration {
   readonly dispose: () => Promise<void>
@@ -93,8 +106,19 @@ function run<A, E>(effect: Effect.Effect<A, E, unknown>): Promise<A> {
   return Effect.runPromise(effect as Effect.Effect<A, E, never>)
 }
 
-/** Core's `parse`: an effect Schema decodes, and a plain JSON Schema converts and then decodes. */
+/**
+ * Core's `parse`: a schema with a Standard Schema validator uses it (core prefers one, so unknown keys are refused
+ * rather than dropped), an effect Schema decodes, and a plain JSON Schema converts and then decodes.
+ */
 function parse(schema: unknown, value: unknown): Promise<unknown> {
+  if (typeof schema === "object" && schema !== null && "~standard" in schema) {
+    const standard = (schema as { "~standard": { validate(input: unknown): unknown } })["~standard"]
+    const result = standard.validate(value) as { value?: unknown; issues?: readonly unknown[] } | Promise<{ value?: unknown; issues?: readonly unknown[] }>
+    return Promise.resolve(result).then((checked) => {
+      if (checked.issues !== undefined && checked.issues.length > 0) throw new Error(checked.issues.map((issue) => String((issue as { message?: unknown }).message ?? issue)).join("; "))
+      return checked.value
+    })
+  }
   const codec = codecFor(schema)
   return run(Schema.decodeUnknownEffect(codec)(value))
 }
@@ -154,6 +178,11 @@ export function makeRpcHost(): RpcHost {
         result = await handler(parsed, { error: (type, text, data) => Object.assign(new Error(text), { type, data }) })
       } catch (cause) {
         throw new RpcFailure("rpc.internal", `RPC call failed: ${message(cause)}`)
+      }
+      // A handler's declared failure is answered as that error, not encoded as its output.
+      if (result instanceof Error && typeof (result as unknown as { type?: unknown }).type === "string") {
+        const failure = result as unknown as { type: string; message: string; data?: unknown }
+        throw new RpcDeclaredFailure(failure.type, failure.message, failure.data)
       }
       try {
         return await encode(method.output, result)

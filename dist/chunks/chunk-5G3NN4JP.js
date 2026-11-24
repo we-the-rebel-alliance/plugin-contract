@@ -1,7 +1,11 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
-  isToolsRpcId
-} from "./chunk-UDTV67VT.js";
+  ATTENDANCE_RESPONSES,
+  COMMITMENT_STATES,
+  EVENT_LIMITS,
+  FACT_TYPES,
+  isEventKind
+} from "./chunk-OGAJDQ7Z.js";
 import {
   validator
 } from "./chunk-S3ZVQTGH.js";
@@ -19,13 +23,6 @@ import {
   string,
   union
 } from "./chunk-3GQYQSG2.js";
-import {
-  ATTENDANCE_RESPONSES,
-  COMMITMENT_STATES,
-  EVENT_LIMITS,
-  FACT_TYPES,
-  isEventKind
-} from "./chunk-OGAJDQ7Z.js";
 
 // src/internal/schema/types.ts
 var MAX_BYTES_DEFAULT = 65536;
@@ -37,6 +34,8 @@ var ACT_EFFECTS = ["local", "notify", "spend", "irreversible"];
 // src/internal/schema/sources.ts
 var SOURCE_ID = /^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$/;
 var TOOL_NAME = /^[a-z][a-z0-9_]{0,63}$/;
+var OLD_TOOLS_RPC_ID = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*\.tools$/;
+var isOldToolsRpcId = (value) => typeof value === "string" && value.length <= 214 && OLD_TOOLS_RPC_ID.test(value);
 var ACTION = /^(?:[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*|[a-z][a-z0-9]*_[a-z][a-z0-9_]*)$/;
 var OPERATION = /^[A-Za-z][A-Za-z0-9._-]{0,199}$/;
 var SCOPE_KEY = /^[a-z][a-z0-9_]{0,31}$/;
@@ -232,7 +231,7 @@ var act = object({
 });
 var sourcesSchema = object({
   contractVersion: literal(1),
-  rpc: string().max(200).refine(isToolsRpcId, { error: "must be a tools-RPC id: the plugin id and .tools, such as google-workspace.gws.tools" }).optional().describe("The plugin's tools-RPC id, which a consumer calls instead of mapping the package."),
+  rpc: string().max(200).refine(isOldToolsRpcId, { error: "must be a tools-RPC id: the plugin id and .tools, such as google-workspace.gws.tools" }).optional().describe("The plugin's tools-RPC id, which a consumer calls instead of mapping the package."),
   probe: object({ action: string().max(80).regex(ACTION, { error: "must be a dotted action such as gws.probe" }) }).strict().optional().describe("The plugin's one probe tool, and the permission action it asserts."),
   items: array(source).min(1).describe("The plugin's sources. A source id is unique across the declaration."),
   acts: array(act).min(1, "must name at least one act, or be left out").optional().describe("The plugin's acts, beside its sources in the same manifest. Absent when the plugin declares no write.")

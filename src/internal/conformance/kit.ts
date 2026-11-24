@@ -37,8 +37,6 @@ import {
 import { AUTHOR_ROLES, removalProblems } from "../events.ts"
 import { maxBytesOf } from "../../manifest.ts"
 import { hintProblems } from "../../hints.ts"
-import { sessionRules } from "../../permission.ts"
-import { toolsRpcIdProblems } from "../../tools-rpc.ts"
 import { pageChecks, type PageOptions } from "./page.ts"
 import { probeProblems, probeSourceName } from "./probe.ts"
 import { detailInput, detailInputProblems, scopeProblems, type DetailCallInput } from "./details.ts"
@@ -478,7 +476,7 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
   const rpc = options.sources?.rpc
   add(
     "rpc-id",
-    rpc === undefined ? [] : [...toolsRpcIdProblems(rpc, options.describe)],
+    rpc === undefined ? [] : [...oldToolsRpcIdProblems(rpc, options.describe)],
     rpc !== undefined,
     rpc === undefined,
   )
@@ -830,3 +828,12 @@ function versionProblems(answer: unknown, where: string, state: VersionState): {
 
 /** The actor kinds that make an actor an agent, a bot or a service (#45 §1). */
 const MACHINE_KINDS: readonly string[] = ["agent", "bot", "service"]
+
+
+/** The old tools-RPC id, kept only for this v0.3 declaration's `sources.rpc`; `register` now uses the plugin name. */
+function oldToolsRpcIdProblems(declared: unknown, described?: { readonly id?: unknown }): string[] {
+  const pattern = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*\.tools$/
+  if (typeof declared !== "string" || declared.length > 214 || !pattern.test(declared)) return ["the tools-RPC id must be the plugin id and .tools, such as google-workspace.gws.tools"]
+  if (described !== undefined && described.id !== declared) return [`the plugin's describe reports the tools-RPC id ${String(described.id)}, not ${declared}`]
+  return []
+}

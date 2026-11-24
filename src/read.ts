@@ -18,7 +18,7 @@ import type { Checked } from "./internal/checked.ts"
 import { PAGE, probeResultProblems, resultProblems } from "./internal/events.ts"
 import { failure, failureFromError, type ReadFailure } from "./internal/failure.ts"
 import { resolveSince, type ParamsContext } from "./params.ts"
-import { detailRules, grantCovers, namespaceOf, probeRules, sessionRules, type Grant, type PermissionRule } from "./permission.ts"
+import { detailRules, grantCovers, namespaceOf, probeRules, sessionRules, type Grant, type PermissionRule } from "./access.ts"
 import { pick, pickProblemsForOutput } from "./pick.ts"
 import { checkOutput, isOutputName } from "./outputs.ts"
 

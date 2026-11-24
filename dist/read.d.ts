@@ -16,7 +16,7 @@ import { type InstalledManifest, type OwnerOrg, type SourceItem } from "./manife
 import type { Checked } from "./internal/checked.js";
 import { type ReadFailure } from "./internal/failure.js";
 import { type ParamsContext } from "./params.js";
-import { type Grant, type PermissionRule } from "./permission.js";
+import { type Grant, type PermissionRule } from "./access.js";
 export type { FailureCode, ReadFailure } from "./internal/failure.js";
 /** What a project's host does for `read`. */
 export interface ReadHost {

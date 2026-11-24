@@ -2,22 +2,7 @@
 import {
   isExtensionOutput,
   isOutputName
-} from "./chunk-34YMSPZQ.js";
-import {
-  _enum,
-  array,
-  boolean,
-  discriminatedUnion,
-  fromJSONSchema,
-  literal,
-  looseObject,
-  number,
-  record,
-  strictObject,
-  string,
-  toJSONSchema,
-  unknown
-} from "./chunk-3GQYQSG2.js";
+} from "./chunk-V4DNAPX5.js";
 import {
   ACCOUNT_MECHANISMS,
   ACTION_EFFECTS,
@@ -40,6 +25,21 @@ import {
   TESTED_OPENCODE,
   isEventKindIn
 } from "./chunk-OGAJDQ7Z.js";
+import {
+  _enum,
+  array,
+  boolean,
+  discriminatedUnion,
+  fromJSONSchema,
+  literal,
+  looseObject,
+  number,
+  record,
+  strictObject,
+  string,
+  toJSONSchema,
+  unknown
+} from "./chunk-3GQYQSG2.js";
 
 // src/manifest/canonical.ts
 import { createHash } from "node:crypto";

@@ -1,0 +1,119 @@
+/**
+ * Door 1 and door 2: the agent tool and Code Mode, from the same handler table (contract §9).
+ *
+ * Every method becomes one tool in the plugin's namespace `<name>`, with permission action `<name>.<method>`; OpenCode
+ * exposes it as `tools.<name>.<method>` in Code Mode and as `<name>_<method>` to a model. A method declared
+ * `agent: false` is registered with a Code Mode entry object, which is the registration that leaves it out of agent
+ * prompts while keeping it in Code Mode, automations and RPC (§6). `pinned: true` sets Code Mode's `pinned` flag
+ * instead of the deprecated top-level one.
+ *
+ * The tool's executor runs the same `run` as every other door: input and answer validation, account resolution and
+ * operation assertions are not reimplemented here.
+ */
+import type { Plugin } from "@opencode/plugin"
+import { assertOperations } from "./assertions.ts"
+import { RegisterError } from "./errors.ts"
+import type { MethodEntry } from "./handlers.ts"
+import { execute, prepareCall, toolCall, type CallEnvironment } from "./invoke.ts"
+
+/** The tool context an executor receives, as much of OpenCode's `ToolContext` as this module uses. */
+export interface ToolCallContext {
+  readonly sessionID: string
+  readonly agent: string
+  readonly messageID: string
+  readonly id: string
+  readonly signal: AbortSignal
+  readonly codemode?: boolean
+  readonly progress: (update: Readonly<Record<string, unknown>>) => Promise<void>
+}
+
+/** The value schema and options a tool registration carries. */
+export interface ToolRegistration {
+  readonly name: string
+  readonly description: string
+  readonly input: Readonly<Record<string, unknown>>
+  readonly output: Readonly<Record<string, unknown>>
+  readonly options: {
+    readonly namespace: string
+    readonly permission: string
+    readonly codemode: boolean | { readonly pinned?: boolean; readonly description?: string; readonly input?: unknown; readonly output?: unknown }
+  }
+  execute(input: unknown, context: ToolCallContext): Promise<{ readonly output: unknown; readonly content: string }>
+}
+
+/** The editor inside `ctx.tool.transform`, as this module uses it. */
+export interface ToolEditor {
+  namespace(namespace: { readonly name: string; readonly description: string }): void
+  add(tool: ToolRegistration): void
+}
+
+/** The part of the plugin context the tools use. */
+export interface ToolContext {
+  readonly permission: {
+    assert(input: {
+      readonly sessionID: string
+      readonly agent?: string
+      readonly action: string
+      readonly resources: readonly string[]
+      readonly save?: readonly string[]
+      readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
+    }): Promise<void>
+  }
+  /** The editor is `unknown` here because the host's `ToolEditor.add` is generic over each schema type; `installTools`
+   * narrows it to `ToolEditor`, exactly as the accounts module narrows its transforms. */
+  readonly tool: { readonly transform: (callback: (editor: unknown) => void) => Promise<{ dispose(): Promise<void> }> }
+}
+
+const hostContextIsToolContext = (context: Pick<Plugin.Context, "tool" | "permission">): ToolContext => context
+void hostContextIsToolContext
+
+/** The text a direct agent tool shows for an answer. A string is itself; anything else is its JSON. */
+function textOf(value: unknown): string {
+  if (typeof value === "string") return value
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return String(value)
+  }
+}
+
+/** The Code Mode options of one method: an entry object for `agent: false`, the flag otherwise, with `pinned`. */
+function codemodeFor(entry: MethodEntry): ToolRegistration["options"]["codemode"] {
+  const pinned = entry.item.pinned === true
+  if (entry.item.agent === false) {
+    return { ...(pinned ? { pinned: true } : {}), description: entry.handler.description, input: entry.input, output: entry.output }
+  }
+  return pinned ? { pinned: true } : true
+}
+
+/** The tool registrations, built once, so a test can inspect them before OpenCode runs them. */
+export function toolRegistrations(environment: CallEnvironment, context: ToolContext): readonly ToolRegistration[] {
+  return environment.entries.map((entry) => ({
+    name: entry.name,
+    description: entry.handler.description,
+    input: entry.input,
+    output: entry.output,
+    options: { namespace: environment.name, permission: `${environment.name}.${entry.name}`, codemode: codemodeFor(entry) },
+    async execute(raw, callContext) {
+      try {
+        const prepared = prepareCall(entry, raw, environment.accounts)
+        await assertOperations(context, environment.name, entry, callContext, prepared.account)
+        const value = await execute(entry, prepared, toolCall(callContext, callContext.codemode === true ? "codemode" : "tool"))
+        return { output: value, content: textOf(value) }
+      } catch (error) {
+        const own = error instanceof RegisterError ? error : undefined
+        throw new Error(own?.message ?? (error instanceof Error ? error.message : String(error)))
+      }
+    },
+  }))
+}
+
+/** Register every tool in the plugin's namespace, and return the registration to dispose. */
+export async function installTools(context: ToolContext, environment: CallEnvironment): Promise<{ dispose(): Promise<void> }> {
+  const tools = toolRegistrations(environment, context)
+  return (await context.tool.transform((raw) => {
+    const editor = raw as ToolEditor
+    editor.namespace({ name: environment.name, description: environment.manifest.plugin.summary })
+    for (const tool of tools) editor.add(tool)
+  })) as { dispose(): Promise<void> }
+}

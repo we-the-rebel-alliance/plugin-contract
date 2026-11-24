@@ -16,11 +16,11 @@ import { MAX_BYTES_DEFAULT, findAction, type ActionEffect, type ActionItem, type
 import type { Checked } from "./internal/checked.ts"
 import { failure, failureFromError, type ReadFailure } from "./internal/failure.ts"
 import { problemsOf } from "./internal/validator.ts"
-import { actSessionRules, type ActGrant, type ActPhase, type PermissionRule } from "./permission.ts"
+import { actSessionRules, type ActGrant, type ActPhase, type PermissionRule } from "./access.ts"
 import type { ReadHost } from "./read.ts"
 
 export type { ReadFailure } from "./internal/failure.ts"
-export type { ActGrant, ActPhase } from "./permission.ts"
+export type { ActGrant, ActPhase } from "./access.ts"
 
 /** What a project's host does for `act`: a read host, plus a confirmation check when it can issue one. */
 export interface ActHost extends ReadHost {

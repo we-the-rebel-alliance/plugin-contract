@@ -11,13 +11,15 @@
  */
 import * as z from "zod"
 import { FACT_TYPES, isEventKind } from "../events.ts"
-import { isToolsRpcId } from "../../tools-rpc.ts"
 import { ACT_EFFECTS, MAX_BYTES_DEFAULT, MAX_BYTES_LIMIT, SERVICE_ID_MAX, SERVICE_LABEL_MAX } from "./types.ts"
 
 /** A source id: at least two dotted lowercase segments. */
 const SOURCE_ID = /^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$/
 /** A tool name: lowercase words joined by underscores. */
 const TOOL_NAME = /^[a-z][a-z0-9_]{0,63}$/
+/** The old tools-RPC id (`<plugin id>.tools`), kept only for the v0.3 `sources` declaration this schema reads. */
+const OLD_TOOLS_RPC_ID = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*\.tools$/
+const isOldToolsRpcId = (value: unknown): value is string => typeof value === "string" && value.length <= 214 && OLD_TOOLS_RPC_ID.test(value)
 /** A permission action: dotted (`gws.events_list`), or a namespaced tool (`slack_events_list`). */
 const ACTION = /^(?:[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*|[a-z][a-z0-9]*_[a-z][a-z0-9_]*)$/
 /** A provider operation: a dotted API operation, or a bare MCP tool name. */
@@ -395,7 +397,7 @@ export const sourcesSchema = z
     rpc: z
       .string()
       .max(200)
-      .refine(isToolsRpcId, { error: "must be a tools-RPC id: the plugin id and .tools, such as google-workspace.gws.tools" })
+      .refine(isOldToolsRpcId, { error: "must be a tools-RPC id: the plugin id and .tools, such as google-workspace.gws.tools" })
       .optional()
       .describe("The plugin's tools-RPC id, which a consumer calls instead of mapping the package."),
     probe: z

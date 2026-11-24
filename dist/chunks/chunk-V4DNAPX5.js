@@ -1,5 +1,8 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
+  EXTENSION_NAME
+} from "./chunk-OGAJDQ7Z.js";
+import {
   problemsOf,
   validator
 } from "./chunk-S3ZVQTGH.js";
@@ -16,9 +19,6 @@ import {
   string,
   union
 } from "./chunk-3GQYQSG2.js";
-import {
-  EXTENSION_NAME
-} from "./chunk-OGAJDQ7Z.js";
 
 // src/outputs.ts
 var text = (max) => string().max(max);

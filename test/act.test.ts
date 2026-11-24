@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 import { act, type ActHost, type ActRequest } from "../src/act.ts"
 import { checkManifest } from "../src/manifest.ts"
-import { evaluate, type ActGrant, type PermissionRule } from "../src/permission.ts"
+import { evaluate, type ActGrant, type PermissionRule } from "../src/access.ts"
 import { installed, manifest } from "./support/manifest.ts"
 
 const answer = {

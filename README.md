@@ -55,8 +55,8 @@ The module map of the contract (§15), and what this package ships today:
 |---|---|---|---|
 | `manifest` | both | schema, validation and hashing of `capabilities` | landing |
 | `accounts` | plugin | profiles, names, registration, `account` resolution, status | landing |
-| `access` | plugin | default rules from `access` and `methods` | landing |
-| `register` | plugin | doors 1–3 from one handler table | landing |
+| [`access`](docs/access.md) | plugin | default rules from `access` and `methods` | here |
+| [`register`](docs/register.md) | plugin | doors 1–3 from one handler table | here |
 | `events` | plugin | event normaliser, hash, screening, page building | here |
 | `cursor` | plugin | bound cursor codec | here |
 | `bus` | plugin | typed `changed`, `status` and `account` emitters | landing |
@@ -69,13 +69,10 @@ The module map of the contract (§15), and what this package ships today:
 | `kit` | dev | the `plugin-kit` binary | landing |
 | `mcp-events` | plugin | optional MCP Events adapter | later |
 
-The package also ships the pieces `access` and `register` will replace — `permission` (exact session rules from a
-grant) and `tools-rpc` (the tools-RPC transport) — and [`hints`](docs/hints.md), the hint file format. They keep
-working until their replacements land.
-
 `docs/conformance.md` describes the kit. `docs/events.md` describes the feed model. `docs/outputs.md` describes the
 snapshot shapes. `docs/read.md`, `docs/act.md`, `docs/params.md` and `docs/pick.md` describe the app side, and
-`docs/hints.md` the hint file. `docs/tools-rpc.md` describes the transport.
+`docs/hints.md` the hint file. [`docs/access.md`](docs/access.md) describes the access levels and the grant fences;
+[`docs/register.md`](docs/register.md) describes the one handler table and the three doors.
 
 ## plugin-kit
 
@@ -103,7 +100,7 @@ its own `dist/`. Node 22 or later runs it; CI checks Node 24.
 - [Supported plugins](SUPPORTED.md): the plugins and their state.
 - [Decisions](docs/decisions.md): the settled decisions behind v0.
 - [Conformance](docs/conformance.md), [events and cursors](docs/events.md), [outputs](docs/outputs.md),
-  [`tools-rpc`](docs/tools-rpc.md).
+  [access](docs/access.md), [register](docs/register.md).
 - The app side: [read](docs/read.md), [act](docs/act.md), [catalog](docs/catalog.md), [params](docs/params.md),
   [pick](docs/pick.md).
 - [Hints](docs/hints.md): the generic hint file format.
