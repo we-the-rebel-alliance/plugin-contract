@@ -15,6 +15,7 @@
 import { METHOD_CLASSES, type ActionItem, type Manifest, type MethodClass, type MethodItem, type SourceItem } from "../../manifest.ts"
 import * as z from "zod"
 import { error, warning, type Finding } from "./report.ts"
+import { urlHostProblem } from "./url-hosts.ts"
 
 /**
  * The prefixes that settle a method's class. The schema enforces the first three; this table is the whole set, and it
@@ -28,6 +29,9 @@ const PREFIXES: readonly { readonly pattern: RegExp; readonly class: MethodClass
   { pattern: /^(?:create|update|write|set|edit|put|patch|insert|add|modify|move|rename|upload|save)_/, class: "write", because: "a method that changes something is class write" },
   { pattern: /^admin_/, class: "admin", because: "a method that administers the provider is class admin" },
 ]
+
+/** How much a class may do, lowest first. A name never asks a plugin to lower a class the person already chose. */
+const RISK: Readonly<Record<MethodClass, number>> = { read: 0, write: 1, export: 2, send: 3, share: 4, delete: 5, admin: 6 }
 
 /** The name a method is judged by: a pass-through MCP tool's own name, without `mcp:`. */
 function methodName(method: string): string {
@@ -57,6 +61,7 @@ export function declarationFindings(installed: { readonly package: string; reado
     if (named === "*") continue
     for (const prefix of PREFIXES) {
       if (!prefix.pattern.test(named) || item.class === prefix.class) continue
+      if (RISK[item.class] > RISK[prefix.class]) continue
       findings.push(
         error("methods.class", `${method} is class ${item.class}, and its name says ${prefix.class}: ${prefix.because}`, {
           path: `capabilities.methods.${method}.class`,
@@ -76,11 +81,11 @@ export function declarationFindings(installed: { readonly package: string; reado
         }),
       )
     }
-    if (item.commits !== undefined && manifest.methods[item.commits]?.class === "read") {
+    if (item.commits !== undefined && manifest.methods[item.commits]?.class !== "read") {
       findings.push(
-        error("methods.commits", `${method} commits ${item.commits}, which is class read: the committing method changes something`, {
+        error("methods.commits", `${method} commits ${item.commits}, which is class ${manifest.methods[item.commits]?.class}: a plan dry-runs the change and is a read`, {
           path: `capabilities.methods.${method}.commits`,
-          fix: `Class ${item.commits} by what it does, or name another method.`,
+          fix: `Class ${item.commits} read, or name another planning method.`,
         }),
       )
     }
@@ -160,6 +165,10 @@ export function declarationFindings(installed: { readonly package: string; reado
     if (source.kind === "events" && source.thumbnails === true && source.urlHosts === undefined) {
       findings.push(error("sources.thumbnails", `${source.id} declares thumbnails and no urlHosts: a thumbnail is displayed only on a host the source names`, { path: `capabilities.sources.${source.id}.thumbnails` }))
     }
+    for (const host of source.urlHosts ?? []) {
+      const problem = urlHostProblem(host)
+      if (problem !== null) findings.push(error("sources.urlHosts", `${source.id}'s urlHost ${JSON.stringify(host)} ${problem}`, { path: `capabilities.sources.${source.id}.urlHosts` }))
+    }
   }
 
   // §8: a preview writes nothing and the commit is a different method that does.
@@ -207,12 +216,12 @@ export function optionsFindings(manifest: Manifest): Finding[] {
       findings.push(error("options.access", `access offers ${values.map(String).join(", ")}, and the contract's levels are all, ask-changes and read-only`, { path: "capabilities.options.properties.access.enum" }))
     }
     if (access["default"] !== undefined && access["default"] !== "all") {
-      findings.push(warning("options.access-default", `access defaults to ${JSON.stringify(access["default"])}, and standard §5 gives all`, { path: "capabilities.options.properties.access.default", fix: "Default access to all." }))
+      findings.push(error("options.access-default", `access defaults to ${JSON.stringify(access["default"])}, and standard §5 gives all`, { path: "capabilities.options.properties.access.default", fix: "Default access to all." }))
     }
   }
   const untested = properties["allowUntestedHost"] as Record<string, unknown> | undefined
   if (untested !== undefined && untested["default"] !== undefined && untested["default"] !== false) {
-    findings.push(warning("options.untested-default", `allowUntestedHost defaults to ${JSON.stringify(untested["default"])}, and standard §5 gives false`, { path: "capabilities.options.properties.allowUntestedHost.default" }))
+    findings.push(error("options.untested-default", `allowUntestedHost defaults to ${JSON.stringify(untested["default"])}, and standard §5 gives false`, { path: "capabilities.options.properties.allowUntestedHost.default" }))
   }
   if (manifest.accounts !== undefined && properties["accounts"] === undefined) {
     findings.push(error("options.accounts", `${manifest.plugin.name} signs in and its options declare no accounts map`, { path: "capabilities.options.properties.accounts", fix: "Declare accounts as a map of alias to profile." }))

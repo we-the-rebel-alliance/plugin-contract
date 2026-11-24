@@ -1,497 +1,334 @@
 import assert from "node:assert/strict"
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { after, describe, test } from "node:test"
-import { fileURLToPath, pathToFileURL } from "node:url"
-import { readInstalledManifest } from "../src/manifest.ts"
-import { runConformance, t0, t1, renderGeneratedDocs } from "../src/conformance.ts"
-import { manifestHash } from "../src/manifest.ts"
-import { validPage } from "./support/valid-page.ts"
+import { fileURLToPath } from "node:url"
+import { runConformance, t0, t1 } from "../src/conformance.ts"
+import { readInstalledManifest, type Manifest } from "../src/manifest.ts"
 import { staticFindings } from "../src/internal/conformance/static.ts"
+import { declarationFindings, optionsFindings } from "../src/internal/conformance/declaration.ts"
+import { accountFindings } from "../src/internal/conformance/accounts.ts"
+import { actionFindings } from "../src/internal/conformance/actions.ts"
+import { busFindings, statusFindings } from "../src/internal/conformance/status.ts"
+import { grantFindings, rpcConfirmationFindings } from "../src/internal/conformance/grants.ts"
+import { detailFindings, eventsFindings, probeFindings, suggestFindings } from "../src/internal/events-conformance.ts"
 
 const here = dirname(fileURLToPath(import.meta.url))
-const support = pathToFileURL(join(here, "support", "plugin.mjs")).href
+const fixtureDirectory = join(here, "fixtures", "fixture-plugin")
 const root = mkdtempSync(join(tmpdir(), "conformance-"))
 after(() => rmSync(root, { recursive: true, force: true }))
 
 let sequence = 0
+const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
+const ids = (findings: readonly { id: string }[]): string[] => findings.map((finding) => finding.id)
+const errors = (findings: readonly { level: string }[]): unknown[] => findings.filter((finding) => finding.level === "error")
+const nodeMajor = Number(process.versions.node.split(".")[0])
+const skipHost = nodeMajor < 24 ? "the embedded host needs Node 24's explicit resource management (`await using`)" : false
 
-/** A v0 manifest for a small plugin with accounts, an events source and one non-read method. */
-function manifest(change: (value: any) => void = () => {}): any {
-  const value = {
-    version: 1,
-    plugin: {
-      name: "demo",
-      title: "Demo",
-      summary: "A demo connector for the conformance kit's tests.",
-      vendor: { id: "demo", name: "Demo", domain: "demo.example" },
-      icons: [{ src: "assets/icon.svg", type: "image/svg+xml" }],
-      host: { opencode: ">=2.4.1 <2.5.0", tested: ["2.4.1"] },
-    },
-    accounts: { via: "integration", profile: { $ref: "#/options/properties/accounts/additionalProperties" }, owner: "mailto" },
-    options: {
-      type: "object",
-      properties: {
-        access: { type: "string", enum: ["all", "ask-changes", "read-only"], default: "all" },
-        accounts: { type: "object", additionalProperties: { type: "object", properties: { region: { type: "string" } }, additionalProperties: false } },
-        allowUntestedHost: { type: "boolean", default: false },
-      },
-      additionalProperties: false,
-    },
-    methods: {
-      status: { class: "read", accounts: "none" },
-      probe: { class: "read", accounts: "optional", operations: ["demo.users.get"] },
-      events_list: { class: "read", accounts: "optional", operations: ["demo.messages.list", "demo.users.get"] },
-      send_message: { class: "send", accounts: "optional", operations: ["demo.messages.create"] },
-    },
-    sources: [
-      {
-        id: "demo.messages",
-        kind: "events",
-        reads: "message",
-        method: "events_list",
-        input: { source: "messages" },
-        operations: ["demo.messages.list", "demo.users.get"],
-        cost: { class: "free" },
-        maxBytes: 65_536,
-        urlHosts: ["example.test"],
-      },
-    ],
-    actions: [],
-    events: { changed: {} },
-  }
-  change(value)
-  return value
+/** The fixture's manifest and fixture, as the kit reads them. */
+function fixture(): { manifest: Manifest; packageName: string; installed: { package: string; manifest: Manifest }; recorded: any } {
+  const installed = readInstalledManifest(fixtureDirectory)
+  assert.ok(installed.ok, installed.ok ? "" : installed.problems.join("\n"))
+  const recorded = JSON.parse(readFileSync(join(fixtureDirectory, "fixtures", "conformance.json"), "utf8"))
+  return { manifest: installed.value.manifest, packageName: installed.value.package, installed: installed.value, recorded }
 }
 
-/** A page of the test source for one account. */
-function page(account: string, change: (value: any) => void = () => {}): any {
-  const value = validPage({
-    source: "messages",
-    plugin: "@we-the-rebel-alliance/demo-plugin",
-    account,
-    owner: { id: `mailto:${account}@example.test`, label: account },
-    events: [{ external_id: `m-${account}`, occurred_at: "2026-11-01T09:00:00.000Z" }],
-    cursor: `cursor-${account}`,
-    more: false,
-    asOf: "2026-11-13T09:00:00.000Z",
-  })
-  change(value)
-  return value
-}
-
-/** A fixture the base manifest satisfies. */
-function fixture(change: (value: any) => void = () => {}): any {
-  const value = {
-    plugin: "@we-the-rebel-alliance/demo-plugin",
-    accounts: {
-      aliases: ["work", "personal"],
-      required: { method: "events_list", code: "ACCOUNT_REQUIRED" },
-      unknown: { method: "events_list", account: "nobody_here", code: "ACCOUNT_UNKNOWN" },
-      cursors: [{ method: "events_list", account: "work", other: "personal", code: "CURSOR_INVALID" }],
-    },
-    sources: {
-      "demo.messages": {
-        cases: [
-          { name: "the work account", input: { source: "messages", account: "work" }, expect: "page", answer: page("work") },
-          { name: "the personal account", input: { source: "messages", account: "personal" }, expect: "page", answer: page("personal") },
-        ],
-        probe: { answer: { source: "messages", account: "work", owner: { id: "mailto:work@example.test", label: "Work" }, trust: "untrusted" } },
-      },
-    },
-    events: {
-      emitted: ["changed"],
-      status: {
-        name: "demo",
-        version: "1.0.0",
-        host: { version: "2.4.1", range: ">=2.4.1 <2.5.0", tested: ["2.4.1"] },
-        state: "ready",
-        accounts: [
-          { alias: "work", state: "ready", owner: { id: "mailto:work@example.test", label: "Work" } },
-          { alias: "personal", state: "ready", owner: { id: "mailto:personal@example.test", label: "Personal" } },
-        ],
-        unguardedAgents: [],
-        nextStep: null,
-      },
-    },
-  }
-  change(value)
-  return value
-}
-
-/** Write a plugin directory a consumer and T1 can read. */
-function plugin(options: {
-  readonly value?: any
-  readonly recorded?: any
-  readonly entry?: boolean
-  readonly entryOptions?: Record<string, unknown>
-  readonly skills?: boolean
-  readonly skillDescription?: string
-  readonly docs?: boolean
-  readonly extraFiles?: Readonly<Record<string, string>>
-}): string {
-  const value = options.value ?? manifest()
-  const name = value.plugin.name
-  const directory = join(root, `plugin-${++sequence}`)
-  mkdirSync(join(directory, "fixtures"), { recursive: true })
-  writeFileSync(
-    join(directory, "package.json"),
-    `${JSON.stringify({ name: `@we-the-rebel-alliance/${name}-plugin`, version: "1.0.0", type: "module", exports: { "./server": "./index.js" }, capabilities: value }, null, 2)}\n`,
-  )
-  if (options.entry !== false) {
-    writeFileSync(
-      join(directory, "index.js"),
-      `import { defineTestPlugin } from ${JSON.stringify(support)}\nexport default defineTestPlugin(new URL(".", import.meta.url).pathname, ${JSON.stringify(options.entryOptions ?? {})})\n`,
-    )
-  }
-  if (options.recorded !== undefined) writeFileSync(join(directory, "fixtures", "conformance.json"), `${JSON.stringify(options.recorded, null, 2)}\n`)
-  if (options.skills !== false) {
-    mkdirSync(join(directory, "skills", name), { recursive: true })
-    writeFileSync(
-      join(directory, "skills", name, "SKILL.md"),
-      `---\nname: ${name}\ndescription: ${options.skillDescription ?? "Read the demo source, and pick an account. Use for demo data only."}\n---\n\n# ${name}\n\nRead with \`tools.${name}.events_list\`.\n`,
-    )
-  }
-  if (options.docs === true) {
-    mkdirSync(join(directory, "docs"), { recursive: true })
-    const docs = renderGeneratedDocs(value)
-    writeFileSync(join(directory, "README.md"), `# Demo\n\n<!-- generated:capabilities -->\n${docs.capabilities}\n<!-- /generated:capabilities -->\n\n<!-- generated:errors -->\n${docs.errors}\n<!-- /generated:errors -->\n`)
-  }
-  for (const [path, text] of Object.entries(options.extraFiles ?? {})) {
-    mkdirSync(dirname(join(directory, path)), { recursive: true })
-    writeFileSync(join(directory, path), text)
-  }
+/** A writable copy of the fixture plugin. */
+function copy(): string {
+  const directory = join(root, `fixture-${++sequence}`)
+  cpSync(fixtureDirectory, directory, { recursive: true })
+  // A fixture copy lives outside the repository: point its dist imports at this worktree's build.
+  const entry = join(directory, "index.js")
+  writeFileSync(entry, readFileSync(entry, "utf8").replaceAll("../../../dist/", `${join(here, "..", "dist")}/`))
   return directory
 }
 
-const errors = (findings: readonly { level: string }[]) => findings.filter((finding) => finding.level === "error")
-const ids = (findings: readonly { id: string }[]) => findings.map((finding) => finding.id)
+/** A real plugin entry built from the fixture manifest, for one broken property at a time. */
+function writeCustom(directory: string, options: { readonly rules?: boolean; readonly unchecked?: boolean; readonly codemode?: boolean; readonly events?: boolean; readonly hostRange?: boolean; readonly pinned?: boolean; readonly id?: string } = {}): void {
+  const settings = { rules: true, unchecked: false, codemode: true, events: true, hostRange: true, pinned: true, id: "fixture", ...options }
+  writeFileSync(
+    join(directory, "index.js"),
+    `import { readFileSync } from "node:fs"
+import { effectFor, withRules } from ${JSON.stringify(join(here, "..", "dist", "access.js"))}
+const manifest = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")).capabilities
+const settings = ${JSON.stringify(settings)}
+function inRange(version) { const m = /^(\\d+)\\.(\\d+)\\.(\\d+)/.exec(String(version)); return m !== null && Number(m[1]) === 2 && Number(m[2]) === 4 && Number(m[3]) >= 1 }
+export default {
+  id: settings.id,
+  async setup(context) {
+    if (settings.hostRange && !inRange(context.app.version) && context.options?.allowUntestedHost !== true) throw new Error("HOST_UNTESTED: no. Next step: use 2.4.1.")
+    const methods = Object.entries(manifest.methods).filter(([method]) => !method.startsWith("mcp:"))
+    await context.tool.transform((tool) => {
+      tool.namespace({ name: "fixture", description: manifest.plugin.summary })
+      for (const [method, item] of methods) tool.add({ name: method, description: method, input: { type: "object" }, output: { type: "object" }, options: { namespace: "fixture", permission: "fixture." + method, codemode: settings.codemode ? (item.pinned === true && settings.pinned ? { pinned: true } : true) : false }, execute: async () => ({}) })
+    })
+    await context.rpc.register({ id: "fixture", methods: Object.fromEntries(methods.map(([method]) => [method, { input: { type: "object" }, output: { type: "object" } }])), events: settings.events ? Object.fromEntries(Object.keys(manifest.events).map((event) => [event, { schema: { type: "object" } }])) : {} }, Object.fromEntries(methods.map(([method, item]) => [method, async (input) => { if (!settings.unchecked && item.class !== "read") await context.permission.assert({ sessionID: input.sessionID ?? "ses_conformance", action: "fixture." + method, resources: ["*"] }); return { ok: true } }])))
+    if (settings.rules) await context.agent.transform((agents) => { for (const agent of agents.list()) agents.update(agent.id, (info) => { const additions = [{ action: "fixture.*", resource: "*", effect: "allow" }]; for (const [method, item] of methods) { const effect = effectFor(item, context.options?.access ?? "all"); if (effect !== "allow") additions.push({ action: "fixture." + method, resource: "*", effect }) } info.permissions = withRules(info.permissions, additions) }) })
+  },
+}
+`,
+  )
+}
 
-describe("the report", () => {
-  test("a plugin that declares, records and loads cleanly has no findings", async () => {
-    const report = await runConformance(plugin({ recorded: fixture() }))
+describe("the fixture plugin, and the real host", () => {
+  test("runConformance accepts the fixture", { timeout: 30_000 }, async () => {
+    const report = await runConformance(fixtureDirectory)
     assert.deepEqual(report.findings, [])
     assert.equal(report.ok, true)
   })
 
-  test("record: true turns the missing recordings into warnings and is still ok", async () => {
-    const report = await runConformance(plugin({}), { record: true })
+  test("T1 loads it on 2.4.1 and it refuses 2.5.0", { skip: skipHost, timeout: 30_000 }, async () => {
+    assert.deepEqual(await t1(fixtureDirectory, "2.4.1"), [])
+    assert.deepEqual(await t1(fixtureDirectory, "2.5.0"), [])
+  })
+
+  test("T1 records the real namespace, tools, Code Mode entries and RPC events", { skip: skipHost, timeout: 30_000 }, async () => {
+    const namespace = await import("../src/internal/conformance/host.ts").then((module) => module.namespaceOf(fixtureDirectory, fixture().manifest))
+    assert.equal(namespace, fixture().manifest.plugin.summary)
+    const inspection = await import("../src/internal/conformance/host.ts").then((module) => module.inspectHost(fixtureDirectory, fixture().manifest, "2.4.1", { accounts: ["work", "personal"], realAccounts: true, inputs: fixture().recorded.rpc.inputs }))
+    assert.deepEqual(inspection.findings, [])
+    assert.ok(inspection.run?.tools.some((tool) => tool.permission === "fixture.pinned_status" && typeof tool.codemode === "object" && tool.codemode.pinned === true))
+    assert.ok(inspection.run?.rpc?.events.includes("changed"))
+  })
+
+  test("a plugin with no permission rules is refused", { skip: skipHost, timeout: 30_000 }, async () => {
+    const directory = copy()
+    writeCustom(directory, { rules: false })
+    assert.ok(ids(await t1(directory, "2.4.1")).includes("T1.permissions"))
+  })
+
+  test("LD-5: a non-read RPC with an allow rule and no grant must be refused", { skip: skipHost, timeout: 30_000 }, async () => {
+    const directory = copy()
+    writeCustom(directory, { unchecked: true })
+    assert.ok(ids(await t1(directory, "2.4.1")).includes("T1.rpc-confirmation"))
+  })
+
+  test("a tool outside Code Mode is refused", { skip: skipHost, timeout: 30_000 }, async () => {
+    const directory = copy()
+    writeCustom(directory, { codemode: false })
+    assert.ok(ids(await t1(directory, "2.4.1")).includes("T1.codemode"))
+  })
+
+  test("an RPC events block that does not match the manifest is refused", { skip: skipHost, timeout: 30_000 }, async () => {
+    const directory = copy()
+    writeCustom(directory, { events: false })
+    assert.ok(ids(await t1(directory, "2.4.1")).includes("T1.events"))
+  })
+
+  test("a plugin that does not refuse an unsupported host is refused", { skip: skipHost, timeout: 30_000 }, async () => {
+    const directory = copy()
+    writeCustom(directory, { hostRange: false })
+    assert.ok(ids(await t1(directory, "2.5.0")).includes("T1.unsupported-host"))
+  })
+
+  test("a pinned entry that is not in the manifest, and a missing pin, are refused", { skip: skipHost, timeout: 30_000 }, async () => {
+    const directory = copy()
+    writeCustom(directory, { pinned: false })
+    assert.ok(ids(await t1(directory, "2.4.1")).includes("T1.codemode"))
+  })
+
+  test("a pinned tool over the token budget is refused", { skip: skipHost, timeout: 30_000 }, async () => {
+    const directory = copy()
+    const entry = join(directory, "index.js")
+    writeFileSync(entry, readFileSync(entry, "utf8").replace('description: "Read the pinned status."', `description: "${"x".repeat(5000)}"`))
+    assert.ok(ids(await t1(directory, "2.4.1")).includes("T1.pinned-budget"))
+  })
+
+  test("real account behaviour: a plugin that ignores its two aliases is refused", { skip: skipHost, timeout: 30_000 }, async () => {
+    const directory = copy()
+    writeCustom(directory, {})
+    assert.ok(ids(await t1(directory, "2.4.1")).includes("T1.accounts"))
+  })
+
+  test("a plugin with the wrong id is refused", { skip: skipHost, timeout: 30_000 }, async () => {
+    const directory = copy()
+    writeCustom(directory, { id: "other" })
+    assert.ok(ids(await t1(directory, "2.4.1")).includes("T1.id"))
+  })
+
+  test("record:true and no fixture is warnings only", async () => {
+    const directory = copy()
+    rmSync(join(directory, "fixtures"), { recursive: true, force: true })
+    const report = await runConformance(directory, { hosts: [], record: true })
     assert.equal(report.ok, true)
-    assert.ok(report.findings.length > 0)
     assert.deepEqual(errors(report.findings), [])
   })
 
-  test("a manifest that does not validate is one finding per problem", async () => {
-    const value = manifest()
-    value.plugin.extra = true
-    const report = await runConformance(plugin({ value, recorded: fixture() }))
-    assert.equal(report.ok, false)
-    assert.ok(ids(report.findings).includes("manifest.invalid"))
-  })
-
-  test("no host was run is a warning, and the rest still passes", async () => {
-    const report = await runConformance(plugin({ recorded: fixture() }), { hosts: [] })
+  test("hosts: [] skips T1 with a warning", async () => {
+    const report = await runConformance(fixtureDirectory, { hosts: [] })
     assert.equal(report.ok, true)
     assert.ok(ids(report.findings).includes("T1.unchecked"))
   })
 })
 
-describe("the declaration", () => {
-  test("a write verb in a read method's name is refused", async () => {
-    const value = manifest((manifest) => {
-      manifest.methods.create_note = { class: "read", accounts: "optional", operations: ["demo.notes.create"] }
-    })
-    const report = await runConformance(plugin({ value, recorded: fixture() }))
-    assert.ok(ids(report.findings).includes("methods.class"))
-  })
-
-  test("a package name that does not derive from the plugin's name is refused", async () => {
-    const directory = plugin({ recorded: fixture() })
-    const file = join(directory, "package.json")
-    const pkg = JSON.parse(readFileSync(file, "utf8"))
-    pkg.name = "@example/other-plugin"
-    writeFileSync(file, JSON.stringify(pkg))
-    const report = await runConformance(directory)
-    assert.ok(ids(report.findings).includes("names.package"))
-  })
-
-  test("a plan is a read and a commit is not", async () => {
-    const value = manifest((manifest) => {
-      manifest.methods.plan_send = { class: "write", plans: true, accounts: "optional" }
-      manifest.methods.send_message.commits = "plan_send"
-    })
-    const report = await runConformance(plugin({ value, recorded: fixture() }))
-    assert.ok(ids(report.findings).includes("methods.plans"))
-  })
-
-  test("options must default access to all, and their defaults must validate", async () => {
-    const value = manifest((manifest) => {
-      manifest.options.properties.access.default = "ask-changes"
-      manifest.options.properties.region = { type: "string", default: 3 }
-    })
-    const report = await runConformance(plugin({ value, recorded: fixture() }))
-    assert.ok(ids(report.findings).includes("options.access-default"))
-    assert.ok(ids(report.findings).includes("options.defaults"))
-  })
-})
-
 describe("T0", () => {
-  test("the namespace line is at most 400 characters", () => {
-    const value = manifest((manifest) => {
-      manifest.plugin.summary = "x".repeat(401)
-    })
-    const findings = staticFindings(plugin({ recorded: fixture() }), value)
-    assert.ok(ids(findings).includes("T0.namespace-length"))
+  test("the fixture is clean", async () => {
+    const found = await t0(fixtureDirectory)
+    if (nodeMajor >= 24) assert.deepEqual(found, [])
+    else assert.deepEqual(errors(found), [])
   })
-
-  test("a skill description over 300 characters is refused", async () => {
-    const directory = plugin({ recorded: fixture(), skillDescription: "x".repeat(301) })
-    assert.ok(ids(await t0(directory)).includes("T0.skill-length"))
+  test("the registered namespace line is the one T0 measures", () => {
+    const { manifest } = fixture()
+    assert.ok(ids(staticFindings(fixtureDirectory, manifest, { namespace: "x".repeat(401) })).includes("T0.namespace-length"))
   })
-
-  test("no skill is a warning", async () => {
-    const findings = await t0(plugin({ recorded: fixture(), skills: false }))
-    assert.deepEqual(errors(findings), [])
-    assert.ok(ids(findings).includes("T0.skills-missing"))
+  test("a skill description over 300 characters, folded over lines, is refused", () => {
+    const directory = copy()
+    const file = join(directory, "skills", "fixture", "SKILL.md")
+    const text = readFileSync(file, "utf8").replace(/description: >[\s\S]*?\n---/, `description: >\n  ${"x".repeat(301)}\n---`)
+    writeFileSync(file, text)
+    assert.ok(ids(staticFindings(directory, fixture().manifest, { namespace: "fixture" })).includes("T0.skill-length"))
   })
-
-  test("a text naming a tool that does not exist is refused", async () => {
-    const directory = plugin({ recorded: fixture(), extraFiles: { "AGENTS.md": "Call `tools.demo.missing_method`." } })
-    assert.ok(ids(await t0(directory)).includes("T0.tools"))
+  test("a text naming an undeclared tool is refused, and a declared mcp: tool is accepted", () => {
+    const directory = copy()
+    writeFileSync(join(directory, "AGENTS.md"), "Call `tools.fixture.missing_method`, then `fixture_list_files`.\n")
+    const found = ids(staticFindings(directory, fixture().manifest, { namespace: "fixture" }))
+    assert.ok(found.includes("T0.tools"))
+    const good = copy()
+    writeFileSync(join(good, "AGENTS.md"), "Call `fixture_list_files`.\n")
+    assert.ok(!ids(staticFindings(good, fixture().manifest, { namespace: "fixture" })).includes("T0.tools"))
   })
-
-  test("a pinned method without evidence is refused, and with evidence it is not", async () => {
-    const value = manifest((manifest) => {
-      manifest.methods.events_list.pinned = true
-    })
-    const without = await t0(plugin({ value, recorded: fixture() }))
-    assert.ok(ids(without).includes("T0.pinned"))
-    const withEvidence = await t0(plugin({ value, recorded: fixture((fixture) => (fixture.pinned = { events_list: "41 of 44 sessions call it" })) }))
-    assert.ok(!ids(withEvidence).includes("T0.pinned"))
+  test("a pinned method without evidence is refused", () => {
+    const directory = copy()
+    const fixtureFile = join(directory, "fixtures", "conformance.json")
+    const value = JSON.parse(readFileSync(fixtureFile, "utf8"))
+    value.pinned = {}
+    writeFileSync(fixtureFile, JSON.stringify(value))
+    assert.ok(ids(staticFindings(directory, fixture().manifest, { namespace: "fixture" })).includes("T0.pinned"))
   })
-
-  test("generated docs are current, and drift is refused", async () => {
-    const current = await t0(plugin({ recorded: fixture(), docs: true }))
-    assert.ok(!ids(current).some((id) => id.startsWith("T0.docs-")))
-    const drifted = await t0(plugin({ recorded: fixture(), extraFiles: { "README.md": "<!-- generated:capabilities -->\nstale\n<!-- /generated:capabilities -->\n" } }))
-    assert.ok(ids(drifted).includes("T0.docs-capabilities"))
-    const unmarked = await t0(plugin({ recorded: fixture(), extraFiles: { "docs/capabilities.md": "# Capabilities\n" } }))
-    assert.ok(ids(unmarked).includes("T0.docs-capabilities"))
-  })
-
-  test("a manifest that does not validate is a T0.manifest finding", async () => {
-    const value = manifest()
-    value.version = 2
-    assert.ok(ids(await t0(plugin({ value, recorded: fixture() }))).includes("T0.manifest"))
+  test("generated docs are current, and drift is refused", () => {
+    const directory = copy()
+    const file = join(directory, "docs", "capabilities.md")
+    writeFileSync(file, "# Capabilities\n\n<!-- generated:capabilities -->\nstale\n<!-- /generated:capabilities -->\n")
+    assert.ok(ids(staticFindings(directory, fixture().manifest, { namespace: "fixture" })).includes("T0.docs-capabilities"))
   })
 })
 
-describe("T1", () => {
-  test("a plugin loads, its doors and permissions hold, and it refuses an unsupported host", async () => {
-    const directory = plugin({ recorded: fixture() })
-    assert.deepEqual(await t1(directory, "2.4.1"), [])
-    assert.deepEqual(await t1(directory, "2.5.0"), [])
+describe("the declaration", () => {
+  test("a write verb in a read method's name is refused, and a riskier class is never downgraded", () => {
+    const { installed } = fixture()
+    const bad = clone(installed.manifest) as any
+    bad.methods.create_note = { class: "read", accounts: "optional" }
+    assert.ok(ids(declarationFindings({ ...installed, manifest: bad })).includes("methods.class"))
+    const riskier = clone(installed.manifest) as any
+    riskier.methods.export_note = { class: "delete", accounts: "optional" }
+    assert.ok(!ids(declarationFindings({ ...installed, manifest: riskier })).includes("methods.class"))
   })
 
-  test("a plugin id that is not the manifest's name is refused", async () => {
-    const findings = await t1(plugin({ recorded: fixture(), entryOptions: { id: "other" } }), "2.4.1")
-    assert.ok(ids(findings).includes("T1.id"))
+  test("a plan must be read, and its commit must name a different method", () => {
+    const { installed } = fixture()
+    const value = clone(installed.manifest) as any
+    value.methods.plan_send.class = "write"
+    const found = ids(declarationFindings({ ...installed, manifest: value }))
+    assert.ok(found.includes("methods.plans") || found.includes("methods.commits"))
   })
 
-  test("a plugin with no permission rules is refused", async () => {
-    const findings = await t1(plugin({ recorded: fixture(), entryOptions: { noRules: true } }), "2.4.1")
-    assert.ok(ids(findings).includes("T1.permissions"))
+  test("wrong defaults for access and allowUntestedHost are errors", () => {
+    const { manifest } = fixture()
+    const value = clone(manifest) as any
+    value.options.properties.access.default = "ask-changes"
+    value.options.properties.allowUntestedHost.default = true
+    const found = optionsFindings(value)
+    assert.ok(ids(found).includes("options.access-default"))
+    assert.ok(ids(found).includes("options.untested-default"))
+    assert.ok(errors(found).length >= 2)
   })
 
-  test("a plugin with no tool namespace is refused", async () => {
-    const findings = await t1(plugin({ recorded: fixture(), entryOptions: { noNamespace: true } }), "2.4.1")
-    assert.ok(ids(findings).includes("T1.doors"))
+  test("a public-suffix or shared urlHost is refused, and so is a *.github.io thumbnail", () => {
+    const { installed, manifest } = fixture()
+    const value = clone(manifest) as any
+    value.sources[0].urlHosts = ["*.github.io", "files.example.com"]
+    assert.ok(ids(declarationFindings({ ...installed, manifest: value })).includes("sources.urlHosts"))
   })
 
-  test("LD-5: a non-read method over RPC without an answered ask is refused", async () => {
-    const good = await t1(plugin({ recorded: fixture() }), "2.4.1")
-    assert.ok(!ids(good).includes("T1.rpc-confirmation"))
-    const bad = await t1(plugin({ recorded: fixture(), entryOptions: { uncheckedRpc: true } }), "2.4.1")
-    assert.ok(ids(bad).includes("T1.rpc-confirmation"))
-  })
-
-  test("a plugin that does not refuse an unsupported host is refused", async () => {
-    const findings = await t1(plugin({ recorded: fixture(), entryOptions: { refuseUntested: false } }), "2.5.0")
-    assert.ok(ids(findings).includes("T1.unsupported-host"))
-  })
-
-  test("a plugin with no server entry does not load", async () => {
-    const findings = await t1(plugin({ recorded: fixture(), entry: false }), "2.4.1")
-    assert.ok(ids(findings).includes("T1.load"))
-  })
-})
-
-describe("accounts", () => {
-  test("one alias is not two-account behaviour", async () => {
-    const report = await runConformance(plugin({ recorded: fixture((fixture) => (fixture.accounts.aliases = ["work"])) }))
-    assert.ok(ids(report.findings).includes("accounts.aliases"))
-  })
-
-  test("the two refusals carry ACCOUNT_REQUIRED and ACCOUNT_UNKNOWN", async () => {
-    const report = await runConformance(
-      plugin({
-        recorded: fixture((fixture) => {
-          fixture.accounts.required.code = "INPUT_INVALID"
-          fixture.accounts.unknown.code = "INPUT_INVALID"
-        }),
-      }),
-    )
-    assert.ok(ids(report.findings).includes("accounts.required"))
-    assert.ok(ids(report.findings).includes("accounts.unknown"))
-  })
-
-  test("a cursor is bound to its account", async () => {
-    const report = await runConformance(plugin({ recorded: fixture((fixture) => (fixture.accounts.cursors = [])) }))
-    assert.ok(ids(report.findings).includes("accounts.cursors"))
-  })
-
-  test("a local plugin has one account", async () => {
-    const value = manifest((manifest) => {
-      manifest.accounts.via = "local"
-    })
-    const report = await runConformance(plugin({ value, recorded: fixture() }))
-    assert.ok(ids(report.findings).includes("accounts.local"))
+  test("the package name derives from the plugin's name", () => {
+    const { installed } = fixture()
+    assert.ok(ids(declarationFindings({ ...installed, package: "@example/other-plugin" })).includes("names.package"))
   })
 })
 
-describe("events and thumbnails", () => {
-  const withThumbnails = (change: (value: any) => void = () => {}) =>
-    manifest((manifest) => {
-      manifest.sources[0].thumbnails = true
-      manifest.sources[0].urlHosts = ["example.test"]
-      change(manifest)
-    })
-
-  test("a thumbnail appears when asked, on a declared host, outside the hash", async () => {
-    const value = withThumbnails()
-    const directory = plugin({
-      value,
-      recorded: fixture((fixture) => {
-        fixture.sources["demo.messages"].cases[0].input.thumbnails = true
-        fixture.sources["demo.messages"].cases[0].answer = page("work", (page) => {
-          page.events[0].thumbnail = "https://example.test/thumb.png"
-        })
-      }),
-    })
-    const report = await runConformance(directory)
-    assert.equal(report.ok, true)
-    assert.ok(!ids(report.findings).includes("pages.thumbnail"))
+describe("recorded sources, accounts, status, actions and grants", () => {
+  test("the fixture's pages, probe, detail and suggest are clean", () => {
+    const { manifest, recorded } = fixture()
+    const source = manifest.sources[0]!
+    assert.ok(source.kind === "events")
+    const entry = recorded.sources["fixture.messages"]
+    assert.deepEqual(eventsFindings({ plugin: "@we-the-rebel-alliance/fixture-plugin", source, recorded: entry }), [])
+    assert.deepEqual(probeFindings(source, entry.probe.answer, "work"), [])
+    const detail = source.details?.[0]
+    assert.ok(detail)
+    assert.deepEqual(detailFindings(source, entry.details, "work"), [])
+    assert.deepEqual(suggestFindings(source, entry.suggest.answer), [])
   })
 
-  test("a thumbnail with a query string is refused", async () => {
-    const report = await runConformance(
-      plugin({
-        value: withThumbnails(),
-        recorded: fixture((fixture) => {
-          fixture.sources["demo.messages"].cases[0].input.thumbnails = true
-          fixture.sources["demo.messages"].cases[0].answer = page("work", (page) => {
-            page.events[0].thumbnail = "https://example.test/thumb.png?token=1"
-          })
-        }),
-      }),
-    )
-    assert.ok(ids(report.findings).includes("pages.shape"))
+  test("a thumbnail on a public suffix, or asked for by a source that did not declare it, is refused", () => {
+    const { manifest, recorded } = fixture()
+    const source = manifest.sources[0]!
+    if (source.kind !== "events") throw new Error("fixture")
+    const entry = clone(recorded.sources["fixture.messages"])
+    entry.cases[0].answer.events[0].thumbnail = "https://user.github.io/thumb.png"
+    const unsafe = clone(manifest) as any
+    unsafe.sources[0].urlHosts = ["*.github.io"]
+    assert.ok(ids(eventsFindings({ plugin: "@we-the-rebel-alliance/fixture-plugin", source: unsafe.sources[0], recorded: entry })).includes("pages.thumbnail"))
+    const undeclared = clone(manifest) as any
+    delete undeclared.sources[0].thumbnails
+    const found = eventsFindings({ plugin: "@we-the-rebel-alliance/fixture-plugin", source: undeclared.sources[0], recorded: entry })
+    assert.ok(ids(found).includes("pages.thumbnail"))
   })
 
-  test("a thumbnail on a source that does not declare thumbnails is refused", async () => {
-    const report = await runConformance(
-      plugin({
-        recorded: fixture((fixture) => {
-          fixture.sources["demo.messages"].cases[0].answer = page("work", (page) => {
-            page.events[0].thumbnail = "https://example.test/thumb.png"
-          })
-        }),
-      }),
-    )
-    assert.ok(ids(report.findings).includes("pages.thumbnail") || ids(report.findings).includes("pages.shape"))
+  test("a failed entry holds the cursor, and a secret is refused", () => {
+    const { manifest, recorded } = fixture()
+    const source = manifest.sources[0]!
+    if (source.kind !== "events") throw new Error("fixture")
+    const failed = clone(recorded.sources["fixture.messages"])
+    failed.cases[0].answer.failed = [{ external_id: "m-missing", code: "RATE_LIMITED" }]
+    failed.cases[0].answer.cursor = "other"
+    assert.ok(ids(eventsFindings({ plugin: "@we-the-rebel-alliance/fixture-plugin", source, recorded: failed })).includes("pages.cursor"))
+    const secret = clone(recorded.sources["fixture.messages"])
+    secret.cases[0].answer.events[0].text = "token ghp_0123456789abcdefghijklmnopqrstuvwxyz"
+    assert.ok(ids(eventsFindings({ plugin: "@we-the-rebel-alliance/fixture-plugin", source, recorded: secret })).includes("pages.secrets") || ids(eventsFindings({ plugin: "@we-the-rebel-alliance/fixture-plugin", source, recorded: secret })).includes("pages.shape"))
   })
 
-  test("a failed entry holds the cursor back", async () => {
-    const report = await runConformance(
-      plugin({
-        recorded: fixture((fixture) => {
-          fixture.sources["demo.messages"].cases[0].answer = page("work", (page) => {
-            page.failed = [{ external_id: "m-missing", code: "RATE_LIMITED" }]
-            page.cursor = "another"
-          })
-        }),
-      }),
-    )
-    assert.ok(ids(report.findings).includes("pages.cursor"))
+  test("one alias, the wrong refusal codes, and no cursor are refused", () => {
+    const { manifest, recorded } = fixture()
+    const one = clone(recorded.accounts)
+    one.aliases = ["work"]
+    assert.ok(ids(accountFindings(manifest, one)).includes("accounts.aliases"))
+    const wrong = clone(recorded.accounts)
+    wrong.required.code = "INPUT_INVALID"
+    wrong.unknown.code = "INPUT_INVALID"
+    wrong.cursors = []
+    const found = ids(accountFindings(manifest, wrong))
+    assert.ok(found.includes("accounts.required"))
+    assert.ok(found.includes("accounts.unknown"))
+    assert.ok(found.includes("accounts.cursors"))
   })
 
-  test("a secret in an event is refused", async () => {
-    const report = await runConformance(
-      plugin({
-        recorded: fixture((fixture) => {
-          fixture.sources["demo.messages"].cases[0].answer = page("work", (page) => {
-            const { hash, ...rest } = page.events[0]
-            page.events[0] = { ...rest, text: "token ghp_0123456789abcdefghijklmnopqrstuvwxyz", hash }
-          })
-        }),
-      }),
-    )
-    assert.ok(ids(report.findings).includes("pages.secrets") || ids(report.findings).includes("pages.shape"))
-  })
-})
-
-describe("grants and the RPC door", () => {
-  const withAction = () =>
-    manifest((manifest) => {
-      manifest.methods.plan_send = { class: "read", plans: true, accounts: "optional" }
-      manifest.methods.send_message.commits = "plan_send"
-      manifest.actions = [
-        { id: "demo.messages.send", effect: "notify", preview: "plan_send", commit: "send_message", input: { type: "object" }, output: { type: "object" } },
-        { id: "demo.mail.send", effect: "notify", preview: "plan_send", commit: "send_message", input: { type: "object" }, output: { type: "object" } },
-      ]
-    })
-
-  test("recorded grants verify, including #40's four refusals", async () => {
-    const names = ["valid", "wrong-aud", "replayed", "expired", "digest-mismatch"]
-    const cases = names.map((name) => JSON.parse(readFileSync(join(here, "fixtures", "grant", `${name}.json`), "utf8")))
-    const publicKey = readFileSync(join(here, "fixtures", "grant", "public-key.pem"), "utf8")
-    const recorded = fixture((fixture) => {
-      fixture.grants = { publicKey, cases: cases.map((entry) => ({ name: entry.name, token: entry.token, input: entry.input, request: entry.request, store: entry.store, expect: entry.expect })) }
-    })
-    const report = await runConformance(plugin({ value: withAction(), recorded }))
-    assert.deepEqual(report.findings.filter((finding) => finding.id.startsWith("grants")), [])
+  test("events, status and actions are declared and recorded", () => {
+    const { manifest, recorded } = fixture()
+    const missing = clone(recorded.events)
+    missing.emitted = ["changed"]
+    assert.ok(ids(busFindings(manifest, missing)).includes("events.emitted"))
+    const status = clone(recorded.events.status)
+    status.name = "other"
+    status.accounts = []
+    assert.ok(ids(statusFindings(manifest, "1.0.0", status, ["work", "personal"])).includes("status.name"))
+    const action = clone(recorded.actions)
+    action[0].preview = undefined
+    assert.ok(ids(actionFindings(manifest, action)).includes("actions.recorded"))
   })
 
-  test("a missing negative case is a finding", async () => {
-    const cases = ["valid"].map((name) => JSON.parse(readFileSync(join(here, "fixtures", "grant", `${name}.json`), "utf8")))
-    const publicKey = readFileSync(join(here, "fixtures", "grant", "public-key.pem"), "utf8")
-    const recorded = fixture((fixture) => {
-      fixture.grants = { publicKey, cases: cases.map((entry) => ({ name: entry.name, token: entry.token, input: entry.input, request: entry.request, store: entry.store, expect: entry.expect })) }
-    })
-    const report = await runConformance(plugin({ value: withAction(), recorded }))
-    assert.ok(ids(report.findings).includes("grants.cases"))
+  test("the grant recording verifies, and a missing negative case is refused", async () => {
+    const { manifest, recorded } = fixture()
+    assert.deepEqual(await grantFindings(manifest, recorded.grants), [])
+    const missing = clone(recorded.grants)
+    missing.cases = missing.cases.filter((entry: { name: string }) => entry.name !== "replayed")
+    assert.ok(ids(await grantFindings(manifest, missing)).includes("grants.cases"))
   })
 
-  test("LD-5 recorded: a non-read RPC call with the ask denied is refused", async () => {
-    const report = await runConformance(
-      plugin({
-        recorded: fixture((fixture) => {
-          fixture.rpc = { calls: [{ method: "send_message", ask: "denied", expect: { code: "UNAVAILABLE" } }] }
-        }),
-      }),
-    )
-    assert.ok(ids(report.findings).includes("rpc.confirmation"))
-  })
-})
-
-describe("the manifest a report is keyed on", () => {
-  test("a manifest read from disk hashes canonically, and the report uses that package", () => {
-    const directory = plugin({ recorded: fixture() })
-    const installed = readInstalledManifest(directory)
-    assert.ok(installed.ok)
-    const value = manifest()
-    assert.equal(installed.value.hash, manifestHash(value))
-    assert.equal(installed.value.package, "@we-the-rebel-alliance/demo-plugin")
+  test("a recorded non-read RPC refusal carries PERMISSION_DENIED", () => {
+    const { manifest } = fixture()
+    const found = rpcConfirmationFindings(manifest, { calls: [{ method: "write_note", ask: "denied", expect: { code: "UNAVAILABLE" } }] })
+    assert.ok(ids(found).includes("rpc.confirmation"))
   })
 })

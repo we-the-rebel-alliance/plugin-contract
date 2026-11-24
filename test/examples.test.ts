@@ -8,6 +8,8 @@ import { readInstalledManifest } from "../src/manifest.ts"
 import { acceptAnswer } from "../src/read.ts"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
+const nodeMajor = Number(process.versions.node.split(".")[0])
+const skipHost = nodeMajor < 24 ? "the embedded host needs Node 24" : false
 const examples = readdirSync(join(root, "examples"))
   .filter((name) => existsSync(join(root, "examples", name, "package.json")))
   .sort()
@@ -36,7 +38,7 @@ describe("the examples", () => {
     }
   })
 
-  test("the manifest and the kit accept every example", async () => {
+  test("the manifest and the kit accept every example", { timeout: 60_000 }, async () => {
     for (const name of examples) {
       const report = await runConformance(join(root, "examples", name))
       assert.deepEqual(report.findings, [], `${name}: ${report.findings.map((finding) => `${finding.id}: ${finding.message}`).join("\n")}`)
@@ -44,7 +46,7 @@ describe("the examples", () => {
     }
   })
 
-  test("T0 is clean, and T1 loads each plugin on 2.4.1 and refuses 2.5.0 cleanly", async () => {
+  test("T0 is clean, and T1 loads each plugin on 2.4.1 and refuses 2.5.0 cleanly", { skip: skipHost, timeout: 60_000 }, async () => {
     for (const name of examples) {
       const directory = join(root, "examples", name)
       assert.deepEqual(await t0(directory), [], name)

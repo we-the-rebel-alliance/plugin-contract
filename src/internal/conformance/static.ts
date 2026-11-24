@@ -45,13 +45,25 @@ function field(text: string, key: string): string | undefined {
   const at = lines.findIndex((line) => new RegExp(`^${key}\\s*:`).test(line))
   if (at < 0) return undefined
   const first = (lines[at] ?? "").replace(new RegExp(`^${key}\\s*:\\s*`), "").trim()
-  if (first !== "" && !["|", ">", "|-", ">-", "|+", ">+"].includes(first)) return unquote(first)
+  const block = ["|", ">", "|-", ">-", "|+", ">+"]
+  if (first !== "" && !block.includes(first)) {
+    // A plain scalar may continue on the following indented lines; YAML folds those into spaces.
+    const parts = [unquote(first)]
+    for (const line of lines.slice(at + 1)) {
+      if (line.trim() === "") continue
+      if (!/^\s/.test(line)) break
+      parts.push(line.trim())
+    }
+    return parts.join(" ")
+  }
   const body: string[] = []
   for (const line of lines.slice(at + 1)) {
     if (line.trim() !== "" && !/^\s/.test(line)) break
     body.push(line.replace(/^\s{2}/, ""))
   }
-  return unquote(body.join("\n").trim())
+  const folded = first.startsWith(">")
+  const joined = folded ? body.map((line) => line.trim()).filter((line) => line !== "").join(" ") : body.join("\n").trim()
+  return unquote(joined)
 }
 
 function unquote(value: string): string {
@@ -110,7 +122,7 @@ function namedTools(text: string, plugin: string, underscored: boolean): string[
   const dotted = new RegExp(`tools\\.${plugin}\\.([a-z][a-z0-9_]*)`, "g")
   for (const match of text.matchAll(dotted)) named.push(match[1] ?? "")
   if (underscored) {
-    const bare = new RegExp(`\\b${plugin}_([a-z][a-z0-9_]*)\\b`, "g")
+    const bare = new RegExp(`\\b${plugin}(?:-[a-z0-9]+)?_([a-z][a-z0-9_]*)`, "g")
     for (const match of text.matchAll(bare)) named.push(match[1] ?? "")
   }
   return named
@@ -127,20 +139,22 @@ function pinnedEvidence(directory: string): Record<string, unknown> {
 }
 
 /** T0: every static gate, one finding each. */
-export function staticFindings(directory: string, manifest: Manifest): Finding[] {
+export function staticFindings(directory: string, manifest: Manifest, options: { readonly namespace?: string | undefined; readonly record?: boolean | undefined } = {}): Finding[] {
   const findings: Finding[] = []
   const name = manifest.plugin.name
-  const line = manifest.plugin.summary
-  if (line.length > NAMESPACE_LINE_MAX) {
-    findings.push(
-      error("T0.namespace-length", `the namespace line is ${line.length} characters, over the ${NAMESPACE_LINE_MAX}-character budget`, {
-        path: "capabilities.plugin.summary",
-        fix: `Cut the summary to ${NAMESPACE_LINE_MAX} characters or fewer.`,
-      }),
-    )
-  }
-  if (/[\r\n]/.test(line)) {
-    findings.push(error("T0.namespace-length", "the namespace line is more than one line", { path: "capabilities.plugin.summary", fix: "Write the summary as one sentence on one line." }))
+  const line = options.namespace
+  if (line !== undefined) {
+    if (line.length > NAMESPACE_LINE_MAX) {
+      findings.push(
+        error("T0.namespace-length", `the registered namespace line is ${line.length} characters, over the ${NAMESPACE_LINE_MAX}-character budget`, {
+          path: "src/index.ts",
+          fix: `Cut the namespace description to ${NAMESPACE_LINE_MAX} characters or fewer.`,
+        }),
+      )
+    }
+    if (/[\r\n]/.test(line)) findings.push(error("T0.namespace-length", "the registered namespace line is more than one line", { path: "src/index.ts", fix: "Write the namespace description as one line." }))
+  } else {
+    findings.push(warning("T0.namespace-unmeasured", "the registered namespace line was not measured, because no real host run happened", { fix: "Run T1 on Node 24, or run plugin-kit check, which measures it from the host." }))
   }
 
   const skills = skillsOf(directory)
@@ -166,11 +180,14 @@ export function staticFindings(directory: string, manifest: Manifest): Finding[]
   }
 
   const declared = new Set(Object.keys(manifest.methods).filter((method) => !method.startsWith("mcp:")))
+  const mcpWildcard = Object.hasOwn(manifest.methods, "mcp:*")
+  const mcpTools = new Set(Object.keys(manifest.methods).filter((method) => method.startsWith("mcp:") && method !== "mcp:*").map((method) => method.slice("mcp:".length)))
+  const known = (method: string): boolean => declared.has(method) || mcpTools.has(method) || mcpWildcard
   const seen = new Set<string>()
   for (const file of proseFiles(directory)) {
     const text = readFileSync(join(directory, file), "utf8")
     for (const method of namedTools(text, name, file.startsWith("skills/"))) {
-      if (declared.has(method)) continue
+      if (known(method)) continue
       if (seen.has(`${file}\u0000${method}`)) continue
       seen.add(`${file}\u0000${method}`)
       findings.push(
@@ -181,9 +198,9 @@ export function staticFindings(directory: string, manifest: Manifest): Finding[]
       )
     }
   }
-  for (const method of namedTools(line, name, false)) {
-    if (declared.has(method)) continue
-    findings.push(error("T0.tools", `the namespace line names the tool ${name}_${method}, which capabilities.methods does not declare`, { path: "capabilities.plugin.summary" }))
+  for (const method of line === undefined ? [] : namedTools(line, name, false)) {
+    if (known(method)) continue
+    findings.push(error("T0.tools", `the namespace line names the tool ${name}_${method}, which capabilities.methods does not declare`, { path: "src/index.ts" }))
   }
 
   const evidence = pinnedEvidence(directory)
@@ -192,7 +209,7 @@ export function staticFindings(directory: string, manifest: Manifest): Finding[]
     const reason = evidence[method]
     if (typeof reason === "string" && reason.trim() !== "") continue
     findings.push(
-      error("T0.pinned", `${method} is pinned, and nothing declares the session data that shows most sessions call it`, {
+      (options.record === true ? warning : error)("T0.pinned", `${method} is pinned, and nothing declares the session data that shows most sessions call it`, {
         path: "capabilities.methods." + method,
         fix: `Add "pinned": { "${method}": "<the evidence>" } to fixtures/conformance.json, or unpin it.`,
       }),

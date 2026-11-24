@@ -31,14 +31,15 @@ from another across releases. `ok` is false when any finding is an error. A warn
 prove. `record: true` turns a missing recording into a warning while a fixture is being written. `hosts` defaults to the
 manifest's `plugin.host.tested`; the first unsupported release (`2.5.0`) is always run as well, for the clean refusal.
 
-`t0` is static: no model, no network, no host. `t1` loads the plugin on one OpenCode release. `runConformance` runs T0,
-the declaration and its recordings, and T1.
+`t0` is static except for one host reading: the registered namespace line, which only the real host can show, is
+measured from T1 (or from a short host run on Node 24). `t1` loads the plugin on one OpenCode release. `runConformance`
+runs T0, the declaration and its recordings, and T1.
 
 ## T0, the static gate
 
 | Check | Proves |
 |---|---|
-| `T0.namespace-length` | the namespace line (`capabilities.plugin.summary`) is one line of at most 400 characters |
+| `T0.namespace-length` | the namespace text the plugin registers with `ctx.tool.namespace` is one line of at most 400 characters |
 | `T0.skill-length` | every `skills/**/SKILL.md` has a description of at most 300 characters |
 | `T0.skill-name` | every skill is `<name>` or `<name>-<topic>` |
 | `T0.tools` | no text names a tool the manifest does not declare (`tools.<name>.<method>`, and `<name>_<method>` in a skill) |
@@ -55,14 +56,22 @@ is not a T0 finding: the file set belongs to the kit's `docs` and `forbidden` ch
 | `T1.load` | the package's server entry imports and exports `Plugin.define({ id, setup })` |
 | `T1.id` | the plugin's id is `capabilities.plugin.name` |
 | `T1.doors` | every non-MCP method is an agent tool with permission `<name>.<method>` and an RPC method under id `<name>`, and nothing else is registered |
-| `T1.permissions` | the access matrix holds for every agent at `all`, `ask-changes` and `read-only`, with each method's `effect` last |
-| `T1.rpc-confirmation` | a non-`read` method over RPC without an answered ask is refused (LD-5) |
-| `T1.unsupported-host` | a release outside `>=2.4.1 <2.5.0` is refused with `HOST_UNTESTED` and a next step, unless `allowUntestedHost` is true |
+| `T1.permissions` | the access matrix holds for every real primary agent at `all`, `ask-changes` and `read-only`, using the one `effectFor` from `./access` |
+| `T1.codemode` | every tool is exposed to Code Mode, and only a declared pinned method is pinned |
+| `T1.events` | the one RPC registration carries exactly the manifest's bus events |
+| `T1.pinned-budget` | a pinned tool's signature is within about 1,000 tokens |
+| `T1.rpc-confirmation` | a non-`read` method over RPC with an allow rule and no grant is refused (LD-5) |
+| `T1.accounts` | with two aliases, a missing account is `ACCOUNT_REQUIRED`, an unknown one is `ACCOUNT_UNKNOWN`, and a cursor does not cross accounts |
+| `T1.unsupported-host` | a release outside `>=2.4.1 <2.5.0` is refused with `HOST_UNTESTED` and a next step |
 
-T1 imports the built server entry the way OpenCode 2.4.1's loader does (`@opencode/plugin/host` resolves `./server`,
-then `.`, then `main`) and calls `setup` with a recording context for the public `Plugin.Context` surface the contract
-uses: `ctx.tool`, `ctx.rpc`, `ctx.agent`, `ctx.permission`, `ctx.integration`, `ctx.mcp`, `ctx.storage` and the plugin's
-options. It does not need the plugin's dependencies installed beside the kit.
+T1 loads the built server entry through OpenCode's own `Plugin.Host.resolve` (`./server`, then `.`; never `main` or
+`dist/index.js`) and runs it in the embedded `@opencode/sdk` 2.4.1 host: it creates a session, prompts once so the
+plugin instance activates, waits for the plugin list, and records the real `ctx` registrations. It imports no private
+OpenCode code. The host harness lives in `src/internal/host/` and is owned by conformance; `plugin-kit` imports it. It
+handles the six 2.4 behaviours standard §8 lists: activation before the first RPC, the embedded host never running
+automations, no `experimental.schedule`, MCP `server/discover` with 401/403 final, nested Code Mode call ids, and a
+turn's first tool step arriving before the start. A plugin repository carries `@opencode/plugin` and `@opencode/sdk`
+2.4.1 as devDependencies (standard §3); `dist/` still bundles neither.
 
 ## The declaration
 
@@ -73,12 +82,12 @@ and a `delete_*`/`send_*`/`share_*` method whose class disagrees. These findings
 |---|---|
 | `names.package` | the package is `@we-the-rebel-alliance/<name>-plugin` |
 | `methods.class` | a name's prefix and its class agree: a delete, a send, a share, an export, a write, an admin |
-| `methods.plans`, `methods.commits` | a plan is a read, and a commit is not |
+| `methods.plans`, `methods.commits` | a plan is a read, and the method it names as its commit is a read plan too |
 | `sources.method`, `sources.operations` | a source is read by a read, and its operations are among its method's |
 | `sources.details`, `sources.suggest` | a detail and a bind-time read are reads, in the source's namespace, and a suggest's operations stay out of the running grant |
 | `sources.thumbnails` | a source that declares thumbnails declares `urlHosts` (#42) |
 | `actions.preview`, `actions.commit` | a preview is a read, a commit is not, and they are different methods |
-| `options.*` | `access` is the three levels and defaults to `all`; `allowUntestedHost` defaults to false; the defaults satisfy the schema; an account-taking plugin declares `accounts` |
+| `options.*` | `access` is the three levels and defaults to `all`; `allowUntestedHost` defaults to false; a wrong default is an error; an account-taking plugin declares `accounts` |
 
 ## Recorded sources and accounts
 
@@ -86,7 +95,8 @@ and a `delete_*`/`send_*`/`share_*` method whose class disagrees. These findings
 `read.acceptAnswer` (the same call a consumer makes), its source and plugin names, its kinds, its size, its hash
 stability, `failed` holding the cursor, one `gap` per read, final `removals`, refused secrets and a billed source's
 cost. A thumbnail appears only when the read asked for it, is an https URL of at most 2048 characters with no user info,
-query or fragment, is on a host in `urlHosts`, and is outside the event's hash.
+query or fragment, is on a host in `urlHosts`, passes the Public Suffix/shared-host safety check (a `*.github.io`
+thumbnail does not), and is outside the event's hash.
 
 A snapshot validates against its registry output; a probe reads the account and nothing else; a detail read takes only
 the fields its `from` names; a suggest answer lists `{ id, label? }` at most 64 times.
@@ -102,6 +112,9 @@ the fields its `from` names; a suggest answer lists `{ id, label? }` at most 64 
 | `accounts.required`, `accounts.unknown` | `ACCOUNT_REQUIRED` and `ACCOUNT_UNKNOWN` are recorded, on a method that takes an account |
 | `accounts.cursors` | a cursor issued for one account is refused for another |
 
+With `accounts.real: true` in the fixture, T1 runs the same cases against the real host; the fixture plugin below sets
+it, so the account behaviour is proven by execution, not only by a recording.
+
 ## Events, status, actions, grants
 
 | Check | Proves |
@@ -115,7 +128,8 @@ the fields its `from` names; a suggest answer lists `{ id, label? }` at most 64 
 
 The grant check calls the `grant` module over the plugin's recorded host public key and compact tokens; it never carries
 a private key. A non-local action without a recorded grant is a finding. T1 is the live half of the same rule: it calls
-each non-read RPC handler with the ask denied.
+each non-read method over RPC with a session whose rules allow it and no grant, and requires `PERMISSION_DENIED`; a
+plugin whose rules permit the call fails conformance.
 
 ## The fixture
 
@@ -126,9 +140,10 @@ needs one says so:
 {
   "plugin": "@we-the-rebel-alliance/acme-plugin",
   "accounts": {
+    "real": true,
     "aliases": ["work", "personal"],
     "required": { "method": "events_list", "code": "ACCOUNT_REQUIRED" },
-    "unknown": { "method": "events_list", "account": "nobody_here", "code": "ACCOUNT_UNKNOWN" },
+    "unknown": { "method": "events_list", "account": "nobodyhere", "code": "ACCOUNT_UNKNOWN" },
     "cursors": [{ "method": "events_list", "account": "work", "other": "personal", "code": "CURSOR_INVALID" }]
   },
   "sources": {
@@ -153,8 +168,10 @@ needs one says so:
 ```
 
 `plugin-kit record` writes and redacts the file; `record: true` lets a plugin run the kit while it is still being
-written. `examples/*/fixtures/conformance.json` are complete recordings, and `npm run conformance:self-test` runs the
-kit over every example from `dist/` as it ships.
+written. `test/fixtures/fixture-plugin/` is the kit's own real plugin: it has write, send and delete methods, a plan and
+its commit, a grant action, an events source with thumbnails, a detail, a suggest read and a pinned tool, and the
+conformance tests run every hard check against it, positive and negative. `examples/*/fixtures/conformance.json` are
+complete recordings, and `npm run conformance:self-test` runs the kit over every example from `dist/` as it ships.
 
 ## Generated docs
 

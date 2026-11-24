@@ -26,7 +26,7 @@ import { actionFindings } from "./internal/conformance/actions.ts"
 import { declarationFindings, optionsFindings } from "./internal/conformance/declaration.ts"
 import { readFixture } from "./internal/conformance/fixture.ts"
 import { grantFindings, rpcConfirmationFindings } from "./internal/conformance/grants.ts"
-import { hostFindings, UNSUPPORTED_HOST } from "./internal/conformance/host.ts"
+import { hostFindings, inspectHost, namespaceOf, UNSUPPORTED_HOST } from "./internal/conformance/host.ts"
 import { error, isOk, warning, type ConformanceReport, type Finding } from "./internal/conformance/report.ts"
 import { staticFindings } from "./internal/conformance/static.ts"
 import { busFindings, statusFindings } from "./internal/conformance/status.ts"
@@ -51,7 +51,8 @@ export async function t0(pluginDir: string): Promise<Finding[]> {
   const directory = resolve(pluginDir)
   const installed = readInstalledManifest(directory)
   if (!installed.ok) return installed.problems.map((problem) => error("T0.manifest", problem, { path: "package.json", fix: "Fix capabilities in package.json, then run T0 again." }))
-  return staticFindings(directory, installed.value.manifest)
+  const namespace = await namespaceOf(directory, installed.value.manifest)
+  return staticFindings(directory, installed.value.manifest, { ...(namespace === undefined ? {} : { namespace }) })
 }
 
 /**
@@ -63,7 +64,12 @@ export async function t1(pluginDir: string, host: string): Promise<Finding[]> {
   const directory = resolve(pluginDir)
   const installed = readInstalledManifest(directory)
   if (!installed.ok) return installed.problems.map((problem) => error("T1.manifest", problem, { path: "package.json", fix: "Fix capabilities in package.json, then run T1 again." }))
-  return hostFindings(directory, installed.value.manifest, host)
+  const read = readFixture(directory).fixture
+  return hostFindings(directory, installed.value.manifest, host, {
+    ...(read?.accounts?.aliases === undefined ? {} : { accounts: read.accounts.aliases }),
+    ...(read?.accounts?.real === true ? { realAccounts: true } : {}),
+    ...(read?.rpc?.inputs === undefined ? {} : { inputs: read.rpc.inputs }),
+  })
 }
 
 /**
@@ -81,7 +87,6 @@ export async function runConformance(pluginDir: string, options: ConformanceOpti
   const findings: Finding[] = []
   const record = options.record === true
 
-  findings.push(...staticFindings(directory, manifest))
   findings.push(...declarationFindings(installed.value))
   findings.push(...optionsFindings(manifest))
 
@@ -163,8 +168,18 @@ export async function runConformance(pluginDir: string, options: ConformanceOpti
   if (hosts.length === 0) {
     findings.push(warning("T1.unchecked", "no host was run, so the doors, permissions and LD-5 were not proven", { fix: "Pass hosts: [\"2.4.1\"], or run plugin-kit hosts." }))
   }
-  for (const host of hosts) findings.push(...(await hostFindings(directory, manifest, host)))
-  if (!hosts.includes(UNSUPPORTED_HOST)) findings.push(...(await hostFindings(directory, manifest, UNSUPPORTED_HOST)))
+  let namespace: string | undefined
+  for (const host of hosts) {
+    const inspection = await inspectHost(directory, manifest, host, {
+      ...(aliases.length === 0 ? {} : { accounts: aliases }),
+      ...(fixture?.accounts?.real === true ? { realAccounts: true } : {}),
+      ...(fixture?.rpc?.inputs === undefined ? {} : { inputs: fixture.rpc.inputs }),
+    })
+    findings.push(...inspection.findings)
+    if (namespace === undefined && inspection.run?.namespace !== undefined) namespace = inspection.run.namespace.description
+  }
+  if (hosts.length > 0 && !hosts.includes(UNSUPPORTED_HOST)) findings.push(...(await hostFindings(directory, manifest, UNSUPPORTED_HOST, aliases.length === 0 ? {} : { accounts: aliases })))
+  findings.unshift(...staticFindings(directory, manifest, { ...(namespace === undefined ? {} : { namespace }), record }))
 
   return { ok: isOk(findings), findings }
 }

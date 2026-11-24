@@ -7,12 +7,14 @@
  * contract's codes, and that the manifest agrees with it.
  */
 import { aliasProblem, isAlias } from "../../accounts.ts"
-import { accountName } from "../../accounts/names.ts"
+import { serverOf } from "../../access.ts"
 import { methodAccounts, type Manifest } from "../../manifest.ts"
 import { error, warning, type Finding } from "./report.ts"
 
 /** What a plugin records about its accounts. */
 export interface RecordedAccounts {
+  /** Run the two-account cases against the real host in T1, not only against the recording. */
+  readonly real?: boolean | undefined
   readonly aliases?: readonly string[] | undefined
   readonly required?: { readonly method?: unknown; readonly code?: unknown } | undefined
   readonly unknown?: { readonly method?: unknown; readonly account?: unknown; readonly code?: unknown } | undefined
@@ -62,11 +64,8 @@ export function accountFindings(manifest: Manifest, recorded: RecordedAccounts |
     seen.add(alias)
     // The integration or MCP server a person signs in to: the derivation must accept the alias, which it does only for
     // a valid one. This also proves the plugin's names come from its one name.
-    try {
-      accountName(name, alias)
-    } catch (cause) {
-      findings.push(error("accounts.names", `${alias} derives no integration or MCP server name: ${cause instanceof Error ? cause.message : String(cause)}`, { path: "fixtures/conformance.json" }))
-    }
+    const server = serverOf(name, alias, aliases)
+    if (!server.ok) findings.push(error("accounts.names", `${alias} derives no integration or MCP server name: ${server.problems.join("; ")}`, { path: "fixtures/conformance.json" }))
   }
   if (manifest.accounts.via === "local" && aliases.length > 1) {
     findings.push(error("accounts.local", `${name} holds accounts as the machine's identity, and the fixture records ${aliases.length} aliases: a local plugin has one account`, { path: "capabilities.accounts.via" }))

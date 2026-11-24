@@ -6,6 +6,7 @@
 // stand in for them until those modules land, and follow the same public host API: `ctx.tool.transform`,
 // `ctx.rpc.register`, `ctx.agent.transform`, `ctx.permission.assert` and `ctx.app.version`.
 import { readFileSync } from "node:fs"
+import { effectFor, withRules } from "../../dist/access.js"
 
 const RANGE = ">=2.4.1 <2.5.0"
 
@@ -13,18 +14,6 @@ function inRange(version) {
   const match = /^(\d+)\.(\d+)\.(\d+)/.exec(String(version))
   if (match === null) return false
   return Number(match[1]) === 2 && Number(match[2]) === 4 && Number(match[3]) >= 1
-}
-
-/** What §6's access table gives a method at one level, with the method's own effect last. */
-function accessEffect(level, item) {
-  if (level === "all") return "allow"
-  if (item.effect === "deny") return "deny"
-  if (level === "read-only") {
-    if (item.effect === "ask") return "ask"
-    return item.class === "read" ? "allow" : "deny"
-  }
-  if (item.effect !== undefined) return item.effect
-  return item.class === "read" ? "allow" : "ask"
 }
 
 /** The example's manifest, from the package it sits in. */
@@ -48,11 +37,15 @@ export function defineExamplePlugin(name) {
         tool.namespace({ name: plugin, description: manifest.plugin.summary })
         for (const [method, item] of methods) {
           tool.add({
-            id: `${plugin}_${method}`,
-            namespace: plugin,
-            permission: `${plugin}.${method}`,
+            name: method,
             description: `The ${plugin} plugin's ${method} method.`,
-            ...(item.pinned === true ? { codemode: { pinned: true } } : { codemode: true }),
+            input: { type: "object", additionalProperties: true },
+            output: { type: "object", additionalProperties: true },
+            options: {
+              namespace: plugin,
+              permission: `${plugin}.${method}`,
+              codemode: item.pinned === true ? { pinned: true } : true,
+            },
             execute: async () => ({ output: `the ${plugin} example's ${method}` }),
           })
         }
@@ -82,11 +75,13 @@ export function defineExamplePlugin(name) {
       context.agent.transform((agents) => {
         for (const agent of agents.list()) {
           agents.update(agent.id, (info) => {
-            info.permissions.push({ action: `${plugin}.*`, resource: "*", effect: "allow" })
+            // Insert after the agent's base allow, as contract.access does, so a later host rule still narrows.
+            const additions = [{ action: `${plugin}.*`, resource: "*", effect: "allow" }]
             for (const [method, item] of methods) {
-              const effect = accessEffect(context.options?.access ?? "all", item)
-              if (effect !== "allow") info.permissions.push({ action: `${plugin}.${method}`, resource: "*", effect })
+              const effect = effectFor(item, context.options?.access ?? "all")
+              if (effect !== "allow") additions.push({ action: `${plugin}.${method}`, resource: "*", effect })
             }
+            info.permissions = withRules(info.permissions, additions)
           })
         }
       })

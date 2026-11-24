@@ -1,0 +1,413 @@
+{
+  "plugin": "@we-the-rebel-alliance/fixture-plugin",
+  "accounts": {
+    "real": true,
+    "aliases": [
+      "work",
+      "personal"
+    ],
+    "required": {
+      "method": "events_list",
+      "code": "ACCOUNT_REQUIRED"
+    },
+    "unknown": {
+      "method": "events_list",
+      "account": "nobodyhere",
+      "code": "ACCOUNT_UNKNOWN"
+    },
+    "cursors": [
+      {
+        "method": "events_list",
+        "account": "work",
+        "other": "personal",
+        "code": "CURSOR_INVALID"
+      }
+    ]
+  },
+  "sources": {
+    "fixture.messages": {
+      "cases": [
+        {
+          "name": "a work page with thumbnails",
+          "input": {
+            "source": "messages",
+            "account": "work",
+            "thumbnails": true
+          },
+          "expect": "page",
+          "answer": {
+            "source": "messages",
+            "account": "work",
+            "owner": {
+              "id": "mailto:work@example.test",
+              "label": "Work"
+            },
+            "events": [
+              {
+                "source": "messages",
+                "account": "work",
+                "external_id": "m-work",
+                "kind": "message",
+                "occurred_at": "2026-11-01T09:00:00.000Z",
+                "thread": null,
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "mailto:work@example.test",
+                    "name": "Work"
+                  }
+                ],
+                "title": "A fixture message",
+                "text": "The fixture plugin's own text.",
+                "url": "https://files.example.com/messages/1",
+                "labels": [
+                  "inbox"
+                ],
+                "thumbnail": "https://files.example.com/thumbs/1.png",
+                "hash": "sha256:9dbb09110153c1bcdc45a57d9b6eb8c2bb8bf7d0f2fb6f404281420e4e4c274a"
+              }
+            ],
+            "cursor": "eyJhY2NvdW50Ijoid29yayIsInNvdXJjZSI6Im1lc3NhZ2VzIn0",
+            "more": false,
+            "trust": "untrusted",
+            "asOf": "2026-11-13T09:00:00.000Z"
+          }
+        },
+        {
+          "name": "a personal page with thumbnails",
+          "input": {
+            "source": "messages",
+            "account": "personal",
+            "thumbnails": true
+          },
+          "expect": "page",
+          "answer": {
+            "source": "messages",
+            "account": "personal",
+            "owner": {
+              "id": "mailto:personal@example.test",
+              "label": "Personal"
+            },
+            "events": [
+              {
+                "source": "messages",
+                "account": "personal",
+                "external_id": "m-personal",
+                "kind": "message",
+                "occurred_at": "2026-11-01T09:00:00.000Z",
+                "thread": null,
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "mailto:personal@example.test",
+                    "name": "Personal"
+                  }
+                ],
+                "title": "A fixture message",
+                "text": "The fixture plugin's own text.",
+                "url": "https://files.example.com/messages/1",
+                "labels": [
+                  "inbox"
+                ],
+                "thumbnail": "https://files.example.com/thumbs/1.png",
+                "hash": "sha256:bdaa973208e0752bbf3c99e3f47065b5e1eb45abe6a8c142f58a973eea11bb0c"
+              }
+            ],
+            "cursor": "eyJhY2NvdW50IjoicGVyc29uYWwiLCJzb3VyY2UiOiJtZXNzYWdlcyJ9",
+            "more": false,
+            "trust": "untrusted",
+            "asOf": "2026-11-13T09:00:00.000Z"
+          }
+        }
+      ],
+      "probe": {
+        "answer": {
+          "source": "messages",
+          "account": "work",
+          "owner": {
+            "id": "mailto:work@example.test",
+            "label": "Work"
+          },
+          "trust": "untrusted"
+        }
+      },
+      "details": [
+        {
+          "id": "fixture.messages.message",
+          "event": {
+            "external_id": "m-work"
+          },
+          "answer": {
+            "source": "messages",
+            "account": "work",
+            "owner": {
+              "id": "mailto:work@example.test",
+              "label": "Work"
+            },
+            "events": [
+              {
+                "source": "messages",
+                "account": "work",
+                "external_id": "m-work",
+                "kind": "message",
+                "occurred_at": "2026-11-01T09:00:00.000Z",
+                "thread": null,
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "mailto:work@example.test",
+                    "name": "Work"
+                  }
+                ],
+                "title": "A fixture message",
+                "text": "The fixture plugin's own text.",
+                "url": "https://files.example.com/messages/1",
+                "labels": [
+                  "inbox"
+                ],
+                "hash": "sha256:9dbb09110153c1bcdc45a57d9b6eb8c2bb8bf7d0f2fb6f404281420e4e4c274a"
+              }
+            ],
+            "cursor": "eyJhY2NvdW50Ijoid29yayIsInNvdXJjZSI6Im1lc3NhZ2VzIn0",
+            "more": false,
+            "trust": "untrusted",
+            "asOf": "2026-11-13T09:00:00.000Z"
+          }
+        }
+      ],
+      "suggest": {
+        "answer": {
+          "options": [
+            {
+              "id": "C1",
+              "label": "general"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "events": {
+    "emitted": [
+      "changed",
+      "status",
+      "account"
+    ],
+    "status": {
+      "name": "fixture",
+      "version": "1.0.0",
+      "host": {
+        "version": "2.4.1",
+        "range": ">=2.4.1 <2.5.0",
+        "tested": [
+          "2.4.1"
+        ]
+      },
+      "state": "ready",
+      "accounts": [
+        {
+          "alias": "work",
+          "state": "ready",
+          "owner": {
+            "id": "mailto:work@example.test",
+            "label": "Work"
+          }
+        },
+        {
+          "alias": "personal",
+          "state": "ready",
+          "owner": {
+            "id": "mailto:personal@example.test",
+            "label": "Personal"
+          }
+        }
+      ],
+      "unguardedAgents": [],
+      "nextStep": null
+    }
+  },
+  "actions": [
+    {
+      "id": "fixture.messages.send",
+      "preview": {
+        "answer": {
+          "output": {},
+          "trust": "untrusted"
+        }
+      },
+      "commit": {
+        "answer": {
+          "ok": true
+        }
+      }
+    }
+  ],
+  "grants": {
+    "publicKey": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA1UgtTlzPkA2+PD3AE6csB4/dglVrf/hqmmsevmkxGsA=\n-----END PUBLIC KEY-----\n",
+    "cases": [
+      {
+        "name": "valid",
+        "token": "eyJhbGciOiJFZDI1NTE5Iiwia2lkIjoiaG9zdF8yMDI2XzExIiwidHlwIjoicGx1Z2luLWNvbnRyYWN0LWFjdCtqd3QifQ.eyJhdWQiOiJAd2UtdGhlLXJlYmVsLWFsbGlhbmNlL2ZpeHR1cmUtcGx1Z2luIiwiY29uc3VtZXIiOiJjb25zdW1lcjpmaXh0dXJlIiwiY2FwYWJpbGl0eSI6ImZpeHR1cmUuc2VuZF9tZXNzYWdlIiwiYWNjb3VudCI6IndvcmsiLCJzY29wZSI6e30sImFjdCI6ImZpeHR1cmUubWVzc2FnZXMuc2VuZCIsImRpZ2VzdCI6InNoYTI1Njo4NzAwMmJmYTc3MDk1NWZjN2JmYzA5ZmRhZTA3OTRlMzhjODZhZTZkODEyZGQ4OWEwYTM1NzVjN2I5NjgwNjgyIiwibWFuaWZlc3QiOiJzaGEyNTY6YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsImlhdCI6MTc5OTk5OTk5NSwiZXhwIjoxODAwMDAwMDU1LCJqdGkiOiJmaXh0dXJlX3ZhbGlkXzEiLCJjZm0iOnRydWV9.2wBa3bHHNIeWMJL67lIftEaz3dwZq21evY7PBWoU7o17byJg1h9-F11RGbbPSzhzk3F9XDZE1hedrc_-mnlHAg",
+        "input": {
+          "to": "person@example.test",
+          "body": "hello"
+        },
+        "request": {
+          "act": "fixture.messages.send",
+          "actions": {
+            "fixture.messages.send": "required"
+          },
+          "audience": "@we-the-rebel-alliance/fixture-plugin",
+          "consumer": "consumer:fixture",
+          "capability": "fixture.send_message",
+          "account": "work",
+          "scope": {},
+          "manifest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "now": 1800000000
+        },
+        "store": {
+          "used": []
+        },
+        "expect": {
+          "ok": true
+        }
+      },
+      {
+        "name": "wrong-aud",
+        "token": "eyJhbGciOiJFZDI1NTE5Iiwia2lkIjoiaG9zdF8yMDI2XzExIiwidHlwIjoicGx1Z2luLWNvbnRyYWN0LWFjdCtqd3QifQ.eyJhdWQiOiJAd2UtdGhlLXJlYmVsLWFsbGlhbmNlL290aGVyLXBsdWdpbiIsImNvbnN1bWVyIjoiY29uc3VtZXI6Zml4dHVyZSIsImNhcGFiaWxpdHkiOiJmaXh0dXJlLnNlbmRfbWVzc2FnZSIsImFjY291bnQiOiJ3b3JrIiwic2NvcGUiOnt9LCJhY3QiOiJmaXh0dXJlLm1lc3NhZ2VzLnNlbmQiLCJkaWdlc3QiOiJzaGEyNTY6ODcwMDJiZmE3NzA5NTVmYzdiZmMwOWZkYWUwNzk0ZTM4Yzg2YWU2ZDgxMmRkODlhMGEzNTc1YzdiOTY4MDY4MiIsIm1hbmlmZXN0Ijoic2hhMjU2OmFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLCJpYXQiOjE3OTk5OTk5OTUsImV4cCI6MTgwMDAwMDA1NSwianRpIjoiZml4dHVyZV93cm9uZ19hdWRfMSIsImNmbSI6dHJ1ZX0.ayhNcYfbZQ6XBiWFvcFYYR3-8dSNyD8M--C6qVTF9y8ppSimdSbFeDFEJbX50CzAxnZA0lhunQws8jjkCk6vDg",
+        "input": {
+          "to": "person@example.test",
+          "body": "hello"
+        },
+        "request": {
+          "act": "fixture.messages.send",
+          "actions": {
+            "fixture.messages.send": "required"
+          },
+          "audience": "@we-the-rebel-alliance/fixture-plugin",
+          "consumer": "consumer:fixture",
+          "capability": "fixture.send_message",
+          "account": "work",
+          "scope": {},
+          "manifest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "now": 1800000000
+        },
+        "store": {
+          "used": []
+        },
+        "expect": {
+          "ok": false,
+          "code": "GRANT_AUDIENCE_MISMATCH"
+        }
+      },
+      {
+        "name": "replayed",
+        "token": "eyJhbGciOiJFZDI1NTE5Iiwia2lkIjoiaG9zdF8yMDI2XzExIiwidHlwIjoicGx1Z2luLWNvbnRyYWN0LWFjdCtqd3QifQ.eyJhdWQiOiJAd2UtdGhlLXJlYmVsLWFsbGlhbmNlL2ZpeHR1cmUtcGx1Z2luIiwiY29uc3VtZXIiOiJjb25zdW1lcjpmaXh0dXJlIiwiY2FwYWJpbGl0eSI6ImZpeHR1cmUuc2VuZF9tZXNzYWdlIiwiYWNjb3VudCI6IndvcmsiLCJzY29wZSI6e30sImFjdCI6ImZpeHR1cmUubWVzc2FnZXMuc2VuZCIsImRpZ2VzdCI6InNoYTI1Njo4NzAwMmJmYTc3MDk1NWZjN2JmYzA5ZmRhZTA3OTRlMzhjODZhZTZkODEyZGQ4OWEwYTM1NzVjN2I5NjgwNjgyIiwibWFuaWZlc3QiOiJzaGEyNTY6YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsImlhdCI6MTc5OTk5OTk5NSwiZXhwIjoxODAwMDAwMDU1LCJqdGkiOiJmaXh0dXJlX3JlcGxheWVkXzEiLCJjZm0iOnRydWV9.HYhLOsnSK2Tp6DodRfmbUvydaQPBbegL68FTSwSQTgGlELodywBqrPdwN3fHrtni86RpxK51dp6189ve4uwrCg",
+        "input": {
+          "to": "person@example.test",
+          "body": "hello"
+        },
+        "request": {
+          "act": "fixture.messages.send",
+          "actions": {
+            "fixture.messages.send": "required"
+          },
+          "audience": "@we-the-rebel-alliance/fixture-plugin",
+          "consumer": "consumer:fixture",
+          "capability": "fixture.send_message",
+          "account": "work",
+          "scope": {},
+          "manifest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "now": 1800000000
+        },
+        "store": {
+          "used": [
+            "fixture_replayed_1"
+          ]
+        },
+        "expect": {
+          "ok": false,
+          "code": "GRANT_REPLAYED"
+        }
+      },
+      {
+        "name": "expired",
+        "token": "eyJhbGciOiJFZDI1NTE5Iiwia2lkIjoiaG9zdF8yMDI2XzExIiwidHlwIjoicGx1Z2luLWNvbnRyYWN0LWFjdCtqd3QifQ.eyJhdWQiOiJAd2UtdGhlLXJlYmVsLWFsbGlhbmNlL2ZpeHR1cmUtcGx1Z2luIiwiY29uc3VtZXIiOiJjb25zdW1lcjpmaXh0dXJlIiwiY2FwYWJpbGl0eSI6ImZpeHR1cmUuc2VuZF9tZXNzYWdlIiwiYWNjb3VudCI6IndvcmsiLCJzY29wZSI6e30sImFjdCI6ImZpeHR1cmUubWVzc2FnZXMuc2VuZCIsImRpZ2VzdCI6InNoYTI1Njo4NzAwMmJmYTc3MDk1NWZjN2JmYzA5ZmRhZTA3OTRlMzhjODZhZTZkODEyZGQ4OWEwYTM1NzVjN2I5NjgwNjgyIiwibWFuaWZlc3QiOiJzaGEyNTY6YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsImlhdCI6MTc5OTk5OTAwMCwiZXhwIjoxNzk5OTk5MDYwLCJqdGkiOiJmaXh0dXJlX2V4cGlyZWRfMSIsImNmbSI6dHJ1ZX0.ZCprNFhVsWvr1QXch8tRT3872WjUsFbDRRIwA7s-zmGxGZw4eu42GZZBOB27Qn4lrPcuaPtJuqAELSnhTJWKAw",
+        "input": {
+          "to": "person@example.test",
+          "body": "hello"
+        },
+        "request": {
+          "act": "fixture.messages.send",
+          "actions": {
+            "fixture.messages.send": "required"
+          },
+          "audience": "@we-the-rebel-alliance/fixture-plugin",
+          "consumer": "consumer:fixture",
+          "capability": "fixture.send_message",
+          "account": "work",
+          "scope": {},
+          "manifest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "now": 1800000000
+        },
+        "store": {
+          "used": []
+        },
+        "expect": {
+          "ok": false,
+          "code": "GRANT_EXPIRED"
+        }
+      },
+      {
+        "name": "digest-mismatch",
+        "token": "eyJhbGciOiJFZDI1NTE5Iiwia2lkIjoiaG9zdF8yMDI2XzExIiwidHlwIjoicGx1Z2luLWNvbnRyYWN0LWFjdCtqd3QifQ.eyJhdWQiOiJAd2UtdGhlLXJlYmVsLWFsbGlhbmNlL2ZpeHR1cmUtcGx1Z2luIiwiY29uc3VtZXIiOiJjb25zdW1lcjpmaXh0dXJlIiwiY2FwYWJpbGl0eSI6ImZpeHR1cmUuc2VuZF9tZXNzYWdlIiwiYWNjb3VudCI6IndvcmsiLCJzY29wZSI6e30sImFjdCI6ImZpeHR1cmUubWVzc2FnZXMuc2VuZCIsImRpZ2VzdCI6InNoYTI1NjozZDcyMmUwOTA1ZTNmYWVhYTVjNDI2NWMyYjYzZmY0Y2ZmNWQ1NTdkOGRkMDVkMGYwNTA1ODdiMTBkMjQwYmI2IiwibWFuaWZlc3QiOiJzaGEyNTY6YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsImlhdCI6MTc5OTk5OTk5NSwiZXhwIjoxODAwMDAwMDU1LCJqdGkiOiJmaXh0dXJlX2RpZ2VzdF8xIiwiY2ZtIjp0cnVlfQ.yWZ2OHyddab4qesdbJANjLi3r7JAx_qTlXj85zJjr12yCQbkScQj4DC8HmxQAZi6hqzJXoahMGk72GrIe_d6Cg",
+        "input": {
+          "to": "person@example.test",
+          "body": "hello"
+        },
+        "request": {
+          "act": "fixture.messages.send",
+          "actions": {
+            "fixture.messages.send": "required"
+          },
+          "audience": "@we-the-rebel-alliance/fixture-plugin",
+          "consumer": "consumer:fixture",
+          "capability": "fixture.send_message",
+          "account": "work",
+          "scope": {},
+          "manifest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "now": 1800000000
+        },
+        "store": {
+          "used": []
+        },
+        "expect": {
+          "ok": false,
+          "code": "GRANT_DIGEST_MISMATCH"
+        }
+      }
+    ]
+  },
+  "rpc": {
+    "inputs": {
+      "events_list": {
+        "source": "messages"
+      },
+      "send_message": {
+        "planId": "plan-1"
+      },
+      "write_note": {
+        "account": "work"
+      },
+      "delete_note": {
+        "account": "work"
+      },
+      "share_note": {
+        "account": "work"
+      }
+    }
+  },
+  "pinned": {
+    "pinned_status": "Every fixture session reads the pinned status before anything else."
+  }
+}

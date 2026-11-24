@@ -12,7 +12,7 @@
     },
     "unknown": {
       "method": "events_list",
-      "account": "nobody_here",
+      "account": "nobodyhere",
       "code": "ACCOUNT_UNKNOWN"
     },
     "cursors": [

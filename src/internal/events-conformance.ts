@@ -18,6 +18,7 @@ import { checkOutput } from "../outputs.ts"
 import { acceptAnswer } from "../read.ts"
 import { maxBytesOf, ownerProblems, thumbnailUrlProblems, type Detail, type SourceItem } from "../manifest.ts"
 import { error, warning, type Finding } from "./conformance/report.ts"
+import { thumbnailHostProblem } from "./conformance/url-hosts.ts"
 
 /** One recorded `events_list` call: its input, what it was expected to answer, and the answer. */
 export interface RecordedCase {
@@ -194,6 +195,10 @@ function thumbnailFindings(where: string, event: SourceEvent, source: SourceItem
   const findings: Finding[] = []
   for (const problem of thumbnailUrlProblems(event.thumbnail, source.urlHosts ?? [])) {
     findings.push(error("pages.thumbnail", `${where} ${event.external_id}'s thumbnail ${problem}`, { path: "fixtures/conformance.json" }))
+  }
+  if (typeof event.thumbnail === "string") {
+    const unsafe = thumbnailHostProblem(event.thumbnail)
+    if (unsafe !== null) findings.push(error("pages.thumbnail", `${where} ${event.external_id}'s thumbnail host ${unsafe}: a thumbnail is displayed only from a site the source can claim`, { path: "fixtures/conformance.json" }))
   }
   const { hash, ...rest } = event
   if (eventHash({ ...rest, thumbnail: "https://example.invalid/another.png" }) !== hash) {
