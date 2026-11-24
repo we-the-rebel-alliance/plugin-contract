@@ -23,5 +23,7 @@ export declare function refuse(code: ErrorCode, what: string, next: string): nev
  * undefined, so the caller's fallback is `UNAVAILABLE`; a sign-in must use the table's `NEEDS_SIGN_IN`.
  */
 export declare function refusalOf(error: unknown): Refusal | undefined;
+/** The refusal a permission assertion's error maps to: its own contract code, or PERMISSION_DENIED. */
+export declare function permissionRefusal(error: unknown, what: string): Refusal;
 /** The one-line reason of an unknown failure, redacted and cut to 160 characters. */
 export declare function reasonOf(error: unknown): string;

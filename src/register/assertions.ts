@@ -7,8 +7,9 @@
  * `plugin/src/promise/adapter.ts:574`). So every handler invocation calls `ctx.permission.assert` once, with the
  * method's action `<name>.<method>` and the resources its declared operations name (`<alias>:<operation>`, or `["*"]`
  * when it declares none). The host evaluates the session's rules and asks when the last matching rule says `ask`; a
- * deny or a rejection rejects. A tool or Code Mode call passes `save: ["*"]` so "Always allow" can save the tool's
- * action; an RPC call never saves, because its answer applies to that one call only.
+ * deny or a rejection rejects. A tool or Code Mode call may save a pattern scoped to this method's action and account
+ * (`<account>:*`) so "Always allow" cannot become a project-wide `*`; an RPC call never saves, because its answer
+ * applies to that one call only.
  *
  * `callEffect` is the read-only evaluation the RPC cap needs before the gate: it says whether the session's rules will
  * ask, allow or deny the method, without prompting.
@@ -68,7 +69,8 @@ export async function gate(
     ...(call.agent === undefined ? {} : { agent: call.agent }),
     action: methodAction(name, entry.name),
     resources: resourcesFor(entry, account),
-    ...(options.save ? { save: ["*"] } : {}),
+    // Save only this method's own action for this account. Never `*`, which would be a project-wide allow.
+    ...(options.save ? { save: [`${account}:*`] } : {}),
     ...(options.source === undefined ? {} : { source: options.source }),
   })
 }

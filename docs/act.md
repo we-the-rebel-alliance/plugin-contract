@@ -2,7 +2,8 @@
 
 The consumer side of a declared write (contract §8). A write is previewed, then committed. The preview writes nothing;
 the commit is the write. A commit whose effect is not `local` needs a confirmation the host issued, either as an
-OpenCode permission ask in a session or as a host-signed action grant.
+OpenCode permission ask in a session or as a host-signed action grant. Every request carries `aliases`, the plugin's
+declared account aliases from its options, so the fence refuses an undeclared account.
 
 ## What an act does
 

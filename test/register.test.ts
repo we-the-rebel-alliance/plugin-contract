@@ -48,6 +48,13 @@ function handlers(over: Partial<Record<string, MethodHandler>> = {}): HandlerTab
   }
 }
 
+
+/** Make a plan through RPC and return its id; a commit may only use a plan this instance recorded. */
+const planId = async (h: ReturnType<typeof makeHarness>, account?: string): Promise<string> => {
+  const result = (await h.rpc.call("demo", "plan_send", { sessionID: "s1", input: account === undefined ? {} : { account } })) as { planId: string }
+  return result.planId
+}
+
 const context = (over: Record<string, unknown> = {}) => ({
   sessionID: "s1",
   agent: "build",
@@ -161,7 +168,34 @@ describe("register: input, account and output", () => {
   test("a commit's own input schema is not used: the contract's { planId } is", async () => {
     const h = makeHarness()
     await register(h.ctx, demo, handlers({ send_message: handler({ input: {}, output: SENT, run: async () => ({ sent: true }) }) }))
-    assert.deepEqual((await h.tools.get("demo_send_message")!.tool.execute({ planId: "p1" }, context())).output, { sent: true })
+    const plan = await h.tools.get("demo_plan_send")!.tool.execute({}, context())
+    assert.deepEqual((await h.tools.get("demo_send_message")!.tool.execute({ planId: (plan.output as { planId: string }).planId }, context())).output, { sent: true })
+  })
+
+  test("a commit runs as the plan's account: a deny on personal is not skipped", async () => {
+    const h = makeHarness({ options: { accounts: { work: {}, personal: {} } } })
+    let sent = 0
+    await register(
+      h.ctx,
+      demo,
+      handlers({
+        plan_send: handler({ run: async (_input, call) => ({ planId: `plan-${call.account}`, method: "send_message" }) }),
+        send_message: handler({ output: SENT, run: async () => { sent += 1; return { sent: true } } }),
+      }),
+    )
+    h.sessions.get("s1")!.permissions = [{ action: "demo.send_message", resource: "personal:*", effect: "deny" }]
+    const plan = await h.tools.get("demo_plan_send")!.tool.execute({ account: "personal" }, context())
+    assert.deepEqual(plan.output, { planId: "plan-personal", method: "send_message" })
+    await assert.rejects(h.tools.get("demo_send_message")!.tool.execute({ planId: "plan-personal" }, context()), /PERMISSION_DENIED/)
+    assert.equal(sent, 0, "the commit ran as work and skipped the personal deny")
+    // The same plan's account is the account named in the gate, not the first declared alias.
+    assert.equal(h.assertions.at(-1)!.resources.join(","), "personal:demo.messages.create")
+  })
+
+  test("a commit refuses an unknown plan", async () => {
+    const h = makeHarness()
+    await register(h.ctx, demo, handlers())
+    await assert.rejects(h.tools.get("demo_send_message")!.tool.execute({ planId: "not-a-plan" }, context()), /PLAN_INVALID: .*no plan/)
   })
 
   test("a plan is refused when it names a method that does not commit it", async () => {
@@ -214,7 +248,7 @@ describe("register: the per-alias server rule", () => {
     const h = makeHarness({ options: { accounts: { work: {}, personal: {} } } })
     await register(h.ctx, own, handlers({ sync: handler() }))
     await h.tools.get("demo_sync")!.tool.execute({ account: "work" }, context())
-    assert.deepEqual(h.assertions, [{ sessionID: "s1", agent: "build", action: "demo.sync", resources: ["work:list_files"], save: ["*"] }])
+    assert.deepEqual(h.assertions, [{ sessionID: "s1", agent: "build", action: "demo.sync", resources: ["work:list_files"], save: ["work:*"] }])
     assert.ok(agentRules(h).some((rule) => rule.action === "demo-work_*"), "access covers work's MCP server")
     assert.equal(agentRules(h).some((rule) => rule.action === "demo-personal_*"), true, "access covers personal's MCP server")
   })
@@ -321,12 +355,14 @@ describe("register: door 3", () => {
     await register(h.ctx, demo, handlers(), {
       grant: { keys: { keys: { host_test: publicKey } }, audience: "@we-the-rebel-alliance/demo-plugin", store: { consume: async () => true }, now: () => now },
     })
+    input.planId = await planId(h)
+    const before = h.assertions.length
     assert.deepEqual(await h.rpc.call("demo", "send_message", { sessionID: "s1", input }), { sent: true })
-    assert.equal(h.assertions.length, 1)
-    assert.equal(h.assertions[0]!.action, "demo.send_message")
-    assert.equal(h.assertions[0]!.save, undefined, "an RPC ask never saves")
+    assert.equal(h.assertions.length, before + 1)
+    assert.equal(h.assertions.at(-1)!.action, "demo.send_message")
+    assert.equal(h.assertions.at(-1)!.save, undefined, "an RPC ask never saves")
     assert.deepEqual(await h.rpc.call("demo", "send_message", { sessionID: "s1", input }), { sent: true })
-    assert.equal(h.assertions.length, 2, "the second call asks again, so nothing was saved")
+    assert.equal(h.assertions.length, before + 2, "the second call asks again, so nothing was saved")
     // A session allow rule appended after the generated ask makes the grant the confirmation, and the gate allows it.
     h.sessions.get("s1")!.permissions = [{ action: "*", resource: "*", effect: "allow" }]
     assert.deepEqual(await h.rpc.call("demo", "send_message", { sessionID: "s1", input, grant: token, consumer: "consumer:demo" }), { sent: true })
@@ -335,7 +371,8 @@ describe("register: door 3", () => {
   test("a non-read with an allow rule and no ask or grant is refused (LD-5)", async () => {
     const h = makeHarness()
     await register(h.ctx, demo, handlers())
-    await assert.rejects(h.rpc.call("demo", "send_message", { sessionID: "s1", input: { planId: "p1" } }), (error: unknown) => {
+    const input = { planId: await planId(h) }
+    await assert.rejects(h.rpc.call("demo", "send_message", { sessionID: "s1", input }), (error: unknown) => {
       assert.ok(error instanceof RpcDeclaredFailure)
       assert.equal(error.type, "failed")
       assert.equal((error.data as { code: string }).code, "PERMISSION_DENIED")
@@ -347,12 +384,12 @@ describe("register: door 3", () => {
     const answered = makeHarness()
     await register(answered.ctx, demo, handlers())
     answered.sessions.get("s1")!.permissions = [{ action: "demo.send_message", resource: "*", effect: "ask" }]
-    assert.deepEqual(await answered.rpc.call("demo", "send_message", { sessionID: "s1", input: { planId: "p1" } }), { sent: true })
+    assert.deepEqual(await answered.rpc.call("demo", "send_message", { sessionID: "s1", input: { planId: await planId(answered) } }), { sent: true })
 
     const refused = makeHarness({ answerAsks: false })
     await register(refused.ctx, demo, handlers())
     refused.sessions.get("s1")!.permissions = [{ action: "demo.send_message", resource: "*", effect: "ask" }]
-    await assert.rejects(refused.rpc.call("demo", "send_message", { sessionID: "s1", input: { planId: "p1" } }), (error: unknown) => {
+    await assert.rejects(refused.rpc.call("demo", "send_message", { sessionID: "s1", input: { planId: await planId(refused) } }), (error: unknown) => {
       assert.ok(error instanceof RpcDeclaredFailure)
       assert.equal((error.data as { code: string }).code, "PERMISSION_DENIED")
       return true
@@ -389,10 +426,41 @@ describe("register: door 3", () => {
     }
     const h = makeHarness()
     await register(h.ctx, demo, handlers(), wiring)
+    input.planId = await planId(h)
     assert.deepEqual(await h.rpc.call("demo", "send_message", { sessionID: "s1", input, grant: token(), consumer: "consumer:demo" }), { sent: true })
     await assert.rejects(h.rpc.call("demo", "send_message", { sessionID: "s1", input, grant: token({ manifest: `sha256:${"a".repeat(64)}` }), consumer: "consumer:demo" }), (error: unknown) => {
       assert.ok(error instanceof RpcDeclaredFailure)
       assert.equal((error.data as { code: string }).code, "GRANT_INVALID")
+      return true
+    })
+  })
+
+  test("a grant for another account than the plan is ACCOUNT_MISMATCH", async () => {
+    const { publicKey, privateKey } = generateKeyPairSync("ed25519")
+    const now = 1_800_000_000
+    const h = makeHarness({ options: { accounts: { work: {}, personal: {} } } })
+    await register(h.ctx, demo, handlers(), {
+      grant: { keys: { keys: { host_test: publicKey } }, audience: "@we-the-rebel-alliance/demo-plugin", store: { consume: async () => true }, now: () => now },
+    })
+    const input = { planId: await planId(h, "personal") }
+    const token = signGrant({
+      key: privateKey,
+      kid: "host_test",
+      audience: "@we-the-rebel-alliance/demo-plugin",
+      consumer: "consumer:demo",
+      capability: "demo.send_message",
+      account: "work",
+      act: "demo.messages.send",
+      manifest: manifestHash(demo),
+      jti: "grant_plan_account_1",
+      iat: now,
+      exp: now + 60,
+      input,
+      cfm: true,
+    })
+    await assert.rejects(h.rpc.call("demo", "send_message", { sessionID: "s1", input, grant: token, consumer: "consumer:demo" }), (error: unknown) => {
+      assert.ok(error instanceof RpcDeclaredFailure)
+      assert.equal((error.data as { code: string }).code, "ACCOUNT_MISMATCH")
       return true
     })
   })

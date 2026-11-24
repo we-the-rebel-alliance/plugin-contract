@@ -19,12 +19,11 @@
 import { randomUUID } from "node:crypto"
 import type { Plugin } from "@opencode/plugin"
 import { effectFor, methodAction, type AccessLevel } from "../access.ts"
-import { DEFAULT_ALIAS } from "../accounts/alias.ts"
 import { busEvents } from "../bus.ts"
 import { verifyGrant, type GrantKeys, type GrantScope, type GrantStore } from "../grant.ts"
 import type { JsonSchema } from "../manifest.ts"
 import { callEffect, gate } from "./assertions.ts"
-import { refusal, refusalOf, RegisterError, type Refusal } from "./errors.ts"
+import { permissionRefusal, refusal, refusalOf, RegisterError, type Refusal } from "./errors.ts"
 import type { MethodEntry } from "./handlers.ts"
 import { execute, prepareCall, type CallEnvironment } from "./invoke.ts"
 import { validate } from "./validate.ts"
@@ -74,6 +73,10 @@ export interface RpcContext {
       readonly save?: readonly string[]
       readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
     }): Promise<void>
+    hook(
+      name: "evaluate",
+      callback: (event: { effect: "allow" | "deny" | "ask"; source?: { readonly id: string } }) => void | Promise<void>,
+    ): Promise<{ dispose(): Promise<void> }>
   }
   readonly rpc: {
     register(definition: unknown, handlers: Readonly<Record<string, (input: unknown, context: RpcCallContext) => Promise<unknown>>>): Promise<RpcRegistration>
@@ -135,14 +138,6 @@ function grantActions(environment: CallEnvironment): Readonly<Record<string, "re
   return actions
 }
 
-/** The refusal a permission assertion's error maps to. */
-function permissionRefusal(error: unknown, what: string): Refusal {
-  const own = refusalOf(error)
-  if (own) return own
-  const message = (error instanceof Error ? error.message.split(/\r?\n/, 1)[0] : String(error)) ?? String(error)
-  return refusal("PERMISSION_DENIED", `${what} was refused: ${message}`, "Ask the person to allow it, or use a session whose agent allows it.")
-}
-
 /** The session's agent and rules: the agent's, then the session's, as OpenCode reads them. */
 async function rulesOf(context: RpcContext, sessionID: string): Promise<{ readonly agent: string; readonly rules: readonly { readonly action: string; readonly resource: string; readonly effect: "allow" | "deny" | "ask" }[] }> {
   let info: Awaited<ReturnType<RpcContext["session"]["get"]>>
@@ -201,21 +196,6 @@ async function verify(environment: CallEnvironment, wiring: GrantWiring, request
 }
 
 /**
- * A commit's grant names the account in its claims, and its input must not; try each declared alias and keep the
- * first failure that is not another account's mismatch, so a replay or an expiry is reported as itself.
- */
-async function verifyAny(environment: CallEnvironment, wiring: GrantWiring, request: Record<string, unknown>, entry: MethodEntry, accounts: readonly string[]): Promise<Verdict> {
-  let first: Unverified | undefined
-  for (const account of accounts.length === 0 ? [DEFAULT_ALIAS] : accounts) {
-    const checked = await verify(environment, wiring, request, entry, account)
-    if (checked.ok) return checked
-    if (checked.code !== "GRANT_ACCOUNT_MISMATCH") return checked
-    first ??= checked
-  }
-  return first ?? { ok: false, refusal: refusal("GRANT_INVALID", "the grant names no account this plugin has", "Ask the host to issue the grant for one of the plugin's accounts."), code: "GRANT_ACCOUNT_MISMATCH" }
-}
-
-/**
  * The RPC call: the plugin's level, the two confirmations for a non-read, the one gate, then the same handler path
  * every door uses.
  */
@@ -227,6 +207,7 @@ async function invoke(
   wiring: GrantWiring | undefined,
   raw: unknown,
   rpc: RpcCallContext,
+  freshAsks: Set<string>,
 ): Promise<unknown> {
   try {
     if (!plain(raw)) throw new RegisterError(refusal("INPUT_INVALID", "the RPC envelope must be an object", 'Pass {"sessionID":"<session>","input":<the method\'s input>}.'))
@@ -236,8 +217,10 @@ async function invoke(
     if (!plain(input)) throw new RegisterError(refusal("INPUT_INVALID", "the RPC envelope needs an input object", "Pass the method's input as the envelope's input."))
     const resolved = await rulesOf(context, sessionID)
     const nonRead = entry.item.class !== "read"
+    const callID = `rpc:${randomUUID()}`
     let prepared
     let gated = false
+    let fresh = false
     if (nonRead) {
       // The plugin's own setting is final: a caller's session rules can narrow it, never widen it (contract §13).
       if (level === "read-only") {
@@ -248,40 +231,48 @@ async function invoke(
       }
       if (raw["grant"] !== undefined) {
         if (wiring === undefined) throw new RegisterError(refusal("GRANT_INVALID", "this plugin has no grant verifier, so it cannot accept a grant", "Use a permission ask in a session, or configure the plugin's grant verifier."))
-        const accounts = entry.item.commits === undefined ? undefined : environment.accounts.map((account) => account.alias)
-        if (accounts === undefined) {
-          // The input names the account for a non-commit; resolve it before the grant can be checked against it.
-          prepared = prepareCall(entry, input, environment.accounts)
-          const checked = await verify(environment, wiring, raw, entry, prepared.account)
-          if (!checked.ok) throw new RegisterError(checked.refusal)
-        } else {
-          const checked = await verifyAny(environment, wiring, raw, entry, accounts)
-          if (!checked.ok) throw new RegisterError(checked.refusal)
-          prepared = prepareCall(entry, input, environment.accounts, checked.account)
+        // A commit resolves its plan's account first, so the grant must name that account; a grant for another account
+        // is ACCOUNT_MISMATCH, not a silent run as the first alias.
+        prepared = prepareCall(entry, input, environment.accounts, environment.plans)
+        const checked = await verify(environment, wiring, raw, entry, prepared.account)
+        if (!checked.ok) {
+          const failure =
+            entry.item.commits !== undefined && checked.code === "GRANT_ACCOUNT_MISMATCH"
+              ? refusal("ACCOUNT_MISMATCH", "the grant names another account than the plan", "Issue the grant for the account the plan was made for.")
+              : checked.refusal
+          throw new RegisterError(failure)
         }
+        // The grant is the confirmation; do not ask again (item 6).
+        gated = true
       } else {
-        prepared = prepareCall(entry, input, environment.accounts)
+        prepared = prepareCall(entry, input, environment.accounts, environment.plans)
         const effect = callEffect(environment.name, entry, prepared.account, resolved.rules)
         if (effect === "allow") {
           // An allow rule is not a confirmation. Run the gate first so it is the one permission evaluation, then refuse.
-          await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: `rpc:${entry.name}` }, prepared.account, { save: false })
+          await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: callID }, prepared.account, { save: false })
           gated = true
           throw new RegisterError(refusal("PERMISSION_DENIED", `${environment.name}.${entry.name} is a ${entry.item.class} and an allow rule is not a confirmation for RPC`, "A non-read method over RPC needs a permission ask or a host-signed action grant."))
         }
+        fresh = effect === "ask"
       }
     } else {
-      prepared = prepareCall(entry, input, environment.accounts)
+      prepared = prepareCall(entry, input, environment.accounts, environment.plans)
     }
     if (!gated) {
+      const source = { type: "tool" as const, messageID: "msg_rpc", id: callID }
+      if (fresh) freshAsks.add(callID)
       try {
-        await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: `rpc:${entry.name}` }, prepared.account, { save: false })
+        // A fresh one-call ask: the evaluate hook turns an allow that came only from a saved approval back into ask.
+        await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: callID }, prepared.account, { save: false, ...(fresh ? { source } : {}) })
       } catch (error) {
         throw new RegisterError(permissionRefusal(error, `${environment.name}.${entry.name}`))
+      } finally {
+        if (fresh) freshAsks.delete(callID)
       }
     }
     const messageID = "msg_rpc"
     const id = `rpc:${randomUUID()}`
-    const value = await execute(entry, prepared, { sessionID, agent: resolved.agent, messageID, id, signal: rpc.signal, progress: async () => {}, door: "rpc" })
+    const value = await execute(entry, prepared, { sessionID, agent: resolved.agent, messageID, id, signal: rpc.signal, progress: async () => {}, door: "rpc" }, environment.plans)
     return value === undefined ? null : JSON.parse(JSON.stringify(value))
   } catch (error) {
     const own = refusalOf(error)
@@ -296,10 +287,27 @@ export async function installRpc(context: RpcContext, environment: CallEnvironme
   const handlers: Record<string, (input: unknown, call: RpcCallContext) => Promise<unknown>> = {}
   for (const entry of environment.entries) {
     methods[entry.name] = { input: strictEnvelope(entry.input), output: entry.output, errors: { failed: FAILED } }
-    handlers[entry.name] = (raw: unknown, call: RpcCallContext) => invoke(context, environment, level, entry, wiring, raw, call)
+    handlers[entry.name] = (raw: unknown, call: RpcCallContext) => invoke(context, environment, level, entry, wiring, raw, call, freshAsks)
   }
   // Only the events the manifest declares: an undeclared bus event must not be publishable (contract §10 and §16).
   const events = Object.fromEntries(Object.entries(busEvents(environment.name)).filter(([event]) => Object.hasOwn(environment.manifest.events, event)))
   const definition = { id: environment.name, methods, events }
-  return context.rpc.register(definition, handlers)
+  const freshAsks = new Set<string>()
+  const hook = await context.permission.hook("evaluate", (event) => {
+    if (event.source !== undefined && freshAsks.has(event.source.id) && event.effect !== "deny") event.effect = "ask"
+  })
+  let registration: RpcRegistration
+  try {
+    registration = await context.rpc.register(definition, handlers)
+  } catch (error) {
+    await hook.dispose().catch(() => undefined)
+    throw error
+  }
+  return {
+    events: registration.events,
+    async dispose() {
+      await hook.dispose().catch(() => undefined)
+      await registration.dispose()
+    },
+  }
 }

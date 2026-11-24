@@ -32,6 +32,8 @@ export interface ActRequest {
      * and for a local commit. An empty token is not a confirmation.
      */
     readonly confirmation?: string;
+    /** The plugin's declared account aliases, from its manifest options. */
+    readonly aliases: readonly string[];
     readonly signal?: AbortSignal;
 }
 /** Who a commit would reach, as the preview names them. A host shows this on the one confirm. */

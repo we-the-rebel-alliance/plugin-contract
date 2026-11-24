@@ -10,7 +10,7 @@
  */
 import type { Plugin } from "@opencode/plugin"
 import { gate } from "./assertions.ts"
-import { RegisterError } from "./errors.ts"
+import { permissionRefusal, RegisterError } from "./errors.ts"
 import type { MethodEntry } from "./handlers.ts"
 import { execute, prepareCall, toolCall, type CallEnvironment } from "./invoke.ts"
 
@@ -90,16 +90,15 @@ export function toolRegistrations(environment: CallEnvironment, context: ToolCon
     options: { namespace: environment.name, permission: `${environment.name}.${entry.name}`, codemode: codemodeFor(entry) },
     async execute(raw, callContext) {
       try {
-        const prepared = prepareCall(entry, raw, environment.accounts)
+        const prepared = prepareCall(entry, raw, environment.accounts, environment.plans)
         await gate(context, environment.name, entry, callContext, prepared.account, {
           save: true,
           source: { type: "tool", messageID: callContext.messageID, id: callContext.id },
         })
-        const value = await execute(entry, prepared, toolCall(callContext, callContext.codemode === true ? "codemode" : "tool"))
+        const value = await execute(entry, prepared, toolCall(callContext, callContext.codemode === true ? "codemode" : "tool"), environment.plans)
         return { output: value, content: textOf(value) }
       } catch (error) {
-        const own = error instanceof RegisterError ? error : undefined
-        throw new Error(own?.message ?? (error instanceof Error ? error.message : String(error)))
+        throw new Error(error instanceof RegisterError ? error.message : permissionRefusal(error, `${environment.name}.${entry.name}`).message)
       }
     },
   }))

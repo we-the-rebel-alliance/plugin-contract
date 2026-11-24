@@ -80,7 +80,7 @@ export declare function namespaceOf(source: Pick<SourceItem, "id">): string;
  * The alias is the grant's own account, which the app resolved from the plugin's manifest before it issued the grant;
  * `serverOf` in `./rules.ts` is the deriving form that also refuses an alias the plugin does not declare.
  */
-export declare function operationRule(source: Pick<SourceItem, "id">, operation: string, account: string, aliases?: readonly string[]): PermissionRule;
+export declare function operationRule(source: Pick<SourceItem, "id">, operation: string, account: string, aliases?: readonly string[], kind?: "operation" | "tool"): Checked<PermissionRule>;
 /**
  * The session rules for reading `source` under `grant`: deny everything, then allow the method and each declared
  * operation for the granted account. Refused when the grant is for another source or its account cannot be named in a
@@ -108,6 +108,8 @@ export declare function probeRules(source: SourceItem, account: string, identity
  * matches any run of characters and `?` one), and no match asks. The same evaluation the register and the tools RPC run.
  */
 export declare function evaluate(rules: readonly PermissionRule[], action: string, resource?: string): PermissionRule["effect"];
+/** True when `pattern` matches `value` with OpenCode's `*` and `?` wildcards. */
+export declare function matches(pattern: string, value: string): boolean;
 /** True when `grant` covers a read of `source` for `account` within `scope`: the same source and account, and every scope value granted. */
 export declare function grantCovers(grant: Grant, request: {
     readonly source: string;

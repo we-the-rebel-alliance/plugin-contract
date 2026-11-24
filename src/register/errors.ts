@@ -66,6 +66,14 @@ export function refusalOf(error: unknown): Refusal | undefined {
   return refusal(code, redactReason(what), redactReason(step))
 }
 
+/** The refusal a permission assertion's error maps to: its own contract code, or PERMISSION_DENIED. */
+export function permissionRefusal(error: unknown, what: string): Refusal {
+  const own = refusalOf(error)
+  if (own) return own
+  const message = (error instanceof Error ? error.message.split(/\r?\n/, 1)[0] : String(error)) ?? String(error)
+  return refusal("PERMISSION_DENIED", `${what} was refused: ${message}`, "Ask the person to allow it, or use a session whose agent allows it.")
+}
+
 /** The one-line reason of an unknown failure, redacted and cut to 160 characters. */
 export function reasonOf(error: unknown): string {
   return redactReason(error instanceof Error ? error.message : String(error))

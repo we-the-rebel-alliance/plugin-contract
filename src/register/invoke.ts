@@ -8,6 +8,7 @@
 import { DEFAULT_ALIAS } from "../accounts/alias.ts"
 import { resolveAccount, type AccountProfile } from "../accounts.ts"
 import { manifestHash, type Manifest } from "../manifest.ts"
+import { planStore, type PlanStore } from "./plans.ts"
 import { refusal, refusalOf, refuse, RegisterError, reasonOf, type Refusal } from "./errors.ts"
 import { methodEntries, type Door, type HandlerTable, type MethodCall, type MethodEntry } from "./handlers.ts"
 import { validate, validateCommitInput, validatePlan } from "./validate.ts"
@@ -22,11 +23,13 @@ export interface CallEnvironment {
   readonly hash: string
   readonly entries: readonly MethodEntry[]
   readonly accounts: readonly AccountProfile[]
+  /** The plans this plugin instance made: a commit runs as the account its plan recorded. */
+  readonly plans: PlanStore
 }
 
 /** The handler table and account set, validated once at setup. */
 export function prepare(manifest: Manifest, handlers: HandlerTable, accounts: readonly AccountProfile[]): CallEnvironment {
-  return { name: manifest.plugin.name, manifest, hash: manifestHash(manifest), entries: methodEntries(manifest, handlers), accounts }
+  return { name: manifest.plugin.name, manifest, hash: manifestHash(manifest), entries: methodEntries(manifest, handlers), accounts, plans: planStore() }
 }
 
 /**
@@ -64,13 +67,14 @@ export interface PreparedCall {
  * The input checked and the account resolved, or a contract refusal. A commit takes no account: its account is the one
  * a verified grant names, or the plugin's only account, or `default` for the handler to read from the plan.
  */
-export function prepareCall(entry: MethodEntry, raw: unknown, accounts: readonly AccountProfile[], preferred?: string): PreparedCall {
+export function prepareCall(entry: MethodEntry, raw: unknown, accounts: readonly AccountProfile[], plans: PlanStore): PreparedCall {
   const { input, account } = checkedInput(entry, raw)
   if (entry.item.commits !== undefined) {
-    const candidate = preferred ?? accounts[0]?.alias ?? DEFAULT_ALIAS
-    if (accounts.length === 0) return { input, account: candidate }
-    const resolved = resolveAccount(accounts, { account: candidate })
-    if (!resolved.ok) throw new RegisterError(refusal(resolved.code, resolved.what, resolved.next))
+    const planId = typeof input["planId"] === "string" ? input["planId"] : ""
+    const plan = plans.accountOf(planId)
+    if (!plan.ok) throw new RegisterError(refusal("PLAN_INVALID", plan.problems.join("; "), "Plan again, then commit with the planId it answers."))
+    const resolved = accounts.length === 0 ? { ok: true as const, alias: plan.value } : resolveAccount(accounts, { account: plan.value })
+    if (!resolved.ok) throw new RegisterError(refusal("ACCOUNT_UNKNOWN", resolved.what, resolved.next))
     return { input, account: resolved.alias }
   }
   const resolved = resolveAccount(accounts, { account })
@@ -101,9 +105,11 @@ function failureOf(entry: MethodEntry, error: unknown): Refusal {
 }
 
 /** Run a prepared call's handler, checking its answer and mapping its failure. */
-export async function execute(entry: MethodEntry, prepared: PreparedCall, call: Omit<MethodCall, "account">): Promise<unknown> {
+export async function execute(entry: MethodEntry, prepared: PreparedCall, call: Omit<MethodCall, "account">, plans: PlanStore): Promise<unknown> {
   try {
-    return checkedOutput(entry, await entry.handler.run(prepared.input, { ...call, account: prepared.account }))
+    const value = checkedOutput(entry, await entry.handler.run(prepared.input, { ...call, account: prepared.account }))
+    if (entry.item.plans === true) plans.record((value as { planId: string }).planId, prepared.account)
+    return value
   } catch (error) {
     if (error instanceof RegisterError) throw error
     throw new RegisterError(failureOf(entry, error))

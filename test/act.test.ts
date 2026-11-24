@@ -88,6 +88,7 @@ const requestFor = (actionId: string, extra: Partial<ActRequest> = {}): ActReque
   grant: grantFor(actionId),
   consumer: "notes.home",
   phase: "commit",
+  aliases: ["default"],
   input: { text: "hello" },
   ...extra,
 })

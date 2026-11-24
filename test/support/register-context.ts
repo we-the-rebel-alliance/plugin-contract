@@ -127,6 +127,9 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
       },
     },
     permission: {
+      async hook() {
+        return { dispose: async () => {} }
+      },
       async assert(input) {
         assertions.push({
           sessionID: input.sessionID,

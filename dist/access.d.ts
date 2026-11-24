@@ -12,7 +12,7 @@
  * The grant side (`sessionRules`, `actSessionRules`, `detailRules`, `probeRules`) is here because it is the same rules
  * language: a fenced session denies everything, then allows exactly one grant. `docs/access.md` is the guide.
  */
-export { ACCESS_LEVELS, DEFAULT_ACCESS, accessLevel, aliasesFrom, effectFor, isMcpMethod, methodAction, rulesFor, serverOf, } from "./access/rules.js";
+export { ACCESS_LEVELS, DEFAULT_ACCESS, accessLevel, aliasesFrom, effectFor, isMcpMethod, methodAction, rulesFor, serverOf, toolAction, normalizeToolName, } from "./access/rules.js";
 export type { AccessLevel } from "./access/rules.js";
 export { applyAccess, unguardedAgents, withRules } from "./access/agents.js";
 export type { AccessContext, AccessRegistration, AccessRequest, AgentEditor, AgentLike } from "./access/agents.js";

@@ -119,6 +119,24 @@ describe("the access levels", () => {
     assert.equal(evaluate(workOnly, "demo_list_files"), "ask")
   })
 
+  test("a dotted MCP tool is rewritten as OpenCode rewrites it, including from built dist", async () => {
+    const own = value((m) => {
+      delete m.methods["mcp:*"]
+      m.methods["mcp:files.delete"] = { class: "delete" }
+    })
+    const rules = rulesFor(own, "read-only", ["default", "work"])
+    assert.ok(rules.some((rule) => rule.action === "demo_files_delete" && rule.effect === "deny"))
+    assert.ok(rules.some((rule) => rule.action === "demo-work_files_delete" && rule.effect === "deny"))
+    assert.equal(evaluate(rules, "demo-work_files_delete"), "deny")
+    const operation = operationRule({ id: "demo.files" }, "files.delete", "work", ["work"], "tool")
+    assert.deepEqual(operation, { ok: true, value: { action: "demo-work_files_delete", resource: "*", effect: "allow" } })
+
+    const built = (await import("../dist/access.js")) as unknown as typeof import("../src/access.ts")
+    const builtRules = built.rulesFor(own, "read-only", ["default", "work"])
+    assert.ok(builtRules.some((rule) => rule.action === "demo-work_files_delete" && rule.effect === "deny"))
+    assert.equal(built.evaluate(builtRules, "demo-work_files_delete"), "deny")
+  })
+
   test("the per-alias server derivation refuses an alias the plugin does not declare", () => {
     assert.deepEqual(serverOf("demo", "work", ["default", "work"]), { ok: true, value: "demo-work" })
     assert.deepEqual(serverOf("demo", "default", ["default", "work"]), { ok: true, value: "demo" })
@@ -191,7 +209,9 @@ describe("generating access into agents", () => {
     const widened: AgentLike = { id: "widened", permissions: [...list[0]!.permissions, { action: "*", resource: "*", effect: "allow" }] }
     const narrowed: AgentLike = { id: "narrowed", permissions: [...list[0]!.permissions, { action: "*", resource: "*", effect: "deny" }] }
     const missing: AgentLike = { id: "missing", permissions: [{ action: "*", resource: "*", effect: "allow" }] }
-    assert.deepEqual(unguardedAgents([widened, narrowed, missing], access.rules), ["missing", "widened"])
+    const specific: AgentLike = { id: "specific", permissions: [...list[0]!.permissions, { action: "demo.send_message", resource: "work:*", effect: "allow" }] }
+    const specificNarrow: AgentLike = { id: "specific-narrow", permissions: [...list[0]!.permissions, { action: "demo.send_message", resource: "work:*", effect: "deny" }] }
+    assert.deepEqual(unguardedAgents([widened, narrowed, missing, specific, specificNarrow], access.rules), ["missing", "specific", "widened"])
   })
 
   test("an invalid access option is a problem, not a wider default", async () => {
@@ -219,8 +239,8 @@ describe("sessionRules", () => {
   })
 
   test("derive each operation's rule as the conformance kit does", () => {
-    assert.deepEqual(operationRule(messages, "demo.messages.get", ana), { action: "demo.read", resource: `${ana}:demo.messages.get`, effect: "allow" })
-    assert.deepEqual(operationRule({ id: "slack.workspace" }, "slack_read_channel", "work"), { action: "slack-work_slack_read_channel", resource: "*", effect: "allow" })
+    assert.deepEqual(operationRule(messages, "demo.messages.get", ana), { ok: true, value: { action: "demo.read", resource: `${ana}:demo.messages.get`, effect: "allow" } })
+    assert.deepEqual(operationRule({ id: "slack.workspace" }, "slack_read_channel", "work", ["work"]), { ok: true, value: { action: "slack-work_slack_read_channel", resource: "*", effect: "allow" } })
     assert.equal(namespaceOf(messages), "demo")
   })
 
@@ -246,7 +266,7 @@ describe("sessionRules", () => {
     const recordings = value((m) => {
       m.sources = [{ id: "demo.recordings", kind: "events", reads: "meeting", method: "events_list", operations: ["list_files"], cost: { class: "free" } }]
     }).sources[0]!
-    const work = rulesOf(sessionRules(recordings, { source: "demo.recordings", account: "work" }))
+    const work = rulesOf(sessionRules(recordings, { source: "demo.recordings", account: "work" }, ["work"]))
     assert.deepEqual(work, [
       DENY_ALL,
       { action: "demo.events_list", resource: "*", effect: "allow" },
@@ -254,7 +274,7 @@ describe("sessionRules", () => {
     ])
     assert.equal(evaluate(work, "demo-work_list_files"), "allow")
     assert.equal(evaluate(work, "demo_list_files"), "deny")
-    const fallback = rulesOf(sessionRules(recordings, { source: "demo.recordings", account: "default" }))
+    const fallback = rulesOf(sessionRules(recordings, { source: "demo.recordings", account: "default" }, ["default"]))
     assert.deepEqual(fallback, [
       DENY_ALL,
       { action: "demo.events_list", resource: "*", effect: "allow" },
@@ -262,6 +282,9 @@ describe("sessionRules", () => {
     ])
     assert.equal(evaluate(fallback, "demo_list_files"), "allow")
     assert.equal(evaluate(fallback, "demo-work_list_files"), "deny")
+    const undeclared = sessionRules(recordings, { source: "demo.recordings", account: "work" }, ["default"])
+    assert.equal(undeclared.ok, false, "an alias the plugin does not declare is refused, not derived")
+    if (!undeclared.ok) assert.match(undeclared.problems[0]!, /not one this plugin declares/)
   })
 
   test("refuse a declared operation with a wildcard", () => {

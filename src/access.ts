@@ -22,6 +22,8 @@ export {
   methodAction,
   rulesFor,
   serverOf,
+  toolAction,
+  normalizeToolName,
 } from "./access/rules.ts"
 export type { AccessLevel } from "./access/rules.ts"
 export { applyAccess, unguardedAgents, withRules } from "./access/agents.ts"

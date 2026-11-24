@@ -12,6 +12,17 @@ export declare function accessLevel(options?: Readonly<Record<string, unknown>>)
 export declare function isMcpMethod(method: string): boolean;
 /** The permission action of a plugin's own method (contract §3): `<name>.<method>`. */
 export declare function methodAction(name: string, method: string): string;
+/**
+ * OpenCode 2.4.1's tool-name normalisation: every character outside letters, digits, `_` and `-` becomes `_`
+ * (`core/src/tool/runtime.ts:300`; the installed core's `chunks/model-resolver-6zneq7kt.js:220-221`).
+ */
+export declare function normalizeToolName(name: string): string;
+/**
+ * The permission action of an MCP tool on `server`, exactly as OpenCode builds its effective tool name: the server is
+ * the namespace with dots replaced by underscores, then `_` and the normalised tool name
+ * (`core/src/tool/runtime.ts:300`). `mcp:*` keeps its wildcard: server `demo-work` yields `demo-work_*`.
+ */
+export declare function toolAction(server: string, tool: string): string;
 /** The effect a method's class and `effect` give under `level`. `effect` only narrows: ask or deny. */
 export declare function effectFor(method: Pick<MethodItem, "class" | "effect">, level: AccessLevel): PermissionRule["effect"];
 /**

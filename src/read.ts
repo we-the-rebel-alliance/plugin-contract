@@ -59,6 +59,8 @@ export interface ReadRequest {
   /** A snapshot read. */
   readonly pick?: readonly string[]
   readonly context: ParamsContext
+  /** The plugin's declared account aliases, from its manifest options. Fences refuse an undeclared alias. */
+  readonly aliases: readonly string[]
   readonly signal?: AbortSignal
 }
 
@@ -186,7 +188,7 @@ export async function read(host: ReadHost, request: ReadRequest): Promise<ReadOu
   const { source, input } = prepared
   const called = await fencedCall(
     host,
-    sessionRules(source, request.grant),
+    sessionRules(source, request.grant, request.aliases),
     { package: request.installed.package, method: source.method, input, ...(request.signal ? { signal: request.signal } : {}) },
     `${request.consumer} reads ${source.id}`,
   )
@@ -247,6 +249,8 @@ export interface DetailRequest {
   readonly consumer: string
   /** The event the detail is read for, as the source listed it. Inputs come only from its API fields. */
   readonly event: Readonly<Record<string, unknown>>
+  /** The plugin's declared account aliases. */
+  readonly aliases: readonly string[]
   readonly signal?: AbortSignal
 }
 
@@ -287,7 +291,7 @@ export async function readDetail(host: ReadHost, request: DetailRequest): Promis
   const scope = grant.scope === undefined ? {} : (canonicalScope(grant.scope) as Record<string, string[]>)
   const called = await fencedCall(
     host,
-    detailRules(source, request.detail, grant),
+    detailRules(source, request.detail, grant, request.aliases),
     { package: installed.package, method: detail.method, input: { account: grant.account, scope, fields: fields.value }, ...(request.signal ? { signal: request.signal } : {}) },
     `${request.consumer} reads ${request.detail}`,
   )
@@ -315,7 +319,7 @@ export interface ProbeAnswer {
  * operations it declares, or the identity operations the caller passes. The source's own method action fences the
  * read; `probe` adds no content. The call is `probe` with `{ source?, account }`.
  */
-export async function probe(host: ReadHost, request: { readonly installed: InstalledManifest; readonly source: string; readonly account: string; readonly identityOperations?: readonly string[]; readonly signal?: AbortSignal }): Promise<{ readonly ok: true; readonly answer: ProbeAnswer } | { readonly ok: false; readonly failure: ReadFailure }> {
+export async function probe(host: ReadHost, request: { readonly installed: InstalledManifest; readonly source: string; readonly account: string; readonly identityOperations?: readonly string[]; readonly aliases: readonly string[]; readonly signal?: AbortSignal }): Promise<{ readonly ok: true; readonly answer: ProbeAnswer } | { readonly ok: false; readonly failure: ReadFailure }> {
   const source = findSource(request.installed.manifest, request.source)
   if (!source) return { ok: false, failure: failure("UNAVAILABLE", `${request.installed.package} declares no source ${request.source}`, "Check the source id.") }
   const method = findMethod(request.installed.manifest, "probe")
@@ -324,7 +328,7 @@ export async function probe(host: ReadHost, request: { readonly installed: Insta
   const name = typeof source.input?.["source"] === "string" ? { source: source.input["source"] } : {}
   const called = await fencedCall(
     host,
-    probeRules(source, request.account, identity, `${namespaceOf(source)}.probe`),
+    probeRules(source, request.account, identity, `${namespaceOf(source)}.probe`, request.aliases),
     { package: request.installed.package, method: "probe", input: { ...name, account: request.account }, ...(request.signal ? { signal: request.signal } : {}) },
     `probe ${source.id}`,
   )

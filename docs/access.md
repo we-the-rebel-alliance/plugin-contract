@@ -30,8 +30,10 @@ not fall back to a wider level.
 
 The rule for a plugin's own method is its permission action, `<name>.<method>`, on `*`. A pass-through MCP method
 (`mcp:<tool>` or `mcp:*`) is the MCP tool's action, `<server>_<tool>`, on `*`, one rule per alias: `<name>_<tool>` for
-`default` and `<name>-<alias>_<tool>` for any other. A rule for `work` can never reach another alias's tools. Wildcard
-rules (`mcp:*`) are emitted before specific ones, because OpenCode's last matching rule wins.
+`default` and `<name>-<alias>_<tool>` for any other. A rule for `work` can never reach another alias's tools. The tool
+name is rewritten exactly as OpenCode 2.4.1 rewrites it (`core/src/tool/runtime.ts:300`): `mcp:files.delete` on server
+`demo-work` is `demo-work_files_delete`, and `mcp:*` keeps its wildcard. Wildcard rules are emitted before specific
+ones, because OpenCode's last matching rule wins.
 
 ## Into the agents
 
@@ -69,7 +71,9 @@ const outcome = await read(host, { installed, source: source.id, grant, consumer
 - `actSessionRules(manifest, act, grant, phase)` — a preview session cannot run the commit action.
 - `grantCovers(grant, request)` — the grant's source, account and scope cover a read.
 
-`operationRule`, `namespaceOf`, `accountProblem`, `DENY_ALL` and `evaluate` are exported for the app side and for tests.
+`operationRule` returns `Checked<PermissionRule>` and refuses an undeclared alias instead of throwing; the read, act,
+detail and probe requests carry the plugin's declared account aliases so a fence never falls back to the grant's own
+account. `namespaceOf`, `accountProblem`, `DENY_ALL`, `matches` and `evaluate` are exported for the app side and tests.
 `evaluate` is OpenCode's last-match-wins evaluation, with no match asking.
 
 ## Errors

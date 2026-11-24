@@ -45,6 +45,24 @@ export function methodAction(name: string, method: string): string {
   return `${name}.${method}`
 }
 
+/**
+ * OpenCode 2.4.1's tool-name normalisation: every character outside letters, digits, `_` and `-` becomes `_`
+ * (`core/src/tool/runtime.ts:300`; the installed core's `chunks/model-resolver-6zneq7kt.js:220-221`).
+ */
+export function normalizeToolName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_-]/g, "_")
+}
+
+/**
+ * The permission action of an MCP tool on `server`, exactly as OpenCode builds its effective tool name: the server is
+ * the namespace with dots replaced by underscores, then `_` and the normalised tool name
+ * (`core/src/tool/runtime.ts:300`). `mcp:*` keeps its wildcard: server `demo-work` yields `demo-work_*`.
+ */
+export function toolAction(server: string, tool: string): string {
+  const namespace = server.replaceAll(".", "_")
+  return tool === "*" ? `${namespace}_*` : `${namespace}_${normalizeToolName(tool)}`
+}
+
 /** The effect a method's class and `effect` give under `level`. `effect` only narrows: ask or deny. */
 export function effectFor(method: Pick<MethodItem, "class" | "effect">, level: AccessLevel): PermissionRule["effect"] {
   if (method.effect === "deny") return "deny"
@@ -98,7 +116,7 @@ export function rulesFor(manifest: Manifest, level: AccessLevel, aliases: readon
       for (const alias of declared) {
         const server = serverOf(name, alias, declared)
         if (!server.ok) throw new Error(`access: ${server.problems.join("; ")}`)
-        push({ action: `${server.value}_${tool}`, resource: "*", effect })
+        push({ action: toolAction(server.value, tool), resource: "*", effect })
       }
       continue
     }

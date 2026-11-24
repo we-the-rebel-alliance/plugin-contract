@@ -96,7 +96,10 @@ A **non-read** method over RPC needs one of contract §8's two confirmations (LD
   action the method commits (or the method itself when it commits no action), account, manifest hash, exact input
   digest, time window, `cfm`, and single use through the plugin's durable store.
 
-A non-read over RPC with only an allow rule is `PERMISSION_DENIED`; the next step names both ways to confirm it.
+A non-read over RPC with only an allow rule is `PERMISSION_DENIED`; the next step names both ways to confirm it. A
+saved "Always allow" from a tool door never confirms an RPC write: the register forces a fresh one-call ask (the
+`evaluate` hook turns a saved allow back into `ask`), or a valid grant is the confirmation. A tool door saves only
+`<account>:*` for its own method action, never a project-wide `*`.
 
 The plugin passes the verifier's wiring to `register` as its fourth argument:
 
@@ -124,9 +127,10 @@ The input is checked against the handler's schema (`INPUT_INVALID`), the answer 
 
 A `plans: true` method answers `{ planId, method }` and may carry §8's preview fields (`output`, `reaches`, `changes`,
 `cost`, `trust`); `method` must be the one declared method whose `commits` names the plan (`PLAN_INVALID` otherwise).
-A `commits: "<plan>"` method accepts exactly `{ planId }` from that plan, with no `account`: the grant names the
-account. Its handler's own input schema is not used, and anything else is `PLAN_INVALID`. The register does not store
-plans: the handler does, and resolves the `planId` when it commits.
+A `commits: "<plan>"` method accepts exactly `{ planId }` from that plan, with no `account`. The register stores each
+plan's account (and expiry, 15 minutes) in the plugin instance: a commit runs as that account, and its permission gate
+names that account. An unknown or expired `planId` is `PLAN_INVALID`. A grant for a commit must name the plan's
+account; another account is `ACCOUNT_MISMATCH`. The handler's own input schema is not used for a commit.
 
 ## Permissions on operations
 

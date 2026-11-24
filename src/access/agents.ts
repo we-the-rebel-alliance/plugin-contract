@@ -18,7 +18,7 @@ import type { Plugin } from "@opencode/plugin"
 import { accountsOf } from "../accounts.ts"
 import type { Checked } from "../internal/checked.ts"
 import type { Manifest } from "../manifest.ts"
-import { evaluate, type PermissionRule } from "./fences.ts"
+import { evaluate, matches, type PermissionRule } from "./fences.ts"
 import { accessLevel, aliasesFrom, rulesFor, type AccessLevel } from "./rules.ts"
 
 /** An agent as the transforms and status see it: its id and its ordered rules. */
@@ -92,9 +92,18 @@ const concrete = (action: string): string => action.replaceAll("*", "x").replace
  * a later narrower rule is the person's choice and does not unguard the agent.
  */
 function overridden(agent: AgentLike, rule: PermissionRule): boolean {
-  if (!agent.permissions.some((held) => sameRule(held, rule))) return true
-  const effective = evaluate(agent.permissions, concrete(rule.action), rule.resource)
-  return rank(effective) > rank(rule.effect)
+  const index = agent.permissions.findIndex((held) => sameRule(held, rule))
+  if (index === -1) return true
+  const action = concrete(rule.action)
+  if (rank(evaluate(agent.permissions, action, rule.resource)) > rank(rule.effect)) return true
+  // A later rule on a specific resource can widen the generated rule for that resource even though `*` still reads the
+  // generated effect. Name the agent too; a narrower later rule is the person's choice.
+  for (const later of agent.permissions.slice(index + 1)) {
+    if (rank(later.effect) <= rank(rule.effect)) continue
+    if (later.resource === "*") continue
+    if (matches(later.action, action) || matches(rule.action, concrete(later.action))) return true
+  }
+  return false
 }
 
 /**

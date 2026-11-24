@@ -5,7 +5,7 @@ import {
 } from "./chunks/chunk-SQQJ24OZ.js";
 import {
   actSessionRules
-} from "./chunks/chunk-GXCB3UX4.js";
+} from "./chunks/chunk-EDGC5UUW.js";
 import "./chunks/chunk-R6LVJOLA.js";
 import {
   findAction
@@ -155,7 +155,7 @@ async function act(host, request) {
   if (inputProblems.length > 0) return refused("SCHEMA_VIOLATION", inputProblems.join("; "), "Pass only the input the act's schema describes.");
   const called = await fencedCall(
     host,
-    actSessionRules(installed.manifest, declared, grant, request.phase),
+    actSessionRules(installed.manifest, declared, grant, request.phase, request.aliases),
     {
       package: installed.package,
       method: request.phase === "preview" ? declared.preview : declared.commit,
