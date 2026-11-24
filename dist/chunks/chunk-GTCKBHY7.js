@@ -50,7 +50,7 @@ function sessionRules(source, grant) {
   return fenced([allow(method, "*"), ...operations.map((operation) => operationRule(source, operation, grant.account))]);
 }
 function actSessionRules(manifest, act, grant, phase) {
-  if (grant.act !== act.id) return { ok: false, problems: [`the grant is for ${grant.act}, not ${act.id}`] };
+  if (grant.action !== act.id) return { ok: false, problems: [`the grant is for ${grant.action}, not ${act.id}`] };
   const problem = accountProblem(grant.account);
   if (problem) return { ok: false, problems: [problem] };
   const method = phase === "preview" ? act.preview : act.commit;

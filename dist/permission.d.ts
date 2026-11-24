@@ -1,5 +1,5 @@
 /**
- * Permission: the exact OpenCode session rules a grant allows (design §3, "the trust rule").
+ * Permission: the exact OpenCode session rules a grant allows (contract §6 and §13).
  *
  * Every read runs in a session limited to these rules. OpenCode checks each inner tool call a plugin makes against the
  * calling session's rules, and the last matching rule wins, so the rules are a deny of everything, then one allow per
@@ -26,8 +26,7 @@ export interface PermissionRule {
     readonly effect: "allow" | "deny" | "ask";
 }
 /**
- * A person's grant: one consumer may read one source, for one account, within one scope (design §2, "consent per
- * (consumer, source, account, scope)").
+ * A person's grant: one consumer may read one source, for one account, within one scope (contract §6 and §13).
  */
 export interface Grant {
     /** Who reads: a consumer, such as `notes` or `notes.home`, or an app with its viewer. */
@@ -51,7 +50,7 @@ export interface ActGrant {
     /** Who acts: a consumer, such as `notes`, or an app with its viewer. */
     readonly consumer: string;
     /** The action id. */
-    readonly act: string;
+    readonly action: string;
     /** The account the person confirmed. */
     readonly account: string;
     /** The manifest hash the person consented to; a changed manifest asks again. */
@@ -102,7 +101,7 @@ export declare function sessionRules(source: SourceItem, grant: Pick<Grant, "sou
  * declared operation for the granted account. A preview session allows the preview action and not the commit action,
  * so the commit method cannot run while previewing. Operations are derived like a source's (`operationRule`).
  */
-export declare function actSessionRules(manifest: Manifest, act: Pick<ActionItem, "id" | "preview" | "commit">, grant: Pick<ActGrant, "act" | "account">, phase: ActPhase): Checked<readonly PermissionRule[]>;
+export declare function actSessionRules(manifest: Manifest, act: Pick<ActionItem, "id" | "preview" | "commit">, grant: Pick<ActGrant, "action" | "account">, phase: ActPhase): Checked<readonly PermissionRule[]>;
 /**
  * The session rules for one detail read of `source` under `grant`: the source's own rules, plus the detail's declared
  * method. Refused when the source declares no such detail.

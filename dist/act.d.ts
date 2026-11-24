@@ -12,7 +12,7 @@ export interface ActHost extends ReadHost {
      */
     issuedConfirmation?(check: {
         readonly token: string;
-        readonly act: string;
+        readonly action: string;
         readonly effect: ActionEffect;
         readonly account: string;
         readonly consumer: string;
@@ -21,7 +21,7 @@ export interface ActHost extends ReadHost {
 /** One preview or commit of an act. */
 export interface ActRequest {
     readonly installed: InstalledManifest;
-    readonly act: string;
+    readonly action: string;
     readonly grant: ActGrant;
     readonly consumer: string;
     readonly phase: ActPhase;
