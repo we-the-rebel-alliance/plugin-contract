@@ -73,7 +73,7 @@ export interface ConformanceFixtures {
   /** The kinds the source declares (`reads`): every event is one of them. */
   readonly kinds?: readonly string[]
   /**
-   * The source id's first segment (`acme` for `acme.routine-runs`): every `x-` kind must be in it. Without it, any
+   * The source id's first segment (`acme` for `acme.reminders`): every `x-` kind must be in it. Without it, any
    * well-formed `x-<namespace>/<kind>` passes.
    */
   readonly namespace?: string

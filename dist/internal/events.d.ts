@@ -6,13 +6,13 @@ export declare const EVENTS_LIST = "events_list";
 /** The core kinds of an event (contract §7). */
 export declare const EVENT_KINDS: readonly ["message", "meeting", "session", "bookmark", "issue", "pr", "commit", "doc", "event", "task", "file"];
 export type CoreKind = (typeof EVENT_KINDS)[number];
-/** A plugin's own kind: `x-<plugin>/<kind>`, such as `x-acme/routine-run`. */
+/** A plugin's own kind: `x-<plugin>/<kind>`, such as `x-acme/reminder`. */
 export type ExtensionKind = `x-${string}/${string}`;
 export type EventKind = CoreKind | ExtensionKind;
 /** The most characters each segment of an `x-<namespace>/<name>` takes: the namespace, and the name. */
 export declare const EXTENSION_SEGMENT_MAX = 32;
 /**
- * The one rule for an extension name, an event kind (`x-acme/routine-run`) or a snapshot output (`x-acme/receipt`):
+ * The one rule for an extension name, an event kind (`x-acme/reminder`) or a snapshot output (`x-acme/receipt`):
  * `x-`, a lowercase namespace word, `/`, a lowercase name word, each of 1 to `EXTENSION_SEGMENT_MAX` characters.
  * The registry and every consumer use this pattern rather than their own.
  */
@@ -23,11 +23,11 @@ export declare const EXTENSION_KIND: RegExp;
 export declare const isExtensionName: (name: unknown) => name is ExtensionKind;
 /** True for a core kind, or an extension kind (`EXTENSION_NAME`). */
 export declare const isEventKind: (kind: unknown) => kind is EventKind;
-/** An extension kind's namespace: `acme` in `x-acme/routine-run`; undefined for a core kind or a malformed one. */
+/** An extension kind's namespace: `acme` in `x-acme/reminder`; undefined for a core kind or a malformed one. */
 export declare function extensionNamespace(kind: string): string | undefined;
 /**
  * True for a core kind, or an extension kind in `namespace`: the first segment of the source's id (`acme` for
- * `acme.routine-runs`). An extension kind of another namespace is refused, so one plugin cannot speak in another's
+ * `acme.reminders`). An extension kind of another namespace is refused, so one plugin cannot speak in another's
  * vocabulary.
  */
 export declare function isEventKindIn(kind: unknown, namespace: string): kind is EventKind;
