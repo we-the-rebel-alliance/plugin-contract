@@ -4,7 +4,7 @@ The `bus` module is how a plugin tells every app that something changed, without
 implements contract §10: three typed events, published by OpenCode as `rpc.<name>.<event>` on `/api/event`.
 
 ```ts
-import { createBus } from "@we-the-rebel-alliance/plugin-contract/bus"
+import { busEvents, createBus, readBusEvent } from "@we-the-rebel-alliance/plugin-contract/bus"
 ```
 
 ## A nudge, not the data
@@ -35,35 +35,38 @@ consequences:
 - `reason` is a short one-line explanation, at most 160 characters: `write`, `webhook`, `token-refresh`. It is for a log
   or a diagnostic, not for the app to render as content.
 
-Every event's data is one closed object: exactly those fields, all required, with no extras. The definition registers
-these JSON Schemas with OpenCode, so the host and every reader can validate the same shape.
+Every event's data is one closed object: exactly those fields, all required, with no extras. The events block supplies
+these JSON Schemas to OpenCode, and the reader applies the same validator to a payload it receives.
 
 ## How a plugin wires the writer
 
-`createBus` validates the plugin name, registers one `Rpc.PortableDefinition` with id `<name>`, no methods and the three
-events, and returns a typed writer. Call it once during the plugin's setup:
+A plugin has **one** RPC registration, through `register` (roadmap 1.6). The bus contributes its events block to that
+registration and never opens a second one. OpenCode keeps a list of registrations per RPC id and resolves a call to the
+last one, so a second registration with id `<name>` would hide the plugin's methods: every
+`POST /api/rpc/<name>/<method>` would answer `rpc.method_not_found`.
 
 ```ts
-import type { Plugin } from "@opencode/plugin"
-import { createBus } from "@we-the-rebel-alliance/plugin-contract/bus"
+import { busEvents, createBus } from "@we-the-rebel-alliance/plugin-contract/bus"
 
-export const plugin: Plugin.Plugin = {
-  id: "slack",
-  async setup(ctx) {
-    const bus = await createBus(ctx, "slack")
+const name = "slack" as const
+const registration = await ctx.rpc.register(
+  { id: name, methods, events: busEvents(name) },
+  handlers,
+)
+const bus = createBus(name, registration)
 
-    // After the plugin has written through the provider.
-    await bus.emit("changed", { capability: "slack.mentions", account: "work", reason: "write" })
+// After the plugin has written through the provider.
+await bus.emit("changed", { capability: "slack.mentions", account: "work", reason: "write" })
 
-    // When an account needs attention.
-    await bus.emit("account", { account: "personal", state: "needs_sign_in" })
-  },
-}
+// When an account needs attention.
+await bus.emit("account", { account: "personal", state: "needs_sign_in" })
 ```
 
-The plugin's `<name>` follows contract §3: lowercase letters and digits, 2 to 31 characters, no hyphen. `createBus`
-throws at setup for a name that breaks the rule, because by then the name is a bug in the plugin, not data from a
-provider. Everything after setup is returned, never thrown.
+`busEvents(name)` validates the name and returns `changed`, `status` and `account` for the registration's `events`.
+`createBus(name, registration)` validates the name and wraps that registration's `events.emit`; it registers nothing
+itself. Both throw at setup for a name that breaks contract §3: lowercase letters and digits, 2 to 31 characters, no
+hyphen. A plugin name is a bug in the plugin, not data from a provider. Everything after setup is returned, never
+thrown.
 
 `emit` answers with a result:
 
@@ -96,8 +99,8 @@ A decoded event is `{ type, name, event, data }`, where `type` is exactly `rpc.<
 name, `event` is `changed`, `status` or `account`, and `data` is that event's data. The reader ignores the rest of the
 `/api/event` envelope (`id`, `created`, `location` and so on), so it needs no OpenCode SDK.
 
-`readBusEvent` never throws. When a payload is not this plugin's bus event, it answers one reason, checked in this
-order:
+`readBusEvent` throws only when `options.name` is not a contract §3 name; for a payload it never throws. When a payload
+is not this plugin's bus event, it answers one reason, checked in this order:
 
 | Reason | Meaning |
 |---|---|

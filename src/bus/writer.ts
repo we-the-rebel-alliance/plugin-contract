@@ -1,16 +1,23 @@
 /**
- * The writer side of the bus: a plugin registers the three events once and emits nudges (contract §10).
+ * The writer side of the bus: a plugin registers the three events inside its one RPC registration and emits nudges
+ * (contract §10).
  *
- *   const bus = await createBus(ctx, "slack")
+ *   const registration = await ctx.rpc.register({ id: name, methods, events: busEvents(name) }, handlers)
+ *   const bus = createBus(name, registration)
  *   await bus.emit("changed", { capability: "slack.mentions", account: "work", reason: "write" })
  *
- * `createBus` registers a `Rpc.PortableDefinition` with id `<name>`, no methods and the three events, and returns a
- * typed writer. The host publishes each accepted emit as `rpc.<name>.<event>` on `/api/event`. A payload is checked
- * before it leaves the plugin: a malformed one is refused with its field paths, and one holding a secret is refused
- * with reason `secret` (contract §13). Neither throws, and neither echoes a value.
+ * `createBus` never registers anything. OpenCode keeps a list of registrations per RPC id and resolves a call to the
+ * last one, so a second registration with id `<name>` would hide the plugin's methods and every call would answer
+ * `rpc.method_not_found`. The plugin therefore registers once, with `busEvents(name)` merged into its methods, and this
+ * module only wraps the events emitter of that registration.
+ *
+ * The host publishes each accepted emit as `rpc.<name>.<event>` on `/api/event`. A payload is checked before it leaves
+ * the plugin: a malformed one is refused with its field paths, and one holding a secret is refused with reason
+ * `secret` (contract §13). Neither throws, and neither echoes a value.
  */
-import { checkBusData, holdsSecret, serialise } from "./data.ts"
-import { assertPluginName, BUS_EVENTS, busDefinition, type BusDefinition, type BusEventData, type BusEventName } from "./definition.ts"
+import { holdsSecret, serialise } from "./data.ts"
+import { assertPluginName, BUS_EVENTS, type BusEventData, type BusEventName } from "./definition.ts"
+import { checkBusData } from "./schema.ts"
 
 /** What `emit` answers: accepted, or refused with one reason. */
 export type BusEmitResult =
@@ -27,29 +34,24 @@ export interface Bus {
   emit<K extends BusEventName>(event: K, data: BusEventData[K]): Promise<BusEmitResult>
 }
 
-/** The slice of `ctx` the bus uses: `ctx.rpc.register` (OpenCode 2.4.1). Kept structural so no host type ships. */
-export interface BusHost {
-  readonly rpc: {
-    register(definition: BusDefinition, handlers: Readonly<Record<string, never>>): Promise<BusRegistration>
-  }
-}
-
-/** What `ctx.rpc.register` answers; only the event emitter is used. */
+/**
+ * The slice of a registration the bus uses. Kept structural and plain, so OpenCode's `RpcRegistration` is assignable
+ * without this package naming a host type in its published declarations.
+ */
 export interface BusRegistration {
   readonly events: {
-    emit(...args: [name: BusEventName, data: BusEventData[BusEventName]]): Promise<void>
+    emit(name: BusEventName, data: BusEventData[BusEventName]): Promise<void>
   }
 }
 
 /**
- * Register the bus for one plugin and return its writer.
+ * Wrap the events emitter of a plugin's single RPC registration with the typed writer.
  *
  * A plugin name that is not contract §3's is a programming error and throws at setup, before any event is named. Every
  * payload refusal afterwards is returned, never thrown.
  */
-export async function createBus(host: BusHost, name: string): Promise<Bus> {
+export function createBus(name: string, registration: BusRegistration): Bus {
   assertPluginName(name)
-  const registration = await host.rpc.register(busDefinition(name), {})
   return {
     name,
     async emit(event, data) {

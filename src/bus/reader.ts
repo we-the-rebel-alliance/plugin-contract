@@ -9,8 +9,9 @@
  *
  * A bus event is a nudge, never the data itself: the app re-reads through door 3 after it.
  */
-import { checkBusData, holdsSecret, serialise } from "./data.ts"
-import { BUS_EVENTS, type BusEventData, type BusEventName } from "./definition.ts"
+import { holdsSecret, serialise } from "./data.ts"
+import { assertPluginName, BUS_EVENTS, type BusEventData, type BusEventName } from "./definition.ts"
+import { checkBusData } from "./schema.ts"
 
 /** One decoded bus event: its full type, the plugin's name, the event's name and the event's own data. */
 export type BusEvent = {
@@ -47,9 +48,10 @@ const RPC_TYPE = /^rpc\.([a-z0-9]{2,31})\.([a-z0-9_]+)$/
  *
  * The reasons come in the order an app checks them: a payload that is not an RPC event at all, an RPC event of another
  * plugin, one of this plugin's RPC events with a name the bus does not have, data that holds a secret, and finally data
- * that breaks the schema. Nothing throws, whatever the payload is.
+ * that breaks the schema. A bad `options.name` throws; nothing about the payload throws, whatever it is.
  */
 export function readBusEvent(payload: unknown, options: ReadBusOptions): BusReadResult {
+  assertPluginName(options.name)
   if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return { ok: false, reason: "not-a-bus-event", problems: [] }
   const record = payload as Readonly<Record<string, unknown>>
   const type = record["type"]

@@ -1,17 +1,19 @@
-// The bus (contract §10, §13): a plugin registers `changed`, `status` and `account` once and emits nudges; an app reads
-// one `/api/event` payload as a typed event or a reason. The tests hold the writer, the reader and the one derivation
-// between them: `rpc.<name>.<event>`.
+// The bus (contract §10, §13): a plugin merges `busEvents(name)` into its one RPC registration and wraps that
+// registration with `createBus(name, registration)`; an app reads one `/api/event` payload as a typed event or a
+// reason. The tests hold the writer, the reader, the one derivation between them (`rpc.<name>.<event>`) and the host's
+// registration rule: the last registration per id wins, so a second one would hide the plugin's methods.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 import type { Plugin, Rpc } from "@opencode/plugin"
+import type { RpcRegistration } from "@opencode/plugin/promise/rpc"
 import {
   BUS_EVENTS,
   BUS_STATES,
   type Bus,
-  type BusDefinition,
-  type BusEventData,
-  type BusHost,
-  busDefinition,
+  type BusEventName,
+  type BusEvents,
+  type BusRegistration,
+  busEvents,
   busEventType,
   capabilityPattern,
   createBus,
@@ -20,41 +22,24 @@ import {
   REASON_MAX,
   type ChangedData,
 } from "../src/bus.ts"
+import { makeRpcHost, RpcFailure } from "./support/rpc-host.ts"
 
 interface Emitted {
   readonly type: string
   readonly data: unknown
 }
 
-/** A host that records the definition it was given and the events the writer emits, as the real host names them. */
-function fakeHost(): {
-  host: BusHost
-  definitions: BusDefinition[]
-  handlers: unknown[]
-  emitted: Emitted[]
-  fail: { value: boolean }
-} {
-  const definitions: BusDefinition[] = []
-  const handlers: unknown[] = []
+/** A writer over a stub registration: enough for payload tests, while the RPC tests below use the faithful host. */
+function stub(name = "slack"): { bus: Bus; emitted: Emitted[] } {
   const emitted: Emitted[] = []
-  const fail = { value: false }
-  const host: BusHost = {
-    rpc: {
-      async register(definition, received) {
-        definitions.push(definition)
-        handlers.push(received)
-        return {
-          events: {
-            async emit(name, data) {
-              if (fail.value) throw new Error("the host is gone")
-              emitted.push({ type: `rpc.${definition.id}.${name}`, data })
-            },
-          },
-        }
+  const bus = createBus(name, {
+    events: {
+      async emit(event, data) {
+        emitted.push({ type: busEventType(name, event), data })
       },
     },
-  }
-  return { host, definitions, handlers, emitted, fail }
+  })
+  return { bus, emitted }
 }
 
 const changed = (overrides: Partial<ChangedData> = {}): ChangedData => ({
@@ -65,8 +50,8 @@ const changed = (overrides: Partial<ChangedData> = {}): ChangedData => ({
 })
 
 /** The JSON Schema of one event, as a record a test can read. */
-function schema(definition: BusDefinition, event: string): Record<string, unknown> {
-  return (definition.events as unknown as Record<string, { schema: Record<string, unknown> }>)[event]!.schema
+function schema(events: BusEvents, event: keyof BusEvents): Record<string, unknown> {
+  return events[event].schema as Record<string, unknown>
 }
 
 /** A payload as `/api/event` carries it, with the envelope fields the reader ignores. */
@@ -77,36 +62,40 @@ const payload = (type: string, data: unknown): Record<string, unknown> => ({
   data,
 })
 
-describe("the bus writer (contract §10)", () => {
-  test("registers one definition: the plugin's id, no methods and exactly the three events", async () => {
-    const { host, definitions, handlers } = fakeHost()
-    const bus = await createBus(host, "slack")
-    assert.equal(bus.name, "slack")
-    assert.equal(definitions.length, 1)
-    assert.deepEqual(handlers, [{}])
-    const definition = definitions[0]!
-    assert.equal(definition.id, "slack")
-    assert.deepEqual(definition.methods, {})
-    assert.deepEqual(Object.keys(definition.events), [...BUS_EVENTS])
-  })
+/** Emit an invalid payload and return its problems, with the reason checked on the way. */
+async function invalid(bus: Bus, event: BusEventName, data: unknown): Promise<readonly string[]> {
+  const result = await bus.emit(event, data as never)
+  if (result.ok) assert.fail(`expected ${event} to be refused`)
+  assert.equal(result.reason, "invalid")
+  return result.reason === "invalid" ? result.problems : []
+}
 
-  test("declares each event as a closed object with its fields required", async () => {
-    const definition = busDefinition("slack")
+describe("the bus events (contract §10)", () => {
+  test("busEvents declares exactly the three events, each a closed object with its fields required", () => {
+    const events = busEvents("slack")
+    assert.deepEqual(Object.keys(events), [...BUS_EVENTS])
     assert.deepEqual(
-      { changed: schema(definition, "changed")["required"], status: schema(definition, "status")["required"], account: schema(definition, "account")["required"] },
+      { changed: schema(events, "changed")["required"], status: schema(events, "status")["required"], account: schema(events, "account")["required"] },
       { changed: ["capability", "account", "reason"], status: ["state"], account: ["account", "state"] },
     )
     for (const event of BUS_EVENTS) {
-      assert.equal(schema(definition, event)["type"], "object", event)
-      assert.equal(schema(definition, event)["additionalProperties"], false, event)
+      assert.equal(schema(events, event)["type"], "object", event)
+      assert.equal(schema(events, event)["additionalProperties"], false, event)
     }
-    const states = (schema(definition, "status")["properties"] as Record<string, Record<string, unknown>>)["state"]!["enum"]
+    const states = (schema(events, "status")["properties"] as Record<string, Record<string, unknown>>)["state"]!["enum"]
     assert.deepEqual(states, [...BUS_STATES])
   })
 
+  test("busEvents builds the capability rule from the plugin name", () => {
+    assert.equal(busEvents("gws").changed.schema["type"], "object")
+    assert.equal(capabilityPattern("gws"), "^gws\\.[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)*$")
+    assert.throws(() => busEvents("gws-plugin"), /is not a plugin name/)
+  })
+})
+
+describe("the bus writer (contract §10)", () => {
   test("emits each event, and the host names it rpc.<name>.<event>", async () => {
-    const { host, emitted } = fakeHost()
-    const bus = await createBus(host, "slack")
+    const { bus, emitted } = stub()
     assert.deepEqual(await bus.emit("changed", changed()), { ok: true })
     assert.deepEqual(await bus.emit("status", { state: "ready" }), { ok: true })
     assert.deepEqual(await bus.emit("account", { account: "work", state: "needs_sign_in" }), { ok: true })
@@ -117,74 +106,69 @@ describe("the bus writer (contract §10)", () => {
     ])
   })
 
-  test("derives the event type from the plugin name, and the definition id is the name", async () => {
+  test("derives the event type from the plugin name", () => {
     assert.equal(busEventType("slack", "changed"), "rpc.slack.changed")
     assert.equal(busEventType("gws", "account"), "rpc.gws.account")
-    assert.equal(busDefinition("gws").id, "gws")
-    assert.equal(capabilityPattern("gws"), "^gws\\.[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)*$")
   })
 
-  test("a plugin name that breaks contract §3 is refused before anything is registered", async () => {
-    const { host, definitions } = fakeHost()
+  test("a plugin name that breaks contract §3 is refused", () => {
+    const registration: BusRegistration = { events: { async emit() {} } }
     for (const name of ["slack-plugin", "Slack", "a", "1".repeat(32), "sla_ck", "", " slack", "slack!"]) {
-      await assert.rejects(createBus(host, name), /is not a plugin name/, name)
+      assert.throws(() => createBus(name, registration), /is not a plugin name/, name)
     }
-    await assert.rejects(createBus(host, 42 as unknown as string), /is not a plugin name/)
-    assert.equal(definitions.length, 0)
+    assert.throws(() => createBus(42 as unknown as string, registration), /is not a plugin name/)
     for (const name of ["slack", "gws", "x1", "a1", "1a", "a".repeat(31)]) assert.equal(isPluginName(name), true, name)
     for (const name of ["a", "a".repeat(32), "slack-plugin", "Slack", "sla_ck", "", 42]) assert.equal(isPluginName(name), false, String(name))
   })
 
   test("refuses malformed data with its field paths and emits nothing", async () => {
-    const { host, emitted } = fakeHost()
-    const bus = await createBus(host, "slack")
-    const cases: [Parameters<Bus["emit"]>[0], unknown, string][] = [
-      ["changed", undefined, "data: must be an object"],
-      ["changed", null, "data: must be an object"],
-      ["changed", [], "data: must be an object"],
-      ["changed", "changed", "data: must be an object"],
-      ["changed", { account: "work", reason: "write" }, "data.capability: is required"],
-      ["changed", { capability: "slack.mentions", reason: "write" }, "data.account: is required"],
-      ["changed", { capability: "slack.mentions", account: "work" }, "data.reason: is required"],
-      ["changed", changed({ capability: 42 as unknown as string }), "data.capability: must be a string"],
-      ["changed", changed({ capability: "" }), "data.capability: must not be empty"],
-      ["changed", changed({ capability: "gws.gmail" }), "data.capability: must be this plugin's capability id, slack.<capability>"],
-      ["changed", changed({ capability: "mentions" }), "data.capability: must be this plugin's capability id, slack.<capability>"],
-      ["changed", changed({ capability: "slack.Mentions" }), "data.capability: must be this plugin's capability id, slack.<capability>"],
-      ["changed", changed({ account: 42 as unknown as string }), "data.account: must be a string"],
-      ["changed", changed({ account: "Work" }), "data.account: must be an account alias: lowercase letters, digits and underscores, starting with a letter (contract §5)"],
-      ["changed", changed({ account: "work-2" }), "data.account: must be an account alias: lowercase letters, digits and underscores, starting with a letter (contract §5)"],
-      ["changed", changed({ account: "a".repeat(33) }), "data.account: must be an account alias: lowercase letters, digits and underscores, starting with a letter (contract §5)"],
-      ["changed", changed({ reason: 42 as unknown as string }), "data.reason: must be a string"],
-      ["changed", changed({ reason: "" }), "data.reason: must not be empty"],
-      ["changed", changed({ reason: "a".repeat(REASON_MAX + 1) }), `data.reason: must be at most ${REASON_MAX} characters`],
-      ["changed", changed({ reason: "two\nlines" }), `data.reason: must be 1 to ${REASON_MAX} characters on one line`],
-      ["changed", { ...changed(), extra: "content" }, "data.extra: is not a field of this event"],
-      ["status", undefined, "data: must be an object"],
-      ["status", {}, "data.state: is required"],
-      ["status", { state: "signed_in" }, `data.state: must be one of ${BUS_STATES.join(", ")}`],
-      ["status", { state: 1 }, `data.state: must be one of ${BUS_STATES.join(", ")}`],
-      ["status", { state: "ready", detail: "content" }, "data.detail: is not a field of this event"],
-      ["account", undefined, "data: must be an object"],
-      ["account", { state: "ready" }, "data.account: is required"],
-      ["account", { account: "work" }, "data.state: is required"],
-      ["account", { account: "WORK", state: "ready" }, "data.account: must be an account alias: lowercase letters, digits and underscores, starting with a letter (contract §5)"],
-      ["account", { account: "work", state: "signed_out" }, `data.state: must be one of ${BUS_STATES.join(", ")}`],
-      ["account", { account: "work", state: "ready", extra: true }, "data.extra: is not a field of this event"],
+    const { bus, emitted } = stub()
+    const cases: [BusEventName, unknown, string][] = [
+      ["changed", undefined, "expected object"],
+      ["changed", null, "expected object"],
+      ["changed", [], "expected object"],
+      ["changed", "changed", "expected object"],
+      ["changed", { account: "work", reason: "write" }, "capability"],
+      ["changed", { capability: "slack.mentions", reason: "write" }, "account"],
+      ["changed", { capability: "slack.mentions", account: "work" }, "reason"],
+      ["changed", changed({ capability: 42 as unknown as string }), "capability"],
+      ["changed", changed({ capability: "" }), "capability"],
+      ["changed", changed({ capability: "gws.gmail" }), "capability"],
+      ["changed", changed({ capability: "mentions" }), "capability"],
+      ["changed", changed({ capability: "slack.Mentions" }), "capability"],
+      ["changed", changed({ account: 42 as unknown as string }), "account"],
+      ["changed", changed({ account: "Work" }), "account"],
+      ["changed", changed({ account: "work-2" }), "account"],
+      ["changed", changed({ account: "a".repeat(33) }), "account"],
+      ["changed", changed({ reason: 42 as unknown as string }), "reason"],
+      ["changed", changed({ reason: "" }), "reason"],
+      ["changed", changed({ reason: "a".repeat(REASON_MAX + 1) }), "reason"],
+      ["changed", changed({ reason: "two\nlines" }), "reason"],
+      ["changed", { ...changed(), extra: "content" }, "extra"],
+      ["status", undefined, "expected object"],
+      ["status", {}, "state"],
+      ["status", { state: "signed_in" }, "state"],
+      ["status", { state: 1 }, "state"],
+      ["status", { state: "ready", detail: "content" }, "detail"],
+      ["account", undefined, "expected object"],
+      ["account", { state: "ready" }, "account"],
+      ["account", { account: "work" }, "state"],
+      ["account", { account: "WORK", state: "ready" }, "account"],
+      ["account", { account: "work", state: "signed_out" }, "state"],
+      ["account", { account: "work", state: "ready", extra: true }, "extra"],
     ]
-    for (const [event, data, problem] of cases) {
-      const result = await bus.emit(event, data as never)
-      assert.equal(result.ok, false, `${event}: ${JSON.stringify(data)}`)
-      if (result.ok) continue
-      assert.equal(result.reason, "invalid")
-      assert.ok(result.reason === "invalid" && result.problems.includes(problem), `${event}: expected "${problem}", got ${JSON.stringify(result)}`)
+    for (const [event, data, field] of cases) {
+      const problems = await invalid(bus, event, data)
+      assert.ok(
+        problems.some((problem) => problem.includes(field)),
+        `${event}: expected a problem naming "${field}", got ${JSON.stringify(problems)}`,
+      )
     }
     assert.deepEqual(emitted, [])
   })
 
   test("refuses an event the bus does not have, even from JavaScript", async () => {
-    const { host, emitted } = fakeHost()
-    const bus = await createBus(host, "slack")
+    const { bus, emitted } = stub()
     assert.deepEqual(await bus.emit("installed" as never, { account: "work", state: "ready" } as never), {
       ok: false,
       reason: "invalid",
@@ -194,8 +178,7 @@ describe("the bus writer (contract §10)", () => {
   })
 
   test("refuses a secret with reason secret, and echoes no part of it", async () => {
-    const { host, emitted } = fakeHost()
-    const bus = await createBus(host, "slack")
+    const { bus, emitted } = stub()
     const token = `ghp_${"A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8"}`
     const results = [
       await bus.emit("changed", changed({ reason: `after write ${token}` })),
@@ -208,16 +191,14 @@ describe("the bus writer (contract §10)", () => {
   })
 
   test("accepts prose that is not a secret", async () => {
-    const { host, emitted } = fakeHost()
-    const bus = await createBus(host, "slack")
+    const { bus, emitted } = stub()
     const reason = "the provider says a message arrived; re-read the source"
     assert.deepEqual(await bus.emit("changed", changed({ reason })), { ok: true })
     assert.deepEqual(emitted, [{ type: "rpc.slack.changed", data: changed({ reason }) }])
   })
 
   test("a value that is not JSON is refused rather than thrown", async () => {
-    const { host } = fakeHost()
-    const bus = await createBus(host, "slack")
+    const { bus } = stub()
     const cyclic: Record<string, unknown> = {}
     cyclic["self"] = cyclic
     const results = [await bus.emit("changed", cyclic as never), await bus.emit("changed", { capability: 1n } as never)]
@@ -228,10 +209,65 @@ describe("the bus writer (contract §10)", () => {
   })
 
   test("a host that fails reports unavailable and never throws", async () => {
-    const { host, fail } = fakeHost()
-    const bus = await createBus(host, "slack")
-    fail.value = true
+    const bus = createBus("slack", {
+      events: {
+        async emit() {
+          throw new Error("the host is gone")
+        },
+      },
+    })
     assert.deepEqual(await bus.emit("changed", changed()), { ok: false, reason: "unavailable" })
+  })
+})
+
+describe("one registration per plugin (OpenCode 2.4.1 RPC)", () => {
+  const text = {
+    input: { type: "object", additionalProperties: false, required: ["text"], properties: { text: { type: "string", minLength: 1 } } },
+    output: { type: "object", additionalProperties: false, required: ["text"], properties: { text: { type: "string" } } },
+  }
+
+  test("the plugin's method still resolves after busEvents is merged and createBus wraps the registration", async () => {
+    const host = makeRpcHost()
+    const definition = { id: "slack", methods: { echo: text, broken: text }, events: busEvents("slack") }
+    const registration = await host.register(definition, {
+      echo: (input) => ({ text: (input as { text: string }).text }),
+      broken: () => ({}),
+    })
+    const bus = createBus("slack", registration)
+    assert.equal(host.count("slack"), 1)
+    assert.deepEqual(await host.call("slack", "echo", { text: "hello" }), { text: "hello" })
+    await assert.rejects(host.call("slack", "echo", {}), (error: unknown) => error instanceof RpcFailure && error.type === "rpc.invalid_input")
+    await assert.rejects(host.call("slack", "broken", { text: "hello" }), (error: unknown) => error instanceof RpcFailure && error.type === "rpc.invalid_output")
+
+    assert.deepEqual(await bus.emit("changed", changed()), { ok: true })
+    assert.deepEqual(await bus.emit("status", { state: "ready" }), { ok: true })
+    assert.deepEqual(await bus.emit("account", { account: "work", state: "needs_sign_in" }), { ok: true })
+    assert.deepEqual(host.published.map((event) => event.type), ["rpc.slack.changed", "rpc.slack.status", "rpc.slack.account"])
+    assert.equal(host.count("slack"), 1)
+  })
+
+  test("the last registration wins: a method only the first one has is rpc.method_not_found", async () => {
+    const host = makeRpcHost()
+    const first = await host.register({ id: "slack", methods: { one: text }, events: busEvents("slack") }, { one: () => ({ text: "one" }) })
+    const second = await host.register({ id: "slack", methods: { two: text }, events: busEvents("slack") }, { two: () => ({ text: "two" }) })
+    assert.equal(host.count("slack"), 2)
+    await assert.rejects(host.call("slack", "one", { text: "x" }), (error: unknown) => error instanceof RpcFailure && error.type === "rpc.method_not_found")
+    assert.deepEqual(await host.call("slack", "two", { text: "x" }), { text: "two" })
+
+    await second.dispose()
+    assert.deepEqual(await host.call("slack", "one", { text: "x" }), { text: "one" })
+    await first.dispose()
+    assert.equal(host.count("slack"), 0)
+    await assert.rejects(host.call("slack", "one", { text: "x" }), (error: unknown) => error instanceof RpcFailure && error.type === "rpc.unavailable")
+  })
+
+  test("event data is validated through the converted JSON Schema", async () => {
+    const host = makeRpcHost()
+    const registration = await host.register({ id: "slack", methods: {}, events: busEvents("slack") }, {})
+    await assert.rejects(registration.events.emit("changed", { capability: "slack.mentions", account: "work" }), /expected|missing|required/i)
+    await assert.rejects(registration.events.emit("status", { state: "signed_in" }), /expected|invalid|literal|enum/i)
+    await registration.events.emit("status", { state: "ready" })
+    assert.deepEqual(host.published.at(-1), { type: "rpc.slack.status", data: { state: "ready" } })
   })
 })
 
@@ -268,25 +304,31 @@ describe("the bus reader (contract §10)", () => {
     }
   })
 
+  test("refuses a bad plugin name instead of silently matching nothing", () => {
+    for (const name of ["Slack", "slack-plugin", "a", ""]) {
+      assert.throws(() => readBusEvent(payload("rpc.slack.changed", changed()), { name }), /is not a plugin name/, name)
+    }
+  })
+
   test("refuses malformed data for each event, naming the field and not the value", () => {
     const cases: [string, unknown, string][] = [
-      ["rpc.slack.changed", undefined, "data: must be an object"],
-      ["rpc.slack.changed", { account: "work", reason: "write" }, "data.capability: is required"],
-      ["rpc.slack.changed", { ...changed(), extra: "content" }, "data.extra: is not a field of this event"],
-      ["rpc.slack.changed", changed({ capability: "gws.gmail" }), "data.capability: must be this plugin's capability id, slack.<capability>"],
-      ["rpc.slack.changed", changed({ account: "Work" }), "data.account: must be an account alias: lowercase letters, digits and underscores, starting with a letter (contract §5)"],
-      ["rpc.slack.changed", changed({ reason: "two\nlines" }), `data.reason: must be 1 to ${REASON_MAX} characters on one line`],
-      ["rpc.slack.status", {}, "data.state: is required"],
-      ["rpc.slack.status", { state: "signed_in" }, `data.state: must be one of ${BUS_STATES.join(", ")}`],
-      ["rpc.slack.account", { state: "ready" }, "data.account: is required"],
-      ["rpc.slack.account", { account: "work", state: "signed_out" }, `data.state: must be one of ${BUS_STATES.join(", ")}`],
+      ["rpc.slack.changed", undefined, "expected object"],
+      ["rpc.slack.changed", { account: "work", reason: "write" }, "capability"],
+      ["rpc.slack.changed", { ...changed(), extra: "content" }, "extra"],
+      ["rpc.slack.changed", changed({ capability: "gws.gmail" }), "capability"],
+      ["rpc.slack.changed", changed({ account: "Work" }), "account"],
+      ["rpc.slack.changed", changed({ reason: "two\nlines" }), "reason"],
+      ["rpc.slack.status", {}, "state"],
+      ["rpc.slack.status", { state: "signed_in" }, "state"],
+      ["rpc.slack.account", { state: "ready" }, "account"],
+      ["rpc.slack.account", { account: "work", state: "signed_out" }, "state"],
     ]
-    for (const [type, data, problem] of cases) {
+    for (const [type, data, field] of cases) {
       const read = readBusEvent(payload(type, data), { name: "slack" })
       assert.equal(read.ok, false, type)
       if (read.ok) continue
       assert.equal(read.reason, "invalid")
-      assert.ok(read.reason === "invalid" && read.problems.includes(problem), `${type}: expected "${problem}", got ${JSON.stringify(read)}`)
+      assert.ok(read.reason === "invalid" && read.problems.some((problem) => problem.includes(field)), `${type}: expected a problem naming "${field}", got ${JSON.stringify(read)}`)
     }
   })
 
@@ -309,9 +351,8 @@ describe("the bus reader (contract §10)", () => {
   })
 
   test("a writer's accepted event reads back as the same event", async () => {
-    const { host, emitted } = fakeHost()
-    const bus = await createBus(host, "gws")
-    const data: BusEventData["changed"] = { capability: "gws.gmail", account: "default", reason: "webhook" }
+    const { bus, emitted } = stub("gws")
+    const data = { capability: "gws.gmail", account: "default", reason: "webhook" }
     assert.deepEqual(await bus.emit("changed", data), { ok: true })
     assert.deepEqual(readBusEvent(payload(emitted[0]!.type, emitted[0]!.data), { name: "gws" }), {
       ok: true,
@@ -322,14 +363,23 @@ describe("the bus reader (contract §10)", () => {
 
 describe("the bus types (contract §3, §10)", () => {
   test("the definition's event payload type is rpc.<name>.<event>", () => {
-    const definition = busDefinition("slack")
+    const definition = {
+      id: "slack",
+      methods: {},
+      events: busEvents("slack"),
+    } as const satisfies Rpc.PortableDefinition
     type Changed = Rpc.EventPayload<typeof definition, "changed">
     const type: Changed["type"] = "rpc.slack.changed"
     assert.equal(type, "rpc.slack.changed")
   })
 
-  test("an OpenCode plugin context is a bus host", () => {
-    const accepts = (ctx: Plugin.Context): Promise<Bus> => createBus(ctx, "slack")
+  test("an OpenCode 2.4.1 RpcRegistration is a bus registration", () => {
+    const definition = {
+      id: "slack",
+      methods: { status: { input: { type: "object" }, output: { type: "object" } } },
+      events: busEvents("slack"),
+    } as const satisfies Rpc.PortableDefinition
+    const accepts = (registration: RpcRegistration<typeof definition>): Bus => createBus("slack", registration)
     assert.equal(typeof accepts, "function")
   })
 
