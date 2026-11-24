@@ -9,11 +9,11 @@ and [AGENTS.md](AGENTS.md) is the working guide.
 You need Node 22.18 or later. Bun is optional; it runs the same tests locally.
 
 ```sh
-npm ci
+npm ci --ignore-scripts
 npm run check
 ```
 
-`npm run check` runs what CI runs:
+`npm run check` runs the core gates:
 
 | Step | What it proves |
 |---|---|
@@ -22,6 +22,9 @@ npm run check
 | `npm run check:dist` | `dist/` imports only Node built-ins, its declarations name nothing outside the package, and every export loads from a bare copy on Node (and on Bun when it is installed) |
 | `npm test` | the tests pass on Node (`node --test`) |
 | `npm run conformance:self-test` | the conformance kit accepts every example under `examples/`, from `dist/` as it ships |
+
+CI runs these steps in one job named `ci`, and four more: actionlint, `npm run test:bun`, `git diff --exit-code -- dist`
+(the committed `dist/` must be what a fresh build makes), `node scripts/release.mjs --dry-run`, and the Node 22 tests.
 
 ## The rules
 
