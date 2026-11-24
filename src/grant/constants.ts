@@ -22,13 +22,13 @@ export const MAX_INPUT_BYTES = 65536
 export const MAX_INPUT_DEPTH = 16
 
 /** How far a signer's clock may run ahead of the verifier's, in seconds, unless the request says otherwise. */
-export const DEFAULT_CLOCK_SKEW_SEC = 30
+export const DEFAULT_CLOCK_SKEW_SEC = 5
 
 /** The longest lifetime a grant may claim, in seconds, unless the request says otherwise. */
-export const DEFAULT_MAX_LIFETIME_SEC = 300
+export const DEFAULT_MAX_LIFETIME_SEC = 60
 
-/** The hard ceiling on a request's `clockSkewSec`: no request may widen the future window past an hour. */
-export const MAX_CLOCK_SKEW_SEC = 3600
+/** The hard ceiling on a request's `clockSkewSec`: no request may widen the future window past 30 seconds. */
+export const MAX_CLOCK_SKEW_SEC = 30
 
-/** The hard ceiling on a request's `maxLifetimeSec`: no request may accept a grant that lives a day or longer. */
-export const MAX_LIFETIME_SEC = 86400
+/** The hard ceiling on a request's `maxLifetimeSec`: no request may accept a grant that lives over 5 minutes. */
+export const MAX_LIFETIME_SEC = 300

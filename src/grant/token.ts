@@ -5,16 +5,16 @@
  * Header, exactly three members:
  *
  * ```json
- * { "alg": "Ed25519", "kid": "host-2026-11", "typ": "plugin-contract-act+jwt" }
+ * { "alg": "Ed25519", "kid": "host_2026_11", "typ": "plugin-contract-act+jwt" }
  * ```
  *
  * Claims, exactly these and no others:
  *
  * ```json
  * {
- *   "aud": "<the app the grant is for>",
+ *   "aud": "<the plugin's package name, as the host uses it>",
  *   "consumer": "<the grant key>",
- *   "capability": "<name>.<capability> or method id",
+ *   "capability": "<name>.<method>, or the source capability id",
  *   "account": "<alias>",
  *   "scope": { "<key>": "<value>" },
  *   "act": "<name>.<action>",
@@ -36,6 +36,7 @@ import { createPrivateKey, createPublicKey, sign, type KeyObject } from "node:cr
 import { TextDecoder } from "node:util"
 import { GRANT_ALG, GRANT_TYP, MAX_GRANT_LENGTH } from "./constants.ts"
 import { canonicalScope, digestInput, type GrantScope } from "./input.ts"
+import { strictJson } from "./json.ts"
 import { accountProblem, hashProblem, isPlainObject, jtiProblem, kidProblem, textProblem } from "./text.ts"
 
 /** The header of an action grant. No other member is accepted. */
@@ -45,13 +46,13 @@ export interface GrantHeader {
   readonly typ: typeof GRANT_TYP
 }
 
-/** A verified action grant: what the host signed, as the verifier returns it. */
-export type ActionGrant = GrantClaims
-
 /** The claims a verified grant carries. `scope` is returned in canonical form. */
 export interface GrantClaims {
+  /** The plugin's package name as the host uses it, for example `@we-the-rebel-alliance/slack-plugin`. */
   readonly aud: string
+  /** The grant key: the consumer the grant was issued to. */
   readonly consumer: string
+  /** The method id `<name>.<method>`, for example `slack.events_list`, or the source capability id where the contract calls it that. */
   readonly capability: string
   readonly account: string
   readonly scope: GrantScope
@@ -75,8 +76,11 @@ export type GrantKeyMaterial = KeyObject | string | Uint8Array
 export interface SignGrantRequest {
   readonly key: GrantKeyMaterial
   readonly kid: string
+  /** The plugin's package name as the host uses it. */
   readonly audience: string
+  /** The grant key: the consumer the grant is issued to. */
   readonly consumer: string
+  /** The method id `<name>.<method>`, or the source capability id where the contract calls it that. */
   readonly capability: string
   readonly account: string
   readonly scope?: GrantScope
@@ -116,6 +120,8 @@ export type ReadClaimsResult =
   | { readonly ok: false; readonly code: "GRANT_CLAIMS_INVALID"; readonly reason: string }
 
 const BASE64URL = /^[A-Za-z0-9_-]+$/
+/** A PEM private key of any label: PKCS#8, RSA, EC, DSA, OpenSSH or an encrypted one. Never trusted as a public key. */
+const PRIVATE_PEM = /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----/
 const HEADER_KEYS = ["alg", "kid", "typ"] as const
 const CLAIM_KEYS = ["account", "act", "aud", "capability", "consumer", "digest", "exp", "iat", "jti", "manifest", "scope"] as const
 const decoder = new TextDecoder("utf-8", { fatal: true })
@@ -160,12 +166,9 @@ export function parseToken(token: unknown): ParsedToken {
 
   const headerText = decodeText(headerBytes)
   if (headerText === undefined) return malformed("the grant's header is not UTF-8")
-  let headerValue: unknown
-  try {
-    headerValue = JSON.parse(headerText)
-  } catch {
-    return malformed("the grant's header is not JSON")
-  }
+  const headerJson = strictJson(headerText, "the grant's header")
+  if (!headerJson.ok) return malformed(headerJson.reason)
+  const headerValue = headerJson.value
   if (!isPlainObject(headerValue)) return malformed("the grant's header is not an object")
   const keys = Object.keys(headerValue)
   if (keys.length !== HEADER_KEYS.length || !HEADER_KEYS.every((key) => keys.includes(key))) {
@@ -203,12 +206,9 @@ function wholeSeconds(value: unknown, what: string): string | undefined {
  * is reported as absent, confirmed or invalid; the confirmation rule decides whether that is a refusal.
  */
 export function readClaims(payload: string): ReadClaimsResult {
-  let value: unknown
-  try {
-    value = JSON.parse(payload)
-  } catch {
-    return claimsFailure("the grant's claims are not JSON")
-  }
+  const parsed = strictJson(payload, "the grant's claims")
+  if (!parsed.ok) return claimsFailure(parsed.reason)
+  const value = parsed.value
   if (!isPlainObject(value)) return claimsFailure("the grant's claims are not an object")
   const allowed = new Set<string>([...CLAIM_KEYS, "cfm"])
   if (Object.keys(value).some((key) => !allowed.has(key))) return claimsFailure("the grant holds a claim this verifier does not know")
@@ -279,14 +279,17 @@ function isKeyObject(value: unknown): value is KeyObject {
 
 /**
  * The Ed25519 public key `material` names, or nothing when it is not one. A `KeyObject` is used as it is, a string is
- * read as PEM, and bytes are read as SPKI DER. A trusted key that cannot be read is a configuration error, never a
- * reason to try another key.
+ * read as PEM, and bytes are read as SPKI DER. Private key material is refused on every path: a private `KeyObject`, a
+ * private PEM (including an encrypted one) and private DER are never turned into a trusted public key. A trusted key
+ * that cannot be read is a configuration error, never a reason to try another key.
  */
 export function toPublicKey(material: GrantKeyMaterial): KeyObject | undefined {
   let key: KeyObject
   if (isKeyObject(material)) {
     key = material
   } else if (typeof material === "string") {
+    // `createPublicKey` happily derives a public key from a private PEM; a trusted key must never be private material.
+    if (PRIVATE_PEM.test(material)) return undefined
     try {
       key = createPublicKey(material)
     } catch {

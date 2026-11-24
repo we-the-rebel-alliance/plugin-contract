@@ -35,14 +35,15 @@ export interface GrantKeys {
 }
 
 /**
- * Where single use is recorded. The plugin backs this with durable storage: an insert-if-absent keyed by `jti`,
- * answering `true` when this call made the insert and `false` when the grant was already spent.
+ * Where single use is recorded. The plugin backs this with durable storage: an atomic insert-if-absent keyed by
+ * `claims.jti`, answering `true` when this call made the insert and `false` when the grant was already spent.
  *
- * It must not be an in-memory `Map`: a restart would resurrect a spent grant. A store that throws is a refusal
- * (`GRANT_STORE_UNAVAILABLE`), never a crash.
+ * The store receives the full verified claims, so it can write its receipt (`act`, `digest`, `exp`, `cfm`) in the same
+ * insert and prune by `claims.exp`. It must not be an in-memory `Map`: a restart would resurrect a spent grant. A
+ * store that throws is a refusal (`GRANT_STORE_UNAVAILABLE`), never a crash.
  */
 export interface GrantStore {
-  consume(jti: string): Promise<boolean>
+  consume(claims: GrantClaims): Promise<boolean>
 }
 
 /** Everything the plugin knows about the grant it is about to verify. */
@@ -57,11 +58,11 @@ export interface GrantRequest {
   readonly actions: GrantActions
   /** The trusted public keys, by `kid`, and the key ids revoked. */
   readonly keys: GrantKeys
-  /** The app or audience the grant must be for. */
+  /** The plugin's package name as the host uses it; the grant's `aud` must be this. */
   readonly audience: string
   /** The grant key (§14): the consumer the grant was issued to. */
   readonly consumer: string
-  /** The capability or method id the grant must name. */
+  /** The method id `<name>.<method>` (or the source capability id where the contract calls it that) the grant must name. */
   readonly capability: string
   /** The account alias the grant must name. */
   readonly account: string
@@ -73,9 +74,9 @@ export interface GrantRequest {
   readonly now: number
   /** The durable single-use ledger. */
   readonly store: GrantStore
-  /** How far a signer's clock may run ahead, in seconds. Default 30, at most 3600. */
+  /** How far a signer's clock may run ahead, in seconds. Default 5, at most 30. */
   readonly clockSkewSec?: number
-  /** The longest lifetime a grant may claim, in seconds. Default 300, at most 86400. */
+  /** The longest lifetime a grant may claim, in seconds. Default 60, at most 300. */
   readonly maxLifetimeSec?: number
 }
 
@@ -145,6 +146,8 @@ export interface GrantFailure {
 /** A grant that verified, with its claims spent once. */
 export interface GrantSuccess {
   readonly ok: true
+  /** The `kid` of the trusted key that verified the signature, for logs and receipts. */
+  readonly kid: string
   readonly claims: GrantClaims
 }
 
@@ -281,7 +284,7 @@ function normalizeRequest(request: GrantRequest): CheckedRequest {
  * 6. the window is sane and current (`GRANT_LIFETIME_INVALID`, `GRANT_NOT_YET_VALID`, `GRANT_EXPIRED`);
  * 7. the input is canonical (`GRANT_INPUT_INVALID`) and its digest is the grant's (`GRANT_DIGEST_MISMATCH`);
  * 8. the confirmation rule holds (`GRANT_CONFIRMATION_REQUIRED`, `GRANT_CONFIRMATION_INVALID`);
- * 9. only now, the store records the `jti` (`GRANT_REPLAYED`, `GRANT_STORE_UNAVAILABLE`).
+ * 9. only now, the store records the verified claims' `jti` (`GRANT_REPLAYED`, `GRANT_STORE_UNAVAILABLE`).
  *
  * A negative answer means no store write happened. A positive answer means the store recorded this `jti` for the
  * first time.
@@ -341,14 +344,15 @@ export async function verifyGrant(request: GrantRequest): Promise<GrantOutcome> 
     return failure("GRANT_CONFIRMATION_INVALID", "the grant's confirmation is neither absent nor true")
   }
 
+  const verified: GrantClaims = { ...claims, ...(read.confirmation === "confirmed" ? { cfm: true } : {}) }
   let firstUse: unknown
   try {
-    firstUse = await value.store.consume(claims.jti)
+    firstUse = await value.store.consume(verified)
   } catch {
     return failure("GRANT_STORE_UNAVAILABLE", "the grant store could not record the grant")
   }
   if (firstUse === false) return failure("GRANT_REPLAYED", "the grant has already been used")
   if (firstUse !== true) return failure("GRANT_STORE_UNAVAILABLE", "the grant store answered something other than true or false")
 
-  return { ok: true, claims: { ...claims, ...(read.confirmation === "confirmed" ? { cfm: true } : {}) } }
+  return { ok: true, kid, claims: verified }
 }

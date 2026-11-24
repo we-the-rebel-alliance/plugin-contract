@@ -22,7 +22,7 @@ export {
 export { canonicalJson, canonicalScope, digestInput, GrantInputError } from "./grant/input.ts"
 export type { GrantScope } from "./grant/input.ts"
 export { signGrant } from "./grant/token.ts"
-export type { ActionGrant, GrantClaims, GrantHeader, GrantKeyMaterial, SignGrantRequest } from "./grant/token.ts"
+export type { GrantClaims, GrantHeader, GrantKeyMaterial, SignGrantRequest } from "./grant/token.ts"
 export { GRANT_CODES, verifyGrant } from "./grant/verify.ts"
 export type {
   ConfirmationRule,

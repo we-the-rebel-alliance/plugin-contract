@@ -11,11 +11,11 @@ const CONTROL = /[\u0000-\u001f\u007f-\u009f]/
 /** An account alias: contract §5. */
 const ACCOUNT_ALIAS = /^[a-z][a-z0-9_]{0,31}$/
 
-/** A key id: letters, digits, dot, underscore and colon, starting with a letter or a digit. */
-const KID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/
+/** A key id: letters, digits, dot, underscore and colon, starting with a letter or a digit. No hyphen. */
+const KID = /^[A-Za-z0-9][A-Za-z0-9._:]{0,63}$/
 
-/** A single-use key: the same alphabet as a key id, at most 128 characters. */
-const JTI = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
+/** A single-use key: the same alphabet as a key id, at most 128 characters. No hyphen. */
+const JTI = /^[A-Za-z0-9][A-Za-z0-9._:]{0,127}$/
 
 /** A hash as the manifest and input digests write it. */
 const HASH = /^sha256:[0-9a-f]{64}$/
