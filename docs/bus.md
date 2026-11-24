@@ -104,6 +104,7 @@ order:
 | `not-a-bus-event` | the payload is not an RPC event at all, or its type is not `rpc.<name>.<event>` |
 | `unknown-plugin` | it is an RPC event of another plugin |
 | `unknown-event` | it is this plugin's RPC event, but not one of the three bus events |
+| `secret` | the event's data holds a credential; it is refused and no part of it is returned |
 | `invalid` | the event's data breaks the schema; `problems` names fields, never values |
 
 ## Naming
@@ -119,12 +120,13 @@ The name is derived once, from the plugin's `<name>` (contract §3):
 
 ## Secrets are refused
 
-Contract §13 refuses an event that holds a secret. The writer screens the JSON of every payload with the package's
-secret detector before it validates or emits it. A payload holding a private key, an API key, a token, a password or a
-connection string is refused with reason `secret`, and the result carries no part of the payload. An app never sees it.
+Contract §13 refuses an event that holds a secret. Both sides screen the JSON of the event's data with the package's
+secret detector. The writer screens before it validates or emits; the reader screens before it validates the schema,
+so a secret is reported as `secret`, never as `invalid`. A payload holding a private key, an API key, a token, a
+password or a connection string is refused with reason `secret`, and the result carries no part of the payload.
 
-The reader applies the same schema as the writer, so a secret cannot arrive through an extra field either: the schemas
-are closed, and an unknown field is `invalid`.
+The reader applies the same schema as the writer, so a field the contract does not name is `invalid`; if that field
+holds a secret, the earlier screening reports `secret` instead.
 
 ## Example
 

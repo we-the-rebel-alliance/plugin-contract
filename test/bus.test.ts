@@ -290,6 +290,24 @@ describe("the bus reader (contract §10)", () => {
     }
   })
 
+  test("refuses a secret with reason secret, before the schema, and echoes no part of it", () => {
+    const token = `ghp_${"A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8"}`
+    const cases = [
+      payload("rpc.slack.changed", changed({ reason: `after write ${token}` })),
+      // Also a payload the schema would refuse: a secret is reported as a secret, never as invalid.
+      payload("rpc.slack.changed", { ...changed(), extra: token }),
+    ]
+    for (const incoming of cases) assert.deepEqual(readBusEvent(incoming, { name: "slack" }), { ok: false, reason: "secret", problems: [] })
+  })
+
+  test("accepts prose in a reason", () => {
+    const reason = "the provider says a message arrived; re-read the source"
+    assert.deepEqual(readBusEvent(payload("rpc.slack.changed", changed({ reason })), { name: "slack" }), {
+      ok: true,
+      event: { type: "rpc.slack.changed", name: "slack", event: "changed", data: changed({ reason }) },
+    })
+  })
+
   test("a writer's accepted event reads back as the same event", async () => {
     const { host, emitted } = fakeHost()
     const bus = await createBus(host, "gws")
