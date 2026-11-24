@@ -285,6 +285,9 @@ describe("sessionRules", () => {
     const undeclared = sessionRules(recordings, { source: "demo.recordings", account: "work" }, ["default"])
     assert.equal(undeclared.ok, false, "an alias the plugin does not declare is refused, not derived")
     if (!undeclared.ok) assert.match(undeclared.problems[0]!, /not one this plugin declares/)
+    const missing = sessionRules(recordings, { source: "demo.recordings", account: "work" })
+    assert.equal(missing.ok, false, "a missing alias list does not fall back to the grant's own account")
+    if (!missing.ok) assert.match(missing.problems[0]!, /not an account alias|not one this plugin declares/)
   })
 
   test("refuse a declared operation with a wildcard", () => {
