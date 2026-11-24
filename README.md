@@ -65,11 +65,11 @@ The module map of the contract (§15), and what this package ships today:
 | [`read`](docs/read.md), [`act`](docs/act.md) | app | fenced reads and actions, through the catalog or embedded | here |
 | [`params`](docs/params.md), [`pick`](docs/pick.md) | app | relative times, `$me`, field selection | here |
 | [`catalog`](docs/catalog.md) | app, catalog | installed manifests and the broker request | here |
-| `conformance` | CI | the kit | here |
-| `kit` | dev | the `plugin-kit` binary | landing |
+| `conformance` | CI | the conformance checks | here |
+| [`kit`](docs/kit.md) | dev | the `plugin-kit` binary | here |
 | `mcp-events` | plugin | optional MCP Events adapter | later |
 
-`docs/conformance.md` describes the kit. `docs/events.md` describes the feed model. `docs/outputs.md` describes the
+`docs/conformance.md` describes the conformance checks, and [`docs/kit.md`](docs/kit.md) the kit. `docs/events.md` describes the feed model. `docs/outputs.md` describes the
 snapshot shapes. `docs/read.md`, `docs/act.md`, `docs/params.md` and `docs/pick.md` describe the app side, and
 `docs/hints.md` the hint file. [`docs/access.md`](docs/access.md) describes the access levels and the grant fences;
 [`docs/register.md`](docs/register.md) describes the one handler table and the three doors.
@@ -78,7 +78,8 @@ snapshot shapes. `docs/read.md`, `docs/act.md`, `docs/params.md` and `docs/pick.
 
 `plugin-kit` is the binary every plugin's CI runs: `check`, `docs`, `record`, `conformance`, `hosts`, `release`,
 `supported` and `forbidden`. It ships inside this package as a binary and a dev export, and it is never bundled into a
-plugin. A new plugin starts from `plugin-template`.
+plugin. [docs/kit.md](docs/kit.md) describes each command, the generated sections and the OpenCode 2.4 host harness. A
+new plugin starts from `plugin-template`.
 
 ## Install
 
@@ -100,8 +101,8 @@ its own `dist/`. Node 22 or later runs the package; the conformance host needs N
 - [The plugin standard](docs/plugin-standard.md): what every `<name>-plugin` repository must be.
 - [Supported plugins](SUPPORTED.md): the plugins and their state.
 - [Decisions](docs/decisions.md): the settled decisions behind v0.
-- [Conformance](docs/conformance.md), [events and cursors](docs/events.md), [outputs](docs/outputs.md),
-  [access](docs/access.md), [register](docs/register.md).
+- [Conformance](docs/conformance.md), [the kit](docs/kit.md), [events and cursors](docs/events.md),
+  [outputs](docs/outputs.md), [access](docs/access.md), [register](docs/register.md).
 - The app side: [read](docs/read.md), [act](docs/act.md), [catalog](docs/catalog.md), [params](docs/params.md),
   [pick](docs/pick.md).
 - [Hints](docs/hints.md): the generic hint file format.
