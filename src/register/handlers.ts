@@ -86,7 +86,8 @@ export function methodEntries(manifest: Manifest, handlers: HandlerTable): reado
 }
 
 function shapes(name: string, method: string, item: MethodItem, handler: MethodHandler): { input: JsonSchema; output: JsonSchema } {
-  const inputProblems = inputSchemaProblems(handler.input)
+  // A commit's input is the contract's `{ planId }`, so its handler's own input schema is unused and not checked.
+  const inputProblems = item.commits === undefined ? inputSchemaProblems(handler.input) : []
   if (inputProblems.length > 0) {
     refuse("OPTIONS_INVALID", `${name}.${method}'s input schema is not usable: ${inputProblems.join("; ")}`, "Give the handler a JSON Schema object for its input.")
   }

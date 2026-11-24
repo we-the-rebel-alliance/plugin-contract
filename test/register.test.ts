@@ -145,6 +145,12 @@ describe("register: input, account and output", () => {
     await assert.rejects(h.tools.get("demo_send_message")!.tool.execute({ text: "x" }, context()), /PLAN_INVALID: .*only \{ planId \}/)
   })
 
+  test("a commit's own input schema is not used: the contract's { planId } is", async () => {
+    const h = makeHarness()
+    await register(h.ctx, demo, handlers({ send_message: handler({ input: {}, output: SENT, run: async () => ({ sent: true }) }) }))
+    assert.deepEqual((await h.tools.get("demo_send_message")!.tool.execute({ planId: "p1" }, context())).output, { sent: true })
+  })
+
   test("a plan is refused when it names a method that does not commit it", async () => {
     const h = makeHarness()
     await register(h.ctx, demo, handlers({ plan_send: handler({ run: async () => ({ planId: "p1", method: "status" }) }) }))

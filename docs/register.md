@@ -116,9 +116,9 @@ The input is checked against the handler's schema (`INPUT_INVALID`), the answer 
 (`SCHEMA_VIOLATION`). A schema with `additionalProperties: false` also refuses an unknown key.
 
 A `plans: true` method answers exactly `{ planId, method }`, and `method` must be the one declared method whose `commits`
-names the plan (`PLAN_INVALID` otherwise). A `commits: "<plan>"` method accepts exactly `{ planId }` from that plan,
-whatever its handler's schema says; anything else is `PLAN_INVALID`. The register does not store plans: the handler
-does, and resolves the `planId` when it commits.
+names the plan (`PLAN_INVALID` otherwise). A `commits: "<plan>"` method accepts exactly `{ planId }` from that plan;
+its handler's own input schema is not used, and anything else is `PLAN_INVALID`. The register does not store plans: the
+handler does, and resolves the `planId` when it commits.
 
 ## Permissions on operations
 

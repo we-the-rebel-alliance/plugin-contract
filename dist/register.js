@@ -205,7 +205,7 @@ function methodEntries(manifest, handlers) {
   return entries;
 }
 function shapes(name, method, item, handler) {
-  const inputProblems = inputSchemaProblems(handler.input);
+  const inputProblems = item.commits === void 0 ? inputSchemaProblems(handler.input) : [];
   if (inputProblems.length > 0) {
     refuse("OPTIONS_INVALID", `${name}.${method}'s input schema is not usable: ${inputProblems.join("; ")}`, "Give the handler a JSON Schema object for its input.");
   }
