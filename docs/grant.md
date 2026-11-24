@@ -30,7 +30,7 @@ The header is exactly:
 | Member | Rule |
 |---|---|
 | `alg` | Exactly `Ed25519`. No other algorithm, and no "try the key as HMAC": the key itself must be an Ed25519 public key. |
-| `kid` | The key id, 1–64 characters of letters, digits, `.`, `_` and `:`, starting with a letter or a digit. |
+| `kid` | The key id, 1–64 characters of letters, digits, `.`, `_`, `:` and `-`, starting with a letter or a digit. A base64url JWK thumbprint is a valid key id. |
 | `typ` | Exactly `plugin-contract-act+jwt`. |
 
 The claims are exactly these and no others:
@@ -39,7 +39,7 @@ The claims are exactly these and no others:
 |---|---|---|
 | `aud` | The plugin's package name as the host uses it, for example `@we-the-rebel-alliance/slack-plugin` | Non-empty text, at most 200 characters, no control characters |
 | `consumer` | The grant key (contract §14): who the grant was issued to | Same text rule |
-| `capability` | The method id `<name>.<method>`, for example `slack.events_list`; the source capability id where the contract calls it that | Same text rule |
+| `capability` | The method id `<name>.<method>`, for example `slack.events_list` | Same text rule |
 | `account` | The account alias | `^[a-z][a-z0-9_]{0,31}$` (contract §5) |
 | `scope` | What the capability reads or changes | A canonical scope object (see below) |
 | `act` | The action id, `<name>.<action>` | Same text rule as `capability` |
@@ -47,7 +47,7 @@ The claims are exactly these and no others:
 | `manifest` | The manifest hash | `sha256:` and 64 lowercase hex digits |
 | `iat` | When the host signed, in whole seconds since the Unix epoch | A non-negative safe integer |
 | `exp` | When the grant stops being valid, in whole seconds since the Unix epoch | A non-negative safe integer, after `iat` |
-| `jti` | The single-use key | 1–128 characters of letters, digits, `.`, `_` and `:` |
+| `jti` | The single-use key | 1–128 characters of letters, digits, `.`, `_`, `:` and `-`; a UUID is valid |
 | `cfm` | A person confirmed this action and input | Present only as `true`; see "Confirmation" |
 
 `exp` is exclusive: a grant is valid while `now < exp`. There is no grace period after `exp`; a clock that runs behind

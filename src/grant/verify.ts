@@ -62,7 +62,7 @@ export interface GrantRequest {
   readonly audience: string
   /** The grant key (§14): the consumer the grant was issued to. */
   readonly consumer: string
-  /** The method id `<name>.<method>` (or the source capability id where the contract calls it that) the grant must name. */
+  /** The method id `<name>.<method>` the grant must name. */
   readonly capability: string
   /** The account alias the grant must name. */
   readonly account: string

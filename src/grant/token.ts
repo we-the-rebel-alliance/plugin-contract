@@ -14,7 +14,7 @@
  * {
  *   "aud": "<the plugin's package name, as the host uses it>",
  *   "consumer": "<the grant key>",
- *   "capability": "<name>.<method>, or the source capability id",
+ *   "capability": "<name>.<method>",
  *   "account": "<alias>",
  *   "scope": { "<key>": "<value>" },
  *   "act": "<name>.<action>",
@@ -52,7 +52,7 @@ export interface GrantClaims {
   readonly aud: string
   /** The grant key: the consumer the grant was issued to. */
   readonly consumer: string
-  /** The method id `<name>.<method>`, for example `slack.events_list`, or the source capability id where the contract calls it that. */
+  /** The method id `<name>.<method>`, for example `slack.events_list`. */
   readonly capability: string
   readonly account: string
   readonly scope: GrantScope
@@ -80,7 +80,7 @@ export interface SignGrantRequest {
   readonly audience: string
   /** The grant key: the consumer the grant is issued to. */
   readonly consumer: string
-  /** The method id `<name>.<method>`, or the source capability id where the contract calls it that. */
+  /** The method id `<name>.<method>`. */
   readonly capability: string
   readonly account: string
   readonly scope?: GrantScope
