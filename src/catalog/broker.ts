@@ -129,9 +129,10 @@ export function isBrokerRequest(request: unknown): request is BrokerRequest {
 }
 
 /**
- * The reader a consumer uses. With a broker transport, each read goes to the broker first, after the same checks an
- * embedded read makes; it runs embedded when the broker says it is not offered, when the transport fails, or when its
- * answer is not a broker answer. Without one, every read runs embedded over the consumer's own host.
+ * The reader a consumer uses. With a broker transport, each read goes to the broker first, after the pre-call checks
+ * an embedded read makes (a relative `since` is the broker's to resolve); it runs embedded when the broker says it is
+ * not offered, when the transport fails, or when its answer is not a broker answer. Without one, every read runs
+ * embedded over the consumer's own host.
  */
 export function sourceReader(options: { readonly host: ReadHost; readonly broker?: BrokerTransport }): SourceReader {
   const { host, broker } = options

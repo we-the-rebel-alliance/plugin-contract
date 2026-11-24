@@ -54,6 +54,11 @@ The catalog mirrors `@opencode/util@2.4.1` (`dist/npm.js`: `cacheKey`/`key`, `gi
 - **`<name>`** is the package name for a registry target. For a Git target it is the first key of the generation root's
   `package.json` `dependencies`, falling back to the repository name in the target.
 
+A host names a registry target with its `@spec` stripped and its version resolved. The catalog tries the version, then
+`@latest`, then every entry for the package name, so a range or tag reaches the entry it names. A registry package whose
+installed name is not the target is reported, never listed: a cache entry must not be bound to another package's
+manifest.
+
 `cacheDirectory` names the OpenCode cache directory, the one that holds `npm/`. It defaults to
 `<XDG_CACHE_HOME or ~/.cache>/opencode`:
 
@@ -127,8 +132,9 @@ import { isBrokerRequest } from "@we-the-rebel-alliance/plugin-contract/catalog"
 if (!isBrokerRequest(body)) return { offered: true, ok: false, code: "INPUT_INVALID", message: "…" }
 ```
 
-`isBrokerRequest` requires a non-empty `consumer`: a request without one cannot be served, because the consumer is the
-grant key. It also checks the optional fields' types.
+`isBrokerRequest` refuses unknown keys and requires a non-empty `consumer`: a request without one cannot be served,
+because the consumer is the grant key. It requires `manifestHash` to be `sha256:` followed by 64 hex characters, and
+checks the optional fields' types.
 
 ### The answer
 
@@ -148,17 +154,19 @@ const outcome = await reader.read(request)
 outcome.via // "broker" or "embedded"
 ```
 
-`sourceReader` makes the same checks an embedded read makes before it asks anything: the source is declared, the person
-has not turned it off, the grant is this consumer's for the installed manifest hash, the scope is within the grant and
-the inputs suit the source's kind. It then:
+`sourceReader` makes the pre-call checks an embedded read makes before it asks anything: the source is declared, the
+person has not turned it off, the grant is this consumer's for the installed manifest hash, the scope is within the
+grant and the inputs suit the source's kind. It leaves a relative `since` to the broker, which resolves it in the
+person's time zone. It then:
 
 1. reads embedded when no broker is passed, the broker says `{ offered: false }`, the transport throws, or the answer is
    not a broker answer;
 2. passes a refusal through the error table, with no embedded read behind the broker's back;
-3. checks an `ok: true` value exactly as an embedded read does: the account, `trust: "untrusted"`, the size against
-   `maxBytes`, the events page or the output schema, then `pick`.
+3. checks an `ok: true` value as an embedded read does: the account, `trust: "untrusted"`, the size against `maxBytes`,
+   the events page or the output schema, then `pick`.
 
-A broker therefore never needs to be trusted for shape, and a refused read is never retried elsewhere.
+A brokered read does not ask for thumbnails (#42): the #8 request shape predates them. A broker therefore never needs to
+be trusted for shape, and a refused read is never retried elsewhere.
 
 ## Negative cases
 
@@ -169,6 +177,7 @@ A broker therefore never needs to be trusted for shape, and a refused read is ne
 | A package target with no installed package | reported in `problems`, never thrown |
 | A package with no manifest, or one that does not validate | reported in `problems` with the validator's paths |
 | A registry package whose version is not the host's | reported in `problems` |
+| A registry package whose installed name is not the target | reported in `problems`, never listed |
 | A grant for another manifest hash | `PERMISSION_DENIED` before the broker is asked |
 | Another consumer's read | `PERMISSION_DENIED` before the broker is asked |
 | The broker is off | the read runs embedded over the consumer's own host |

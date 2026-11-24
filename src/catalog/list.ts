@@ -149,7 +149,8 @@ function registryTarget(target: string): { readonly name: string; readonly spec?
   if (!PACKAGE_NAME.test(name)) return undefined
   if (at <= 0) return { name }
   const spec = target.slice(at + 1)
-  return spec === "" ? undefined : { name, spec }
+  // The spec becomes a directory name under `npm/`; a path separator would leave the cache.
+  return spec === "" || spec.includes("/") || spec.includes("\\") ? undefined : { name, spec }
 }
 
 /** A Git target, in the forms npm's `parse()` accepts (`npm.js` `parse`, :44). */
@@ -206,7 +207,9 @@ function installedName(parsed: InstallTarget, generation: string): string {
     if (plain(manifest)) {
       const dependencies = manifest["dependencies"]
       if (plain(dependencies)) {
-        const name = Object.keys(dependencies)[0]
+        // Only a real package name may become a path under node_modules: a generation root is writable, and a key
+        // such as "../../escape" must never leave the cache.
+        const name = Object.keys(dependencies).find((entry) => PACKAGE_NAME.test(entry))
         if (name !== undefined) return name
       }
     }
@@ -379,6 +382,12 @@ export async function listInstalledPlugins(host: CatalogHost, options: CatalogOp
     const version = located.registry ? source.version : undefined
     const installed = readInstalledManifest(located.directory, version === undefined ? {} : { version })
     if (installed.ok) {
+      // A cache directory is named after its target. If the package inside carries another name, the cache is
+      // corrupt or has been tampered with, and binding this manifest to the target would mislead every consumer.
+      if (located.registry && parsed?.kind === "registry" && installed.value.package !== parsed.name) {
+        problems.push({ target, problems: [`the installed package is ${installed.value.package}, not the ${parsed.name} the host names`] })
+        continue
+      }
       if (seen.has(installed.value.directory)) continue
       seen.add(installed.value.directory)
       plugins.push({ target, ...installed.value })

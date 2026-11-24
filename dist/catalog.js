@@ -139,7 +139,7 @@ function registryTarget(target) {
   if (!PACKAGE_NAME.test(name)) return void 0;
   if (at <= 0) return { name };
   const spec = target.slice(at + 1);
-  return spec === "" ? void 0 : { name, spec };
+  return spec === "" || spec.includes("/") || spec.includes("\\") ? void 0 : { name, spec };
 }
 function gitTarget(target) {
   const hosted = GIT_HOSTED.test(target);
@@ -180,7 +180,7 @@ function installedName(parsed, generation) {
     if (plain2(manifest)) {
       const dependencies = manifest["dependencies"];
       if (plain2(dependencies)) {
-        const name = Object.keys(dependencies)[0];
+        const name = Object.keys(dependencies).find((entry) => PACKAGE_NAME.test(entry));
         if (name !== void 0) return name;
       }
     }
@@ -314,6 +314,10 @@ async function listInstalledPlugins(host, options = {}) {
     const version = located.registry ? source.version : void 0;
     const installed = readInstalledManifest(located.directory, version === void 0 ? {} : { version });
     if (installed.ok) {
+      if (located.registry && parsed?.kind === "registry" && installed.value.package !== parsed.name) {
+        problems.push({ target, problems: [`the installed package is ${installed.value.package}, not the ${parsed.name} the host names`] });
+        continue;
+      }
       if (seen.has(installed.value.directory)) continue;
       seen.add(installed.value.directory);
       plugins.push({ target, ...installed.value });

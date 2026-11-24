@@ -91,13 +91,32 @@ describe("listInstalledPlugins", () => {
     const generation = writeGeneration(cache, key, "1700000000100", { "@example/checkout": target })
     const directory = join(generation, "node_modules", "@example", "checkout")
     writePackage(directory, manifest(), "@example/checkout", "1.0.0")
-    const listing = await listInstalledPlugins(hostOf([active({ type: "package", target, version: "e40fee4" })]), { cacheDirectory: cache })
+    const shorthand = "example/checkout-two"
+    const shorthandKey = gitKey(shorthand, "checkout-two")
+    const shorthandGeneration = writeGeneration(cache, shorthandKey, "1700000000200", { "@example/checkout-two": shorthand })
+    const shorthandDirectory = join(shorthandGeneration, "node_modules", "@example", "checkout-two")
+    writePackage(shorthandDirectory, manifest(), "@example/checkout-two", "1.0.0")
+    const listing = await listInstalledPlugins(hostOf([active({ type: "package", target, version: "e40fee4" }), active({ type: "package", target: shorthand, version: "e40fee5" })]), { cacheDirectory: cache })
     assert.deepEqual(listing.problems, [])
-    assert.equal(listing.plugins.length, 1)
-    assert.equal(listing.plugins[0]?.directory, directory)
-    assert.equal(listing.plugins[0]?.target, target)
+    assert.equal(listing.plugins.length, 2)
+    const byTarget = new Map(listing.plugins.map((plugin) => [plugin.target, plugin]))
+    assert.equal(byTarget.get(target)?.directory, directory)
+    assert.equal(byTarget.get(target)?.target, target)
     // A Git target's version is a commit revision, so it is not compared with the package's version.
-    assert.equal(listing.plugins[0]?.version, "1.0.0")
+    assert.equal(byTarget.get(target)?.version, "1.0.0")
+    assert.equal(byTarget.get(shorthand)?.directory, shorthandDirectory)
+  })
+
+  test("uses the repository name when a Git generation names no dependency", async () => {
+    const cache = join(scratch, "git-fallback", "opencode")
+    const target = "git+https://example.com/example/fallback.git#main"
+    const key = gitKey(target, "fallback")
+    const generation = writeGeneration(cache, key, "1700000000300")
+    const directory = join(generation, "node_modules", "fallback")
+    writePackage(directory, manifest(), "fallback", "1.0.0")
+    const listing = await listInstalledPlugins(hostOf([active({ type: "package", target, version: "abc1234" })]), { cacheDirectory: cache })
+    assert.deepEqual(listing.problems, [])
+    assert.equal(listing.plugins[0]?.directory, directory)
   })
 
   test("chooses the newest generation that has no .rejected sibling", async () => {
@@ -172,6 +191,8 @@ describe("listInstalledPlugins", () => {
   test("reports a missing package, a package with no manifest, an invalid manifest and another version", async () => {
     const cache = join(scratch, "problems", "opencode")
     installRegistry(cache, "@example/demo@2.0.0", "500", "@example/demo", "1.0.0")
+    const impostor = join(writeGeneration(cache, "@example/impostor@latest", "503"), "node_modules", "@example", "impostor")
+    writePackage(impostor, manifest(), "@example/other")
     const bare = join(writeGeneration(cache, "@example/bare@latest", "501"), "node_modules", "@example", "bare")
     mkdirSync(bare, { recursive: true })
     writeFileSync(join(bare, "package.json"), JSON.stringify({ name: "@example/bare", version: "1.0.0" }))
@@ -184,16 +205,25 @@ describe("listInstalledPlugins", () => {
         active({ type: "package", target: "@example/bare" }),
         active({ type: "package", target: "@example/broken" }),
         active({ type: "package", target: "@example/missing" }),
+        active({ type: "package", target: "@example/impostor" }),
       ]),
       { cacheDirectory: cache },
     )
     assert.deepEqual(listing.plugins, [])
-    assert.equal(listing.problems.length, 4)
+    assert.equal(listing.problems.length, 5)
     const problem = (target: string) => listing.problems.find((entry) => entry.target === target)?.problems.join("\n") ?? ""
     assert.match(problem("@example/demo"), /is version 1\.0\.0, not the 2\.0\.0/)
     assert.match(problem("@example/bare"), /declares no manifest/)
     assert.match(problem("@example/broken"), /capabilities\.plugin: Required/)
     assert.match(problem("@example/missing"), /no installed package/)
+    assert.match(problem("@example/impostor"), /the installed package is @example\/other, not the @example\/impostor the host names/)
+  })
+
+  test("refuses a target whose spec would leave the cache", async () => {
+    const cache = join(scratch, "traversal", "opencode")
+    const listing = await listInstalledPlugins(hostOf([active({ type: "package", target: "@example/demo@../../etc" })]), { cacheDirectory: cache })
+    assert.deepEqual(listing.plugins, [])
+    assert.match(listing.problems[0]?.problems[0] ?? "", /not an npm or Git package target/)
   })
 
   test("reports a plugin list that cannot be read instead of throwing", async () => {
