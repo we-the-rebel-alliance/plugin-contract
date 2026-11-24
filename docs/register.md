@@ -43,7 +43,7 @@ const handlers = {
 |---|---|
 | `description` | The agent tool's description. |
 | `input` | The method's own JSON Schema object, without `account`. The register adds the account selector. |
-| `output` | The answer's JSON Schema. A `plans` method is checked against `{ planId, method }` instead. |
+| `output` | The answer's JSON Schema. A `plans` method is checked against `{ planId, method }` plus the optional §8 preview fields instead. |
 | `run(input, call)` | The work. `call` carries the session, agent, message id, call id, signal, progress, resolved `account` and door. |
 
 `register` refuses a declared method with no handler, a handler the manifest does not declare, and a handler for a
