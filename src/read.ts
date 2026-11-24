@@ -12,7 +12,7 @@
  * implements them over its own OpenCode server. An app keeps its own cursor: `read` returns the page and never stores
  * anything.
  */
-import { findMethod, findSource, maxBytesOf, type InstalledManifest, type SourceItem } from "./manifest.ts"
+import { findMethod, findSource, maxBytesOf, type InstalledManifest, type OwnerOrg, type SourceItem } from "./manifest.ts"
 import { canonicalScope } from "./cursor.ts"
 import type { Checked } from "./internal/checked.ts"
 import { PAGE, probeResultProblems, resultProblems } from "./internal/events.ts"
@@ -267,9 +267,8 @@ export function detailFields(source: SourceItem, detailId: string, event: Readon
 }
 
 /**
- * Reads a declared detail of one event, in a session fenced by the source's own rules. The call is what Memory's
- * conformance kit checks a plugin with: `{ account, scope, fields }`, with the confirmed scope, so the plugin refuses an
- * event outside it.
+ * Reads a declared detail of one event, in a session fenced by the source's rules and the detail's method. The call
+ * is `{ account, scope, fields }`, with the confirmed scope, so the plugin refuses an event outside it.
  */
 export async function readDetail(host: ReadHost, request: DetailRequest): Promise<{ readonly ok: true; readonly answer: unknown } | { readonly ok: false; readonly failure: ReadFailure }> {
   const { installed, grant } = request
@@ -301,18 +300,20 @@ export async function readDetail(host: ReadHost, request: DetailRequest): Promis
 export interface ProbeAnswer {
   readonly source: string
   readonly account: string
-  /** `verified: false` marks an owner the provider does not confirm (#30, item 13). */
-  readonly owner: { readonly id: string; readonly label: string; readonly verified?: false }
+  /**
+   * The signed-in owner. `verified: false` marks an owner the provider does not confirm (#30, item 13), and `orgs`
+   * carries the organizations the provider reports (#44 item 2), at most five.
+   */
+  readonly owner: { readonly id: string; readonly label: string; readonly verified?: false; readonly orgs?: readonly OwnerOrg[] }
   readonly scopes?: readonly string[]
   readonly cost?: unknown
   readonly trust: "untrusted"
 }
 
 /**
- * Probes a source for an account, in a session fenced by its probe rules: the plugin's declared probe action
- * (`sources.probe.action`) and the source's declared identity operations (`permission.identity`), or, for a plugin
- * that declares neither yet, the source's own action and the identity operations the caller passes. The call is the
- * family's: `probe` with `{ source?, account }`.
+ * Probes a source for an account, in a session fenced by the plugin's `methods.probe` action and the identity
+ * operations it declares, or the identity operations the caller passes. The source's own method action fences the
+ * read; `probe` adds no content. The call is `probe` with `{ source?, account }`.
  */
 export async function probe(host: ReadHost, request: { readonly installed: InstalledManifest; readonly source: string; readonly account: string; readonly identityOperations?: readonly string[]; readonly signal?: AbortSignal }): Promise<{ readonly ok: true; readonly answer: ProbeAnswer } | { readonly ok: false; readonly failure: ReadFailure }> {
   const source = findSource(request.installed.manifest, request.source)

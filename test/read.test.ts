@@ -4,7 +4,7 @@ import { checkManifest } from "../src/manifest.ts"
 import { evaluate, type Grant, type PermissionRule } from "../src/permission.ts"
 import { probeProblems } from "../src/conformance.ts"
 import { probeResultProblems } from "../src/internal/events.ts"
-import { detailFields, probe, read, readDetail, type ReadHost, type ReadRequest } from "../src/read.ts"
+import { detailFields, probe, read, readDetail, type ProbeAnswer, type ReadHost, type ReadRequest } from "../src/read.ts"
 import { isBrokerAnswer, sourceReader, type BrokerAnswer, type BrokerRequest, type BrokerTransport } from "../src/broker-client.ts"
 import { installed, manifest } from "./support/manifest.ts"
 
@@ -103,9 +103,9 @@ describe("read a snapshot", () => {
     }
   })
 
-  test("reports the plugin's own error in the family's form, AUTH_REQUIRED as NEEDS_SIGN_IN, and closes the session", async () => {
+  test("reports the plugin's own error in the contract's form, and closes the session", async () => {
     const fake = fakeHost(() => {
-      throw Object.assign(new Error("AUTH_REQUIRED: the Google sign-in expired. Next step: Sign in again."), { data: { code: "AUTH_REQUIRED", next: "Sign in again." } })
+      throw Object.assign(new Error("NEEDS_SIGN_IN: the Google sign-in expired. Next step: Sign in again."), { data: { code: "NEEDS_SIGN_IN", next: "Sign in again." } })
     })
     const outcome = await read(fake.host, todayRequest())
     assert.equal(outcome.ok, false)
@@ -113,6 +113,20 @@ describe("read a snapshot", () => {
     assert.equal(outcome.failure.code, "NEEDS_SIGN_IN")
     assert.equal(outcome.failure.message, "NEEDS_SIGN_IN: the Google sign-in expired. Next step: Sign in again.")
     assert.equal(fake.closed(), 1)
+  })
+
+  test("passes a plugin's INPUT_INVALID or SOURCE_UNKNOWN through as itself, never as a reason to try again", async () => {
+    for (const [message, expected] of [
+      ["INPUT_INVALID: the input is invalid", "INPUT_INVALID"],
+      ["SOURCE_UNKNOWN: no such source. Next step: Pass gmail.", "SOURCE_UNKNOWN"],
+    ] as const) {
+      const outcome = await read(fakeHost(() => Promise.reject(new Error(message))).host, todayRequest())
+      assert.equal(outcome.ok ? "ok" : outcome.failure.code, expected, message)
+      if (outcome.ok) continue
+      assert.doesNotMatch(outcome.failure.next, /Try again later/)
+    }
+    const own = await read(fakeHost(() => Promise.reject(new Error("SOURCE_UNKNOWN: no such source. Next step: Pass gmail."))).host, todayRequest())
+    assert.equal(own.ok ? "" : own.failure.next, "Pass gmail.")
   })
 
   test("a source that asserts more than it declares is refused by the fence", async () => {
@@ -241,6 +255,18 @@ describe("probe", () => {
     assert.equal(wrong.ok ? "ok" : wrong.failure.code, "ACCOUNT_MISMATCH")
   })
 
+  test("ProbeAnswer.owner carries the provider's organizations (#44 item 2)", async () => {
+    const answer: ProbeAnswer = {
+      source: "messages",
+      account: ana,
+      owner: { id: `mailto:${ana}`, label: "Ana", orgs: [{ id: "domain:example.com", label: "example.com" }] },
+      trust: "untrusted",
+    }
+    const replied = await probe(fakeHost(() => answer).host, { installed: demo, source: "demo.messages", account: ana, identityOperations: [] })
+    assert.equal(replied.ok, true, replied.ok ? "" : replied.failure.message)
+    if (replied.ok) assert.deepEqual(replied.answer.owner.orgs, [{ id: "domain:example.com", label: "example.com" }])
+  })
+
   test("a source that is not signed in is NEEDS_SIGN_IN to a consumer, never an owner: null", async () => {
     const outcome = await probe(fakeHost(() => ({ ...good, owner: null })).host, { installed: demo, source: "demo.messages", account: ana, identityOperations: [] })
     assert.equal(outcome.ok ? "ok" : outcome.failure.code, "NEEDS_SIGN_IN")
@@ -330,8 +356,9 @@ describe("broker-client", () => {
   test("reads a refusal through the error table, with the host's codes as the table's", async () => {
     const cases: [Record<string, unknown>, string][] = [
       [{ code: "BUDGET_EXCEEDED", message: "BUDGET_EXCEEDED: today's budget is spent. Next step: Raise it." }, "BUDGET_EXCEEDED"],
-      [{ code: "NOT_GRANTED", message: "notes.home has no grant" }, "PERMISSION_DENIED"],
-      [{ code: "AUTH_REQUIRED", message: "the sign-in expired" }, "NEEDS_SIGN_IN"],
+      [{ code: "PERMISSION_DENIED", message: "the notes app has no grant" }, "PERMISSION_DENIED"],
+      [{ code: "NOT_GRANTED", message: "an unknown code" }, "UNAVAILABLE"],
+      [{ code: "NEEDS_SIGN_IN", message: "the Google sign-in expired" }, "NEEDS_SIGN_IN"],
       [{ code: "RATE_LIMITED", message: "slow down", retryAfterSec: 30 }, "RATE_LIMITED"],
     ]
     for (const [refusal, expected] of cases) {

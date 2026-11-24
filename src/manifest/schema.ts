@@ -11,7 +11,7 @@ import * as z from "zod"
 import { existsSync, readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { EVENT_KINDS, FACT_TYPES, isEventKindIn } from "../internal/events.ts"
-import { isExtensionOutput, isOutputName } from "../registry.ts"
+import { isExtensionOutput, isOutputName } from "../outputs.ts"
 import type { Checked, Validator } from "../internal/checked.ts"
 import { canonicalJson, manifestHash } from "./canonical.ts"
 import {
