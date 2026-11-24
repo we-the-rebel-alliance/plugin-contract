@@ -44,8 +44,8 @@ OpenCode 2.4.1 installs package plugins here:
 <XDG_CACHE_HOME or ~/.cache>/opencode/npm/<key>/<generation>/node_modules/<name>
 ```
 
-The catalog mirrors `@opencode/util@2.4.1` (`dist/npm.js`: `key`, `gitSlug`, `directory`, `generations`, `current`,
-`installedName`; `dist/global-roots.js`: `cache`):
+The catalog mirrors `@opencode/util@2.4.1` (`dist/npm.js`: `cacheKey`/`key`, `gitSlug`, `directory`, `generations`,
+`current`, `installedName`; `dist/global-roots.js`: `cache`):
 
 - **`<key>`** is `name@latest` for a bare registry target, `name@<spec>` for a version, range or tag, and
   `git-<slug>-<sha256(target)[0..12]>` for a Git target (`github:owner/repo#ref`, `git+…`, `git://`, `owner/repo`).

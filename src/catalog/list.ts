@@ -14,9 +14,10 @@
  * OpenCode 2.4.1 installs packages under `<XDG_CACHE_HOME or ~/.cache>/opencode/npm/`. Each target gets one directory
  * named by `key()`; each install is a numeric generation, and the package sits at
  * `<generation>/node_modules/<name>`. This module mirrors that layout from `@opencode/util@2.4.1`
- * (`dist/npm.js`: `key` :75, `gitSlug` :82, `directory` :112, `generations` :113, `current` :118, `installedName` :125;
- * `dist/global-roots.js`: `cache` :5, `roots` :9): the same key for registry and Git targets, the newest generation
- * whose sibling `<generation>.rejected` is absent, and the name from the generation's dependencies for a Git target.
+ * (`dist/npm.js`: `cacheKey` :41 (it wraps `key` :75), `gitSlug` :82, `directory` :112, `generations` :113, `current`
+ * :118, `installedName` :125; `dist/global-roots.js`: `cache` :5, `roots` :9): the same key for registry and Git
+ * targets, the newest generation whose sibling `<generation>.rejected` is absent, and the name from the generation's
+ * dependencies for a Git target.
  *
  * A local plugin names its directory. A host that installs elsewhere, such as a linked checkout, passes `resolve`.
  */
