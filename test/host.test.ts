@@ -15,7 +15,6 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { describe, test } from "node:test"
 import { Effect } from "effect"
-import { OpenCode } from "@opencode/sdk"
 import { Plugin } from "@opencode/plugin"
 import { checkManifest, type Manifest } from "../src/manifest.ts"
 import { register, type HandlerTable, type MethodHandler } from "../src/register.ts"
@@ -71,8 +70,12 @@ async function waitFor<T>(read: () => Promise<T | undefined>, label: string, tim
   }
 }
 
+const nodeMajor = Number(process.versions.node.split(".")[0])
+const skipHost = nodeMajor < 24 ? "the embedded host needs Node 24's explicit resource management (`await using`)" : false
+
 describe("the gate on the embedded OpenCode 2.4.1 host", () => {
-  test("a tool/Code Mode invocation and an RPC call each ask through ctx.permission.assert", { timeout: 30000 }, async () => {
+  test("a tool/Code Mode invocation and an RPC call each ask through ctx.permission.assert", { timeout: 30000, skip: skipHost }, async () => {
+    const { OpenCode } = await import("@opencode/sdk")
     const directory = await mkdtemp(join(tmpdir(), "plugin-contract-host-"))
     let captured: Plugin.Context | undefined
     const plugin = Plugin.define({
