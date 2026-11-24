@@ -114,7 +114,7 @@ export declare function read(host: ReadHost, request: ReadRequest): Promise<Read
 /**
  * A source's answer, checked as the contract says and picked: the account, `trust: "untrusted"`, the size against
  * `maxBytes`, an events page's shape or a snapshot's output, then `pick`. The same checks whoever made the call: `read`
- * embedded, or a host's broker (`broker-client`), so a broker never needs to be trusted for shape.
+ * embedded, or a host's broker (`catalog`), so a broker never needs to be trusted for shape.
  */
 export declare function acceptAnswer(source: SourceItem, account: string, answer: unknown, options?: {
     readonly limit?: number;

@@ -1,12 +1,13 @@
-import { type ReadHost, type ReadOutcome, type ReadRequest } from "./read.js";
+import { type ReadHost, type ReadOutcome, type ReadRequest } from "../read.js";
 /** One read, as a consumer asks a host's broker for it. */
 export interface BrokerRequest {
-    /** The installed package and version the consumer read its manifest from. */
+    /** The installed package the consumer read its manifest from. */
     readonly package: string;
+    /** The installed package's version. */
     readonly version: string;
     /** The manifest hash the consumer consented under; a broker whose own copy differs refuses with PERMISSION_DENIED. */
     readonly manifestHash: string;
-    /** Who reads, such as `notes`: for the broker's grant check and its audit line. */
+    /** Who reads, such as `memory`: the broker's grant key and its audit line. */
     readonly consumer: string;
     readonly source: string;
     readonly account?: string;
@@ -52,6 +53,11 @@ export interface SourceReader {
 export declare function brokerRequest(request: ReadRequest): BrokerRequest;
 /** True when `answer` has a broker answer's shape. */
 export declare function isBrokerAnswer(answer: unknown): answer is BrokerAnswer;
+/**
+ * True when `request` has a broker request's shape, for a broker reading one from an untrusted channel. `consumer` is
+ * required and non-empty: it is the grant key, so a request without one cannot be served.
+ */
+export declare function isBrokerRequest(request: unknown): request is BrokerRequest;
 /**
  * The reader a consumer uses. With a broker transport, each read goes to the broker first, after the same checks an
  * embedded read makes; it runs embedded when the broker says it is not offered, when the transport fails, or when its

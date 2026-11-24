@@ -64,14 +64,14 @@ The module map of the contract (§15), and what this package ships today:
 | [`outputs`](docs/outputs.md) | both | the snapshot shape registry and its JSON Schemas | here |
 | [`read`](docs/read.md), [`act`](docs/act.md) | app | fenced reads and actions, through the catalog or embedded | here |
 | [`params`](docs/params.md), [`pick`](docs/pick.md) | app | relative times, `$me`, field selection | here |
-| `catalog` | app, catalog | installed manifests | landing |
+| [`catalog`](docs/catalog.md) | app, catalog | installed manifests and the broker request | here |
 | `conformance` | CI | the kit | here |
 | `kit` | dev | the `plugin-kit` binary | landing |
 | `mcp-events` | plugin | optional MCP Events adapter | later |
 
 The package also ships the pieces `register` and `catalog` will replace — `descriptor` (reads the current `sources`
-block from an installed package), `list` (lists installed declarations), `permission` (exact session rules from a grant),
-`tools-rpc` (the tools-RPC transport) and `broker-client` (a host's broker when one is offered) — and [`hints`](docs/hints.md),
+block from an installed package), `list` (lists installed declarations), `permission` (exact session rules from a grant)
+and `tools-rpc` (the tools-RPC transport) — and [`hints`](docs/hints.md),
 the hint file format. They keep working until their replacements land.
 
 `docs/conformance.md` describes the kit. `docs/events.md` describes the feed model. `docs/outputs.md` describes the
@@ -105,7 +105,8 @@ its own `dist/`. Node 22 or later runs it; CI checks Node 24.
 - [Decisions](docs/decisions.md): the settled decisions behind v0.
 - [Conformance](docs/conformance.md), [events and cursors](docs/events.md), [outputs](docs/outputs.md),
   [`tools-rpc`](docs/tools-rpc.md).
-- The app side: [read](docs/read.md), [act](docs/act.md), [params](docs/params.md), [pick](docs/pick.md).
+- The app side: [read](docs/read.md), [act](docs/act.md), [catalog](docs/catalog.md), [params](docs/params.md),
+  [pick](docs/pick.md).
 - [Hints](docs/hints.md): the generic hint file format.
 - [AGENTS.template.md](AGENTS.template.md): the agent guide every plugin starts from.
 - [CONTRIBUTING.md](CONTRIBUTING.md): how to build and check this package.

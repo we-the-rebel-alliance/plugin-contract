@@ -1,12 +1,15 @@
 /**
- * `broker-client`: a consumer uses a host's broker when one is offered, and reads embedded when none is (contract §9).
- * Nothing here needs a host: an app reads embedded with `read`.
+ * The broker side of `catalog`: one request and one answer (contract §9, §14).
  *
  * A broker is a thin layer a host builds over the same library. It adds a persistent cache keyed by the provider
  * identity from `probe` plus `(source, account, scope, params, window)`, per-person budgets and cadence, and an audit
  * line per read with no content. The host holds the grants it drew consent for, and may only narrow them: a cached
  * answer serves a consumer only when that consumer's own grant covers the same source, account and scope, never
  * another person or viewer. It never advances a consumer's cursor and never transforms an answer.
+ *
+ * **The grant key is `consumer`.** The request names who reads (`consumer`), and `package`, `version` and
+ * `manifestHash` describe the source's installed manifest. A broker looks the grant up by consumer, compares the
+ * version and hash with its own installed copy, and refuses another declaration with `PERMISSION_DENIED` (issue #8).
  *
  * **The wire shape** is one request and one answer (`BrokerRequest`, `BrokerAnswer`), so any host can offer a broker
  * through its own channel.
@@ -20,18 +23,19 @@
  * find one by asking over RPC: an RPC id has no owner in OpenCode, so another plugin could answer in the broker's
  * name.
  */
-import { canonicalScope } from "./cursor.ts"
-import { failureFromError } from "./internal/failure.ts"
-import { acceptAnswer, checkReadRequest, read, type ReadHost, type ReadOutcome, type ReadRequest } from "./read.ts"
+import { canonicalScope } from "../cursor.ts"
+import { failureFromError } from "../internal/failure.ts"
+import { acceptAnswer, checkReadRequest, read, type ReadHost, type ReadOutcome, type ReadRequest } from "../read.ts"
 
 /** One read, as a consumer asks a host's broker for it. */
 export interface BrokerRequest {
-  /** The installed package and version the consumer read its manifest from. */
+  /** The installed package the consumer read its manifest from. */
   readonly package: string
+  /** The installed package's version. */
   readonly version: string
   /** The manifest hash the consumer consented under; a broker whose own copy differs refuses with PERMISSION_DENIED. */
   readonly manifestHash: string
-  /** Who reads, such as `notes`: for the broker's grant check and its audit line. */
+  /** Who reads, such as `memory`: the broker's grant key and its audit line. */
   readonly consumer: string
   readonly source: string
   readonly account?: string
@@ -94,6 +98,27 @@ export function isBrokerAnswer(answer: unknown): answer is BrokerAnswer {
   if (answer["offered"] !== true) return false
   if (answer["ok"] === true) return "value" in answer
   return answer["ok"] === false && typeof answer["code"] === "string" && typeof answer["message"] === "string"
+}
+
+/**
+ * True when `request` has a broker request's shape, for a broker reading one from an untrusted channel. `consumer` is
+ * required and non-empty: it is the grant key, so a request without one cannot be served.
+ */
+export function isBrokerRequest(request: unknown): request is BrokerRequest {
+  if (!plain(request)) return false
+  for (const key of ["package", "version", "manifestHash", "consumer", "source"] as const) {
+    const value = request[key]
+    if (typeof value !== "string" || value.length === 0) return false
+  }
+  if (request["account"] !== undefined && typeof request["account"] !== "string") return false
+  if (request["cursor"] !== undefined && typeof request["cursor"] !== "string") return false
+  if (request["since"] !== undefined && typeof request["since"] !== "string") return false
+  if (request["limit"] !== undefined && !(typeof request["limit"] === "number" && Number.isInteger(request["limit"]) && request["limit"] > 0)) return false
+  const scope = request["scope"]
+  if (scope !== undefined && !(plain(scope) && Object.values(scope).every((values) => Array.isArray(values) && values.every((value) => typeof value === "string")))) return false
+  const pick = request["pick"]
+  if (pick !== undefined && !(Array.isArray(pick) && pick.every((value) => typeof value === "string"))) return false
+  return true
 }
 
 /**

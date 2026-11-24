@@ -1,0 +1,168 @@
+# `catalog`
+
+The installed manifests, and the broker request a consumer sends a host (contract §14). Remote apps cannot read the
+disk, and nothing said over RPC is trusted as a manifest, so the catalog is the one trusted door for them.
+
+The module does two things:
+
+- **Listing.** `listInstalledPlugins(ctx)` asks the host which plugins are installed (`ctx.plugin.list()`), finds each
+  package's directory, and reads, validates and hashes the manifest with the `manifest` module.
+- **The broker.** `brokerRequest` builds the one request a consumer sends a host's broker, `sourceReader` asks the
+  broker first and reads embedded when none is offered, and `isBrokerRequest`/`isBrokerAnswer` check the wire shapes.
+
+A catalog plugin serves `catalog.list`, `broker.read` and `broker.act` over RPC, in sessions fenced by the person's
+grants. That plugin is its own repository; this module is the shared side it runs on.
+
+## Listing installed plugins
+
+```ts
+import { listInstalledPlugins } from "@we-the-rebel-alliance/plugin-contract/catalog"
+
+const listing = await listInstalledPlugins(ctx) // a plugin's own context
+for (const plugin of listing.plugins) {
+  plugin.manifest.sources   // validated capabilities
+  plugin.hash               // sha256:…, the hash a grant stores
+}
+listing.problems            // packages that could not be read, one entry each
+```
+
+`ctx.plugin.list()` answers one entry per installed plugin. The catalog reads only its `source`:
+
+| `source.type` | What the catalog does |
+|---|---|
+| `local` | reads the manifest at `source.path` |
+| `package` | resolves `source.target`, then reads the manifest; a registry target's `source.version` is checked against the installed package |
+| `builtin`, `sdk` | skipped: there is no package on disk to read |
+
+A package target is a package name such as `@we-the-rebel-alliance/slack-plugin`. The host's own directory is the
+default root for `node_modules`, and `options.roots` replaces it:
+
+```ts
+const listing = await listInstalledPlugins(ctx, { roots: ["/home/ana/.cache/opencode/npm"] })
+```
+
+When the host already knows where a target lives, such as a package cache or a linked checkout, it passes a resolver
+instead:
+
+```ts
+const listing = await listInstalledPlugins(ctx, {
+  resolve: (target) => cacheDirectory(target),
+})
+```
+
+`listInstalledPlugins` never throws for a plugin's own package. A missing package, a registry package whose version is
+not the one the host names, or a manifest that does not validate is reported in `problems`, and every other plugin is
+still listed. Manifests are read with `readInstalledManifest`, so there is one parser, one validator and one hash.
+
+Each listed plugin carries the host's `target` beside the `InstalledManifest` fields (`package`, `version`,
+`directory`, `manifest`, `hash`). Two targets that resolve to the same directory are one entry.
+
+### The host shape
+
+`CatalogHost` is written structurally, so a plugin passes `ctx` as it is; the `@opencode/plugin` types stay out of the
+published declarations. It needs `plugin.list()`, and `location.directory` for the default root.
+
+## The broker
+
+A broker is a thin layer a host builds over the same library. It adds a persistent cache keyed by the provider identity
+from `probe` plus `(source, account, scope, params, window)`, per-person budgets and cadence, and an audit line per read
+with no content. The host holds the grants it drew consent for and may only narrow them. It never advances a consumer's
+cursor and never transforms an answer.
+
+The consumer passes the transport, from a channel it already trusts. It is one function:
+
+```ts
+type BrokerTransport = (request: BrokerRequest, signal?: AbortSignal) => Promise<BrokerAnswer>
+```
+
+Never find a broker by asking over RPC: an RPC id has no owner in OpenCode, so another plugin could answer in the
+broker's name.
+
+### The request
+
+`brokerRequest(readRequest)` builds it from a read. Every field is a reference or the read itself; the manifest and the
+grant never cross the wire.
+
+| Field | Meaning |
+|---|---|
+| `consumer` | who reads, such as `memory`. **This is the grant key**, and the broker's audit line |
+| `package` | the installed package the consumer read its manifest from |
+| `version` | that package's installed version |
+| `manifestHash` | the `sha256:…` hash the consumer consented under |
+| `source` | the source id, such as `slack.mentions` |
+| `account` | the account alias, or the default account |
+| `scope` | the confirmed scope, in canonical form |
+| `cursor`, `since`, `limit` | an events read; `since` may be relative |
+| `pick` | a snapshot's selected paths; a broker may apply it to send less, and the client applies it again |
+
+`package`, `version` and `manifestHash` describe the **source**. They are not the consumer's: a broker looks up the
+grant by `consumer`, compares the version and hash with its own installed copy, and refuses a read made under another
+declaration with `PERMISSION_DENIED` (issue #8).
+
+A broker reading a request from an untrusted channel checks it first:
+
+```ts
+import { isBrokerRequest } from "@we-the-rebel-alliance/plugin-contract/catalog"
+
+if (!isBrokerRequest(body)) return { offered: true, ok: false, code: "INPUT_INVALID", message: "…" }
+```
+
+`isBrokerRequest` requires a non-empty `consumer`: a request without one cannot be served, because the consumer is the
+grant key. It also checks the optional fields' types.
+
+### The answer
+
+| Answer | Meaning |
+|---|---|
+| `{ offered: false }` | no broker now; the client reads embedded for this request |
+| `{ offered: true, ok: true, value, asOf?, cached? }` | `value` is the plugin's answer, untransformed |
+| `{ offered: true, ok: false, code, message, next?, retryAfterSec? }` | a refusal, read through the error table |
+
+### The client
+
+```ts
+import { sourceReader } from "@we-the-rebel-alliance/plugin-contract/catalog"
+
+const reader = sourceReader({ host, broker: transport })
+const outcome = await reader.read(request)
+outcome.via // "broker" or "embedded"
+```
+
+`sourceReader` makes the same checks an embedded read makes before it asks anything: the source is declared, the person
+has not turned it off, the grant is this consumer's for the installed manifest hash, the scope is within the grant and
+the inputs suit the source's kind. It then:
+
+1. reads embedded when no broker is passed, the broker says `{ offered: false }`, the transport throws, or the answer is
+   not a broker answer;
+2. passes a refusal through the error table, with no embedded read behind the broker's back;
+3. checks an `ok: true` value exactly as an embedded read does: the account, `trust: "untrusted"`, the size against
+   `maxBytes`, the events page or the output schema, then `pick`.
+
+A broker therefore never needs to be trusted for shape, and a refused read is never retried elsewhere.
+
+## Negative cases
+
+| Case | What happens |
+|---|---|
+| A package target with no installed package | reported in `problems`, never thrown |
+| A package with no manifest, or one that does not validate | reported in `problems` with the validator's paths |
+| A registry package whose version is not the host's | reported in `problems` |
+| A grant for another manifest hash | `PERMISSION_DENIED` before the broker is asked |
+| Another consumer's read | `PERMISSION_DENIED` before the broker is asked |
+| The broker is off | the read runs embedded over the consumer's own host |
+| A broker refusal | passed through the error table; no embedded read follows |
+
+## Exports
+
+| Export | Does |
+|---|---|
+| `listInstalledPlugins(host, options?)` | installed manifests, validated and hashed, and the packages that could not be read |
+| `brokerRequest(read)` | the one broker request, keyed on `consumer` |
+| `sourceReader({ host, broker? })` | a consumer's reader: broker first when offered, embedded otherwise |
+| `isBrokerRequest(value)` | true when a value has a broker request's shape, including its `consumer` |
+| `isBrokerAnswer(value)` | true when a value has a broker answer's shape |
+| `CatalogHost`, `CatalogOptions`, `CatalogListing`, `CatalogPlugin`, `CatalogProblem`, `HostPlugin` | the host, its options and the listing |
+| `BrokerRequest`, `BrokerAnswer`, `BrokerTransport`, `SourceReader`, `ReaderOutcome` | the wire shapes and the reader |
+
+The listing's `hash` is the same hash `readInstalledManifest` gives and a grant stores. A changed manifest changes the
+hash, so the person is asked again.

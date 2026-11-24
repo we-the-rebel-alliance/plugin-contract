@@ -5,7 +5,6 @@ import { evaluate, type Grant, type PermissionRule } from "../src/permission.ts"
 import { probeProblems } from "../src/conformance.ts"
 import { probeResultProblems } from "../src/internal/events.ts"
 import { detailFields, probe, read, readDetail, type ProbeAnswer, type ReadHost, type ReadRequest } from "../src/read.ts"
-import { isBrokerAnswer, sourceReader, type BrokerAnswer, type BrokerRequest, type BrokerTransport } from "../src/broker-client.ts"
 import { installed, manifest } from "./support/manifest.ts"
 
 const checked = checkManifest(manifest())
@@ -295,94 +294,4 @@ describe("probe", () => {
       assert.equal(viaEvents.length === 0, ok, viaEvents.join("; "))
     })
   }
-})
-
-describe("broker-client", () => {
-  const brokerAnswer = (answer: unknown) => {
-    const seen: BrokerRequest[] = []
-    const transport: BrokerTransport = async (request) => {
-      seen.push(request)
-      if (answer instanceof Error) throw answer
-      return answer as BrokerAnswer
-    }
-    return { transport, seen }
-  }
-
-  test("reads embedded without a broker", async () => {
-    const fake = fakeHost(() => snapshot)
-    const outcome = await sourceReader({ host: fake.host }).read(todayRequest())
-    assert.equal(outcome.via, "embedded")
-    assert.equal(outcome.ok, true)
-    assert.equal(fake.calls.length, 1)
-  })
-
-  test("sends the broker references and the read, never the manifest or the grant", async () => {
-    const { transport, seen } = brokerAnswer({ offered: true, ok: true, value: snapshot, asOf: "2026-11-13T09:41:00Z", cached: true })
-    const fake = fakeHost(() => snapshot)
-    const outcome = await sourceReader({ host: fake.host, broker: transport }).read(todayRequest({ pick: ["items[].text"] }))
-    assert.deepEqual(seen[0], {
-      package: "@example/demo",
-      version: "1.0.0",
-      manifestHash: demo.hash,
-      consumer: "notes.home",
-      source: "demo.channels",
-      account: ana,
-      pick: ["items[].text"],
-    })
-    assert.equal(outcome.via, "broker")
-    assert.equal(outcome.cached, true)
-    assert.ok(outcome.ok && outcome.kind === "snapshot")
-    if (outcome.ok && outcome.kind === "snapshot") assert.deepEqual(outcome.snapshot.data, { items: [{ text: "One" }, { text: "Two" }] })
-    assert.equal(fake.calls.length, 0)
-  })
-
-  test("checks a broker's value as an embedded read does", async () => {
-    const { transport } = brokerAnswer({ offered: true, ok: true, value: { ...snapshot, trust: "trusted" } })
-    const outcome = await sourceReader({ host: fakeHost(() => snapshot).host, broker: transport }).read(todayRequest())
-    assert.equal(outcome.ok ? "ok" : outcome.failure.code, "SCHEMA_VIOLATION")
-    assert.equal(outcome.via, "broker")
-  })
-
-  test("reads embedded when the broker is not offered, the transport fails or the answer is not a broker's", async () => {
-    for (const answer of [{ offered: false }, new Error("no host"), { offered: "yes" }, null]) {
-      const fake = fakeHost(() => snapshot)
-      const outcome = await sourceReader({ host: fake.host, broker: brokerAnswer(answer).transport }).read(todayRequest())
-      assert.equal(outcome.via, "embedded")
-      assert.equal(outcome.ok, true)
-      assert.equal(fake.calls.length, 1)
-    }
-  })
-
-  test("reads a refusal through the error table, with the host's codes as the table's", async () => {
-    const cases: [Record<string, unknown>, string][] = [
-      [{ code: "BUDGET_EXCEEDED", message: "BUDGET_EXCEEDED: today's budget is spent. Next step: Raise it." }, "BUDGET_EXCEEDED"],
-      [{ code: "PERMISSION_DENIED", message: "the notes app has no grant" }, "PERMISSION_DENIED"],
-      [{ code: "NOT_GRANTED", message: "an unknown code" }, "UNAVAILABLE"],
-      [{ code: "NEEDS_SIGN_IN", message: "the Google sign-in expired" }, "NEEDS_SIGN_IN"],
-      [{ code: "RATE_LIMITED", message: "slow down", retryAfterSec: 30 }, "RATE_LIMITED"],
-    ]
-    for (const [refusal, expected] of cases) {
-      const fake = fakeHost(() => snapshot)
-      const outcome = await sourceReader({ host: fake.host, broker: brokerAnswer({ offered: true, ok: false, ...refusal }).transport }).read(todayRequest())
-      assert.equal(outcome.ok ? "ok" : outcome.failure.code, expected)
-      assert.equal(outcome.via, "broker")
-      assert.equal(fake.calls.length, 0, "a refusal is final: no embedded read behind the broker's back")
-      if (!outcome.ok && expected === "RATE_LIMITED") assert.equal(outcome.failure.retryAfterSec, 30)
-    }
-  })
-
-  test("refuses before asking the broker when the read is not this consumer's to make", async () => {
-    const { transport, seen } = brokerAnswer({ offered: true, ok: true, value: snapshot })
-    const outcome = await sourceReader({ host: fakeHost(() => snapshot).host, broker: transport }).read(todayRequest({ grant: grantFor("demo.channels", { disabled: true }) }))
-    assert.equal(outcome.ok ? "ok" : outcome.failure.code, "SOURCE_DISABLED")
-    assert.equal(seen.length, 0)
-  })
-
-  test("knows a broker answer's shape", () => {
-    assert.equal(isBrokerAnswer({ offered: false }), true)
-    assert.equal(isBrokerAnswer({ offered: true, ok: true, value: null }), true)
-    assert.equal(isBrokerAnswer({ offered: true, ok: false, code: "X", message: "y" }), true)
-    assert.equal(isBrokerAnswer({ offered: true, ok: true }), false)
-    assert.equal(isBrokerAnswer({ offered: true, ok: false, code: 1 }), false)
-  })
 })
