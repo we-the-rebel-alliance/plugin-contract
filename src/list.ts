@@ -1,33 +1,31 @@
 /**
- * Lists the declarations of installed packages, from disk, never over RPC.
+ * Lists the manifests of installed packages, from disk, never over RPC (contract §4, §14).
  *
  * A consumer passes a directory of packages (each child, and each package under an `@scope` child) or a list of
  * package directories. A directory that itself holds a `package.json` is one package. Each package is read with
- * `readInstalledDescriptor`, so there is one parser. A missing or invalid descriptor is reported; it is not dropped.
+ * `readInstalledManifest`, so there is one parser. A missing or invalid manifest is reported; it is not dropped.
  *
  *   const listed = listInstalledDeclarations("/path/to/node_modules")
- *   listed.declarations[0].sources   // the package's sources
- *   listed.declarations[0].acts       // its acts, empty when it declares none
- *   listed.problems                   // packages that could not be read
+ *   listed.declarations[0].manifest.sources   // the package's sources
+ *   listed.declarations[0].manifest.actions   // its actions
+ *   listed.problems                           // packages that could not be read
  */
 import { existsSync, readdirSync } from "node:fs"
 import { join } from "node:path"
-import { readInstalledDescriptor, type InstalledDescriptor } from "./descriptor.ts"
-import type { ActItem } from "./internal/schema/types.ts"
+import { readInstalledManifest, type InstalledManifest, type Manifest } from "./manifest.ts"
 
-/** One installed package whose descriptor validated. */
+/** One installed package whose manifest validated. */
 export interface ListedDeclaration {
   readonly directory: string
   readonly package: string
   readonly version: string
-  readonly sources: InstalledDescriptor["sources"]
-  /** The package's acts. Empty when the descriptor declares none. */
-  readonly acts: readonly ActItem[]
-  /** The descriptor hash, covering sources and acts. A grant stores it. */
+  /** The validated `capabilities` value. */
+  readonly manifest: Manifest
+  /** The manifest hash, covering every key. A grant stores it. */
   readonly hash: string
 }
 
-/** A package that has no descriptor, or one this package refuses. */
+/** A package that has no manifest, or one this package refuses. */
 export interface ListedProblem {
   readonly directory: string
   readonly problems: readonly string[]
@@ -39,12 +37,11 @@ export interface ListedDeclarations {
   readonly problems: readonly ListedProblem[]
 }
 
-const listed = (installed: InstalledDescriptor): ListedDeclaration => ({
+const listed = (installed: InstalledManifest): ListedDeclaration => ({
   directory: installed.directory,
   package: installed.package,
   version: installed.version,
-  sources: installed.sources,
-  acts: installed.sources.acts ?? [],
+  manifest: installed.manifest,
   hash: installed.hash,
 })
 
@@ -101,15 +98,15 @@ function targets(input: string | readonly string[]): { readonly directories: rea
 }
 
 /**
- * The declarations of the installed packages at `input`: a directory of packages, or a list of package directories.
- * Uses `readInstalledDescriptor` for each, and reports a missing or invalid descriptor instead of dropping it.
+ * The manifests of the installed packages at `input`: a directory of packages, or a list of package directories.
+ * Uses `readInstalledManifest` for each, and reports a missing or invalid manifest instead of dropping it.
  */
 export function listInstalledDeclarations(input: string | readonly string[]): ListedDeclarations {
   const { directories, problems } = targets(input)
   const declarations: ListedDeclaration[] = []
   const found: ListedProblem[] = [...problems]
   for (const directory of directories) {
-    const installed = readInstalledDescriptor(directory)
+    const installed = readInstalledManifest(directory)
     if (installed.ok) declarations.push(listed(installed.value))
     else found.push({ directory, problems: installed.problems })
   }

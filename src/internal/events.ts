@@ -36,6 +36,9 @@
  */
 import { createHash } from "node:crypto"
 import { canonicalScope, MAX_CURSOR_LENGTH, type Scope } from "../cursor.ts"
+import { ownerProblems } from "../manifest/owner.ts"
+import { THUMBNAIL_URL_MAX, type Owner } from "../manifest/types.ts"
+import { thumbnailUrlProblems } from "../manifest/thumbnail.ts"
 import { secretKinds } from "./secrets.ts"
 
 export type { Scope } from "../cursor.ts"
@@ -302,27 +305,16 @@ export interface SourceEvent {
   readonly parts?: EventPart[]
   /** Typed facts the source derives in code, at most 20, each of a type the manifest declares. */
   readonly facts?: EventFact[]
+  /** #42: the item's https thumbnail, present only when the read asked and the item has one. Outside `eventHash`. */
+  readonly thumbnail?: string
 }
 
-/** The signed-in source account. */
-export interface EventsOwner {
-  readonly id: string
-  readonly label: string
-  /**
-   * `false` when the provider does not confirm who this is, so the id is the plugin's best knowledge
-   * (Wispr Flow names OpenCode's credential, `wisprflow:credential:<id>`). A consumer shows it as unverified. Absent
-   * means the plugin vouches that the provider named the owner. Only `false` is accepted, so one owner has one encoding.
-   */
-  readonly verified?: false
-}
+/** The signed-in source account, with the organizations its provider reports (#44 item 2). */
+export type EventsOwner = Owner
 
-/** An owner's problems as `what` describes it: `{ id, label, verified? }`, two non-empty lines and an optional `false`. */
+/** An owner's problems as `what` describes it: `{ id, label, verified?, orgs? }`, checked in the manifest module. */
 function ownerShapeProblems(owner: unknown, what: string): string[] {
-  if (!plainObject(owner) || !line(owner["id"], EVENT_LIMITS.ownerId) || !line(owner["label"], EVENT_LIMITS.ownerLabel) || Object.keys(owner).some((key) => key !== "id" && key !== "label" && key !== "verified")) {
-    return [`${what} must be { id, label }, two non-empty lines`]
-  }
-  if (owner["verified"] !== undefined && owner["verified"] !== false) return [`${what}.verified must be false, or left out for an owner the provider named`]
-  return []
+  return ownerProblems(owner, what)
 }
 
 // ── The page result's optional parts ──────────────────────────────────────
@@ -425,6 +417,8 @@ export interface EventsListRequest {
   readonly account?: string
   readonly source?: string
   readonly scope?: Record<string, string | string[]>
+  /** #42: the read asks for each item's `thumbnail`. Only a source that declares `thumbnails` accepts it. */
+  readonly thumbnails?: true
 }
 
 // ── Errors (contract §12) ─────────────────────────────────────────────────
@@ -542,21 +536,25 @@ export function scopeProblems(scope: unknown, keys: readonly string[]): string[]
   return problems
 }
 
-/** How a source parses its input: the scope keys it declares (`scope.keys` in its descriptor), none by default. */
+/** How a source parses its input: the scope keys it declares (`scope.keys` in its manifest), none by default. */
 export interface ParseOptions {
   readonly scopeKeys?: readonly string[]
+  /** #42: the source declares `thumbnails: true`, so the read may ask for `thumbnail`s. */
+  readonly thumbnails?: boolean
 }
 
 /**
  * The input checked and normalised, or the problems with it, one sentence each, naming fields and never values.
  * `scope` is accepted only when `options.scopeKeys` declares keys: a source that does not read a scope must refuse
- * one rather than ignore it, since ignoring it would read more than the consumer asked for.
+ * one rather than ignore it, since ignoring it would read more than the consumer asked for. `thumbnails` is accepted
+ * the same way: only from a source that declares it, and only as `true`.
  */
 export function parseEventsListInput(input: unknown, options: ParseOptions = {}): { ok: true; value: EventsListRequest } | { ok: false; problems: string[] } {
   const value = input === undefined || input === null ? {} : input
   if (!plainObject(value)) return { ok: false, problems: ["the input must be an object"] }
   const scoped = (options.scopeKeys?.length ?? 0) > 0
-  const known = scoped ? [...INPUT_KEYS, "scope"] : INPUT_KEYS
+  const thumbnails = options.thumbnails === true
+  const known = [...INPUT_KEYS, ...(scoped ? ["scope"] : []), ...(thumbnails ? ["thumbnails"] : [])]
   const problems = Object.keys(value).filter((key) => !known.includes(key)).map((key) => `"${key}" is not an input of events_list`)
   const { since, cursor, limit, account, source, scope } = value
   let time: number | undefined
@@ -576,6 +574,7 @@ export function parseEventsListInput(input: unknown, options: ParseOptions = {})
   if (source !== undefined && (typeof source !== "string" || source.length > EVENT_LIMITS.source || !SOURCE_PATTERN.test(source))) {
     problems.push(`"source" must be a source's name, a lowercase word such as gmail`)
   }
+  if (value["thumbnails"] !== undefined && value["thumbnails"] !== true) problems.push(`"thumbnails" must be true, or left out`)
   if (scoped && scope !== undefined) problems.push(...scopeProblems(scope, options.scopeKeys!))
   if (problems.length > 0) return { ok: false, problems }
   return {
@@ -587,6 +586,7 @@ export function parseEventsListInput(input: unknown, options: ParseOptions = {})
       ...(account === undefined ? {} : { account: account as string }),
       ...(source === undefined ? {} : { source: source as string }),
       ...(scoped && scope !== undefined ? { scope: canonicalScope(scope as Scope) } : {}),
+      ...(thumbnails && value["thumbnails"] === true ? { thumbnails: true as const } : {}),
     },
   }
 }
@@ -678,6 +678,8 @@ export interface EventDraft {
   readonly sections?: readonly { readonly heading: string; readonly text: string }[]
   readonly parts?: readonly { readonly id: string; readonly text: string; readonly actor?: string }[]
   readonly facts?: readonly EventFact[]
+  /** #42: present only when the read asked for thumbnails. The field is outside `eventHash`. */
+  readonly thumbnail?: string | null
 }
 
 const clean = (text: string) => text.replaceAll("\u0000", "")
@@ -726,6 +728,10 @@ export function makeEvent(draft: EventDraft): SourceEvent {
       return { id, text: cut(clean(part.text), EVENT_LIMITS.text), ...(actor ? { actor } : {}) }
     })
     .filter((part) => part.id.length > 0)
+  // #42: a thumbnail is never null, and only a basic https URL of the contract's length reaches the event. Its host is
+  // checked against the source's urlHosts by `eventProblems`, which knows the source.
+  const thumbnail =
+    typeof draft.thumbnail === "string" && draft.thumbnail.length <= THUMBNAIL_URL_MAX && /^https:\/\/\S+$/.test(draft.thumbnail) ? draft.thumbnail : undefined
   const event = {
     source: draft.source,
     account: draft.account,
@@ -744,6 +750,7 @@ export function makeEvent(draft: EventDraft): SourceEvent {
     ...(sections === undefined || sections.length === 0 ? {} : { sections }),
     ...(parts === undefined || parts.length === 0 ? {} : { parts }),
     ...(draft.facts === undefined || draft.facts.length === 0 ? {} : { facts: [...draft.facts] }),
+    ...(thumbnail === undefined ? {} : { thumbnail }),
   }
   return { ...event, hash: eventHash(event) }
 }
@@ -861,7 +868,12 @@ export function probeResult(identity: EventsListIdentity, extras: { readonly sco
   return {
     source: identity.source,
     account: identity.account,
-    owner: { id: identity.owner.id, label: identity.owner.label, ...(identity.owner.verified === undefined ? {} : { verified: identity.owner.verified }) },
+    owner: {
+      id: identity.owner.id,
+      label: identity.owner.label,
+      ...(identity.owner.verified === undefined ? {} : { verified: identity.owner.verified }),
+      ...(identity.owner.orgs === undefined ? {} : { orgs: identity.owner.orgs }),
+    },
     ...(extras.scopes === undefined ? {} : { scopes: [...new Set(extras.scopes)] }),
     ...(extras.cost === undefined ? {} : { cost: extras.cost }),
     trust: TRUST,
@@ -1125,18 +1137,29 @@ function factsProblems(e: Record<string, unknown>, where: string, actorIds: Read
   return (e.facts as unknown[]).flatMap((fact, index) => factProblems(fact, actorIds, `${where}.facts[${index}]`))
 }
 
-/** The event fields the contract defines, and its optional metadata. */
+/** The event fields the contract defines, its optional metadata, and optionally a thumbnail (#42). */
 const EVENT_KEYS: readonly string[] = ["source", "account", "external_id", "kind", "occurred_at", "thread", "actors", "title", "text", "url", "labels", "hash"]
 const EVENT_METADATA_KEYS: readonly string[] = ["reply_to", "audience", "domains", "sections", "parts", "facts"]
+/** The event fields a read may allow beyond the contract's own. */
+export interface EventProblemOptions {
+  /** #42: the read asked for thumbnails, so `thumbnail` is allowed when the item has one. */
+  readonly thumbnails?: boolean
+  /** The source's `urlHosts`: a thumbnail's host must match one. */
+  readonly urlHosts?: readonly string[]
+}
 
 /** One event's problems, one sentence each; none when it keeps the contract. */
-export function eventProblems(event: unknown, where = "event"): string[] {
+export function eventProblems(event: unknown, where = "event", options: EventProblemOptions = {}): string[] {
   if (!plainObject(event)) return [`${where} is not an object`]
   const problems: string[] = []
-  const keys = [...EVENT_KEYS, ...EVENT_METADATA_KEYS]
+  const keys = [...EVENT_KEYS, ...EVENT_METADATA_KEYS, ...(options.thumbnails === true ? ["thumbnail"] : [])]
   for (const key of Object.keys(event)) if (!keys.includes(key)) problems.push(`${where} has the field "${key}", which the contract does not define`)
   for (const key of EVENT_KEYS) if (!Object.hasOwn(event, key)) problems.push(`${where} has no "${key}"`)
   const e = event as Record<string, unknown>
+  if (e.thumbnail !== undefined) {
+    if (e.thumbnail === null) problems.push(`${where}.thumbnail must be left out, never null`)
+    else problems.push(...thumbnailUrlProblems(e.thumbnail, options.urlHosts ?? []).map((problem) => `${where}.thumbnail ${problem}`))
+  }
   if (!line(e.source, EVENT_LIMITS.source) || !SOURCE_PATTERN.test(e.source)) problems.push(`${where}.source must be a lowercase name such as gmail`)
   if (!line(e.account, EVENT_LIMITS.account)) problems.push(`${where}.account must be a non-empty name of at most ${EVENT_LIMITS.account} characters`)
   if (!line(e.external_id, EVENT_LIMITS.externalId)) problems.push(`${where}.external_id must be a non-empty id of at most ${EVENT_LIMITS.externalId} characters`)
@@ -1296,7 +1319,7 @@ function extraProblems(result: Record<string, unknown>, ids: ReadonlySet<string>
  * A result's problems: its shape, every event, the order, the limit and the size, and each optional addition that is
  * present. None when it keeps the contract. `maxBytes` is the source's declared cap, `MAX_PAGE_BYTES` by default.
  */
-export function resultProblems(result: unknown, limit: number = PAGE.max, maxBytes: number = MAX_PAGE_BYTES): string[] {
+export function resultProblems(result: unknown, limit: number = PAGE.max, maxBytes: number = MAX_PAGE_BYTES, options: EventProblemOptions = {}): string[] {
   if (!plainObject(result)) return ["the result is not an object"]
   const problems: string[] = []
   for (const key of Object.keys(result)) if (!RESULT_KEYS.includes(key) && !EXTRA_KEYS.includes(key)) problems.push(`the result has the field "${key}", which the contract does not define`)
@@ -1314,7 +1337,7 @@ export function resultProblems(result: unknown, limit: number = PAGE.max, maxByt
   if (!Array.isArray(events)) return [...problems, "the result's events must be a list"]
   if (events.length > limit) problems.push(`the result has ${events.length} events, over the limit of ${limit}`)
   for (const [index, event] of events.entries()) {
-    problems.push(...eventProblems(event, `events[${index}]`))
+    problems.push(...eventProblems(event, `events[${index}]`, options))
     if (plainObject(event) && named && event["source"] !== source) problems.push(`events[${index}] names another source than the result`)
     if (plainObject(event) && typeof account === "string" && event["account"] !== account) problems.push(`events[${index}] names another account than the result`)
   }

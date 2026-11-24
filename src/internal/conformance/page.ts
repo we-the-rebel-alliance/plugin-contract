@@ -11,7 +11,7 @@
  * - a billed source reports its `cost`.
  */
 import { PAGE, REFUSAL_REASONS, isEventKindIn, resultProblems, secretKinds, sourceNamespace, type EventsListResult } from "../events.ts"
-import { maxBytesOf } from "../../descriptor.ts"
+import { maxBytesOf } from "../../manifest.ts"
 import type { SourceItem } from "../schema/types.ts"
 
 /** What a page is checked against. */

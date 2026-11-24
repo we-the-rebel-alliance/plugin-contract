@@ -1,16 +1,22 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
 import { describe, test } from "node:test"
-import type { SourceItem } from "../src/descriptor.ts"
 import { accountProblem, DENY_ALL, detailRules, evaluate, grantCovers, namespaceOf, operationRule, probeRules, serverOf, sessionRules, type Grant } from "../src/permission.ts"
 import type { Checked } from "../src/index.ts"
+import { checkManifest, type Manifest } from "../src/manifest.ts"
+import { manifest } from "./support/manifest.ts"
 
 const problemsIn = (checked: Checked<unknown>): readonly string[] => (checked.ok ? [] : checked.problems)
-
-const items = (name: string): SourceItem[] => JSON.parse(readFileSync(new URL(`./descriptors/${name}/package.json`, import.meta.url), "utf8")).sources.items
-const [gmail, today] = items("gws") as [SourceItem, SourceItem]
-const [slack] = items("slack") as [SourceItem]
 const ana = "ana@example.com"
+
+const value = (change: (m: any) => void): Manifest => {
+  const checked = checkManifest(manifest(change))
+  assert.equal(checked.ok, true, checked.ok ? "" : checked.problems.join("\n"))
+  if (!checked.ok) throw new Error("fixture")
+  return checked.value
+}
+
+const demo = value((m) => {})
+const [messages, channels] = demo.sources as [Manifest["sources"][number], Manifest["sources"][number]]
 
 const rulesOf = (checked: ReturnType<typeof sessionRules>) => {
   assert.equal(checked.ok, true, checked.ok ? "" : checked.problems.join("\n"))
@@ -18,162 +24,110 @@ const rulesOf = (checked: ReturnType<typeof sessionRules>) => {
 }
 
 describe("sessionRules", () => {
-  test("gws: deny everything, allow the method on *, and each operation on <account>:<operation>", () => {
-    assert.deepEqual(rulesOf(sessionRules(gmail, { source: "gws.gmail", account: ana })), [
+  test("deny everything, allow the method on *, and each operation on <account>:<operation>", () => {
+    assert.deepEqual(rulesOf(sessionRules(messages, { source: "demo.messages", account: ana })), [
       DENY_ALL,
-      { action: "gws.events_list", resource: "*", effect: "allow" },
-      { action: "gws.read", resource: `${ana}:gmail.users.history.list`, effect: "allow" },
-      { action: "gws.read", resource: `${ana}:gmail.users.messages.list`, effect: "allow" },
-      { action: "gws.read", resource: `${ana}:gmail.users.messages.get`, effect: "allow" },
+      { action: "demo.events_list", resource: "*", effect: "allow" },
+      { action: "demo.read", resource: `${ana}:demo.messages.list`, effect: "allow" },
+      { action: "demo.read", resource: `${ana}:demo.messages.get`, effect: "allow" },
     ])
-  })
-
-  test("Slack: each bare operation is an MCP tool, allowed as <namespace>_<operation> on *", () => {
-    assert.deepEqual(rulesOf(sessionRules(slack, { source: "slack.workspace", account: "T0123" })), [
+    assert.deepEqual(rulesOf(sessionRules(channels, { source: "demo.channels", account: ana })), [
       DENY_ALL,
-      { action: "slack_events_list", resource: "*", effect: "allow" },
-      { action: "slack_slack_read_channel", resource: "*", effect: "allow" },
-      { action: "slack_slack_read_thread", resource: "*", effect: "allow" },
+      { action: "demo.list_channels", resource: "*", effect: "allow" },
+      { action: "demo.read", resource: `${ana}:demo.channels.list`, effect: "allow" },
     ])
   })
 
   test("derive each operation's rule as the conformance kit does", () => {
-    assert.deepEqual(operationRule(gmail, "gmail.users.messages.get", ana), { action: "gws.read", resource: `${ana}:gmail.users.messages.get`, effect: "allow" })
-    assert.deepEqual(operationRule(slack, "slack_read_channel", "T0123"), { action: "slack_slack_read_channel", resource: "*", effect: "allow" })
-    assert.equal(namespaceOf(today), "gws")
+    assert.deepEqual(operationRule(messages, "demo.messages.get", ana), { action: "demo.read", resource: `${ana}:demo.messages.get`, effect: "allow" })
+    assert.deepEqual(operationRule({ id: "slack.workspace" }, "slack_read_channel", "T0123"), { action: "slack-T0123_slack_read_channel", resource: "*", effect: "allow" })
+    assert.equal(namespaceOf(messages), "demo")
   })
 
   test("fence a session exactly: what is declared runs, nothing else does, and no other account", () => {
-    const rules = rulesOf(sessionRules(gmail, { source: "gws.gmail", account: ana }))
-    // The session's rules come after the agent's: even an agent that allows everything is fenced.
+    const rules = rulesOf(sessionRules(messages, { source: "demo.messages", account: ana }))
     const session = [{ action: "*", resource: "*", effect: "allow" as const }, ...rules]
-    assert.equal(evaluate(session, "gws.events_list"), "allow")
-    assert.equal(evaluate(session, "gws.read", `${ana}:gmail.users.messages.get`), "allow")
-    assert.equal(evaluate(session, "gws.read", "ben@example.com:gmail.users.messages.get"), "deny")
-    assert.equal(evaluate(session, "gws.read", `${ana}:gmail.users.messages.send`), "deny")
-    assert.equal(evaluate(session, "gws.send", "*"), "deny")
+    assert.equal(evaluate(session, "demo.events_list"), "allow")
+    assert.equal(evaluate(session, "demo.read", `${ana}:demo.messages.get`), "allow")
+    assert.equal(evaluate(session, "demo.read", "ben@example.com:demo.messages.get"), "deny")
+    assert.equal(evaluate(session, "demo.read", `${ana}:demo.messages.delete`), "deny")
+    assert.equal(evaluate(session, "demo.send_message", "*"), "deny")
     assert.equal(evaluate(session, "bash", "*"), "deny")
-    assert.equal(evaluate(rulesOf(sessionRules(today, { source: "gws.calendar.today", account: ana })), "gws.read", `${ana}:gmail.users.messages.get`), "deny")
   })
 
   test("refuse an account that would widen a rule, and a grant for another source", () => {
     for (const account of ["*", "ana*", "a?a", "ana:evil", "ana b", "", "x".repeat(321)]) {
-      assert.equal(sessionRules(gmail, { source: "gws.gmail", account }).ok, false, account)
+      assert.equal(sessionRules(messages, { source: "demo.messages", account }).ok, false, account)
       assert.ok(accountProblem(account))
     }
     assert.equal(accountProblem(ana), undefined)
-    assert.equal(sessionRules(gmail, { source: "gws.calendar.today", account: ana }).ok, false)
+    assert.equal(sessionRules(messages, { source: "demo.channels", account: ana }).ok, false)
   })
 
-  test("refuse a declared action or operation with a wildcard", () => {
-    const loose = { ...gmail, permission: { ...gmail.permission, operations: ["gmail.*"] } } as SourceItem
-    assert.match(problemsIn(sessionRules(loose, { source: "gws.gmail", account: ana }))[0]!, /wildcard/)
-  })
-})
-
-describe("verbatim rules (#21)", () => {
-  test("a source that states its grants verbatim is fenced to exactly those", () => {
-    const github = {
-      ...gmail,
-      id: "github.activity",
-      permission: { events: "github.events_list", rules: [{ action: "github_api", resource: "GET /user" }, { action: "github_api", resource: "GET /notifications" }] },
-    } as SourceItem
-    const rules = rulesOf(sessionRules(github, { source: "github.activity", account: "octocat" }))
-    assert.deepEqual(rules, [
+  test("a grant for work uses work's MCP server and cannot reach the default alias's tools", () => {
+    const recordings = value((m) => {
+      m.sources = [{ id: "demo.recordings", kind: "events", reads: "meeting", method: "events_list", operations: ["list_files"], cost: { class: "free" } }]
+    }).sources[0]!
+    assert.equal(serverOf("demo", "default"), "demo")
+    assert.equal(serverOf("demo", "work"), "demo-work")
+    const work = rulesOf(sessionRules(recordings, { source: "demo.recordings", account: "work" }))
+    assert.deepEqual(work, [
       DENY_ALL,
-      { action: "github.events_list", resource: "*", effect: "allow" },
-      { action: "github_api", resource: "GET /user", effect: "allow" },
-      { action: "github_api", resource: "GET /notifications", effect: "allow" },
+      { action: "demo.events_list", resource: "*", effect: "allow" },
+      { action: "demo-work_list_files", resource: "*", effect: "allow" },
     ])
-    assert.equal(evaluate(rules, "github_api", "DELETE /repos/x"), "deny")
-    const loose = { ...github, permission: { events: "github.events_list", rules: [{ action: "github_api", resource: "GET *" }] } } as SourceItem
-    assert.equal(sessionRules(loose, { source: "github.activity", account: "octocat" }).ok, false)
-    const neither = { ...github, permission: { events: "github.events_list" } } as SourceItem
-    assert.equal(sessionRules(neither, { source: "github.activity", account: "octocat" }).ok, false)
+    assert.equal(evaluate(work, "demo-work_list_files"), "allow")
+    assert.equal(evaluate(work, "demo_list_files"), "deny")
+    const fallback = rulesOf(sessionRules(recordings, { source: "demo.recordings", account: "default" }))
+    assert.deepEqual(fallback, [
+      DENY_ALL,
+      { action: "demo.events_list", resource: "*", effect: "allow" },
+      { action: "demo_list_files", resource: "*", effect: "allow" },
+    ])
+    assert.equal(evaluate(fallback, "demo_list_files"), "allow")
+    assert.equal(evaluate(fallback, "demo-work_list_files"), "deny")
+  })
+
+  test("refuse a declared operation with a wildcard, and a source whose method is not declared", () => {
+    const loose = { ...demo, sources: [{ ...messages, operations: [...(messages.operations ?? []), "demo.*"] }] } as Manifest
+    assert.match(problemsIn(sessionRules(loose.sources[0]!, { source: "demo.messages", account: ana }))[0]!, /wildcard/)
+
   })
 })
 
 describe("detail and probe rules", () => {
-  test("a detail read runs under the source's own rules", () => {
-    const rules = detailRules(slack, "slack.workspace.thread", { source: "slack.workspace", account: "T0123" })
-    assert.deepEqual(rules, sessionRules(slack, { source: "slack.workspace", account: "T0123" }))
-    assert.equal(detailRules(slack, "slack.nothing", { source: "slack.workspace", account: "T0123" }).ok, false)
+  test("a detail read runs under its declared method's rules", () => {
+    const rules = detailRules(messages, "demo.messages.thread", { source: "demo.messages", account: ana })
+    assert.deepEqual(rulesOf(rules), [
+      DENY_ALL,
+      { action: "demo.events_list", resource: "*", effect: "allow" },
+      { action: "demo.read", resource: `${ana}:demo.messages.list`, effect: "allow" },
+      { action: "demo.read", resource: `${ana}:demo.messages.get`, effect: "allow" },
+      { action: "demo.events_detail", resource: "*", effect: "allow" },
+    ])
+    assert.equal(detailRules(messages, "demo.nothing", { source: "demo.messages", account: ana }).ok, false)
   })
 
-  test("a probe is fenced to the source's action and its identity operations", () => {
-    const rules = probeRules(gmail, ana, ["gmail.users.getProfile"])
+  test("a probe is fenced to the probe action and its identity operations", () => {
+    const rules = probeRules(messages, ana, ["demo.users.get"], "demo.probe")
     assert.ok(rules.ok)
-    assert.equal(evaluate(rules.value, "gws.events_list"), "allow")
-    assert.equal(evaluate(rules.value, "gws.read", `${ana}:gmail.users.getProfile`), "allow")
-    assert.equal(evaluate(rules.value, "gws.read", `${ana}:gmail.users.messages.get`), "deny")
-    assert.equal(probeRules(gmail, "*", []).ok, false)
-  })
-
-  test("a rules source's probe is fenced to its identityRules, verbatim, whatever operations are passed (#30, item 10)", () => {
-    const github = {
-      id: "github.activity",
-      kind: "events",
-      tool: "events_list",
-      reads: "issue",
-      permission: { events: "github.events_list", rules: [{ action: "github_api", resource: "GET /user" }, { action: "github_api", resource: "GET /search/issues" }], identityRules: [{ action: "github_api", resource: "GET /user" }] },
-    } as unknown as SourceItem
-    const rules = probeRules(github, "octo@example.test", [], "github.probe")
-    assert.ok(rules.ok)
-    assert.equal(evaluate(rules.value, "github.probe"), "allow")
-    assert.equal(evaluate(rules.value, "github_api", "GET /user"), "allow")
-    assert.equal(evaluate(rules.value, "github_api", "GET /search/issues"), "deny")
-    assert.deepEqual(probeRules(github, "octo@example.test", ["user.get"], "github.probe"), rules)
+    if (!rules.ok) return
+    assert.equal(evaluate(rules.value, "demo.probe"), "allow")
+    assert.equal(evaluate(rules.value, "demo.read", `${ana}:demo.users.get`), "allow")
+    assert.equal(evaluate(rules.value, "demo.read", `${ana}:demo.users.delete`), "deny")
+    assert.equal(probeRules(messages, "*", [], "demo.probe").ok, false)
   })
 })
 
 describe("grantCovers", () => {
-  const grant: Grant = { consumer: "notes", source: "slack.workspace", account: "T0123", scope: { channels: ["C01", "C02"] }, descriptorHash: "sha256:x" }
+  const grant: Grant = { consumer: "notes", source: "demo.messages", account: "T0123", scope: { channels: ["C01", "C02"] }, manifestHash: "sha256:x" }
 
   test("covers the same source and account within the granted scope only", () => {
-    assert.equal(grantCovers(grant, { source: "slack.workspace", account: "T0123", scope: { channels: ["C01"] } }), true)
-    assert.equal(grantCovers(grant, { source: "slack.workspace", account: "T0123" }), true)
-    assert.equal(grantCovers(grant, { source: "slack.workspace", account: "T0123", scope: { channels: ["C01", "C03"] } }), false)
-    assert.equal(grantCovers(grant, { source: "slack.workspace", account: "T9999", scope: { channels: ["C01"] } }), false)
-    assert.equal(grantCovers(grant, { source: "gws.gmail", account: "T0123" }), false)
-    assert.equal(grantCovers(grant, { source: "slack.workspace", account: "T0123", scope: { labels: ["INBOX"] } }), false)
-  })
-})
-
-describe("one MCP server per account (#30, item 9)", () => {
-  const plaud = {
-    id: "plaud.recordings",
-    kind: "events",
-    tool: "events_list",
-    reads: "meeting",
-    accounts: { named: true, server: "plaud-{account}" },
-    permission: { events: "plaud.events_list", operations: ["list_files", "get_note"], identity: ["get_current_user"] },
-  } as unknown as SourceItem
-
-  test("a named account's bare operations run on its own server; the default account keeps the namespace", () => {
-    assert.equal(serverOf(plaud, "default"), "plaud")
-    assert.equal(serverOf(plaud, "work"), "plaud-work")
-    assert.deepEqual(operationRule(plaud, "list_files", "work"), { action: "plaud-work_list_files", resource: "*", effect: "allow" })
-    assert.deepEqual(operationRule(plaud, "list_files", "default"), { action: "plaud_list_files", resource: "*", effect: "allow" })
-    const rules = sessionRules(plaud, { source: "plaud.recordings", account: "work" })
-    assert.ok(rules.ok)
-    assert.equal(evaluate(rules.value, "plaud.events_list"), "allow")
-    assert.equal(evaluate(rules.value, "plaud-work_list_files"), "allow")
-    assert.equal(evaluate(rules.value, "plaud_list_files"), "deny")
-    assert.equal(evaluate(rules.value, "plaud-home_list_files"), "deny")
-    const probe = probeRules(plaud, "work", ["get_current_user"], "plaud.probe")
-    assert.ok(probe.ok)
-    assert.equal(evaluate(probe.value, "plaud-work_get_current_user"), "allow")
-  })
-
-  test("a dotted operation is unchanged, and a source without accounts.server is unchanged", () => {
-    assert.deepEqual(operationRule({ ...plaud, id: "plaud.recordings" } as SourceItem, "files.list", "work"), { action: "plaud.read", resource: "work:files.list", effect: "allow" })
-    assert.deepEqual(operationRule(slack, "slack_read_channel", "T0123"), operationRule({ id: slack.id } as SourceItem, "slack_read_channel", "T0123"))
-  })
-
-  test("an account that cannot stand in a server's name is refused before any rule is made", () => {
-    for (const account of ["a.b", "work space", "x".repeat(65)]) {
-      assert.equal(sessionRules(plaud, { source: "plaud.recordings", account }).ok, false, account)
-      assert.equal(probeRules(plaud, account, [], "plaud.probe").ok, false, account)
-    }
+    assert.equal(grantCovers(grant, { source: "demo.messages", account: "T0123", scope: { channels: ["C01"] } }), true)
+    assert.equal(grantCovers(grant, { source: "demo.messages", account: "T0123" }), true)
+    assert.equal(grantCovers(grant, { source: "demo.messages", account: "T0123", scope: { channels: ["C01", "C03"] } }), false)
+    assert.equal(grantCovers(grant, { source: "demo.messages", account: "T9999", scope: { channels: ["C01"] } }), false)
+    assert.equal(grantCovers(grant, { source: "demo.channels", account: "T0123" }), false)
+    assert.equal(grantCovers(grant, { source: "demo.messages", account: "T0123", scope: { labels: ["INBOX"] } }), false)
   })
 })

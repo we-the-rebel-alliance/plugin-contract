@@ -7,7 +7,6 @@ import { eventHash } from "../src/events.ts"
 import { declarationProblems, pageProblems, sourceConformance, type ConformanceCalls } from "../src/conformance.ts"
 import { checkOutput, isOutputName } from "../src/outputs.ts"
 import { pickProblemsForOutput } from "../src/pick.ts"
-import { checkSources } from "../src/descriptor.ts"
 
 const PLUGIN = "@we-the-rebel-alliance/acme-plugin"
 const ACCOUNT = "acme@example.test"
@@ -110,9 +109,9 @@ describe("an x- output is checked against its inline schema", () => {
   })
 
   test("the descriptor accepts the declaration, and refuses a bad one", () => {
-    assert.equal(checkSources(declarationOf(receipt())).ok, true)
-    assert.equal(checkSources(declarationOf(acme())).ok, true)
-    assert.equal(checkSources(declarationOf(receipt({ outputSchema: undefined }))).ok, false)
+    assert.equal(SOURCES_SCHEMA.check(declarationOf(receipt())).ok, true)
+    assert.equal(SOURCES_SCHEMA.check(declarationOf(acme())).ok, true)
+    assert.equal(SOURCES_SCHEMA.check(declarationOf(receipt({ outputSchema: undefined }))).ok, false)
   })
 })
 

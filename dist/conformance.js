@@ -1,25 +1,22 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
-  maxBytesOf
-} from "./chunks/chunk-TYSWMQDX.js";
-import "./chunks/chunk-AFCXCE4V.js";
-import {
   SOURCES_SCHEMA
-} from "./chunks/chunk-EMGW7BT2.js";
+} from "./chunks/chunk-Q2GXR3B7.js";
 import {
   toolsRpcIdProblems
-} from "./chunks/chunk-T2QSLHBQ.js";
+} from "./chunks/chunk-2BC7PGVU.js";
+import "./chunks/chunk-IOB3DPAI.js";
 import {
-  operationRule,
-  sessionRules
-} from "./chunks/chunk-2V4VLI45.js";
-import "./chunks/chunk-65FTIXYZ.js";
+  maxBytesOf
+} from "./chunks/chunk-SC2WF2IE.js";
+import "./chunks/chunk-TLI6ZXDE.js";
 import {
   hintProblems
-} from "./chunks/chunk-X5LDDGDL.js";
+} from "./chunks/chunk-OG3K72R6.js";
+import "./chunks/chunk-S3ZVQTGH.js";
 import {
   fromJSONSchema
-} from "./chunks/chunk-BQEBNVNU.js";
+} from "./chunks/chunk-3GQYQSG2.js";
 import {
   AUTHOR_ROLES,
   PAGE,
@@ -30,7 +27,7 @@ import {
   resultProblems,
   secretKinds,
   sourceNamespace
-} from "./chunks/chunk-BMJJJDZ6.js";
+} from "./chunks/chunk-OKHHHVM5.js";
 import "./chunks/chunk-7KJXMIQH.js";
 import "./chunks/chunk-WLRWVIVP.js";
 
@@ -10930,12 +10927,14 @@ function isDetail(value) {
 var key = (action, resource) => `${action}\0${resource}`;
 function grantsFor(source, account) {
   if (source.permission.rules !== void 0) {
-    const action = source.kind === "events" ? source.permission.events : source.permission.tool;
-    return [{ action, resource: "*" }, ...source.permission.rules.map((rule) => ({ action: rule.action, resource: rule.resource }))];
+    const action2 = source.kind === "events" ? source.permission.events : source.permission.tool;
+    return [{ action: action2, resource: "*" }, ...source.permission.rules.map((rule) => ({ action: rule.action, resource: rule.resource }))];
   }
-  const rules = sessionRules(source, { source: source.id, account });
-  if (!rules.ok) return [];
-  return rules.value.filter((rule) => rule.effect === "allow").map((rule) => ({ action: rule.action, resource: rule.resource.replace(`${account}:`, "{account}:") }));
+  const action = source.kind === "events" ? source.permission.events : source.permission.tool;
+  const head = source.id.split(".")[0] ?? source.id;
+  const grants = [{ action, resource: "*" }];
+  for (const operation of source.permission.operations ?? []) addGrant(grants, source, operation, account);
+  return grants;
 }
 function bindGrantsFor(source, account = "default") {
   const suggest = source.scope?.suggest;
@@ -10957,8 +10956,9 @@ function probeIdentityGrants(source, identityOperations, account = "default") {
   return identityGrantsFor(source, identityOperations, account);
 }
 function addGrant(grants, source, operation, account) {
-  const rule = operationRule(source, operation, account);
-  const grant = { action: rule.action, resource: rule.resource.replace(`${account}:`, "{account}:") };
+  const namespace = source.id.split(".")[0] ?? source.id;
+  const server = source.accounts?.server !== void 0 && account !== "default" ? source.accounts.server.replace("{account}", account) : namespace;
+  const grant = operation.includes(".") ? { action: `${server}.read`, resource: `${account}:${operation}`.replace(`${account}:`, "{account}:") } : { action: `${server}_${operation}`, resource: "*" };
   if (!grants.some((held) => held.action === grant.action && held.resource === grant.resource)) grants.push(grant);
 }
 function sameResource(declared, asserted) {

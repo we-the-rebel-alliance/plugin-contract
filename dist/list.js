@@ -1,14 +1,11 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
-  readInstalledDescriptor
-} from "./chunks/chunk-TYSWMQDX.js";
-import "./chunks/chunk-AFCXCE4V.js";
-import "./chunks/chunk-EMGW7BT2.js";
-import "./chunks/chunk-T2QSLHBQ.js";
-import "./chunks/chunk-2V4VLI45.js";
-import "./chunks/chunk-65FTIXYZ.js";
-import "./chunks/chunk-BQEBNVNU.js";
-import "./chunks/chunk-BMJJJDZ6.js";
+  readInstalledManifest
+} from "./chunks/chunk-SC2WF2IE.js";
+import "./chunks/chunk-TLI6ZXDE.js";
+import "./chunks/chunk-S3ZVQTGH.js";
+import "./chunks/chunk-3GQYQSG2.js";
+import "./chunks/chunk-OKHHHVM5.js";
 import "./chunks/chunk-7KJXMIQH.js";
 import "./chunks/chunk-WLRWVIVP.js";
 
@@ -19,8 +16,7 @@ var listed = (installed) => ({
   directory: installed.directory,
   package: installed.package,
   version: installed.version,
-  sources: installed.sources,
-  acts: installed.sources.acts ?? [],
+  manifest: installed.manifest,
   hash: installed.hash
 });
 function childPackages(root) {
@@ -74,7 +70,7 @@ function listInstalledDeclarations(input) {
   const declarations = [];
   const found = [...problems];
   for (const directory of directories) {
-    const installed = readInstalledDescriptor(directory);
+    const installed = readInstalledManifest(directory);
     if (installed.ok) declarations.push(listed(installed.value));
     else found.push({ directory, problems: installed.problems });
   }

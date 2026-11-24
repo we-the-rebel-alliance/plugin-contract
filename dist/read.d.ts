@@ -1,9 +1,9 @@
 /**
- * `read`: the consumer-side call (contract §7 and §9). Every app reads a source the same way, with no host required:
+ * `read`: the consumer-side call (design §3). Every project reads a source the same way, with no host required:
  *
- * 1. the manifest comes from the installed package (`readInstalledDescriptor`), and the grant must be for the same
+ * 1. the manifest comes from the installed package (`readInstalledManifest`), and the grant must be for the same
  *    manifest hash, consumer source, account and scope;
- * 2. params, `since` and `pick` are resolved and checked before anything is called;
+ * 2. `since` and `pick` are resolved and checked before anything is called;
  * 3. the call runs in a session fenced by exactly the grant's rules (`sessionRules`), opened and closed by the host;
  * 4. the answer is checked: its account, `trust: "untrusted"`, its size against `maxBytes`, and a snapshot's `data`
  *    against its output schema; then `pick` keeps only the picked paths.
@@ -12,7 +12,7 @@
  * implements them over its own OpenCode server. An app keeps its own cursor: `read` returns the page and never stores
  * anything.
  */
-import type { InstalledDescriptor, SourceItem } from "./descriptor.js";
+import { type InstalledManifest, type OwnerOrg, type SourceItem } from "./manifest.js";
 import type { Checked } from "./internal/checked.js";
 import { type ReadFailure } from "./internal/failure.js";
 import { type ParamsContext } from "./params.js";
@@ -29,13 +29,11 @@ export interface ReadHost {
         close(): Promise<void>;
     }>;
     /**
-     * Calls a plugin's tools-RPC method in that session: `POST /api/rpc/<the package's tools RPC id>/<method>` with
-     * `{ sessionID, input }`. The host maps the package to its RPC id, from its own record of installed plugins.
+     * Calls a plugin's method in that session: `POST /api/rpc/<plugin id>/<method>` with `{ sessionID, input }`. The
+     * host maps the package to its plugin id, from its own record of installed plugins.
      */
     call(request: {
         readonly package: string;
-        /** The plugin's declared tools-RPC id (`sources.rpc`), when it declares one; the host checks the package owns it. */
-        readonly rpc?: string;
         readonly method: string;
         readonly sessionID: string;
         readonly input: Readonly<Record<string, unknown>>;
@@ -44,7 +42,7 @@ export interface ReadHost {
 }
 /** One read of a source. */
 export interface ReadRequest {
-    readonly installed: InstalledDescriptor;
+    readonly installed: InstalledManifest;
     readonly source: string;
     readonly grant: Grant;
     /** The consumer reading; must be the grant's. */
@@ -55,13 +53,14 @@ export interface ReadRequest {
     readonly cursor?: string;
     readonly since?: string;
     readonly limit?: number;
+    /** Ask for each event's `thumbnail` (#42). Only a source that declares `thumbnails` accepts it. */
+    readonly thumbnails?: true;
     /** A snapshot read. */
-    readonly params?: Readonly<Record<string, unknown>>;
     readonly pick?: readonly string[];
     readonly context: ParamsContext;
     readonly signal?: AbortSignal;
 }
-/** An events page, as the plugin answered it (contract §7). */
+/** An events page, as the plugin answered it (design §2.1). */
 export interface EventsPage {
     readonly source: string;
     readonly account: string;
@@ -103,7 +102,7 @@ export type ReadOutcome = {
 };
 /**
  * The checks before any call, whoever makes it: the source is declared, the person has not turned it off, the grant is
- * this consumer's for the descriptor as installed, the scope is within the grant, the inputs suit the source's kind,
+ * this consumer's for the manifest as installed, the scope is within the grant, the inputs suit the source's kind,
  * and `pick` names paths of its output. The source and the scope to read when they pass.
  */
 export declare function checkReadRequest(request: ReadRequest): {
@@ -120,10 +119,11 @@ export declare function read(host: ReadHost, request: ReadRequest): Promise<Read
 export declare function acceptAnswer(source: SourceItem, account: string, answer: unknown, options?: {
     readonly limit?: number;
     readonly pick?: readonly string[];
+    readonly thumbnails?: true;
 }): ReadOutcome;
-/** A detail read of one event (contract §7, `details`). */
+/** A detail read of one event (design §2.2 `details`). */
 export interface DetailRequest {
-    readonly installed: InstalledDescriptor;
+    readonly installed: InstalledManifest;
     readonly source: string;
     readonly detail: string;
     readonly grant: Grant;
@@ -138,9 +138,8 @@ export interface DetailRequest {
  */
 export declare function detailFields(source: SourceItem, detailId: string, event: Readonly<Record<string, unknown>>): Checked<Record<string, unknown>>;
 /**
- * Reads a declared detail of one event, in a session fenced by the source's own rules. The call is what the conformance
- * kit checks a plugin with: `{ account, scope, fields }`, with the confirmed scope, so the plugin refuses an event
- * outside it.
+ * Reads a declared detail of one event, in a session fenced by the source's rules and the detail's method. The call
+ * is `{ account, scope, fields }`, with the confirmed scope, so the plugin refuses an event outside it.
  */
 export declare function readDetail(host: ReadHost, request: DetailRequest): Promise<{
     readonly ok: true;
@@ -153,24 +152,27 @@ export declare function readDetail(host: ReadHost, request: DetailRequest): Prom
 export interface ProbeAnswer {
     readonly source: string;
     readonly account: string;
-    /** `verified: false` marks an owner the provider does not confirm (#30, item 13). */
+    /**
+     * The signed-in owner. `verified: false` marks an owner the provider does not confirm (#30, item 13), and `orgs`
+     * carries the organizations the provider reports (#44 item 2), at most five.
+     */
     readonly owner: {
         readonly id: string;
         readonly label: string;
         readonly verified?: false;
+        readonly orgs?: readonly OwnerOrg[];
     };
     readonly scopes?: readonly string[];
     readonly cost?: unknown;
     readonly trust: "untrusted";
 }
 /**
- * Probes a source for an account, in a session fenced by its probe rules: the plugin's declared probe action
- * (`sources.probe.action`) and the source's declared identity operations (`permission.identity`), or, for a plugin
- * that declares neither yet, the source's own action and the identity operations the caller passes. The call is the
- * contract's form: `probe` with `{ source?, account }`.
+ * Probes a source for an account, in a session fenced by the plugin's `methods.probe` action and the identity
+ * operations it declares, or the identity operations the caller passes. The source's own method action fences the
+ * read; `probe` adds no content. The call is `probe` with `{ source?, account }`.
  */
 export declare function probe(host: ReadHost, request: {
-    readonly installed: InstalledDescriptor;
+    readonly installed: InstalledManifest;
     readonly source: string;
     readonly account: string;
     readonly identityOperations?: readonly string[];

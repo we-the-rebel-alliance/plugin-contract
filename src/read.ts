@@ -1,9 +1,9 @@
 /**
- * `read`: the consumer-side call (contract §7 and §9). Every app reads a source the same way, with no host required:
+ * `read`: the consumer-side call (design §3). Every project reads a source the same way, with no host required:
  *
- * 1. the manifest comes from the installed package (`readInstalledDescriptor`), and the grant must be for the same
+ * 1. the manifest comes from the installed package (`readInstalledManifest`), and the grant must be for the same
  *    manifest hash, consumer source, account and scope;
- * 2. params, `since` and `pick` are resolved and checked before anything is called;
+ * 2. `since` and `pick` are resolved and checked before anything is called;
  * 3. the call runs in a session fenced by exactly the grant's rules (`sessionRules`), opened and closed by the host;
  * 4. the answer is checked: its account, `trust: "untrusted"`, its size against `maxBytes`, and a snapshot's `data`
  *    against its output schema; then `pick` keeps only the picked paths.
@@ -12,16 +12,15 @@
  * implements them over its own OpenCode server. An app keeps its own cursor: `read` returns the page and never stores
  * anything.
  */
-import type { InstalledDescriptor, SourceItem } from "./descriptor.ts"
-import { findSource, maxBytesOf } from "./descriptor.ts"
+import { findMethod, findSource, maxBytesOf, type InstalledManifest, type OwnerOrg, type SourceItem } from "./manifest.ts"
 import { canonicalScope } from "./cursor.ts"
 import type { Checked } from "./internal/checked.ts"
 import { PAGE, probeResultProblems, resultProblems } from "./internal/events.ts"
 import { failure, failureFromError, type ReadFailure } from "./internal/failure.ts"
-import { resolveParams, resolveSince, type ParamSpec, type ParamsContext } from "./params.ts"
-import { detailRules, grantCovers, probeRules, sessionRules, type Grant, type PermissionRule } from "./permission.ts"
+import { resolveSince, type ParamsContext } from "./params.ts"
+import { detailRules, grantCovers, namespaceOf, probeRules, sessionRules, type Grant, type PermissionRule } from "./permission.ts"
 import { pick, pickProblemsForOutput } from "./pick.ts"
-import { checkOutput } from "./outputs.ts"
+import { checkOutput, isOutputName } from "./outputs.ts"
 
 export type { FailureCode, ReadFailure } from "./internal/failure.ts"
 
@@ -30,13 +29,11 @@ export interface ReadHost {
   /** Opens a session whose rules are exactly `rules`, for one read; `close` ends it. */
   openSession(request: { readonly rules: readonly PermissionRule[]; readonly title: string }): Promise<{ readonly sessionID: string; close(): Promise<void> }>
   /**
-   * Calls a plugin's tools-RPC method in that session: `POST /api/rpc/<the package's tools RPC id>/<method>` with
-   * `{ sessionID, input }`. The host maps the package to its RPC id, from its own record of installed plugins.
+   * Calls a plugin's method in that session: `POST /api/rpc/<plugin id>/<method>` with `{ sessionID, input }`. The
+   * host maps the package to its plugin id, from its own record of installed plugins.
    */
   call(request: {
     readonly package: string
-    /** The plugin's declared tools-RPC id (`sources.rpc`), when it declares one; the host checks the package owns it. */
-    readonly rpc?: string
     readonly method: string
     readonly sessionID: string
     readonly input: Readonly<Record<string, unknown>>
@@ -46,7 +43,7 @@ export interface ReadHost {
 
 /** One read of a source. */
 export interface ReadRequest {
-  readonly installed: InstalledDescriptor
+  readonly installed: InstalledManifest
   readonly source: string
   readonly grant: Grant
   /** The consumer reading; must be the grant's. */
@@ -57,14 +54,15 @@ export interface ReadRequest {
   readonly cursor?: string
   readonly since?: string
   readonly limit?: number
+  /** Ask for each event's `thumbnail` (#42). Only a source that declares `thumbnails` accepts it. */
+  readonly thumbnails?: true
   /** A snapshot read. */
-  readonly params?: Readonly<Record<string, unknown>>
   readonly pick?: readonly string[]
   readonly context: ParamsContext
   readonly signal?: AbortSignal
 }
 
-/** An events page, as the plugin answered it (contract §7). */
+/** An events page, as the plugin answered it (design §2.1). */
 export interface EventsPage {
   readonly source: string
   readonly account: string
@@ -93,26 +91,23 @@ export type ReadOutcome =
   | { readonly ok: true; readonly kind: "snapshot"; readonly snapshot: Snapshot }
   | { readonly ok: false; readonly failure: ReadFailure }
 
-/** The declared tools-RPC id, as a `call` field, when the plugin declares one. */
-const rpcOf = (installed: InstalledDescriptor): { rpc?: string } => (installed.sources.rpc === undefined ? {} : { rpc: installed.sources.rpc })
-
 const plain = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
 const refused = (code: Parameters<typeof failure>[0], what: string, next: string): ReadOutcome => ({ ok: false, failure: failure(code, what, next) })
 const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length
 
 /**
  * The checks before any call, whoever makes it: the source is declared, the person has not turned it off, the grant is
- * this consumer's for the descriptor as installed, the scope is within the grant, the inputs suit the source's kind,
+ * this consumer's for the manifest as installed, the scope is within the grant, the inputs suit the source's kind,
  * and `pick` names paths of its output. The source and the scope to read when they pass.
  */
 export function checkReadRequest(request: ReadRequest): { readonly source: SourceItem; readonly scope?: Readonly<Record<string, readonly string[]>> } | ReadOutcome {
   const { installed, grant } = request
-  const source = findSource(installed.sources, request.source)
-  if (!source) return refused("UNAVAILABLE", `${installed.package} ${installed.version} declares no source ${request.source}`, "Check the source id against the installed plugin's sources.")
+  const source = findSource(installed.manifest, request.source)
+  if (!source) return refused("UNAVAILABLE", `${installed.package} ${installed.version} declares no source ${request.source}`, "Check the source id against the installed plugin's manifest.")
   if (grant.disabled) return refused("SOURCE_DISABLED", `${source.id} is turned off for ${grant.consumer}`, "Turn the source on again to read it.")
   if (grant.consumer !== request.consumer) return refused("PERMISSION_DENIED", `the grant is ${grant.consumer}'s, not ${request.consumer}'s`, "Ask the person to grant this consumer the source.")
-  if (grant.descriptorHash !== installed.hash) {
-    return refused("PERMISSION_DENIED", `${source.id}'s declaration changed since the person consented`, "Ask the person to review the source and consent again.")
+  if (grant.manifestHash !== installed.hash) {
+    return refused("PERMISSION_DENIED", `${source.id}'s manifest changed since the person consented`, "Ask the person to review the source and consent again.")
   }
   const asked = request.scope ?? grant.scope
   if (!grantCovers(grant, { source: source.id, account: grant.account, ...(asked === undefined ? {} : { scope: asked }) })) {
@@ -121,20 +116,23 @@ export function checkReadRequest(request: ReadRequest): { readonly source: Sourc
   // One canonical form (keys and values sorted, no repeats), so a cursor's binding and a cache key agree (#7, D12).
   const scope = asked === undefined ? undefined : (canonicalScope(asked) as Record<string, string[]>)
   if (source.kind === "events") {
-    if (request.params !== undefined || request.pick !== undefined) return refused("SCHEMA_VIOLATION", "params and pick are for a snapshot source", "Pass cursor, since and limit to an events source.")
+    if (request.pick !== undefined) return refused("SCHEMA_VIOLATION", "pick is for a snapshot source", "Pass cursor, since and limit to an events source.")
+    if (request.thumbnails === true && source.thumbnails !== true) {
+      return refused("SCHEMA_VIOLATION", `${source.id} does not declare thumbnails`, "Ask for thumbnails only from a source that declares them.")
+    }
   } else {
-    if (request.cursor !== undefined || request.since !== undefined || request.limit !== undefined) {
-      return refused("SCHEMA_VIOLATION", "cursor, since and limit are for an events source", "Pass params and pick to a snapshot source.")
+    if (request.cursor !== undefined || request.since !== undefined || request.limit !== undefined || request.thumbnails !== undefined) {
+      return refused("SCHEMA_VIOLATION", "cursor, since, limit and thumbnails are for an events source", "Pass pick to a snapshot source.")
     }
     if (request.pick !== undefined) {
-      const problems = pickProblemsForOutput(source.output ?? "", request.pick, source.outputSchema)
+      const problems = isOutputName(source.output) ? pickProblemsForOutput(source.output, request.pick) : []
       if (problems.length > 0) return refused("SCHEMA_VIOLATION", problems.join("; "), "Pick only paths of the source's output schema.")
     }
   }
   return { source, ...(scope === undefined ? {} : { scope }) }
 }
 
-/** `checkReadRequest`, then the method's input: params, `$me` and `since` resolved. */
+/** `checkReadRequest`, then the method's input: `since` resolved, and the account and scope the grant names. */
 function prepare(request: ReadRequest): { source: SourceItem; input: Record<string, unknown> } | ReadOutcome {
   const checked = checkReadRequest(request)
   if ("ok" in checked) return checked
@@ -149,12 +147,10 @@ function prepare(request: ReadRequest): { source: SourceItem; input: Record<stri
     }
     if (request.cursor !== undefined) input["cursor"] = request.cursor
     if (request.limit !== undefined) input["limit"] = request.limit
+    if (request.thumbnails === true) input["thumbnails"] = true
     return { source, input }
   }
-  // The descriptor frame checks that every declared param is { relative?, me? } (a ParamSpec).
-  const params = resolveParams(source.params as Readonly<Record<string, ParamSpec>> | undefined, request.params, request.context)
-  if (!params.ok) return refused("SCHEMA_VIOLATION", params.problems.join("; "), "Pass only the params the source declares, as its descriptor describes them.")
-  return { source, input: { ...input, ...params.value } }
+  return { source, input }
 }
 
 /** The answer's problems against the contract, as a failure; undefined when it keeps it. */
@@ -191,13 +187,14 @@ export async function read(host: ReadHost, request: ReadRequest): Promise<ReadOu
   const called = await fencedCall(
     host,
     sessionRules(source, request.grant),
-    { package: request.installed.package, ...rpcOf(request.installed), method: source.tool, input, ...(request.signal ? { signal: request.signal } : {}) },
+    { package: request.installed.package, method: source.method, input, ...(request.signal ? { signal: request.signal } : {}) },
     `${request.consumer} reads ${source.id}`,
   )
   if (!called.ok) return { ok: false, failure: called.failure }
   return acceptAnswer(source, request.grant.account, called.answer, {
     ...(request.limit === undefined ? {} : { limit: request.limit }),
     ...(request.pick === undefined ? {} : { pick: request.pick }),
+    ...(request.thumbnails === undefined ? {} : { thumbnails: request.thumbnails }),
   })
 }
 
@@ -206,21 +203,26 @@ export async function read(host: ReadHost, request: ReadRequest): Promise<ReadOu
  * `maxBytes`, an events page's shape or a snapshot's output, then `pick`. The same checks whoever made the call: `read`
  * embedded, or a host's broker (`broker-client`), so a broker never needs to be trusted for shape.
  */
-export function acceptAnswer(source: SourceItem, account: string, answer: unknown, options: { readonly limit?: number; readonly pick?: readonly string[] } = {}): ReadOutcome {
+export function acceptAnswer(source: SourceItem, account: string, answer: unknown, options: { readonly limit?: number; readonly pick?: readonly string[]; readonly thumbnails?: true } = {}): ReadOutcome {
   const problem = checkAnswer(source, account, answer)
   if (problem) return { ok: false, failure: problem }
   const value = answer as Record<string, unknown>
   if (source.kind === "events") {
-    // The page against the events contract, under the source's maxBytes (checked above), and the limit the read asked
-    // for.
-    const problems = resultProblems(value, options.limit ?? PAGE.max, maxBytesOf(source))
+    // The page against the events contract with §2.1's additions, under the source's maxBytes (checked above), and the
+    // limit the read asked for.
+    const problems = resultProblems(value, options.limit ?? PAGE.max, maxBytesOf(source), {
+      ...(options.thumbnails === true ? { thumbnails: true } : {}),
+      ...(source.urlHosts === undefined ? {} : { urlHosts: source.urlHosts }),
+    })
     if (problems.length > 0) {
       return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s page breaks the events contract: ${problems.slice(0, 3).join("; ")}`, "Report it to the plugin's maintainers.") }
     }
     return { ok: true, kind: "events", page: value as EventsPage }
   }
-  const checked = checkOutput(source.output ?? "", value["data"], source.outputSchema)
-  if (!checked.ok) return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s data breaks the ${source.output} schema: ${checked.problems.slice(0, 3).join("; ")}`, "Report it to the plugin's maintainers.") }
+  if (isOutputName(source.output)) {
+    const checked = checkOutput(source.output, value["data"])
+    if (!checked.ok) return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s data breaks the ${source.output} schema: ${checked.problems.slice(0, 3).join("; ")}`, "Report it to the plugin's maintainers.") }
+  }
   if (typeof value["asOf"] !== "string" || !Number.isFinite(Date.parse(value["asOf"]))) {
     return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s snapshot has no asOf time`, "Report it to the plugin's maintainers.") }
   }
@@ -236,9 +238,9 @@ export function acceptAnswer(source: SourceItem, account: string, answer: unknow
   }
 }
 
-/** A detail read of one event (contract §7, `details`). */
+/** A detail read of one event (design §2.2 `details`). */
 export interface DetailRequest {
-  readonly installed: InstalledDescriptor
+  readonly installed: InstalledManifest
   readonly source: string
   readonly detail: string
   readonly grant: Grant
@@ -265,16 +267,15 @@ export function detailFields(source: SourceItem, detailId: string, event: Readon
 }
 
 /**
- * Reads a declared detail of one event, in a session fenced by the source's own rules. The call is what the conformance
- * kit checks a plugin with: `{ account, scope, fields }`, with the confirmed scope, so the plugin refuses an event
- * outside it.
+ * Reads a declared detail of one event, in a session fenced by the source's rules and the detail's method. The call
+ * is `{ account, scope, fields }`, with the confirmed scope, so the plugin refuses an event outside it.
  */
 export async function readDetail(host: ReadHost, request: DetailRequest): Promise<{ readonly ok: true; readonly answer: unknown } | { readonly ok: false; readonly failure: ReadFailure }> {
   const { installed, grant } = request
-  const source = findSource(installed.sources, request.source)
+  const source = findSource(installed.manifest, request.source)
   if (!source) return { ok: false, failure: failure("UNAVAILABLE", `${installed.package} declares no source ${request.source}`, "Check the source id.") }
   if (grant.disabled) return { ok: false, failure: failure("SOURCE_DISABLED", `${source.id} is turned off for ${grant.consumer}`, "Turn the source on again to read it.") }
-  if (grant.consumer !== request.consumer || grant.descriptorHash !== installed.hash) {
+  if (grant.consumer !== request.consumer || grant.manifestHash !== installed.hash) {
     return { ok: false, failure: failure("PERMISSION_DENIED", `the grant does not cover ${request.consumer}'s read of ${source.id} as installed`, "Ask the person to consent again.") }
   }
   if (request.event["account"] !== undefined && request.event["account"] !== grant.account) {
@@ -287,7 +288,7 @@ export async function readDetail(host: ReadHost, request: DetailRequest): Promis
   const called = await fencedCall(
     host,
     detailRules(source, request.detail, grant),
-    { package: installed.package, ...rpcOf(installed), method: detail.tool, input: { account: grant.account, scope, fields: fields.value }, ...(request.signal ? { signal: request.signal } : {}) },
+    { package: installed.package, method: detail.method, input: { account: grant.account, scope, fields: fields.value }, ...(request.signal ? { signal: request.signal } : {}) },
     `${request.consumer} reads ${request.detail}`,
   )
   if (!called.ok) return called
@@ -299,33 +300,32 @@ export async function readDetail(host: ReadHost, request: DetailRequest): Promis
 export interface ProbeAnswer {
   readonly source: string
   readonly account: string
-  /** `verified: false` marks an owner the provider does not confirm (#30, item 13). */
-  readonly owner: { readonly id: string; readonly label: string; readonly verified?: false }
+  /**
+   * The signed-in owner. `verified: false` marks an owner the provider does not confirm (#30, item 13), and `orgs`
+   * carries the organizations the provider reports (#44 item 2), at most five.
+   */
+  readonly owner: { readonly id: string; readonly label: string; readonly verified?: false; readonly orgs?: readonly OwnerOrg[] }
   readonly scopes?: readonly string[]
   readonly cost?: unknown
   readonly trust: "untrusted"
 }
 
 /**
- * Probes a source for an account, in a session fenced by its probe rules: the plugin's declared probe action
- * (`sources.probe.action`) and the source's declared identity operations (`permission.identity`), or, for a plugin
- * that declares neither yet, the source's own action and the identity operations the caller passes. The call is the
- * contract's form: `probe` with `{ source?, account }`.
+ * Probes a source for an account, in a session fenced by the plugin's `methods.probe` action and the identity
+ * operations it declares, or the identity operations the caller passes. The source's own method action fences the
+ * read; `probe` adds no content. The call is `probe` with `{ source?, account }`.
  */
-export async function probe(host: ReadHost, request: { readonly installed: InstalledDescriptor; readonly source: string; readonly account: string; readonly identityOperations?: readonly string[]; readonly signal?: AbortSignal }): Promise<{ readonly ok: true; readonly answer: ProbeAnswer } | { readonly ok: false; readonly failure: ReadFailure }> {
-  const source = findSource(request.installed.sources, request.source)
+export async function probe(host: ReadHost, request: { readonly installed: InstalledManifest; readonly source: string; readonly account: string; readonly identityOperations?: readonly string[]; readonly signal?: AbortSignal }): Promise<{ readonly ok: true; readonly answer: ProbeAnswer } | { readonly ok: false; readonly failure: ReadFailure }> {
+  const source = findSource(request.installed.manifest, request.source)
   if (!source) return { ok: false, failure: failure("UNAVAILABLE", `${request.installed.package} declares no source ${request.source}`, "Check the source id.") }
-  // A rules source declares its probe's grants verbatim (identityRules, #30 item 10), which probeRules allows as written.
-  const declared = source.permission.identity ?? (source.permission.identityRules !== undefined ? [] : undefined)
-  const identity = declared ?? request.identityOperations
-  if (identity === undefined) {
-    return { ok: false, failure: failure("PERMISSION_DENIED", `${source.id} declares no identity operations, and none were given`, "Declare permission.identity in the source, or pass the identity operations.") }
-  }
+  const method = findMethod(request.installed.manifest, "probe")
+  if (method === undefined) return { ok: false, failure: failure("PERMISSION_DENIED", `${request.installed.package} declares no probe method`, "Declare probe in the manifest's methods.") }
+  const identity = request.identityOperations ?? method.operations ?? []
   const name = typeof source.input?.["source"] === "string" ? { source: source.input["source"] } : {}
   const called = await fencedCall(
     host,
-    probeRules(source, request.account, identity, request.installed.sources.probe?.action),
-    { package: request.installed.package, ...rpcOf(request.installed), method: "probe", input: { ...name, account: request.account }, ...(request.signal ? { signal: request.signal } : {}) },
+    probeRules(source, request.account, identity, `${namespaceOf(source)}.probe`),
+    { package: request.installed.package, method: "probe", input: { ...name, account: request.account }, ...(request.signal ? { signal: request.signal } : {}) },
     `probe ${source.id}`,
   )
   if (!called.ok) return called

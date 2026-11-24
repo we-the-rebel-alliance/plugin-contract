@@ -22,6 +22,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./accounts": {
+      "types": "./dist/accounts.d.ts",
+      "default": "./dist/accounts.js"
+    },
     "./act": {
       "types": "./dist/act.d.ts",
       "default": "./dist/act.js"
@@ -38,10 +42,6 @@
       "types": "./dist/cursor.d.ts",
       "default": "./dist/cursor.js"
     },
-    "./descriptor": {
-      "types": "./dist/descriptor.d.ts",
-      "default": "./dist/descriptor.js"
-    },
     "./events": {
       "types": "./dist/events.d.ts",
       "default": "./dist/events.js"
@@ -57,6 +57,10 @@
     "./outputs": {
       "types": "./dist/outputs.d.ts",
       "default": "./dist/outputs.js"
+    },
+    "./manifest": {
+      "types": "./dist/manifest.d.ts",
+      "default": "./dist/manifest.js"
     },
     "./params": {
       "types": "./dist/params.d.ts",
@@ -99,6 +103,7 @@
     "check": "npm run typecheck && npm run build && npm run check:dist && npm test && npm run conformance:self-test"
   },
   "devDependencies": {
+    "@opencode/plugin": "2.4.1",
     "@types/node": "24.19.2",
     "esbuild": "0.28.2",
     "typescript": "5.9.3",

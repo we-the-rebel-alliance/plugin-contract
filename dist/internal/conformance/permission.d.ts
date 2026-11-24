@@ -1,3 +1,8 @@
+/**
+ * The recording permission context: a session whose rules are exactly a source's grants. Every read the kit calls runs
+ * with this context, so a read that asserts more than its declaration holds is refused here, and a grant nothing
+ * asserts is reported at the end. Declared equals asserted.
+ */
 import type { SourceItem } from "../schema/types.js";
 /** A permission action and its resource, as a declaration derives them. */
 export interface Grant {
