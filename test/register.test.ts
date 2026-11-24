@@ -254,7 +254,7 @@ describe("register: door 3", () => {
         consumer: "consumer:demo",
         capability: "demo.send_message",
         account: "default",
-        act: "demo.send_message",
+        act: "demo.messages.send",
         manifest: over.manifest ?? manifestHash(demo),
         jti: "grant_test_1",
         iat: now,

@@ -84,8 +84,9 @@ A **non-read** method over RPC needs one of contract §8's two confirmations (LD
   { "sessionID": "<session>", "input": { "planId": "<id>" }, "grant": "<compact token>", "consumer": "<consumer>" }
   ```
 
-  The register verifies it with `verifyGrant` (`./grant`): audience, consumer, capability `<name>.<method>`, account,
-  manifest hash, exact input digest, time window, `cfm`, and single use through the plugin's durable store.
+  The register verifies it with `verifyGrant` (`./grant`): audience, consumer, capability `<name>.<method>`, the
+  action the method commits (or the method itself when it commits no action), account, manifest hash, exact input
+  digest, time window, `cfm`, and single use through the plugin's durable store.
 
 An `allow` rule is not a confirmation. A non-read over RPC with only an allow rule is `PERMISSION_DENIED`; the next step
 names both ways to confirm it.

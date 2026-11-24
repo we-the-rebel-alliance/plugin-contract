@@ -311,9 +311,12 @@ function strictEnvelope(input) {
   });
   return schema;
 }
+function grantAct(environment, entry) {
+  return environment.manifest.actions.find((action) => action.commit === entry.name)?.id ?? methodAction(environment.name, entry.name);
+}
 function grantActions(environment) {
   const actions = {};
-  for (const entry of environment.entries) if (entry.item.class !== "read") actions[methodAction(environment.name, entry.name)] = "required";
+  for (const entry of environment.entries) if (entry.item.class !== "read") actions[grantAct(environment, entry)] = "required";
   return actions;
 }
 function permissionRefusal(error, what) {
@@ -348,7 +351,7 @@ async function verify(environment, wiring, request, entry, account) {
   const checked = await verifyGrant({
     grant: token,
     input: request["input"],
-    act: methodAction(environment.name, entry.name),
+    act: grantAct(environment, entry),
     actions: grantActions(environment),
     keys: wiring.keys,
     audience: wiring.audience,

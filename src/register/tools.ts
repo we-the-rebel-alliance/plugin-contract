@@ -7,7 +7,7 @@
  * prompts while keeping it in Code Mode, automations and RPC (§6). `pinned: true` sets Code Mode's `pinned` flag
  * instead of the deprecated top-level one.
  *
- * The tool's executor runs the same `run` as every other door: input and answer validation, account resolution and
+ * The tool's executor runs the same prepared-call path as every other door: input and answer validation, account resolution and
  * operation assertions are not reimplemented here.
  */
 import type { Plugin } from "@opencode/plugin"

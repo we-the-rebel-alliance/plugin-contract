@@ -7,7 +7,6 @@
  */
 import { type AccountProfile } from "../accounts.js";
 import { type Manifest } from "../manifest.js";
-import { type Refusal } from "./errors.js";
 import { type Door, type HandlerTable, type MethodCall, type MethodEntry } from "./handlers.js";
 /** The environment one call runs in, resolved once by `register`. */
 export interface CallEnvironment {
@@ -20,14 +19,6 @@ export interface CallEnvironment {
 }
 /** The handler table and account set, validated once at setup. */
 export declare function prepare(manifest: Manifest, handlers: HandlerTable, accounts: readonly AccountProfile[]): CallEnvironment;
-/**
- * The handler's input: the account selector removed, then checked against the method's schema. A commit is checked
- * against `{ planId }` alone, whatever the handler's own schema says.
- */
-export declare function checkedInput(entry: MethodEntry, raw: unknown): {
-    readonly input: Record<string, unknown>;
-    readonly account: unknown;
-};
 /** A call's input and the account it resolves to, before any handler runs. */
 export interface PreparedCall {
     readonly input: Record<string, unknown>;
@@ -37,12 +28,8 @@ export interface PreparedCall {
 export declare function prepareCall(entry: MethodEntry, raw: unknown, accounts: readonly AccountProfile[]): PreparedCall;
 /** The answer, checked; a plan must name the method that commits it. */
 export declare function checkedOutput(entry: MethodEntry, value: unknown): unknown;
-/** The failure a handler's error maps to: its contract refusal, or `UNAVAILABLE` with a redacted line. */
-export declare function failureOf(entry: MethodEntry, error: unknown): Refusal;
 /** Run a prepared call's handler, checking its answer and mapping its failure. */
 export declare function execute(entry: MethodEntry, prepared: PreparedCall, call: Omit<MethodCall, "account">): Promise<unknown>;
-/** `prepareCall`, then `execute`: the path a caller with no permission check of its own uses. */
-export declare function run(entry: MethodEntry, raw: unknown, accounts: readonly AccountProfile[], call: Omit<MethodCall, "account">): Promise<unknown>;
 /** The door's call context from an OpenCode tool context. */
 export declare function toolCall(context: {
     readonly sessionID: string;

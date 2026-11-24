@@ -119,10 +119,15 @@ function strictEnvelope(input: JsonSchema): JsonSchema {
   return schema
 }
 
+/** The action a grant names: the declared action this method commits, or the method itself when it commits none. */
+function grantAct(environment: CallEnvironment, entry: MethodEntry): string {
+  return environment.manifest.actions.find((action) => action.commit === entry.name)?.id ?? methodAction(environment.name, entry.name)
+}
+
 /** The grant actions: every non-read method needs a confirmation. A read needs no grant. */
 function grantActions(environment: CallEnvironment): Readonly<Record<string, "required">> {
   const actions: Record<string, "required"> = {}
-  for (const entry of environment.entries) if (entry.item.class !== "read") actions[methodAction(environment.name, entry.name)] = "required"
+  for (const entry of environment.entries) if (entry.item.class !== "read") actions[grantAct(environment, entry)] = "required"
   return actions
 }
 
@@ -163,7 +168,7 @@ async function verify(environment: CallEnvironment, wiring: GrantWiring, request
   const checked = await verifyGrant({
     grant: token,
     input: request["input"],
-    act: methodAction(environment.name, entry.name),
+    act: grantAct(environment, entry),
     actions: grantActions(environment),
     keys: wiring.keys,
     audience: wiring.audience,

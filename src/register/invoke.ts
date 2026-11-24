@@ -32,7 +32,7 @@ export function prepare(manifest: Manifest, handlers: HandlerTable, accounts: re
  * The handler's input: the account selector removed, then checked against the method's schema. A commit is checked
  * against `{ planId }` alone, whatever the handler's own schema says.
  */
-export function checkedInput(entry: MethodEntry, raw: unknown): { readonly input: Record<string, unknown>; readonly account: unknown } {
+function checkedInput(entry: MethodEntry, raw: unknown): { readonly input: Record<string, unknown>; readonly account: unknown } {
   if (!plain(raw)) refuse("INPUT_INVALID", `${entry.name} takes an object as its input`, "Pass the input its schema describes.")
   const input = { ...raw }
   const account = input["account"]
@@ -80,7 +80,7 @@ export function checkedOutput(entry: MethodEntry, value: unknown): unknown {
 }
 
 /** The failure a handler's error maps to: its contract refusal, or `UNAVAILABLE` with a redacted line. */
-export function failureOf(entry: MethodEntry, error: unknown): Refusal {
+function failureOf(entry: MethodEntry, error: unknown): Refusal {
   const own = refusalOf(error)
   if (own) return own
   return refusal("UNAVAILABLE", `${entry.name} failed: ${reasonOf(error)}`, "Try again; if it keeps failing, check the plugin's status.")
@@ -94,11 +94,6 @@ export async function execute(entry: MethodEntry, prepared: PreparedCall, call: 
     if (error instanceof RegisterError) throw error
     throw new RegisterError(failureOf(entry, error))
   }
-}
-
-/** `prepareCall`, then `execute`: the path a caller with no permission check of its own uses. */
-export async function run(entry: MethodEntry, raw: unknown, accounts: readonly AccountProfile[], call: Omit<MethodCall, "account">): Promise<unknown> {
-  return execute(entry, prepareCall(entry, raw, accounts), call)
 }
 
 /** The door's call context from an OpenCode tool context. */
