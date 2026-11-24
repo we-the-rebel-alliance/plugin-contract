@@ -1,62 +1,110 @@
-# source-contract
+# plugin-contract
 
-One source contract for jelly, Memory, Artifacts and every plugin (D202; design: [we-the-rebel-alliance/app#2346](https://github.com/we-the-rebel-alliance/app/issues/2346#issuecomment-6853030617)).
+The contract between OpenCode plugins and the apps that use them. A plugin declares once what it reads, what it does and
+how risky each call is; any app can then use it, and no app is named. This package holds the language and the library:
+the manifest schema, the event and page model, the error table, the modules that read and act under a grant, and the
+conformance kit.
 
-**Plugins are the interface for every data flow.** A plugin declares its sources once, in a top-level `sources` key in its `package.json`, implements `events_list`, `snapshot_read` and `probe` with this package, and passes its conformance kit in CI. Every project (jelly, Memory, Artifacts and any after them) is a consumer: it reads the declaration from the installed package, reads under the person's grants, and builds its own features. No consumer is privileged and none needs another.
+It is greenfield at `v0.0.0`. There are no compatibility shims and no legacy aliases.
 
-This package holds the contract only: the data model, the descriptor schema, the protocol, the library (descriptor, list, events, cursor, params, permission, read, act, `tools-rpc`, `broker-client`), the output schema registry and the conformance kit. It holds no data, schedules nothing, needs no host, and has no runtime dependencies beyond Node built-ins. It runs on Node and Bun.
+## What a plugin declares
 
-**Releases are tagged GitHub Releases, not npm.** Each tag is built in CI with `dist/`, `SHA256SUMS` and the conformance kit. Pin the exact tag (`github:we-the-rebel-alliance/source-contract#vX.Y.Z`); plugins bundle it into their own `dist/`.
+One top-level `capabilities` key in the plugin's `package.json`: identity and the OpenCode range, how accounts work, the
+options' JSON Schema, every method with its class and provider operations, the sources an app may bind to, the actions a
+person may take, and the bus events the plugin emits. The manifest is read from the installed package on disk, never over
+RPC, and hashed; a grant stores the hash, so a changed manifest asks the person again. Contract §4 is the full shape.
 
-## How a plugin adopts it, in five steps
+An app-only hint is allowed only as an `x-<app>` key, which every other app ignores and no app may require.
 
-1. **Declare your sources** in a top-level `sources` key of your `package.json`: `contractVersion: 1` and one item per source, with its `id` (`<plugin>.<source>`), `kind` (`events` or `snapshot`), the `tool` a read calls, `permission.operations` (what the read does at the provider), `private`, `cost` and `maxBytes`. A snapshot names an `output` from the registry. A plugin that reaches more than one outside system groups its sources with an optional `service`, `{ id, label }`, which is what a person turns on or off (Gmail, not gws). A write is an act in that same key: an id, an input schema, an output schema, an effect, a preview tool and a commit tool. See [`examples/`](examples/) and [the contract](docs/contract.md#l1-the-descriptor).
-2. **Pin the package** to a tag, `github:we-the-rebel-alliance/source-contract#vX.Y.Z`, and bundle what you import into your own `dist/`, so an install of your plugin runs no build.
-3. **Implement the protocol** with the package: `events_list` or your snapshot method, and `probe`, over its `tools-rpc` transport, normalising events with `events` and cursors with `cursor`. Delete your copies of `tools-rpc.ts`, `events-list.ts`, `memory-kit.mjs` and `conformance.mjs`.
-4. **Run the conformance kit** in `npm run check` and in CI, with your fixtures ([conformance](docs/conformance.md)). Pass the public tool table to `assertDeclaredTools`: a tool that is neither a source, an act, nor excluded with a reason fails the check.
-5. **Release** as you do today, and attach the conformance report next to `SHA256SUMS`. Every project can then read your sources with no change of its own.
+## The five doors
 
-## How a project consumes it, in five steps
+Every method is written once and reached through every door (contract §9):
 
-1. **Pin the package** to a tag, as above.
-2. **Read descriptors from installed packages**, never over RPC: `readInstalledDescriptor(directory, { version })` from `descriptor` validates and hashes the `sources` key. `listInstalledDeclarations` from `list` does that for a directory of packages, or a list of package directories, and reports a missing or invalid descriptor instead of dropping it.
-3. **Ask the person** and keep a grant per consumer, source, account and scope, with the descriptor hash (`permission`'s `Grant`); show `private`, the cost units and your own budgets and cadence. A changed hash asks again.
-4. **Read through `read`** (or a host's broker, with `sourceReader` from `broker-client`): each read runs in a session limited to the grant's exact rules (`sessionRules`), with params, `$me` and `pick` resolved by the library.
-5. **Keep your own cursor and cache**: save the cursor in the same transaction as the page you accept; `failed[]` holds it back and `refused[]` does not. A cached answer serves only a consumer whose own grant covers it.
+| # | Door | Who | Mechanism |
+|---|---|---|---|
+| 1 | Agent tool | agents | `ctx.tool`, namespace `<name>`, permission `<name>.<method>` |
+| 2 | Code Mode and automations | scripts, automations | `tools.<name>.<method>(…)` |
+| 3 | RPC | apps, scripts, the catalog | `POST /api/rpc/<name>/<method>` with `{ sessionID, input }`, under that session's rules |
+| 4 | Bus | apps | `rpc.<name>.<event>` on `/api/event` |
+| 5 | MCP Events | event automations | an optional `mcp-events` adapter, one local server per plugin |
+
+`register(ctx, manifest, handlers)` wires doors 1–3 from one handler table. A plugin writes no door code. Bus nudges
+carry no content: an app re-reads through door 3.
+
+## Accounts
+
+Every plugin that signs in supports several named accounts at once, such as `work` and `personal` (contract §5). The
+account with no alias is `default`. A plugin's accounts arrive through one of three mechanisms:
+
+- `integration`: the plugin holds the credentials, one OpenCode integration per alias (`gws`, `gws-work`);
+- `mcp`: the vendor's MCP server holds them, one server per alias, each with its own OAuth;
+- `local`: the identity of the machine or OS user, one account.
+
+Every method that takes an account resolves it the same way. With more than one account, leaving `account` out is
+`ACCOUNT_REQUIRED`; an unknown alias is `ACCOUNT_UNKNOWN`. Cursors are bound to the plugin, capability, account and
+scope.
 
 ## Modules
 
-| Module | Does | Opened by | State |
+Each module is its own entry point: `import { read } from "@we-the-rebel-alliance/plugin-contract/read"`. A plugin
+bundles only what it imports.
+
+The module map of the contract (§15), and what this package ships today:
+
+| Module | Side | Does | State |
 |---|---|---|---|
-| `registry` | the output schemas a snapshot source names, seeded from jelly's Home templates | the app | in `main` |
-| `params`, `pick` | relative times and windows in the person's time zone, `$me`, and field selection checked against the output schema | the app, reviewed by Artifacts | in `main` |
-| `descriptor` | reads `sources` from an installed package, validates the frame and hashes it | the app | in `main` |
-| `list` | lists those declarations from a directory of packages, or a list of package directories, including acts once declared | the app | in `main` |
-| `permission` | exact OpenCode session rules from a grant | the app | in `main` |
-| `read` | the consumer-side read in a fenced session, with detail reads and `probe` | the app | in `main` |
-| `act` | the consumer-side preview and commit of a declared act, fenced like a read, with the host's confirmation when the effect is not local | the app | in `main` |
-| `broker-client` | a host's broker when one is offered, `read` embedded otherwise | the app | in `main` |
-| `schema` | the full descriptor and result schemas in zod, with JSON Schema generated | Memory | in `main` (#13) |
-| `conformance` | the kit: the draft's ten checks, the recording permission context, the tokenised verb rule and the screening | Memory | in `main` (#13) |
-| `events` | the one normaliser and hash, the error table and the secret-pattern refusal, and the actor, event and fact metadata of v0.3 | the plugin family | in `main` (#7, #45) |
-| `hints` | the hint and routine file formats, their frontmatter schemas and their checks | the plugin family | in `main` (#45) |
-| `cursor` | the versioned codec, bound to plugin, source, account and scope | the plugin family | in `main` (#7) |
-| `tools-rpc` | the transport, version 2 with the version 2.3 per-method resource resolver | the plugin family | in `main` (#7) |
+| `manifest` | both | schema, validation and hashing of `capabilities` | landing |
+| `accounts` | plugin | profiles, names, registration, `account` resolution, status | landing |
+| `access` | plugin | default rules from `access` and `methods` | landing |
+| `register` | plugin | doors 1–3 from one handler table | landing |
+| `events` | plugin | event normaliser, hash, screening, page building | here |
+| `cursor` | plugin | bound cursor codec | here |
+| `bus` | plugin | typed `changed`, `status` and `account` emitters | landing |
+| `grant` | plugin | action-grant verifier | landing |
+| `outputs` | both | the snapshot shape registry and its JSON Schemas | here |
+| `read`, `act` | app | fenced reads and actions, through the catalog or embedded | here |
+| `params`, `pick` | app | relative times, `$me`, field selection | here |
+| `catalog` | app, catalog | installed manifests | landing |
+| `conformance` | CI | the kit | here |
+| `kit` | dev | the `plugin-kit` binary | landing |
+| `mcp-events` | plugin | optional MCP Events adapter | later |
 
-`examples/` holds three plugins as a consumer finds them on disk, each with a recorded conformance fixture (Memory's gws Gmail, gws Calendar and Slack).
+The package also ships the pieces `register` and `catalog` will replace — `descriptor` (reads the current `sources`
+block from an installed package), `list` (lists installed declarations), `permission` (exact session rules from a grant),
+`tools-rpc` (the tools-RPC transport) and `broker-client` (a host's broker when one is offered) — and `hints`, the hint
+file format. They keep working until their replacements land.
 
-Each module is its own entry point: `import { read } from "@we-the-rebel-alliance/source-contract/read"`.
+`docs/conformance.md` describes the kit. `docs/events.md` describes the feed model. `docs/outputs.md` describes the
+snapshot shapes. `docs/tools-rpc.md` describes the transport.
 
-What each Release carries, and what a consumer must do to upgrade, is in [CHANGELOG.md](CHANGELOG.md). Docs: [the contract](docs/contract.md) and [conformance](docs/conformance.md). A plugin adopts v0.3 one step at a time: [the guide for plugin authors](docs/adopting-v0.3.md). How to build and check the package: [CONTRIBUTING.md](CONTRIBUTING.md).
+## plugin-kit
 
-## Credits
+`plugin-kit` is the binary every plugin's CI runs: `check`, `docs`, `record`, `conformance`, `hosts`, `release`,
+`supported` and `forbidden`. It ships inside this package as a binary and a dev export, and it is never bundled into a
+plugin. A new plugin starts from `plugin-template`.
 
-The package is seeded from work each project had already built and tested:
+## Install
 
-- **Memory** (opencode-mem): the plugin kit, contract 2 (identity, scope, gap, declared reads), its JSON Schema, the recording permission context that proves declared grants equal what the code asserts, and the read-verb allowlist.
-- **The plugin family** (the `opencode-*` plugins): contract 1, `events-list.ts` and `eventsListConformance`, implemented by nine plugins, and `tools-rpc` version 2.
-- **Artifacts**: the relative-time resolver (ADR 0046) and the field picker that leaves out missing optional keys.
-- **jelly** (the app): the Home template schemas that seed the output schema registry.
+Releases are tagged GitHub releases, not npm. Each tag carries `dist/`, `SHA256SUMS`, the conformance kit as one file
+and the JSON Schema bundle. Pin the exact tag:
+
+```sh
+npm install github:we-the-rebel-alliance/plugin-contract#v0.0.0
+```
+
+The package has no runtime dependencies: `dist/` imports only Node built-ins, and a plugin bundles what it imports into
+its own `dist/`. Node 22 or later runs it; CI checks Node 24.
+
+## Docs
+
+- [The contract, v0](docs/contract.md): the manifest, accounts, methods and access, sources, actions, doors, bus events,
+  status, errors, trust, catalog, modules, conformance and versions.
+- [The plugin standard](docs/plugin-standard.md): what every `<name>-plugin` repository must be.
+- [Supported plugins](SUPPORTED.md): the plugins and their state.
+- [Decisions](docs/decisions.md): the settled decisions behind v0.
+- [Conformance](docs/conformance.md), [events and cursors](docs/events.md), [`tools-rpc`](docs/tools-rpc.md).
+- [AGENTS.template.md](AGENTS.template.md): the agent guide every plugin starts from.
+- [CONTRIBUTING.md](CONTRIBUTING.md): how to build and check this package.
 
 ## Licence
 

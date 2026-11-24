@@ -1,13 +1,15 @@
 # Contributing
 
-This repository holds the source contract (design: [app#2346](https://github.com/we-the-rebel-alliance/app/issues/2346#issuecomment-6853030617)). Memory, the plugin family, Artifacts and the app each own a part; [CODEOWNERS](.github/CODEOWNERS) says who reviews what.
+`plugin-contract` is the language between OpenCode plugins and the apps that use them. The contract is
+[docs/contract.md](docs/contract.md), the bar for every plugin repository is [docs/plugin-standard.md](docs/plugin-standard.md),
+and [AGENTS.md](AGENTS.md) is the working guide.
 
 ## Set up and check
 
-You need Node 22.18 or later and Bun 1.4.4.
+You need Node 22.18 or later. Bun is optional; it runs the same tests locally.
 
 ```sh
-npm ci --ignore-scripts
+npm ci
 npm run check
 ```
 
@@ -15,23 +17,37 @@ npm run check
 
 | Step | What it proves |
 |---|---|
-| `npm run typecheck` | The sources and tests typecheck under strict settings. |
-| `npm run build` | `dist/` is built: one bundled ES module per export, the declarations, the JSON Schemas and the notices of what is bundled. |
-| `npm run check:dist` | `dist/` imports only Node built-ins, its declarations name nothing outside the package, and every export loads from a bare copy on Node and on Bun. |
-| `npm test` | The tests pass on Node (`node --test`) and on Bun (`bun test`). Tests use `node:test` and `node:assert`, which both run. |
-| `npm run conformance:self-test` | The conformance kit accepts every example under `examples/`, from `dist/` as it ships. |
+| `npm run typecheck` | the sources and tests typecheck under strict settings |
+| `npm run build` | `dist/` is built: one bundled ES module per export, its declarations, the JSON Schemas and the notices of what is bundled |
+| `npm run check:dist` | `dist/` imports only Node built-ins, its declarations name nothing outside the package, and every export loads from a bare copy on Node (and on Bun when it is installed) |
+| `npm test` | the tests pass on Node (`node --test`) |
+| `npm run conformance:self-test` | the conformance kit accepts every example under `examples/`, from `dist/` as it ships |
 
 ## The rules
 
-- **No install-time dependencies.** Anything the package uses is bundled into `dist/` (zod included); at run time it needs only Node built-ins. `package.json` has `devDependencies` only.
-- **zod is the source of truth, and it stays inside.** A module writes its schema in zod and exports a `Validator<T>` (`src/internal/validator.ts`), never the zod schema: a published declaration that names zod would need zod installed. Add the validator to `SCHEMAS` in `src/schemas.ts`, and the build writes its JSON Schema to `dist/schemas/`.
-- **One entry per module.** Each module is `src/<name>.ts` and an export `"./<name>"` in `package.json`, `{ "types": "./dist/<name>.d.ts", "default": "./dist/<name>.js" }`. Internal code lives in `src/internal/`.
-- **`dist/` is committed.** A consumer pins a tag (`github:we-the-rebel-alliance/source-contract#vX.Y.Z`), and the install must run no build. Run `npm run build` and commit `dist/` with your change; CI fails when it differs. On a conflict in `dist/`, take either side and run `npm run build` again.
-- **Node and Bun.** Write portable code: no Bun-only or Node-only APIs outside `node:` modules both support.
-- **Words.** Plain British English in docs, comments and messages, with no contractions. An error message is the family's form: `CODE: what happened. Next step: …`.
+- **No runtime dependencies.** Anything the package uses is bundled into `dist/` (zod included); at run time it needs
+  only Node built-ins. `package.json` has `devDependencies` only.
+- **zod stays inside.** Export a `Validator<T>` (`src/internal/validator.ts`), never the zod schema. Add the validator
+  to `SCHEMAS` in `src/schemas.ts`, and the build writes its JSON Schema to `dist/schemas/`.
+- **One entry per module.** `src/<name>.ts` and `"./<name>"` in `package.json`. Internal code lives in `src/internal/`.
+- **`dist/` is committed.** A consumer pins a tag, and the install runs no build. Run `npm run build` and commit
+  `dist/` with your change; CI fails when it differs from what the build makes.
+- **Host-neutral.** No module or doc names an app, except in an `x-<app>` key.
+- **Plain English.** Short sentences, one term per concept. An error message reads
+  `CODE: what happened. Next step: …`.
+
+## Pull requests
+
+One change per pull request, based on `master`, with a conventional commit (`feat:`, `fix:`, `docs:`, `chore:`). Fill
+in what changed and why, the contract section it implements, and the exact `npm run check` result. A new module comes
+with tests, including the negative cases, and a page under `docs/`.
 
 ## Releases
 
-Releases are tagged GitHub Releases, not npm. A tag `v<package.json version>` on a main commit whose CI passed runs [the release workflow](.github/workflows/release.yml), which attaches the packed package, the conformance kit as one file, the schema bundle and `SHA256SUMS`. Only the owner decides a Release; an agent never pushes a tag on its own.
+Releases are tagged GitHub releases, not npm. A tag `v<package.json version>` on a `master` commit whose CI passed runs
+[the release workflow](.github/workflows/release.yml), which attaches the packed package, the conformance kit as one
+file, the schema bundle and `SHA256SUMS`. Only the owner decides a release; an agent never pushes a tag on its own.
 
-A Release is prepared in one pull request, `chore(release): prepare vX.Y.Z`: it sets the version in `package.json` and `package-lock.json` (`npm version X.Y.Z --no-git-tag-version`), adds the `CHANGELOG.md` section with every change since the last tag by pull request and what a consumer must do, and commits `dist/` rebuilt by `npm run build` (its banner carries the version). The tag goes on the merged commit once main's CI has passed.
+A release is prepared in one pull request, `chore(release): prepare vX.Y.Z`: the version in `package.json` and
+`package-lock.json` (`npm version X.Y.Z --no-git-tag-version`), the `CHANGELOG.md` section, and `dist/` rebuilt by
+`npm run build`. The tag goes on the merged commit once `master`'s CI has passed.
