@@ -44,7 +44,7 @@ export interface HostInspection {
 }
 
 /** Every T1 finding for one host, and the real run when it happened. */
-export async function inspectHost(directory: string, manifest: Manifest, host: string, options: { readonly accounts?: readonly string[]; readonly realAccounts?: boolean | undefined; readonly inputs?: Readonly<Record<string, unknown>> } = {}): Promise<HostInspection> {
+export async function inspectHost(directory: string, manifest: Manifest, host: string, options: { readonly accounts?: readonly string[]; readonly realAccounts?: boolean | undefined; readonly accountMethod?: string | undefined; readonly inputs?: Readonly<Record<string, unknown>> } = {}): Promise<HostInspection> {
   if (nodeMajor < 24) {
     return {
       findings: [
@@ -101,7 +101,7 @@ export async function inspectHost(directory: string, manifest: Manifest, host: s
     findings.push(...pinnedFindings(manifest, run))
     findings.push(...(await permissionFindings(directory, manifest, host, run, pluginOptions)))
     findings.push(...(await rpcFindings(manifest, run, options.inputs ?? {}, options.accounts ?? [])))
-    if (options.realAccounts === true) findings.push(...(await accountFindings(manifest, run, options.accounts ?? [], options.inputs ?? {})))
+    if (options.realAccounts === true) findings.push(...(await accountFindings(manifest, run, options.accounts ?? [], options.inputs ?? {}, options.accountMethod)))
     return { run, findings }
   } finally {
     await run.close()
@@ -124,7 +124,7 @@ export async function namespaceOf(directory: string, manifest: Manifest, host = 
 }
 
 /** T1 findings only, for `t1`. */
-export async function hostFindings(directory: string, manifest: Manifest, host: string, options: { readonly accounts?: readonly string[]; readonly realAccounts?: boolean | undefined; readonly inputs?: Readonly<Record<string, unknown>> } = {}): Promise<Finding[]> {
+export async function hostFindings(directory: string, manifest: Manifest, host: string, options: { readonly accounts?: readonly string[]; readonly realAccounts?: boolean | undefined; readonly accountMethod?: string | undefined; readonly inputs?: Readonly<Record<string, unknown>> } = {}): Promise<Finding[]> {
   return [...(await inspectHost(directory, manifest, host, options)).findings]
 }
 
@@ -261,9 +261,9 @@ async function rpcFindings(manifest: Manifest, run: HostRun, inputs: Readonly<Re
 }
 
 /** Two aliases, on the running plugin: a missing account and an unknown one are the contract's refusals. */
-async function accountFindings(manifest: Manifest, run: HostRun, aliases: readonly string[], inputs: Readonly<Record<string, unknown>>): Promise<Finding[]> {
+async function accountFindings(manifest: Manifest, run: HostRun, aliases: readonly string[], inputs: Readonly<Record<string, unknown>>, preferred?: string): Promise<Finding[]> {
   if (manifest.accounts === undefined || aliases.length < 2) return []
-  const method = Object.keys(manifest.methods).find((name) => manifest.methods[name]?.accounts === "optional" && !name.startsWith("mcp:"))
+  const method = preferred !== undefined && manifest.methods[preferred]?.accounts === "optional" ? preferred : Object.keys(manifest.methods).find((name) => manifest.methods[name]?.accounts === "optional" && !name.startsWith("mcp:"))
   if (method === undefined) return []
   const findings: Finding[] = []
   const base = inputs[method] ?? {}

@@ -68,6 +68,7 @@ export async function t1(pluginDir: string, host: string): Promise<Finding[]> {
   return hostFindings(directory, installed.value.manifest, host, {
     ...(read?.accounts?.aliases === undefined ? {} : { accounts: read.accounts.aliases }),
     ...(read?.accounts?.real === true ? { realAccounts: true } : {}),
+    ...(typeof read?.accounts?.required?.method === "string" ? { accountMethod: read.accounts.required.method } : {}),
     ...(read?.rpc?.inputs === undefined ? {} : { inputs: read.rpc.inputs }),
   })
 }
@@ -173,6 +174,7 @@ export async function runConformance(pluginDir: string, options: ConformanceOpti
     const inspection = await inspectHost(directory, manifest, host, {
       ...(aliases.length === 0 ? {} : { accounts: aliases }),
       ...(fixture?.accounts?.real === true ? { realAccounts: true } : {}),
+      ...(typeof fixture?.accounts?.required?.method === "string" ? { accountMethod: fixture.accounts.required.method } : {}),
       ...(fixture?.rpc?.inputs === undefined ? {} : { inputs: fixture.rpc.inputs }),
     })
     findings.push(...inspection.findings)

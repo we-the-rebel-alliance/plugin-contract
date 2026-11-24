@@ -11397,7 +11397,7 @@ async function inspectHost(directory, manifest, host, options = {}) {
     findings.push(...pinnedFindings(manifest, run));
     findings.push(...await permissionFindings(directory, manifest, host, run, pluginOptions));
     findings.push(...await rpcFindings(manifest, run, options.inputs ?? {}, options.accounts ?? []));
-    if (options.realAccounts === true) findings.push(...await accountFindings2(manifest, run, options.accounts ?? [], options.inputs ?? {}));
+    if (options.realAccounts === true) findings.push(...await accountFindings2(manifest, run, options.accounts ?? [], options.inputs ?? {}, options.accountMethod));
     return { run, findings };
   } finally {
     await run.close();
@@ -11533,9 +11533,9 @@ async function rpcFindings(manifest, run, inputs, aliases) {
   }
   return findings;
 }
-async function accountFindings2(manifest, run, aliases, inputs) {
+async function accountFindings2(manifest, run, aliases, inputs, preferred) {
   if (manifest.accounts === void 0 || aliases.length < 2) return [];
-  const method = Object.keys(manifest.methods).find((name) => manifest.methods[name]?.accounts === "optional" && !name.startsWith("mcp:"));
+  const method = preferred !== void 0 && manifest.methods[preferred]?.accounts === "optional" ? preferred : Object.keys(manifest.methods).find((name) => manifest.methods[name]?.accounts === "optional" && !name.startsWith("mcp:"));
   if (method === void 0) return [];
   const findings = [];
   const base = inputs[method] ?? {};
@@ -12225,6 +12225,7 @@ async function t1(pluginDir, host) {
   return hostFindings(directory, installed.value.manifest, host, {
     ...read?.accounts?.aliases === void 0 ? {} : { accounts: read.accounts.aliases },
     ...read?.accounts?.real === true ? { realAccounts: true } : {},
+    ...typeof read?.accounts?.required?.method === "string" ? { accountMethod: read.accounts.required.method } : {},
     ...read?.rpc?.inputs === void 0 ? {} : { inputs: read.rpc.inputs }
   });
 }
@@ -12314,6 +12315,7 @@ async function runConformance(pluginDir, options = {}) {
     const inspection = await inspectHost(directory, manifest, host, {
       ...aliases.length === 0 ? {} : { accounts: aliases },
       ...fixture?.accounts?.real === true ? { realAccounts: true } : {},
+      ...typeof fixture?.accounts?.required?.method === "string" ? { accountMethod: fixture.accounts.required.method } : {},
       ...fixture?.rpc?.inputs === void 0 ? {} : { inputs: fixture.rpc.inputs }
     });
     findings.push(...inspection.findings);
