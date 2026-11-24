@@ -76,7 +76,7 @@ function fakeHost(issued?: (token: string) => boolean) {
 
 const grantFor = (actionId: string, extra: Partial<ActGrant> = {}): ActGrant => ({
   consumer: "notes.home",
-  act: actionId,
+  action: actionId,
   account,
   manifestHash: demo.hash,
   ...extra,
@@ -84,7 +84,7 @@ const grantFor = (actionId: string, extra: Partial<ActGrant> = {}): ActGrant => 
 
 const requestFor = (actionId: string, extra: Partial<ActRequest> = {}): ActRequest => ({
   installed: demo,
-  act: actionId,
+  action: actionId,
   grant: grantFor(actionId),
   consumer: "notes.home",
   phase: "commit",

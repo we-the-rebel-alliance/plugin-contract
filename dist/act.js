@@ -5,7 +5,7 @@ import {
 } from "./chunks/chunk-XYUBWIBF.js";
 import {
   actSessionRules
-} from "./chunks/chunk-763D5U2Y.js";
+} from "./chunks/chunk-GTCKBHY7.js";
 import {
   findAction
 } from "./chunks/chunk-GENAPX63.js";
@@ -123,7 +123,7 @@ async function confirmationProblem(host, act2, request) {
   }
   let issued = false;
   try {
-    issued = await host.issuedConfirmation({ token, act: act2.id, effect: act2.effect, account: request.grant.account, consumer: request.consumer }) === true;
+    issued = await host.issuedConfirmation({ token, action: act2.id, effect: act2.effect, account: request.grant.account, consumer: request.consumer }) === true;
   } catch {
     issued = false;
   }
@@ -134,14 +134,14 @@ async function confirmationProblem(host, act2, request) {
 }
 async function act(host, request) {
   const { installed, grant } = request;
-  const declared = findAction(installed.manifest, request.act);
-  if (!declared) return refused("UNAVAILABLE", `${installed.package} ${installed.version} declares no act ${request.act}`, "Check the act id against the installed plugin's manifest.");
+  const declared = findAction(installed.manifest, request.action);
+  if (!declared) return refused("UNAVAILABLE", `${installed.package} ${installed.version} declares no act ${request.action}`, "Check the act id against the installed plugin's manifest.");
   if (request.phase !== "preview" && request.phase !== "commit") {
     return refused("SCHEMA_VIOLATION", "an act is previewed or committed", "Pass phase preview or commit.");
   }
   if (grant.disabled) return refused("SOURCE_DISABLED", `${declared.id} is turned off for ${grant.consumer}`, "Turn the act on again to preview or commit it.");
   if (grant.consumer !== request.consumer) return refused("PERMISSION_DENIED", `the grant is ${grant.consumer}'s, not ${request.consumer}'s`, "Ask the person to grant this consumer the act.");
-  if (grant.act !== declared.id) return refused("PERMISSION_DENIED", `the grant is for ${grant.act}, not ${declared.id}`, "Use the grant for this act.");
+  if (grant.action !== declared.id) return refused("PERMISSION_DENIED", `the grant is for ${grant.action}, not ${declared.id}`, "Use the grant for this act.");
   if (grant.manifestHash !== installed.hash) {
     return refused("PERMISSION_DENIED", `${declared.id}'s manifest changed since the person consented`, "Ask the person to review the action and consent again.");
   }

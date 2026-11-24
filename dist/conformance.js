@@ -1,14 +1,14 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   SOURCES_SCHEMA
-} from "./chunks/chunk-XKBVOFTC.js";
+} from "./chunks/chunk-SNWDFCSO.js";
 import {
   toolsRpcIdProblems
-} from "./chunks/chunk-JTUNLYC6.js";
+} from "./chunks/chunk-UDTV67VT.js";
 import {
   hintProblems
 } from "./chunks/chunk-F5PV73BQ.js";
-import "./chunks/chunk-763D5U2Y.js";
+import "./chunks/chunk-GTCKBHY7.js";
 import {
   maxBytesOf
 } from "./chunks/chunk-GENAPX63.js";
