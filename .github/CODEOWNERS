@@ -1,8 +1,8 @@
-# Who reviews what (design §3, app#2346). The last matching line wins.
+# Who reviews what (contract §15). The last matching line wins.
 #
-# joe-broadhead owns everything: the app's parts (the repository, build and release, descriptor, registry, permission,
-# read, broker-client), Memory's (schema and conformance) and the plugin family's (events, cursor, tools-rpc).
-# domeevans (Artifacts) reviews params and pick, seeded from Artifacts' relative-time resolver and field picker.
+# joe-broadhead owns everything: the repository, build and release, the manifest and accounts, access and register, the
+# bus and grant, read and act, params and pick, outputs, schema, events, cursor, tools-rpc and conformance.
+# domeevans reviews params and pick.
 
 *                         @joe-broadhead
 

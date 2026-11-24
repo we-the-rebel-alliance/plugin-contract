@@ -1,8 +1,8 @@
 name: Release
 
-# A tag v<package.json version> on a main commit whose CI passed makes the GitHub Release. Releases are not published to
-# npm (the owner's decision, app#2346): a consumer pins the tag, github:we-the-rebel-alliance/source-contract#v<version>,
-# and dist/ is committed, so that install runs no build.
+# A tag v<package.json version> on a master commit whose CI passed makes the GitHub Release. Releases are not published
+# to npm: a consumer pins the tag, github:we-the-rebel-alliance/plugin-contract#v<version>, and dist/ is committed, so
+# that install runs no build.
 #
 # Only the owner decides a Release: a tag is pushed after the owner's review, never by an agent on its own.
 #
