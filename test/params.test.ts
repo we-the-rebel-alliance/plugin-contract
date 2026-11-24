@@ -6,7 +6,7 @@ const NOW = new Date("2026-11-13T09:41:27.512Z")
 const AMSTERDAM = { now: NOW, timeZone: "Europe/Amsterdam" }
 
 describe("relative times", () => {
-  test("resolve to UTC, rounded down to the minute (Artifacts' rule)", () => {
+  test("resolve to UTC, rounded down to the minute", () => {
     assert.equal(resolveRelativeTime("now", AMSTERDAM), "2026-11-13T09:41:00.000Z")
     assert.equal(resolveRelativeTime("-90m", AMSTERDAM), "2026-11-13T08:11:00.000Z")
     assert.equal(resolveRelativeTime("+2h", AMSTERDAM), "2026-11-13T11:41:00.000Z")

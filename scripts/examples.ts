@@ -125,7 +125,7 @@ export async function runExamples({ root, schema, conformance, events }: Example
     const pkg = JSON.parse(readFileSync(join(root, "examples", example.name, "package.json"), "utf8")) as { name: string; sources: unknown }
     const checked = schema.SOURCES_SCHEMA.check(example.sources)
     if (!checked.ok) problems.push(...checked.problems.map((problem) => `sources: ${problem}`))
-    // Every recorded page is a page result of contract 1, so the `events` module is asked first.
+    // Every recorded page is checked by the `events` module first, so the example keeps the page shape the authority defines.
     for (const [id, recorded] of Object.entries(example.fixture?.sources ?? {})) {
       const pages = [
         ...(recorded.cases ?? []).filter((entry) => entry.answer !== undefined).map((entry) => ({ what: `${id} ${entry.name ?? "a case"}`, answer: entry.answer })),
@@ -157,7 +157,7 @@ export async function runExamples({ root, schema, conformance, events }: Example
         plugin: pkg.name,
         source,
         tools,
-        // The plugin's own package, as a consumer finds it on disk: its hint and routine files, and every source id.
+        // The plugin's own package, as a consumer finds it on disk: its hint files, and every source id.
         ownSources: sources.map((item) => item.id),
         files: (path) => {
           const file = join(root, "examples", example.name, path)

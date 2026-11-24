@@ -1,5 +1,5 @@
-// The final design's additions to contract 1 (CHANGES.md): kinds, scope, the page result's refused, failed, gap, cost,
-// plugin and asOf, the error table, the secret-pattern refusal, and the conformance's opt-in checks.
+// The events contract: kinds, scope, the page's optional parts, the error table, the secret-pattern refusal, and the
+// conformance's opt-in checks.
 import { createHash } from "node:crypto"
 import { describe, test } from "node:test"
 import { expect } from "./support/expect.ts"
@@ -15,7 +15,7 @@ import {
   FACT_TYPES,
   factProblems,
   IDENTITY_STRENGTHS,
-  canonicalCode,
+  errorCodeOf,
   EVENT_KINDS,
   eventHash,
   eventProblems,
@@ -60,65 +60,65 @@ const event = (index: number, extra: Partial<Parameters<typeof makeEvent>[0]> = 
 describe("kinds", () => {
   test("adds task and file to the nine, and takes x-<plugin>/<kind>", () => {
     expect(EVENT_KINDS.slice(9)).toEqual(["task", "file"])
-    for (const kind of ["task", "file", "x-jelly/routine-run", "x-gws/label-change"]) {
+    for (const kind of ["task", "file", "x-acme/reminder", "x-gws/label-change"]) {
       expect(isEventKind(kind), kind).toBe(true)
       expect(eventProblems(event(1, { kind: kind as never })), kind).toEqual([])
     }
-    for (const kind of ["tweet", "x-/a", "x-jelly", "x-Jelly/run", "x-jelly/Run", `x-jelly/${"a".repeat(60)}`]) expect(isEventKind(kind), kind).toBe(false)
+    for (const kind of ["tweet", "x-/a", "x-acme", "x-Acme/run", "x-acme/Run", `x-acme/${"a".repeat(60)}`]) expect(isEventKind(kind), kind).toBe(false)
   })
 
-  test("one length rule for kinds and outputs: each segment 1 to 32 characters (source-contract#21)", () => {
+  test("one length rule for kinds and outputs: each segment 1 to 32 characters (plugin-contract#21)", () => {
     const max = "a".repeat(EXTENSION_SEGMENT_MAX)
     expect(EXTENSION_SEGMENT_MAX).toBe(32)
     expect(isEventKind(`x-${max}/${max}`)).toBe(true)
     expect(isExtensionName(`x-${max}/${max}`)).toBe(true)
     expect(isEventKind(`x-${max}a/run`)).toBe(false)
-    expect(isEventKind(`x-jelly/${max}a`)).toBe(false)
-    expect(isExtensionName("x-mem/receipt")).toBe(true)
+    expect(isEventKind(`x-acme/${max}a`)).toBe(false)
+    expect(isExtensionName("x-acme/receipt")).toBe(true)
     expect(isExtensionName("message")).toBe(false)
     expect(EXTENSION_KIND).toBe(EXTENSION_NAME)
   })
 })
 
-describe("extension kinds and their namespace (D13, source-contract#15)", () => {
-  test("x-jelly/routine-run is a kind, in jelly's namespace and no other", () => {
-    expect(isEventKind("x-jelly/routine-run")).toBe(true)
-    expect(extensionNamespace("x-jelly/routine-run")).toBe("jelly")
+describe("extension kinds and their namespace (D13, plugin-contract#15)", () => {
+  test("x-acme/reminder is a kind, in acme's namespace and no other", () => {
+    expect(isEventKind("x-acme/reminder")).toBe(true)
+    expect(extensionNamespace("x-acme/reminder")).toBe("acme")
     expect(extensionNamespace("meeting")).toBeUndefined()
-    expect(extensionNamespace("x-jelly")).toBeUndefined()
-    expect(sourceNamespace("jelly.routine-runs")).toBe("jelly")
+    expect(extensionNamespace("x-acme")).toBeUndefined()
+    expect(sourceNamespace("acme.reminders")).toBe("acme")
     expect(sourceNamespace("gws.gmail")).toBe("gws")
-    expect(isEventKindIn("x-jelly/routine-run", sourceNamespace("jelly.routine-runs"))).toBe(true)
-    expect(isEventKindIn("meeting", "jelly")).toBe(true)
-    expect(isEventKindIn("x-mem/suggestion", "jelly")).toBe(false)
-    expect(isEventKindIn("x-jelly/Run", "jelly")).toBe(false)
+    expect(isEventKindIn("x-acme/reminder", sourceNamespace("acme.reminders"))).toBe(true)
+    expect(isEventKindIn("meeting", "acme")).toBe(true)
+    expect(isEventKindIn("x-other/suggestion", "acme")).toBe(false)
+    expect(isEventKindIn("x-acme/Run", "acme")).toBe(false)
   })
 
   test("the conformance refuses an x- kind outside the source's namespace, when told the namespace", async () => {
-    const items = [event(0, { kind: "x-jelly/routine-run" }), event(1)]
+    const items = [event(0, { kind: "x-acme/reminder" }), event(1)]
     const list = async (input: EventsListInput) => {
       const parsed = parseEventsListInput(input)
       if (!parsed.ok) throw new SourceError({ code: "INPUT_INVALID", what: parsed.problems.join("; "), next: "Fix it." })
       if (parsed.value.source !== undefined && parsed.value.source !== "demo") throw new SourceError({ code: "SOURCE_UNKNOWN", what: "no", next: "Pass demo." })
       if (parsed.value.cursor !== undefined) {
-        const decoded = decodeBoundCursor({ plugin: "jelly", source: "demo", account: "work" }, parsed.value.cursor)
+        const decoded = decodeBoundCursor({ plugin: "acme", source: "demo", account: "work" }, parsed.value.cursor)
         if (!decoded.ok) throw new SourceError({ code: "CURSOR_INVALID", what: "no", next: "Start again." })
         const n = decoded.state["n"] as number
         const page = items.slice(n, n + parsed.value.limit)
-        return eventsListResult(WHOSE, page, encodeBoundCursor({ plugin: "jelly", source: "demo", account: "work" }, { n: n + page.length }), n + page.length < items.length)
+        return eventsListResult(WHOSE, page, encodeBoundCursor({ plugin: "acme", source: "demo", account: "work" }, { n: n + page.length }), n + page.length < items.length)
       }
       const from = parsed.value.since !== undefined && parsed.value.since > T0 + 3_600_000 ? items.length : 0
       const page = items.slice(from, from + parsed.value.limit)
-      return eventsListResult(WHOSE, page, encodeBoundCursor({ plugin: "jelly", source: "demo", account: "work" }, { n: from + page.length }), from + page.length < items.length)
+      return eventsListResult(WHOSE, page, encodeBoundCursor({ plugin: "acme", source: "demo", account: "work" }, { n: from + page.length }), from + page.length < items.length)
     }
     const fixtures = { source: "demo", account: "work", since: "2026-11-01T08:00:00Z", expected: ["item-0", "item-1"] }
-    expect(await eventsListConformance(list, { ...fixtures, namespace: "jelly" })).toEqual([])
+    expect(await eventsListConformance(list, { ...fixtures, namespace: "acme" })).toEqual([])
     expect(await eventsListConformance(list, fixtures)).toEqual([])
-    expect(await eventsListConformance(list, { ...fixtures, namespace: "mem" })).toContainEqual(expect.stringContaining("is a x-jelly/routine-run, outside the namespace mem"))
+    expect(await eventsListConformance(list, { ...fixtures, namespace: "mem" })).toContainEqual(expect.stringContaining("is a x-acme/reminder, outside the namespace mem"))
   })
 })
 
-describe("probe (source-contract#8, #4)", () => {
+describe("probe (plugin-contract#8, #4)", () => {
   test("is one method, probe, taking only source and account", () => {
     expect(PROBE).toBe("probe")
     expect(parseProbeInput({})).toEqual({ ok: true, value: {} })
@@ -178,7 +178,7 @@ describe("a weak owner (#30, item 13)", () => {
 
 describe("a weak owner in the conformance (#30, item 13)", () => {
   const WEAK = { id: "wisprflow:credential:abc123", label: "Wispr Flow sign-in", verified: false as const }
-  const BOUND = { plugin: "jelly", source: "demo", account: "work" }
+  const BOUND = { plugin: "acme", source: "demo", account: "work" }
   const items = [event(0), event(1)]
   const lister = (owner: typeof OWNER | typeof WEAK) => async (input: EventsListInput) => {
     const parsed = parseEventsListInput(input)
@@ -204,7 +204,7 @@ describe("a weak owner in the conformance (#30, item 13)", () => {
 })
 
 describe("scope input", () => {
-  test("is refused, as contract 1 refuses it, unless the source declares scope keys", () => {
+  test("is refused unless the source declares scope keys", () => {
     expect(parseEventsListInput({ scope: { label: "INBOX" } })).toEqual({ ok: false, problems: ['"scope" is not an input of events_list'] })
   })
 
@@ -265,7 +265,7 @@ describe("removals[] (#27)", () => {
 describe("the page result", () => {
   const ok = (extras: Parameters<typeof eventsListResult>[4]) => resultProblems(eventsListResult(WHOSE, [event(1), event(2)], "c", false, extras))
 
-  test("a contract 1 page is a valid page, and the builder writes nothing new without extras", () => {
+  test("a page without optional parts is valid, and the builder writes nothing new without extras", () => {
     const page = eventsListResult(WHOSE, [event(1)], "c", false)
     expect(Object.keys(page)).toEqual(["source", "account", "owner", "events", "cursor", "more", "trust"])
     expect(resultProblems(page)).toEqual([])
@@ -314,33 +314,38 @@ describe("the page result", () => {
 })
 
 describe("errors", () => {
-  test("reads the family's form, maps the alias and contract 1's codes, and carries retryAfterSec and gap", () => {
+  test("reads the contract's form, and carries retryAfterSec and gap", () => {
     const expired = new SourceError({ code: "CURSOR_EXPIRED", what: "Gmail no longer keeps history 1010.", next: "Call events_list with since.", gap: { reason: "expired", since: "2026-10-01T00:00:00.000Z" } })
     expect(expired.message).toBe("CURSOR_EXPIRED: Gmail no longer keeps history 1010. Next step: Call events_list with since.")
     expect(expired.gap).toEqual({ reason: "expired", since: "2026-10-01T00:00:00.000Z" })
     expect(parseSourceError(expired)).toEqual({ code: "CURSOR_EXPIRED", canonical: "CURSOR_EXPIRED", what: "Gmail no longer keeps history 1010.", next: "Call events_list with since." })
-    expect(parseSourceError(new Error("AUTH_REQUIRED: the sign-in expired. Next step: Run /connect."))).toEqual({ code: "AUTH_REQUIRED", canonical: "NEEDS_SIGN_IN", what: "the sign-in expired", next: "Run /connect." })
-    expect(parseSourceError(new Error("EVENTS_CURSOR_INVALID: no. Next step: x."))?.canonical).toBe("CURSOR_INVALID")
+    // A code the table does not hold is read as itself, with no canonical code: AUTH_REQUIRED is not in the table.
+    expect(parseSourceError(new Error("AUTH_REQUIRED: the sign-in expired. Next step: Run /connect."))).toEqual({ code: "AUTH_REQUIRED", what: "the sign-in expired", next: "Run /connect." })
+    expect(parseSourceError(new Error("EVENTS_CURSOR_INVALID: no. Next step: x."))?.canonical).toBeUndefined()
     expect(parseSourceError(new Error("GWS_VALIDATION_ERROR: Limit: Too big. Next step: x."))).toEqual({ code: "GWS_VALIDATION_ERROR", what: "Limit: Too big", next: "x." })
     expect(parseSourceError(new Error("The cursor is invalid or has expired."))).toBeUndefined()
-    for (const code of ["SCOPE_MISSING", "BUDGET_EXCEEDED", "SOURCE_DISABLED", "INPUT_INVALID", "SOURCE_UNKNOWN"]) expect(canonicalCode(code)).toBe(code)
-    expect(canonicalCode("ACCOUNT_UNKNOWN")).toBe("ACCOUNT_MISMATCH")
-    expect(parseSourceError(new Error("ACCOUNT_UNKNOWN: there is no account 'work'. Next step: Pass a known account."))?.canonical).toBe("ACCOUNT_MISMATCH")
+    for (const code of ["SCOPE_MISSING", "BUDGET_EXCEEDED", "SOURCE_DISABLED", "INPUT_INVALID", "SOURCE_UNKNOWN", "ACCOUNT_UNKNOWN", "ACCOUNT_REQUIRED", "PLAN_INVALID", "GRANT_INVALID", "HOST_UNTESTED", "OPTIONS_INVALID"]) expect(errorCodeOf(code)).toBe(code)
+    expect(errorCodeOf("AUTH_REQUIRED")).toBeUndefined()
+    expect(parseSourceError(new Error("ACCOUNT_UNKNOWN: there is no account 'work'. Next step: Pass a known account."))?.canonical).toBe("ACCOUNT_UNKNOWN")
     expect(new SourceError({ code: "RATE_LIMITED", what: "x", next: "Wait.", retryAfterSec: 60 }).retryAfterSec).toBe(60)
   })
 })
 
-describe("read's failures take the aliases", () => {
-  test("a plugin's ACCOUNT_UNKNOWN reaches read as ACCOUNT_MISMATCH, not UNAVAILABLE (Wave 1, the Slack review)", () => {
+describe("read's failures take the table", () => {
+  test("a plugin's ACCOUNT_UNKNOWN reaches read as itself, not UNAVAILABLE", () => {
     const failed = failureFromError(new Error("ACCOUNT_UNKNOWN: there is no account 'work'. Next step: Pass a known account."))
-    expect(failed.code).toBe("ACCOUNT_MISMATCH")
+    expect(failed.code).toBe("ACCOUNT_UNKNOWN")
     expect(failed.next).toBe("Pass a known account.")
-    expect(failureFromError(Object.assign(new Error("no such account"), { data: { code: "ACCOUNT_UNKNOWN", next: "Pass a known account." } })).code).toBe("ACCOUNT_MISMATCH")
+    expect(failureFromError(Object.assign(new Error("no such account"), { data: { code: "ACCOUNT_UNKNOWN", next: "Pass a known account." } })).code).toBe("ACCOUNT_UNKNOWN")
+  })
+
+  test("a code the table does not hold is UNAVAILABLE, with no alias for it", () => {
+    expect(failureFromError(new Error("AUTH_REQUIRED: the sign-in expired. Next step: Sign in again.")).code).toBe("UNAVAILABLE")
   })
 })
 
 describe("the secret-pattern refusal", () => {
-  test("is Memory's detector: tokens, keys, private keys and credential assignments, not prose or placeholders", () => {
+  test("is the ported detector: tokens, keys, private keys and credential assignments, not prose or placeholders", () => {
     expect(secretKinds("ghp_abcdefghijklmnop1234")).toEqual(["token"])
     expect(secretKinds("AKIAABCDEFGHIJKLMNOP")).toEqual(["api key"])
     expect(secretKinds("-----BEGIN RSA PRIVATE KEY-----\nabc\n-----END RSA PRIVATE KEY-----")).toEqual(["private key"])
@@ -362,7 +367,7 @@ describe("the secret-pattern refusal", () => {
   })
 })
 
-/** A reference source that implements the final design: bound cursor, scope, refused, the table's codes. */
+/** A reference source that implements the contract: bound cursor, scope, refused, the table's codes. */
 function finalSource(items: readonly SourceEvent[], options: { readonly codes?: boolean; readonly echo?: boolean; readonly unbound?: boolean; readonly leakSecret?: boolean } = {}) {
   const plugin = "opencode-demo"
   const refuse = (code: string, what: string) => {
@@ -434,7 +439,7 @@ describe("the conformance's opt-in checks", () => {
     expect(await eventsListConformance(finalSource(items), { ...fixtures, kinds: ["meeting"] })).toContainEqual(expect.stringContaining("is a message, which the source does not declare"))
   })
 
-  test("give Memory's kit every call, and add its problems after the walk", async () => {
+  test("give the kit every call, and add its problems after the walk", async () => {
     const calls: ConformanceCall[] = []
     const problems = await eventsListConformance(finalSource(items), {
       ...fixtures,
@@ -446,10 +451,10 @@ describe("the conformance's opt-in checks", () => {
   })
 })
 
-// ── v0.3 (#45) ────────────────────────────────────────────────────────────
+// ── Actors, metadata and facts ────────────────────────────────────────────
 
-/** The hash contract 1 and v0.2 write: the fields in their fixed order, and nothing else. */
-const v02Hash = (e: SourceEvent): string => {
+/** The hash of the base fields only: the fields in their fixed order, and nothing else. */
+const baseHash = (e: SourceEvent): string => {
   const fields = [e.source, e.account, e.external_id, e.kind, e.occurred_at, e.thread, e.actors.map((actor) => [actor.role, actor.id, actor.name ?? null]), e.title, e.text, e.url, e.labels]
   return `sha256:${createHash("sha256").update(JSON.stringify(fields)).digest("hex")}`
 }
@@ -572,7 +577,7 @@ describe("facts[] (#45 §3)", () => {
   const COMMITMENT = { type: "commitment", key: "issue-42", title: "Send the report", owner: "linear:4f1c2e9a-0000-4000-8000-000000000001", due: "2026-11-30", state: "open", url: "https://linear.app/example/issue/EX-1" }
   const withFacts = (facts: unknown) => eventProblems(makeEvent({ source: "demo", account: "work", external_id: "item-1", kind: "issue", occurred_at: T0, actors: ACTORS as never, facts: facts as never }))
 
-  test("the three core fact types, with no plugin-defined type in v0.3", () => {
+  test("the three core fact types, with no plugin-defined type", () => {
     expect(FACT_TYPES).toEqual(["commitment", "person.attribute", "meeting.attended"])
     expect(COMMITMENT_STATES).toEqual(["open", "done", "cancelled"])
     expect(ATTENDANCE_RESPONSES).toEqual(["accepted", "declined", "tentative", "needs_action"])
@@ -614,10 +619,10 @@ describe("facts[] (#45 §3)", () => {
 })
 
 describe("the event hash covers a new field only when it is present (#45 §6)", () => {
-  test("an event without the new fields hashes as contract 1 and v0.2 do", () => {
+  test("an event without optional fields hashes only the base fields", () => {
     for (const index of [0, 1]) {
       const built = event(index)
-      expect(built.hash).toBe(v02Hash(built))
+      expect(built.hash).toBe(baseHash(built))
       expect(Object.hasOwn(built, "audience")).toBe(false)
       expect(eventProblems(built)).toEqual([])
     }

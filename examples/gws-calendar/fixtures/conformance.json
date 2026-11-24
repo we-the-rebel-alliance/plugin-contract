@@ -1,6 +1,6 @@
 {
-  "$comment": "Sanitised from the off-line gws pilot fixture: every address, meeting and id is invented. Recorded as contract-version-1 page results, with page tokens, sync tokens, a 410 and a cancellation. The kit replays each case by its input exactly.",
-  "plugin": "@joe-broadhead/opencode-gws",
+  "$comment": "Sanitised from the off-line gws pilot fixture: every address, meeting and id is invented. Recorded as page results of the contract, with page tokens, sync tokens, a 410 and a cancellation. The kit replays each case by its input exactly.",
+  "plugin": "@we-the-rebel-alliance/gws-plugin",
   "account": "sam.rivera@example.com",
   "tools": [
     {
@@ -34,7 +34,7 @@
           ],
           "answer": {
             "source": "calendar",
-            "plugin": "@joe-broadhead/opencode-gws",
+            "plugin": "@we-the-rebel-alliance/gws-plugin",
             "account": "sam.rivera@example.com",
             "owner": {
               "id": "mailto:sam.rivera@example.com",
@@ -94,7 +94,7 @@
           ],
           "answer": {
             "source": "calendar",
-            "plugin": "@joe-broadhead/opencode-gws",
+            "plugin": "@we-the-rebel-alliance/gws-plugin",
             "account": "sam.rivera@example.com",
             "owner": {
               "id": "mailto:sam.rivera@example.com",
@@ -175,7 +175,7 @@
           ],
           "answer": {
             "source": "calendar",
-            "plugin": "@joe-broadhead/opencode-gws",
+            "plugin": "@we-the-rebel-alliance/gws-plugin",
             "account": "sam.rivera@example.com",
             "owner": {
               "id": "mailto:sam.rivera@example.com",
@@ -239,7 +239,7 @@
           ],
           "answer": {
             "source": "calendar",
-            "plugin": "@joe-broadhead/opencode-gws",
+            "plugin": "@we-the-rebel-alliance/gws-plugin",
             "account": "sam.rivera@example.com",
             "owner": {
               "id": "mailto:sam.rivera@example.com",
@@ -304,7 +304,7 @@
           ],
           "answer": {
             "source": "calendar",
-            "plugin": "@joe-broadhead/opencode-gws",
+            "plugin": "@we-the-rebel-alliance/gws-plugin",
             "account": "sam.rivera@example.com",
             "owner": {
               "id": "mailto:sam.rivera@example.com",
@@ -382,7 +382,7 @@
           ],
           "answer": {
             "source": "calendar",
-            "plugin": "@joe-broadhead/opencode-gws",
+            "plugin": "@we-the-rebel-alliance/gws-plugin",
             "account": "sam.rivera@example.com",
             "owner": {
               "id": "mailto:sam.rivera@example.com",

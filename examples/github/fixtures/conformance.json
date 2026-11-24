@@ -1,6 +1,6 @@
 {
   "$comment": "Sanitised: every handle, id and message is invented. The page's runs assert github_api on the four method-and-path resources, with no account prefix.",
-  "plugin": "@joe-broadhead/opencode-github",
+  "plugin": "@we-the-rebel-alliance/github-plugin",
   "account": "octo@example.test",
   "tools": [
     {
@@ -43,7 +43,7 @@
           ],
           "answer": {
             "source": "github",
-            "plugin": "@joe-broadhead/opencode-github",
+            "plugin": "@we-the-rebel-alliance/github-plugin",
             "account": "octo@example.test",
             "owner": {
               "id": "github:octocat",
@@ -103,7 +103,7 @@
           ],
           "answer": {
             "source": "github",
-            "plugin": "@joe-broadhead/opencode-github",
+            "plugin": "@we-the-rebel-alliance/github-plugin",
             "account": "octo@example.test",
             "owner": {
               "id": "github:octocat",
@@ -167,7 +167,7 @@
           ],
           "answer": {
             "source": "github",
-            "plugin": "@joe-broadhead/opencode-github",
+            "plugin": "@we-the-rebel-alliance/github-plugin",
             "account": "octo@example.test",
             "owner": {
               "id": "github:octocat",

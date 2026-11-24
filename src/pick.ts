@@ -1,17 +1,16 @@
 /**
- * `pick`: the paths a read keeps (design §2.3). Every read can carry it; only those paths are returned, and a key the
- * answer does not have is left out, not an error, because providers leave optional keys out (a Calendar event often
- * has no `location`).
+ * `pick`: the paths a read keeps (contract §7). Every read can carry it; only those paths are returned, and a key the
+ * answer does not have is left out, not an error, because providers leave optional keys out (a Calendar event often has
+ * no `location`).
  *
- * Ported from Artifacts' field picker (`pickFields` and `missingFields`, ADR 0044, in we-the-rebel-alliance/artifacts),
- * with its path grammar and limits, and one addition: `pickProblems` checks the paths against the source's output
- * schema when the binding is made, so a typo fails at consent rather than reading nothing.
+ * `pickProblems` checks the paths against the source's output schema when the binding is made, so a typo fails at
+ * consent rather than reading nothing.
  *
  * A path is dotted segments; a segment ending in `[]` maps over an array: `items[].title`, `items[].attendees[].email`.
  */
-import { isExtensionOutput, outputValidator } from "./registry.ts"
+import { isExtensionOutput, outputValidator } from "./outputs.ts"
 
-/** At most this many paths in one pick (Artifacts' defaults). */
+/** At most this many paths in one pick. */
 export const MAX_PICK_PATHS = 50
 /** Each path is at most this many characters. */
 export const MAX_PICK_PATH_LENGTH = 200

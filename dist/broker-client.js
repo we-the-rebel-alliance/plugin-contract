@@ -1,34 +1,28 @@
-// @we-the-rebel-alliance/source-contract 0.3.0. Built by scripts/build.mjs; do not edit.
+// @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   acceptAnswer,
   checkReadRequest,
   read
-} from "./chunks/chunk-B4V7KCDU.js";
-import "./chunks/chunk-EUDLXWG4.js";
-import "./chunks/chunk-IIUWLSGP.js";
+} from "./chunks/chunk-ICYVSOSD.js";
+import "./chunks/chunk-6WEY3U6L.js";
+import "./chunks/chunk-V4BUIRFD.js";
 import {
   failureFromError
-} from "./chunks/chunk-66HYKMBI.js";
-import "./chunks/chunk-UXBQEPWK.js";
-import "./chunks/chunk-YWD23SKJ.js";
-import "./chunks/chunk-GDBKZBG7.js";
-import "./chunks/chunk-WOH6G62Y.js";
-import "./chunks/chunk-DEXO7HMA.js";
-import "./chunks/chunk-KXQYSM2Z.js";
-import "./chunks/chunk-6ZSJSJMV.js";
-import "./chunks/chunk-LJL3EALP.js";
+} from "./chunks/chunk-P7PJT66U.js";
+import "./chunks/chunk-TYSWMQDX.js";
+import "./chunks/chunk-AFCXCE4V.js";
+import "./chunks/chunk-EMGW7BT2.js";
+import "./chunks/chunk-T2QSLHBQ.js";
+import "./chunks/chunk-2V4VLI45.js";
+import "./chunks/chunk-65FTIXYZ.js";
+import "./chunks/chunk-BQEBNVNU.js";
+import "./chunks/chunk-BMJJJDZ6.js";
 import {
   canonicalScope
-} from "./chunks/chunk-NUBUQFLH.js";
-import "./chunks/chunk-CUITXC5J.js";
+} from "./chunks/chunk-7KJXMIQH.js";
+import "./chunks/chunk-WLRWVIVP.js";
 
 // src/broker-client.ts
-var BROKER_CODE_ALIASES = {
-  NOT_GRANTED: "PERMISSION_DENIED",
-  UNKNOWN_SOURCE: "UNAVAILABLE",
-  INVALID_INPUT: "SCHEMA_VIOLATION",
-  PROVIDER_ERROR: "UNAVAILABLE"
-};
 function brokerRequest(request) {
   const asked = request.scope ?? request.grant.scope;
   const scope = asked === void 0 ? void 0 : canonicalScope(asked);
@@ -71,9 +65,8 @@ function sourceReader(options) {
       }
       if (!isBrokerAnswer(answer) || !answer.offered) return embedded(request);
       if (!answer.ok) {
-        const code = BROKER_CODE_ALIASES[answer.code] ?? answer.code;
         const failure = failureFromError({
-          code,
+          code: answer.code,
           message: answer.message,
           data: { ...answer.next === void 0 ? {} : { next: answer.next }, ...answer.retryAfterSec === void 0 ? {} : { retryAfterSec: answer.retryAfterSec } }
         });
@@ -88,7 +81,6 @@ function sourceReader(options) {
   };
 }
 export {
-  BROKER_CODE_ALIASES,
   brokerRequest,
   isBrokerAnswer,
   sourceReader

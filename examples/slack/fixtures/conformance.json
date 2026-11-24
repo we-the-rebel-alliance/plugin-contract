@@ -1,6 +1,6 @@
 {
-  "$comment": "Sanitised from the off-line Slack pilot fixture: every workspace, person, channel id and message is invented. Recorded as contract-version-1 page results, including a thread, a reply Slack never sent to the channel, instruction-shaped text and a pasted block. The kit replays each case by its input exactly.",
-  "plugin": "@joe-broadhead/opencode-slack",
+  "$comment": "Sanitised from the off-line Slack pilot fixture: every workspace, person, channel id and message is invented. Recorded as page results of the contract, including a thread, a reply Slack never sent to the channel, instruction-shaped text and a pasted block. The kit replays each case by its input exactly.",
+  "plugin": "@we-the-rebel-alliance/slack-plugin",
   "account": "T0PILOT01",
   "tools": [
     {
@@ -52,7 +52,7 @@
           ],
           "answer": {
             "source": "slack",
-            "plugin": "@joe-broadhead/opencode-slack",
+            "plugin": "@we-the-rebel-alliance/slack-plugin",
             "account": "T0PILOT01",
             "owner": {
               "id": "slack:U0PILOTOWN",
@@ -230,7 +230,7 @@
           ],
           "answer": {
             "source": "slack",
-            "plugin": "@joe-broadhead/opencode-slack",
+            "plugin": "@we-the-rebel-alliance/slack-plugin",
             "account": "T0PILOT01",
             "owner": {
               "id": "slack:U0PILOTOWN",
@@ -419,7 +419,7 @@
           ],
           "answer": {
             "source": "slack",
-            "plugin": "@joe-broadhead/opencode-slack",
+            "plugin": "@we-the-rebel-alliance/slack-plugin",
             "account": "T0PILOT01",
             "owner": {
               "id": "slack:U0PILOTOWN",
@@ -456,7 +456,7 @@
           ],
           "answer": {
             "source": "slack",
-            "plugin": "@joe-broadhead/opencode-slack",
+            "plugin": "@we-the-rebel-alliance/slack-plugin",
             "account": "T0PILOT01",
             "owner": {
               "id": "slack:U0PILOTOWN",
@@ -638,7 +638,7 @@
           ],
           "answer": {
             "source": "slack",
-            "plugin": "@joe-broadhead/opencode-slack",
+            "plugin": "@we-the-rebel-alliance/slack-plugin",
             "account": "T0PILOT01",
             "owner": {
               "id": "slack:U0PILOTOWN",
@@ -864,7 +864,7 @@
           ],
           "answer": {
             "source": "slack",
-            "plugin": "@joe-broadhead/opencode-slack",
+            "plugin": "@we-the-rebel-alliance/slack-plugin",
             "account": "T0PILOT01",
             "owner": {
               "id": "slack:U0PILOTOWN",

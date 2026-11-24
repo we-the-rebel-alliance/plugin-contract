@@ -4,10 +4,10 @@
 //   node scripts/release.mjs --dry-run  (CI: the same files for the version in package.json, without a tag)
 //
 // The files:
-// - source-contract-<version>.tgz: the package as `npm pack` makes it (dist/, LICENSE, README.md);
-// - source-contract-conformance-<version>.mjs: the conformance kit as one ES module with nothing to install, so a
+// - plugin-contract-<version>.tgz: the package as `npm pack` makes it (dist/, LICENSE, README.md);
+// - plugin-contract-conformance-<version>.mjs: the conformance kit as one ES module with nothing to install, so a
 //   plugin's CI can run it from the Release;
-// - source-contract-schemas-<version>.json: every JSON Schema the package publishes, in one file;
+// - plugin-contract-schemas-<version>.json: every JSON Schema the package publishes, in one file;
 // - SHA256SUMS: the SHA-256 of each, as `sha256sum -c` reads it.
 import { execFileSync } from "node:child_process"
 import { createHash } from "node:crypto"
@@ -39,7 +39,7 @@ if (problems.length > 0) {
 
 rmSync(out, { recursive: true, force: true })
 mkdirSync(out, { recursive: true })
-const base = "source-contract"
+const base = "plugin-contract"
 
 // The package, as npm packs it.
 const packed = JSON.parse(execFileSync("npm", ["pack", "--json", "--pack-destination", out], { cwd: root, encoding: "utf8" }))[0]
@@ -71,7 +71,7 @@ const schemas = Object.fromEntries(
 )
 writeFileSync(
   join(out, `${base}-schemas-${pkg.version}.json`),
-  `${JSON.stringify({ package: pkg.name, version: pkg.version, contractVersion: index.CONTRACT_VERSION, schemas }, null, 2)}\n`,
+  `${JSON.stringify({ package: pkg.name, version: pkg.version, manifestVersion: index.CONTRACT_VERSION, schemas }, null, 2)}\n`,
 )
 
 // The sums, last.

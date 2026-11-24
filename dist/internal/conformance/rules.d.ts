@@ -42,14 +42,14 @@ export declare function tokensOf(name: unknown): string[];
  * Why a name is not a read's, or undefined when it is one.
  *
  * 1. `and`/`then` followed by a verb makes a compound, and is refused.
- * 2. An unambiguous write verb anywhere in the name is refused (Memory's promise).
+ * 2. An unambiguous write verb anywhere in the name is refused (the contract's promise).
  * 3. The name's first token is where its verb sits. A read verb there makes it a read; a noun-verb there is a write
  *    (`post_message`); a plain noun is a namespace or a noun name, and then the next token is the verb's position, so
  *    `slack_post_message` is refused while `events_list` and `slack_read_channel` are reads and `calendar_today` names
  *    no action at all.
  */
 export declare function nameProblem(name: unknown): string | undefined;
-/** `nameProblem`, and the name must carry a read verb. Memory's stricter form, for a read a consumer names. */
+/** `nameProblem`, and the name must carry a read verb: the stricter form, for a read a consumer names. */
 export declare function readVerbProblem(name: unknown): string | undefined;
 /**
  * Why an operation is not a read's, or undefined when it is one.
@@ -63,7 +63,7 @@ export declare function readVerbProblem(name: unknown): string | undefined;
 export declare function operationProblem(operation: unknown): string | undefined;
 /** The most bytes an inline `outputSchema` may take, measured as compact JSON. */
 export declare const MAX_OUTPUT_SCHEMA_BYTES = 32768;
-/** Every field of a contract-1 event. */
+/** Every field of an event. */
 export declare const EVENT_FIELDS: readonly string[];
 /** The event fields a `details` entry may take its input from: identifiers, never an event's own prose. */
 export declare const DETAIL_FIELDS: readonly string[];

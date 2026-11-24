@@ -62,13 +62,13 @@ describe("readInstalledDescriptor", () => {
 
   test("finds a package installed above a directory, as Node would", () => {
     const project = join(scratch, "project")
-    const target = join(project, "node_modules", "@joe-broadhead", "opencode-gws")
+    const target = join(project, "node_modules", "@we-the-rebel-alliance", "gws-plugin")
     mkdirSync(target, { recursive: true })
     cpSync(join(examples, "gws", "package.json"), join(target, "package.json"))
     const deep = join(project, "src", "deep")
     mkdirSync(deep, { recursive: true })
-    assert.equal(findInstalledPackage("@joe-broadhead/opencode-gws", deep), target)
-    assert.equal(findInstalledPackage("@joe-broadhead/opencode-none", deep), undefined)
+    assert.equal(findInstalledPackage("@we-the-rebel-alliance/gws-plugin", deep), target)
+    assert.equal(findInstalledPackage("@we-the-rebel-alliance/none-plugin", deep), undefined)
     assert.equal(findInstalledPackage("../escape", deep), undefined)
   })
 })
@@ -148,7 +148,7 @@ describe("the frame", () => {
     assert.match(problemsOf(mixed).join("\n"), /sources\.items\[1\]\.service\.label: is "Calendar", .*"gws\.google" says "Gmail"/)
   })
 
-  test("runs Memory's schema first, which refuses a key it does not define", () => {
+  test("runs the schema first, which refuses a key it does not define", () => {
     assert.match(problemsOf(withItem((item) => (item.title = "Gmail"))).join("\n"), /Unrecognized key: "title"/)
   })
 })

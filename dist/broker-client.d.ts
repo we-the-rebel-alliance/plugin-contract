@@ -6,7 +6,7 @@ export interface BrokerRequest {
     readonly version: string;
     /** The descriptor hash the consumer consented under; a broker whose own copy differs refuses with PERMISSION_DENIED. */
     readonly descriptorHash: string;
-    /** Who reads, such as `memory`: for the broker's grant check and its audit line. */
+    /** Who reads, such as `notes`: for the broker's grant check and its audit line. */
     readonly consumer: string;
     readonly source: string;
     readonly account?: string;
@@ -50,11 +50,6 @@ export type ReaderOutcome = ReadOutcome & {
 export interface SourceReader {
     read(request: ReadRequest): Promise<ReaderOutcome>;
 }
-/**
- * Codes a host may send before it takes the package's error table, read as the table's. The table's own codes pass
- * through unchanged.
- */
-export declare const BROKER_CODE_ALIASES: Readonly<Record<string, string>>;
 /** The request a broker receives for a consumer's read: references to the installed package, never its descriptor or the grant. */
 export declare function brokerRequest(request: ReadRequest): BrokerRequest;
 /** True when `answer` has a broker answer's shape. */

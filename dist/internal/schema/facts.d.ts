@@ -25,5 +25,5 @@ export declare const FACT_SCHEMAS: {
         organizer: boolean;
     }>;
 };
-/** The schema of a core fact type, or undefined for a type v0.3 does not have. */
+/** The schema of a core fact type, or undefined for a type the contract does not have. */
 export declare function factSchema(type: string): Validator<unknown> | undefined;

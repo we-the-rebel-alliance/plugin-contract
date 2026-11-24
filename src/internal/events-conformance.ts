@@ -1,11 +1,10 @@
 /**
- * `eventsListConformance`: the events half of the conformance kit (design §3, `conformance`; the family owns this part,
- * Memory owns the kit around it).
+ * `eventsListConformance`: the events half of the conformance kit (contract §7 and §16).
  *
- * With contract 1's fixtures it runs contract 1's checks, unchanged, so each of the nine plugins' existing tests
- * passes as it is. Each addition of the final design is checked when the page carries it (`resultProblems` checks
- * `refused`, `failed`, `gap`, `cost`, `scope`, `plugin` and `asOf` whenever present) and, where a check needs to know
- * something about the source, when the fixture says so:
+ * With a recorded fixture it walks a source's `events_list` whole and page by page, and checks every result against
+ * `resultProblems`. Each optional part of the page is checked when the page carries it (`refused`, `failed`, `gap`,
+ * `removals`, `cost`, `scope` and `asOf`), and, where a check needs to know something about the source, when the
+ * fixture says so:
  *
  * - `maxBytes`: every page within the source's declared `maxBytes`;
  * - `kinds`: every event of a kind the source declares (`reads`);
@@ -14,14 +13,14 @@
  * - `binding`: the cursor is the library's bound cursor, and the same state bound to another plugin, account or scope
  *   is refused;
  * - `codes`: every refusal carries the table's code (`CURSOR_INVALID`, `INPUT_INVALID`, `SOURCE_UNKNOWN`);
- * - and always: no secret pattern survives in an event's title or text (the draft's conformance check 3).
+ * - and always: no secret pattern survives in an event's title or text.
  *
- * **The seam for Memory's kit.** `hooks.onCall` sees every call and its answer (Memory's recording permission context
- * records the assertions here), and `hooks.after` adds the problems of the checks Memory owns: `probe` reads no
+ * **The seam for a consumer's kit.** `hooks.onCall` sees every call and its answer (a recording permission context
+ * records the assertions here), and `hooks.after` adds the problems of the checks the consumer owns: `probe` reads no
  * content, `details` only with in-scope event fields, `failed[]` holds the cursor, and `gap` and `CURSOR_EXPIRED`
  * round-trip. This module does not implement those; it gives them every page the walk listed.
  */
-import { decodeBoundCursor, encodeBoundCursor, encodeCursor, type CursorBinding, type Scope } from "../cursor.ts"
+import { decodeBoundCursor, encodeBoundCursor, type CursorBinding, type Scope } from "../cursor.ts"
 import {
   isEventKindIn,
   MAX_PAGE_BYTES,
@@ -44,7 +43,7 @@ export interface ConformanceCall {
   readonly error?: unknown
 }
 
-/** Where Memory's kit plugs in (see the module's comment). */
+/** Where a consumer's kit plugs in (see the module's comment). */
 export interface ConformanceHooks {
   readonly onCall?: (call: ConformanceCall) => void
   readonly after?: (walk: { readonly whole?: EventsListResult; readonly pages: readonly EventsListResult[] }) => readonly string[] | Promise<readonly string[]>
@@ -74,8 +73,8 @@ export interface ConformanceFixtures {
   /** The kinds the source declares (`reads`): every event is one of them. */
   readonly kinds?: readonly string[]
   /**
-   * The source id's first segment (`jelly` for `jelly.routine-runs`): every `x-` kind must be in it (decision D13).
-   * Without it, any well-formed `x-<namespace>/<kind>` passes.
+   * The source id's first segment (`acme` for `acme.reminders`): every `x-` kind must be in it. Without it, any
+   * well-formed `x-<namespace>/<kind>` passes.
    */
   readonly namespace?: string
   /** The external_ids a full listing from `since` refuses, in order. */
@@ -231,7 +230,7 @@ export async function eventsListConformance(list: EventsList, fixtures: Conforma
   await refused({ ...base, limit: PAGE.max + 1 }, `a limit of ${PAGE.max + 1}`, INPUT)
   await refused({ ...base, limit: 0 }, "a limit of 0", INPUT)
   await refused({ ...after("not-a-cursor"), limit: pageSize }, "a malformed cursor", CURSOR)
-  await refused({ ...after(encodeCursor(`${fixtures.source}-other`, {})), limit: pageSize }, "another source's cursor", CURSOR)
+  await refused({ ...after(encodeBoundCursor({ plugin: "conformance", source: `${fixtures.source}-other`, account: fixtures.account ?? "default" }, {})), limit: pageSize }, "another source's cursor", CURSOR)
   await refused({ ...base, source: `${fixtures.source}-other`, limit: pageSize }, "a source the plugin does not have", ["SOURCE_UNKNOWN", "INPUT_INVALID"])
 
   // The bound cursor: the source's cursor is the library's, bound to (plugin, source, account, scope), and the same

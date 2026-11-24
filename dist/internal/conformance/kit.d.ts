@@ -115,14 +115,13 @@ export interface SourceConformanceOptions {
      */
     readonly machineActors?: readonly string[] | undefined;
     /**
-     * A hint or routine file's text, from the plugin's own package, by the path its descriptor declares (#45 §4, §5):
+     * A hint file's text, from the plugin's own package, by the path its manifest declares:
      * `(path) => readFileSync(join(here, path), "utf8")`. Undefined when the package holds no such file. Without it, the
-     * `hints` and `routines` checks cannot run, and a source that declares a file is not ok.
+     * `hints` check cannot run, and a source that declares a file is not ok.
      */
     readonly files?: ((path: string) => string | undefined) | undefined;
     /**
-     * Every source id the plugin declares, for the own-source rule of a hint and a routine (#45 §4, §5). Default: the
-     * source under test.
+     * Every source id the plugin declares, for the own-source rule of a hint. Default: the source under test.
      */
     readonly ownSources?: readonly string[] | undefined;
 }

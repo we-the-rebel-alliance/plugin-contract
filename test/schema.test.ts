@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 import { factProblems } from "../src/events.ts"
-import { HINT_SCHEMA, ROUTINE_SCHEMA } from "../src/hints.ts"
+import { HINT_SCHEMA } from "../src/hints.ts"
 import { SCHEMAS } from "../src/schemas.ts"
 import { FACT_SCHEMAS, MAX_BYTES_DEFAULT, MAX_BYTES_LIMIT, SOURCES_SCHEMA } from "../src/schema.ts"
 
@@ -197,9 +197,9 @@ describe("the sources schema", () => {
   })
 })
 
-describe("a source that declares facts, hints and routines (#45)", () => {
+describe("a source that declares facts and hints", () => {
   const facts = (value: unknown): readonly string[] => problemsOf(declaration(eventItem({ facts: value })))
-  const files = (key: "hints" | "routines", value: unknown): readonly string[] => problemsOf(declaration(eventItem({ [key]: value })))
+  const files = (value: unknown): readonly string[] => problemsOf(declaration(eventItem({ hints: value })))
 
   test("facts are declared by type, from the three core types, on an events source only", () => {
     assert.deepEqual(facts(["commitment"]), [])
@@ -210,16 +210,14 @@ describe("a source that declares facts, hints and routines (#45)", () => {
     assert.ok(problemsOf(declaration(snapshotItem({ facts: ["commitment"] }))).length > 0)
   })
 
-  test("hint and routine paths are relative Markdown files", () => {
-    assert.deepEqual(files("hints", ["hints/mail.md"]), [])
-    assert.deepEqual(files("routines", ["routines/meeting-actions.md"]), [])
+  test("hint paths are relative Markdown files", () => {
+    assert.deepEqual(files(["hints/mail.md"]), [])
     for (const refused of ["hints/mail.txt", "/hints/mail.md", "../mail.md", "hints/../mail.md", "", "hints\\mail.md"]) {
-      assert.ok(files("hints", [refused]).length > 0, `${refused} must be refused`)
-      assert.ok(files("routines", [refused]).length > 0, `${refused} must be refused`)
+      assert.ok(files([refused]).length > 0, `${refused} must be refused`)
     }
-    assert.ok(files("hints", "hints/mail.md").length > 0)
-    assert.ok(files("hints", []).length > 0)
-    assert.ok(files("hints", [`hints/${"a".repeat(200)}.md`]).length > 0)
+    assert.ok(files("hints/mail.md").length > 0)
+    assert.ok(files([]).length > 0)
+    assert.ok(files([`hints/${"a".repeat(200)}.md`]).length > 0)
   })
 
   test("nothing else changes: an item without them still validates, and an unknown key is still refused", () => {
@@ -235,14 +233,14 @@ describe("a source that declares facts, hints and routines (#45)", () => {
     assert.ok(events !== undefined && snapshot !== undefined)
     assert.deepEqual(events["properties"]["facts"]["items"]["enum"], ["commitment", "person.attribute", "meeting.attended"])
     assert.equal(events["properties"]["hints"]["items"]["type"], "string")
-    assert.equal(events["properties"]["routines"]["items"]["type"], "string")
-    // A snapshot carries hints and routines, and no facts: a snapshot has no events to derive one from.
+    assert.equal(events["properties"]["routines"], undefined)
+    // A snapshot carries hints, and no facts: a snapshot has no events to derive one from.
     assert.deepEqual(snapshot["properties"]["facts"], { not: {} })
     assert.equal(snapshot["properties"]["hints"]["items"]["type"], "string")
   })
 })
 
-describe("a source that declares its service (#44 item 1)", () => {
+describe("a source that declares its service", () => {
   const gmail = { id: "gws.gmail", label: "Gmail" }
   const service = (value: unknown): readonly string[] => problemsOf(declaration(eventItem({ service: value })))
 
@@ -291,10 +289,10 @@ describe("a source that declares its service (#44 item 1)", () => {
   })
 })
 
-describe("the v0.3 schemas (#45 §8)", () => {
+describe("the published schemas", () => {
   test("every new schema is published, by the name its file takes", () => {
     const names = SCHEMAS.map((schema) => schema.name)
-    for (const name of ["fact.commitment", "fact.person.attribute", "fact.meeting.attended", "hint", "routine"]) {
+    for (const name of ["fact.commitment", "fact.person.attribute", "fact.meeting.attended", "hint"]) {
       assert.ok(names.includes(name), `${name} is not one of the published schemas`)
     }
   })
@@ -329,10 +327,9 @@ describe("the v0.3 schemas (#45 §8)", () => {
     assert.equal(FACT_SCHEMAS["commitment"]!.check({ type: "commitment", key: "k", title: "t", owner: "slack:nobody", state: "open" }).ok, true)
   })
 
-  test("the hint and routine schemas are the ones a file is checked with", () => {
+  test("the hint schema is the one a file is checked with", () => {
     assert.equal(HINT_SCHEMA.name, "hint")
-    assert.equal(ROUTINE_SCHEMA.name, "routine")
     assert.equal(HINT_SCHEMA.check({ source: "granola.meetings", kinds: ["meeting"] }).ok, true)
-    assert.equal(ROUTINE_SCHEMA.check({ id: "a", title: "b", reads: { sources: ["granola.meetings"], kinds: ["meeting"] }, produces: [] }).ok, false)
+    assert.equal(HINT_SCHEMA.check({ source: "granola.meetings", kinds: ["meeting"], produces: [] }).ok, false)
   })
 })

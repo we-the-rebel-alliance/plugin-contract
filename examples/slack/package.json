@@ -1,9 +1,9 @@
 {
-  "name": "@joe-broadhead/opencode-slack",
+  "name": "@we-the-rebel-alliance/slack-plugin",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Example: the Slack plugin's workspace source as contract version 1 declares it. Every person, id and message is invented.",
+  "description": "Example: the Slack plugin's workspace source as the contract declares it. Every person, id and message is invented.",
   "sources": {
     "contractVersion": 1,
     "items": [

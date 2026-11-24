@@ -1,5 +1,5 @@
 /**
- * The §2.2 `sources` descriptor, written in zod. zod stays inside the package: `src/schema.ts` exports the validator,
+ * The `sources` manifest block, written in zod. zod stays inside the package: `src/schema.ts` exports the validator,
  * never this schema.
  *
  * The shapes and the cross-field rules are both here, so the generated JSON Schema (`dist/schemas/sources.json`)
@@ -36,7 +36,7 @@ const isOutputName = (name: string): boolean => REGISTRY_NAME.test(name) || isEv
 const PRICE_PER = /^[a-z][a-z0-9-]{0,31}$/
 /** An exact host, or `*.` and a registrable domain. */
 const HOST = /^(?:\*\.)?[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/
-/** A file a plugin ships beside its sources: a relative, lowercase path ending in `.md` (#45 §4, §5). */
+/** A file a plugin ships beside its sources: a relative, lowercase path ending in `.md`. */
 const FILE_PATH = /^[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)*\.md$/
 
 /** A file a source declares: a path inside the installed package, such as `hints/mail.md`. */
@@ -99,7 +99,7 @@ const accounts = z
       .regex(ACCOUNT_SERVER, { error: "must be lowercase words holding {account} once, such as plaud-{account}" })
       .optional()
       .describe(
-        "For a plugin with one MCP server per account (#30, item 9): the server a named account's MCP tools live on, with {account} for the account, such as plaud-{account}. A bare operation is then <server>_<operation> for an account other than default; the default account keeps the namespace.",
+        "For a plugin with one MCP server per account: the server a named account's MCP tools live on, with {account} for the account, such as plaud-{account}. A bare operation is then <server>_<operation> for an account other than default; the default account keeps the namespace.",
       ),
   })
   .strict()
@@ -142,7 +142,7 @@ const permissionBase = {
     .array(z.string().max(200).regex(OPERATION, { error: "must be a provider operation or an MCP tool name" }))
     .optional()
     .describe(
-      "The identity operations probe asserts for this source (#4, #8); each is among permission.operations, and no content read asserts it. Empty when the probe asserts only sources.probe.action; absent when the source does not declare it, so a consumer uses its fallback.",
+      "The identity operations probe asserts for this source; each is among permission.operations, and no content read asserts it. Empty when the probe asserts only sources.probe.action; absent when the source does not declare it, so a consumer uses its fallback.",
     ),
   /**
    * True when the source's content reads legitimately assert an identity operation, such as reading mentions needing
@@ -152,7 +152,7 @@ const permissionBase = {
   readsIdentity: z
     .boolean()
     .optional()
-    .describe("True when the source's content reads assert an identity operation (#30, item 4); every identity operation is still declared."),
+    .describe("True when the source's content reads assert an identity operation; every identity operation is still declared."),
   operations: z
     .array(z.string().max(200).regex(OPERATION, { error: "must be a provider operation or an MCP tool name" }))
     .min(1)
@@ -181,7 +181,7 @@ const permissionBase = {
     )
     .optional()
     .describe(
-      "For a rules source: the grants probe asserts for this source, verbatim, each among permission.rules (#30, item 10). Empty when the probe asserts only sources.probe.action; absent when undeclared. A rules source's equivalent of identity.",
+      "For a rules source: the grants probe asserts for this source, verbatim, each among permission.rules. Empty when the probe asserts only sources.probe.action; absent when undeclared. A rules source's equivalent of identity.",
     ),
 }
 
@@ -245,7 +245,7 @@ const service = z
   })
   .strict()
   .describe(
-    "The outside system this source belongs to (#44 item 1), such as Gmail or Calendar. Absent: the plugin is one service, named after the plugin. It is part of the descriptor, so moving a source to another service changes the hash.",
+    "The outside system this source belongs to, such as Gmail or Calendar. Absent: the plugin is one service, named after the plugin. It is part of the manifest, so moving a source to another service changes the hash.",
   )
 
 const common = {
@@ -284,18 +284,13 @@ const events = z
       .min(1, "must name at least one fact type")
       .optional()
       .describe(
-        "The fact types this source's events carry (#45 §3), each a core type. An event may carry a fact of a declared type and of no other; Memory stamps the installed package's version on each fact it files.",
+        "The fact types this source's events carry, each a core type. An event may carry a fact of a declared type and of no other.",
       ),
     hints: z
       .array(filePath)
       .min(1, "must name at least one hint file")
       .optional()
-      .describe("The hint files the package ships for this source (#45 §4): how to read one kind of item, at most 1,500 characters each."),
-    routines: z
-      .array(filePath)
-      .min(1, "must name at least one routine file")
-      .optional()
-      .describe("The routine files the package ships for this source (#45 §5). Memory's first engine runs only its own core routines, so a plugin ships one only later."),
+      .describe("The hint files the package ships for this source: how to read one kind of item, at most 1,500 characters each."),
     permission: permissionEvents,
     output: z.never({ error: "an events source has no output: output belongs to a snapshot" }).optional(),
     maxAgeSec: z.never({ error: "an events source has no maxAgeSec: a snapshot may be reused, an events page is read once" }).optional(),
@@ -322,12 +317,7 @@ const snapshot = z
       .array(filePath)
       .min(1, "must name at least one hint file")
       .optional()
-      .describe("The hint files the package ships for this source (#45 §4): how to read one kind of item, at most 1,500 characters each."),
-    routines: z
-      .array(filePath)
-      .min(1, "must name at least one routine file")
-      .optional()
-      .describe("The routine files the package ships for this source (#45 §5). Memory's first engine runs only its own core routines, so a plugin ships one only later."),
+      .describe("The hint files the package ships for this source: how to read one kind of item, at most 1,500 characters each."),
     permission: permissionTool,
     maxAgeSec: z.int().min(1).optional().describe("How long a result may be reused before it is read again."),
     facts: z.never({ error: "a snapshot has no facts: a fact is derived from an event's provider fields" }).optional(),
@@ -398,7 +388,7 @@ const act = z
     }
   })
 
-/** The `sources` key of a plugin's package.json, contract version 1. */
+/** The `sources` key of a plugin's package.json, wire version 1. */
 export const sourcesSchema = z
   .object({
     contractVersion: z.literal(1),
@@ -407,22 +397,22 @@ export const sourcesSchema = z
       .max(200)
       .refine(isToolsRpcId, { error: "must be a tools-RPC id: the plugin id and .tools, such as google-workspace.gws.tools" })
       .optional()
-      .describe("The plugin's tools-RPC id (#4, #8), which a consumer calls instead of mapping the package."),
+      .describe("The plugin's tools-RPC id, which a consumer calls instead of mapping the package."),
     probe: z
       .object({ action: z.string().max(80).regex(ACTION, { error: "must be a dotted action such as gws.probe" }) })
       .strict()
       .optional()
-      .describe("The plugin's one probe tool, and the permission action it asserts (#4, #8)."),
+      .describe("The plugin's one probe tool, and the permission action it asserts."),
     items: z.array(source).min(1).describe("The plugin's sources. A source id is unique across the declaration."),
     acts: z
       .array(act)
       .min(1, "must name at least one act, or be left out")
       .optional()
-      .describe("The plugin's acts, beside its sources in the same descriptor. Absent when the plugin declares no write. Additive: an older consumer refuses the key."),
+      .describe("The plugin's acts, beside its sources in the same manifest. Absent when the plugin declares no write."),
   })
   .strict()
   .superRefine((value, ctx) => {
-    // One label per service id (#44 item 1): a person turns a service on or off by the one name they see.
+    // One label per service id: a person turns a service on or off by the one name they see.
     const labels = new Map<string, string>()
     for (const [index, item] of value.items.entries()) {
       if (item.service === undefined) continue

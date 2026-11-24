@@ -1,6 +1,6 @@
 {
-  "$comment": "Sanitised from the off-line gws pilot fixture: every address, message and id is invented. Recorded as contract-version-1 page results. The kit replays each case by its input exactly.",
-  "plugin": "@joe-broadhead/opencode-gws",
+  "$comment": "Sanitised from the off-line gws pilot fixture: every address, message and id is invented. Recorded as page results of the contract. The kit replays each case by its input exactly.",
+  "plugin": "@we-the-rebel-alliance/gws-plugin",
   "account": "sam.rivera@example.com",
   "tools": [
     {
@@ -43,7 +43,7 @@
           ],
           "answer": {
             "source": "gmail",
-            "plugin": "@joe-broadhead/opencode-gws",
+            "plugin": "@we-the-rebel-alliance/gws-plugin",
             "account": "sam.rivera@example.com",
             "owner": {
               "id": "mailto:sam.rivera@example.com",
@@ -187,7 +187,7 @@
           ],
           "answer": {
             "source": "gmail",
-            "plugin": "@joe-broadhead/opencode-gws",
+            "plugin": "@we-the-rebel-alliance/gws-plugin",
             "account": "sam.rivera@example.com",
             "owner": {
               "id": "mailto:sam.rivera@example.com",
@@ -331,7 +331,7 @@
           ],
           "answer": {
             "source": "gmail",
-            "plugin": "@joe-broadhead/opencode-gws",
+            "plugin": "@we-the-rebel-alliance/gws-plugin",
             "account": "sam.rivera@example.com",
             "owner": {
               "id": "mailto:sam.rivera@example.com",
@@ -483,7 +483,7 @@
           ],
           "answer": {
             "source": "gmail",
-            "plugin": "@joe-broadhead/opencode-gws",
+            "plugin": "@we-the-rebel-alliance/gws-plugin",
             "account": "sam.rivera@example.com",
             "owner": {
               "id": "mailto:sam.rivera@example.com",

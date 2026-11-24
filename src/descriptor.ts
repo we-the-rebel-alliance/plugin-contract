@@ -6,7 +6,7 @@
  *   const installed = readInstalledDescriptor("/path/to/node_modules/@scope/plugin", { version: "1.2.3" })
  *   if (installed.ok) installed.value.hash   // "sha256:…": a grant stores it; a changed descriptor asks again
  *
- * Validation is Memory's descriptor schema (`schema`, `SOURCES_SCHEMA`) first, then this library's frame, which adds
+ * Validation is the descriptor schema (`schema`, `SOURCES_SCHEMA`) first, then this library's frame, which adds
  * what only the package can check: a snapshot's `output` is a registered schema. The rules a JSON Schema cannot
  * express (verbs, namespaces, `urlHosts`) are the conformance kit's, which a plugin runs in its own CI.
  */
@@ -19,20 +19,20 @@ import type { Checked } from "./internal/checked.ts"
 import { EVENT_KINDS, isEventKind, MAX_BYTES } from "./internal/events.ts"
 import { problemsOf } from "./internal/validator.ts"
 import type { ParamSpec } from "./params.ts"
-import { isExtensionOutput, isOutputName, OUTPUT_NAMES } from "./registry.ts"
+import { isExtensionOutput, isOutputName, OUTPUT_NAMES } from "./outputs.ts"
 import { SOURCES_SCHEMA } from "./schema.ts"
 
 /** The most bytes a source may declare for one answer (1 MB), and the default when it declares none (64 KB): `events`' `MAX_BYTES`. */
 export const MAX_BYTES_LIMIT: number = MAX_BYTES.max
 export const DEFAULT_MAX_BYTES: number = MAX_BYTES.default
 
-/** Who may be asked, and how (design §2.2 `permission`): Memory's schema type, so there is one definition (#30, item 8). */
+/** Who may be asked, and how: the schema's type, so there is one definition. */
 export type SourcePermission = Permission
 
-/** A detail read, a declared read per event whose inputs come only from the event's own fields: Memory's schema type (#30, item 8). */
+/** A detail read, a declared read per event whose inputs come only from the event's own fields: the schema's type. */
 export type SourceDetail = Detail
 
-/** One source a plugin declares: Memory's schema type, the one `SourceItem` the package exports (#30, item 8). */
+/** One source a plugin declares: the schema's type, the one `SourceItem` the package exports. */
 export type { ActItem, SourceItem } from "./internal/schema/types.ts"
 import type { ActItem, Detail, Permission, SourceItem } from "./internal/schema/types.ts"
 
@@ -64,7 +64,7 @@ const SOURCE_ID = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)+$/
 const METHOD = /^[A-Za-z0-9_.-]{1,100}$/
 const ACTION = /^[A-Za-z0-9_.-]{1,200}$/
 const OPERATION = /^[A-Za-z0-9_.-]{1,200}$/
-/** The event fields a detail read may take its input from (Memory's schema): identifiers and metadata, never `title` or `text`. */
+/** The event fields a detail read may take its input from: identifiers and metadata, never `title` or `text`. */
 export const DETAIL_FIELDS = ["external_id", "kind", "occurred_at", "url", "thread", "actors", "labels", "hash"] as const
 
 const action = z.string().regex(ACTION, "must be a permission action, such as gws.events_list")
@@ -77,8 +77,8 @@ const item = z
     kind: z.enum(["events", "snapshot"]),
     tool: z.string().regex(METHOD, "must be a tools-RPC method name"),
     input: z.record(z.string(), z.unknown()).optional(),
-    // PROVISIONAL (app#2346 decisions D13 and D15, PR #7): one event kind, core or x-<plugin>/<kind>. Whether `reads`
-    // takes a list, and whether an extension's <plugin> must match the descriptor's, are not agreed yet.
+    // PROVISIONAL (D13 and D15, open): one event kind, core or x-<plugin>/<kind>. Whether `reads` takes a list, and
+    // whether an extension's <plugin> must match the plugin's own name, are not agreed yet.
     reads: z.string().refine(isEventKind, `must be an event kind: ${EVENT_KINDS.join(", ")}, or x-<plugin>/<kind>`).optional(),
     output: z.string().optional(),
     params: z.record(z.string(), z.looseObject({ relative: z.boolean().optional(), me: z.boolean().optional() })).optional(),
@@ -152,7 +152,7 @@ const sources = z
     }
   })
 
-/** The `sources` value checked against Memory's schema, then the frame; its problems, one sentence each, when it breaks them. */
+/** The `sources` value checked against the schema, then the frame; its problems, one sentence each, when it breaks them. */
 export function checkSources(value: unknown): Checked<SourcesDescriptor> {
   const schema = SOURCES_SCHEMA.check(value)
   if (!schema.ok) return { ok: false, problems: schema.problems.map((problem) => `sources.${problem}`.replace("sources.the value", "sources")) }

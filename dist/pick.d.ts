@@ -1,4 +1,4 @@
-/** At most this many paths in one pick (Artifacts' defaults). */
+/** At most this many paths in one pick. */
 export declare const MAX_PICK_PATHS = 50;
 /** Each path is at most this many characters. */
 export declare const MAX_PICK_PATH_LENGTH = 200;

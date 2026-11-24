@@ -1,19 +1,13 @@
 /**
- * `events`: the events_list source contract, as a library (design §2.1 and §2.3).
+ * `events`: the source feed model and its page, as a library (contract §7).
  *
  *   events_list({ source?, account?, scope?, cursor?, since?, limit? })
  *     → { source, account, owner, events, cursor, more, trust: "untrusted",
- *         scope?, refused?, failed?, gap?, cost?, plugin?, asOf? }
- *
- * This is contract 1, the family's `src/host/events-list.ts` (identical in github, granola, gws, history, linear,
- * plaud, slack, wisprflow and x; SHA-256 9d72fc8d…605e), extracted as a module, with the final design's page result
- * added **additively**: every field and kind contract 1 defines keeps its meaning, every contract 1 page is a valid
- * page here, and each addition is optional. `docs/events.md` maps each addition to the design and lists what still needs
- * a decision.
+ *         scope?, refused?, failed?, removals?, gap?, cost?, plugin?, asOf? }
  *
  * A source plugin adds one read-only tool and tools-RPC method named `events_list`. It never writes, never asks and
  * never calls a model, so a scheduled check can run it with no one there. The rules, which `eventsListConformance`
- * (`./conformance.ts`) tests against any source:
+ * (`./events-conformance.ts`) tests against any source:
  *
  * - **Input.** `since` is an ISO date (a UTC day) or an ISO date-time with `Z` or an offset. `cursor` is a string a
  *   previous result of the same source and account returned. `limit` is an integer from 1 to 500, 100 by default.
@@ -44,19 +38,16 @@ import { createHash } from "node:crypto"
 import { canonicalScope, MAX_CURSOR_LENGTH, type Scope } from "../cursor.ts"
 import { secretKinds } from "./secrets.ts"
 
-export { decodeCursor, encodeCursor } from "../cursor.ts"
 export type { Scope } from "../cursor.ts"
 export { secretKinds } from "./secrets.ts"
-
-
 
 /** The tool's and the tools-RPC method's name. */
 export const EVENTS_LIST = "events_list"
 
-/** The core kinds: contract 1's nine, then `task` and `file` (design §2.1). */
+/** The core kinds of an event (contract §7). */
 export const EVENT_KINDS = ["message", "meeting", "session", "bookmark", "issue", "pr", "commit", "doc", "event", "task", "file"] as const
 export type CoreKind = (typeof EVENT_KINDS)[number]
-/** A plugin's own kind: `x-<plugin>/<kind>`, such as `x-jelly/routine-run`. */
+/** A plugin's own kind: `x-<plugin>/<kind>`, such as `x-acme/reminder`. */
 export type ExtensionKind = `x-${string}/${string}`
 export type EventKind = CoreKind | ExtensionKind
 
@@ -64,9 +55,9 @@ export type EventKind = CoreKind | ExtensionKind
 export const EXTENSION_SEGMENT_MAX = 32
 
 /**
- * The one rule for an extension name, an event kind (`x-jelly/routine-run`) or a snapshot output (`x-mem/receipt`):
+ * The one rule for an extension name, an event kind (`x-acme/reminder`) or a snapshot output (`x-acme/receipt`):
  * `x-`, a lowercase namespace word, `/`, a lowercase name word, each of 1 to `EXTENSION_SEGMENT_MAX` characters.
- * Memory's schema and the registry use this pattern rather than their own (source-contract#21).
+ * The registry and every consumer use this pattern rather than their own.
  */
 export const EXTENSION_NAME = new RegExp(`^x-[a-z][a-z0-9-]{0,${EXTENSION_SEGMENT_MAX - 1}}/[a-z][a-z0-9-]{0,${EXTENSION_SEGMENT_MAX - 1}}$`)
 
@@ -80,15 +71,15 @@ export const isExtensionName = (name: unknown): name is ExtensionKind => typeof 
 export const isEventKind = (kind: unknown): kind is EventKind =>
   typeof kind === "string" && ((EVENT_KINDS as readonly string[]).includes(kind) || isExtensionName(kind))
 
-/** An extension kind's namespace: `jelly` in `x-jelly/routine-run`; undefined for a core kind or a malformed one. */
+/** An extension kind's namespace: `acme` in `x-acme/reminder`; undefined for a core kind or a malformed one. */
 export function extensionNamespace(kind: string): string | undefined {
   return isEventKind(kind) && kind.startsWith("x-") ? kind.slice(2, kind.indexOf("/")) : undefined
 }
 
 /**
- * True for a core kind, or an extension kind in `namespace`: the first segment of the source's id (`jelly` for
- * `jelly.routine-runs`), as Memory's schema checks a descriptor's `reads` (decision D13, (b)). An extension kind of
- * another namespace is refused, so one plugin cannot speak in another's vocabulary.
+ * True for a core kind, or an extension kind in `namespace`: the first segment of the source's id (`acme` for
+ * `acme.reminders`). An extension kind of another namespace is refused, so one plugin cannot speak in another's
+ * vocabulary.
  */
 export function isEventKindIn(kind: unknown, namespace: string): kind is EventKind {
   if (!isEventKind(kind)) return false
@@ -125,10 +116,10 @@ export const EVENT_LIMITS = {
   failed: 500,
   detail: 200,
   costUnits: 8,
-  /** #45 §1: the identities one actor may carry, and the lengths of each part of one. */
+  /** The identities one actor may carry, and the lengths of each part of one. */
   identities: 10,
   identityBasis: 64,
-  /** #45 §2: the metadata one event may carry. */
+  /** The metadata one event may carry. */
   replyTo: 512,
   domains: 20,
   domain: 253,
@@ -136,7 +127,7 @@ export const EVENT_LIMITS = {
   sectionHeading: 300,
   parts: 50,
   partId: 512,
-  /** #45 §3: the facts one event may carry, and the lengths of their fields. */
+  /** The facts one event may carry, and the lengths of their fields. */
   facts: 20,
   factKey: 200,
   factTitle: 300,
@@ -147,13 +138,13 @@ export const EVENT_LIMITS = {
 export const PAGE = { default: 100, min: 1, max: 500 } as const
 
 /**
- * The most bytes of JSON one result holds when the source declares no `maxBytes`: 64 KB, the descriptor's default
- * `maxBytes` and the host's RPC cap (decision D10, (b); contract 1's cap was 900 000). A source that declares a larger
- * `maxBytes` (at most 1 MB) passes it to `fitPage`, and the conformance takes it.
+ * The most bytes of JSON one result holds when the source declares no `maxBytes`: 64 KB, the manifest's default
+ * `maxBytes` and the host's RPC cap. A source that declares a larger `maxBytes` (at most 1 MB) passes it to `fitPage`,
+ * and the conformance takes it.
  */
 export const MAX_PAGE_BYTES = 65_536
 
-/** The descriptor's `maxBytes`: its default and its ceiling (design §2.2). */
+/** The manifest's `maxBytes`: its default and its ceiling. */
 export const MAX_BYTES = { default: 65_536, max: 1_048_576 } as const
 
 /** Where a listing starts when the call has neither cursor nor since: this many hours before now. */
@@ -162,14 +153,14 @@ export const FIRST_RUN_HOURS = 24
 export const TRUST = "untrusted" as const
 
 /**
- * What kind of actor an actor is (#45 §1): a person, an agent, a bot or a service. Absent means "not known to be one",
+ * What kind of actor an actor is: a person, an agent, a bot or a service. Absent means "not known to be one",
  * never a confirmed person. `kind` is required for every agent, bot and service actor a plugin can recognise.
  */
 export const ACTOR_KINDS = ["person", "agent", "bot", "service"] as const
 export type ActorKind = (typeof ACTOR_KINDS)[number]
 
 /**
- * The roles the contract gives a meaning (#45 §1): `from` is the author, at most one per event, and `author` is read as
+ * The roles the contract gives a meaning: `from` is the author, at most one per event, and `author` is read as
  * its alias; `to`, `cc` and `bcc` are recipients, `mentioned` an actor the provider resolves from a mention, and the
  * rest keep their meaning. An unknown role is read as "involved", so a plugin may name its own.
  */
@@ -177,18 +168,18 @@ export const ACTOR_ROLES = ["from", "author", "to", "cc", "bcc", "mentioned", "a
 export type ActorRole = (typeof ACTOR_ROLES)[number]
 
 /**
- * The roles that name an event's author: `from`, and its alias `author`. A page may list several (#45 §1) — a `From`
+ * The roles that name an event's author: `from`, and its alias `author`. A page may list several — a `From`
  * header carries several addresses, and gws lists one `from` actor for each — so a consumer reads the first `from`, or
  * else the first `author`, as the author. The kit's `one-author` is a plugin's authoring-time check, not a page rule.
  */
 export const AUTHOR_ROLES = ["from", "author"] as const
 
-/** How strong an identity is (#45 §1): `strong` from an authenticated source, `weak` as observed. */
+/** How strong an identity is: `strong` from an authenticated source, `weak` as observed. */
 export const IDENTITY_STRENGTHS = ["strong", "weak"] as const
 export type IdentityStrength = (typeof IDENTITY_STRENGTHS)[number]
 
 /**
- * Another id the plugin knows for one actor (#45 §1). `id` is scheme-qualified and never the actor's own `id`;
+ * Another id the plugin knows for one actor. `id` is scheme-qualified and never the actor's own `id`;
  * `strength` says whether an authenticated source gave it; `basis` names the provider field it came from, such as
  * `slack.profile.email`. Only a strong identity merges people automatically, and never without the person's word.
  */
@@ -202,7 +193,7 @@ export interface EventIdentity {
 /**
  * Someone or something an event involves. `id` is a stable, scheme-qualified id: `mailto:…`, `slack:U…`, `github:…`.
  * `kind` says what it is, `identities` lists every other id the plugin knows for it, and `self` is a hint that it is
- * the signed-in person, which Memory alone decides (#45 §1, §7).
+ * the signed-in person, which a consumer decides.
  */
 export interface EventActor {
   readonly role: string
@@ -213,18 +204,18 @@ export interface EventActor {
   readonly self?: boolean
 }
 
-/** Who an item was for (#45 §2): a direct message, a group, a channel, mail, or a public place. Absent means unknown. */
+/** Who an item was for: a direct message, a group, a channel, mail, or a public place. Absent means unknown. */
 export const AUDIENCES = ["dm", "group", "channel", "email", "public"] as const
 export type Audience = (typeof AUDIENCES)[number]
 
-/** One heading of a long item, such as a meeting's notes (#45 §2). Its `text` is up to 4,096 characters of its own. */
+/** One heading of a long item, such as a meeting's notes. Its `text` is up to 4,096 characters of its own. */
 export interface EventSection {
   readonly heading: string
   readonly text: string
 }
 
 /**
- * One part of a growing item, such as one turn of a session or of a transcript (#45 §2). A part's `id` and `text`
+ * One part of a growing item, such as one turn of a session or of a transcript. A part's `id` and `text`
  * never change once listed, so a consumer may add the new parts only. `actor` names an actor id on the same event.
  */
 export interface EventPart {
@@ -233,22 +224,22 @@ export interface EventPart {
   readonly actor?: string
 }
 
-/** The core fact types (#45 §3). v0.3 has no plugin-defined type, and no fact has a field for a sensitive trait. */
+/** The core fact types. There is no plugin-defined type, and no fact has a field for a sensitive trait. */
 export const FACT_TYPES = ["commitment", "person.attribute", "meeting.attended"] as const
 export type FactType = (typeof FACT_TYPES)[number]
 
-/** What a commitment is doing (#45 §3). */
+/** What a commitment is doing. */
 export const COMMITMENT_STATES = ["open", "done", "cancelled"] as const
 export type CommitmentState = (typeof COMMITMENT_STATES)[number]
 
-/** How someone answered a meeting invitation (#45 §3). */
+/** How someone answered a meeting invitation. */
 export const ATTENDANCE_RESPONSES = ["accepted", "declined", "tentative", "needs_action"] as const
 export type AttendanceResponse = (typeof ATTENDANCE_RESPONSES)[number]
 
 /**
- * A commitment the source already holds in code (#45 §3): `key` is a stable id within the source and account, so two
- * pages that list one item give one key; `owner` and `counterparty` are actor ids on the same event; `state` is what
- * the provider says now. Memory stamps the installed package's version on each fact it files, so a fact carries none.
+ * A commitment the source already holds in code: `key` is a stable id within the source and account, so two pages that
+ * list one item give one key; `owner` and `counterparty` are actor ids on the same event; `state` is what the provider
+ * says now. A consumer stamps the installed package's version on each fact it files, so a fact carries none.
  */
 export interface FactCommitment {
   readonly type: "commitment"
@@ -262,7 +253,7 @@ export interface FactCommitment {
   readonly url?: string
 }
 
-/** An attribute of a person, from structured profile or directory data only (#45 §3): at least one of the three. */
+/** An attribute of a person, from structured profile or directory data only: at least one of the three. */
 export interface FactPersonAttribute {
   readonly type: "person.attribute"
   readonly actor: string
@@ -271,7 +262,7 @@ export interface FactPersonAttribute {
   readonly role?: string
 }
 
-/** Who attended a meeting, and how they answered (#45 §3). */
+/** Who attended a meeting, and how they answered. */
 export interface FactMeetingAttended {
   readonly type: "meeting.attended"
   readonly actor: string
@@ -279,7 +270,7 @@ export interface FactMeetingAttended {
   readonly organizer: boolean
 }
 
-/** A typed fact on an event (#45 §3): derived in the plugin's code from provider fields, never from free text. */
+/** A typed fact on an event: derived in the plugin's code from provider fields, never from free text. */
 export type EventFact = FactCommitment | FactPersonAttribute | FactMeetingAttended
 
 /** One normalised event, as a source lists it. A consumer adds its own id. */
@@ -299,17 +290,17 @@ export interface SourceEvent {
   readonly labels: string[]
   /** `sha256:<hex>` of every other field, from `eventHash`. */
   readonly hash: string
-  /** (#45 §2) The parent's `external_id`, or a source-scoped key such as `gmail-message:<Message-ID>`. */
+  /** The parent's `external_id`, or a source-scoped key such as `gmail-message:<Message-ID>`. */
   readonly reply_to?: string
-  /** (#45 §2) Who the item was for. Absent means unknown. */
+  /** Who the item was for. Absent means unknown. */
   readonly audience?: Audience
-  /** (#45 §2) The recipients' lowercase domains, for mail and shared channels, at most 20. */
+  /** The recipients' lowercase domains, for mail and shared channels, at most 20. */
   readonly domains?: string[]
-  /** (#45 §2) A long item by heading, at most 20, each text of its own 4,096 characters. */
+  /** A long item by heading, at most 20, each text of its own 4,096 characters. */
   readonly sections?: EventSection[]
-  /** (#45 §2) A growing item's parts, at most 50, whose ids and texts never change once listed. */
+  /** A growing item's parts, at most 50, whose ids and texts never change once listed. */
   readonly parts?: EventPart[]
-  /** (#45 §3) Typed facts the source derives in code, at most 20, each of a type the descriptor declares. */
+  /** Typed facts the source derives in code, at most 20, each of a type the manifest declares. */
   readonly facts?: EventFact[]
 }
 
@@ -318,7 +309,7 @@ export interface EventsOwner {
   readonly id: string
   readonly label: string
   /**
-   * (#30, item 13) `false` when the provider does not confirm who this is, so the id is the plugin's best knowledge
+   * `false` when the provider does not confirm who this is, so the id is the plugin's best knowledge
    * (Wispr Flow names OpenCode's credential, `wisprflow:credential:<id>`). A consumer shows it as unverified. Absent
    * means the plugin vouches that the provider named the owner. Only `false` is accepted, so one owner has one encoding.
    */
@@ -334,7 +325,7 @@ function ownerShapeProblems(owner: unknown, what: string): string[] {
   return []
 }
 
-// ── The page result's additions (design §2.1) ─────────────────────────────
+// ── The page result's optional parts ──────────────────────────────────────
 
 /** Why an event is refused for good: instruction-shaped text from someone else, a secret, or not the owner's. */
 export const REFUSAL_REASONS = ["instruction", "secret", "owner"] as const
@@ -366,7 +357,7 @@ export type RemovalReason = (typeof REMOVAL_REASONS)[number]
 
 /**
  * Something the source listed before and no longer stands behind (#27), so a consumer can retract what it derived.
- * `external_id` is the id the source listed, never a hash (D2); `at` is when the source learned of it, UTC, never later
+ * `external_id` is the id the source listed, never a hash; `at` is when the source learned of it, UTC, never later
  * than the page's `asOf`. A removal is an answer, not a drop: the page's cursor covers it and it never holds a cursor
  * back, so no id is in both `removals[]` and `failed[]`. It may name an id that is also among the page's events (a
  * tombstone); a consumer applies the events first, then the removals.
@@ -420,9 +411,9 @@ export interface EventsListResult {
   readonly removals?: EventsRemoval[]
   readonly gap?: EventsGap
   readonly cost?: EventsCost
-  /** The plugin's package name or id (the draft's envelope). */
+  /** The plugin's package name or id. */
   readonly plugin?: string
-  /** When the source read the page, UTC ISO (the draft's envelope). */
+  /** When the source read the page, UTC ISO. */
   readonly asOf?: string
 }
 
@@ -436,59 +427,40 @@ export interface EventsListRequest {
   readonly scope?: Record<string, string | string[]>
 }
 
-// ── Errors (design §2.1, "Errors") ────────────────────────────────────────
+// ── Errors (contract §12) ─────────────────────────────────────────────────
 
-/** The one error table: the draft's nine, the final design's three, and the two input refusals (D3). */
+/** The one error table (contract §12). A plugin may add codes; it declares them in its manifest. */
 export const ERROR_CODES = [
   "NEEDS_SIGN_IN",
+  "SCOPE_MISSING",
+  "ACCOUNT_REQUIRED",
+  "ACCOUNT_UNKNOWN",
   "ACCOUNT_MISMATCH",
   "CURSOR_INVALID",
   "CURSOR_EXPIRED",
   "RATE_LIMITED",
-  "TOO_LARGE",
-  "SCHEMA_VIOLATION",
-  "PERMISSION_DENIED",
-  "UNAVAILABLE",
-  "SCOPE_MISSING",
   "BUDGET_EXCEEDED",
   "SOURCE_DISABLED",
+  "TOO_LARGE",
   "INPUT_INVALID",
   "SOURCE_UNKNOWN",
+  "SCHEMA_VIOLATION",
+  "PERMISSION_DENIED",
+  "PLAN_INVALID",
+  "GRANT_INVALID",
+  "HOST_UNTESTED",
+  "OPTIONS_INVALID",
+  "UNAVAILABLE",
 ] as const
 export type ErrorCode = (typeof ERROR_CODES)[number]
 
-/**
- * Codes proposed for the table and not yet in it. Empty: D3 (a) moved `INPUT_INVALID` and `SOURCE_UNKNOWN` into
- * `ERROR_CODES`. Kept for one release so an importer does not break.
- */
-export const PROPOSED_CODES = [] as const
-export type ProposedCode = (typeof PROPOSED_CODES)[number]
-
-/**
- * Other names for codes in the table. `AUTH_REQUIRED` is `NEEDS_SIGN_IN` (design §2.1). `ACCOUNT_UNKNOWN`, the code the
- * family's tools RPC and plugins give for an account the plugin does not have, is `ACCOUNT_MISMATCH`: the read named
- * an account other than one the source can read, and trying again will not help.
- */
-export const ERROR_ALIASES: Readonly<Record<string, ErrorCode>> = { AUTH_REQUIRED: "NEEDS_SIGN_IN", ACCOUNT_UNKNOWN: "ACCOUNT_MISMATCH" }
-
-/**
- * The codes contract 1's plugins use, mapped to the table, so a consumer can read a plugin that has not moved yet
- * (projects support the current and previous contract versions, design §3).
- */
-export const CONTRACT1_CODES: Readonly<Record<string, ErrorCode | ProposedCode>> = {
-  EVENTS_INVALID_INPUT: "INPUT_INVALID",
-  EVENTS_CURSOR_INVALID: "CURSOR_INVALID",
-  EVENTS_SOURCE_UNKNOWN: "SOURCE_UNKNOWN",
-}
-
-/** The table's code for `code`: itself, its alias, or contract 1's name for it; undefined for any other code. */
-export function canonicalCode(code: string): ErrorCode | ProposedCode | undefined {
-  if ((ERROR_CODES as readonly string[]).includes(code) || (PROPOSED_CODES as readonly string[]).includes(code)) return code as ErrorCode | ProposedCode
-  return ERROR_ALIASES[code] ?? CONTRACT1_CODES[code]
+/** The table's code for `code`, or undefined for a code the table does not hold. */
+export function errorCodeOf(code: string): ErrorCode | undefined {
+  return (ERROR_CODES as readonly string[]).includes(code) ? (code as ErrorCode) : undefined
 }
 
 /**
- * A refusal in the family's form, `CODE: what happened. Next step: what to do.`, with the code and its data. A
+ * A refusal in the contract's form, `CODE: what happened. Next step: what to do.`, with the code and its data. A
  * `RATE_LIMITED` or `BUDGET_EXCEEDED` may carry `retryAfterSec`; a `CURSOR_EXPIRED` carries the `gap`.
  */
 export class SourceError extends Error {
@@ -508,21 +480,21 @@ export class SourceError extends Error {
   }
 }
 
-const FAMILY_MESSAGE = /^([A-Z][A-Z0-9_]*): ([^]*?)(?:\. Next step: ([^]*))?$/
+const SOURCE_ERROR_MESSAGE = /^([A-Z][A-Z0-9_]*): ([^]*?)(?:\. Next step: ([^]*))?$/
 
 /**
  * The code, its canonical code, what happened and the next step, read from a refusal: a `SourceError`, or any error
- * whose message is in the family's form. Undefined for an error with no code.
+ * whose message is in the contract's form. Undefined for an error with no code.
  */
-export function parseSourceError(error: unknown): { code: string; canonical?: ErrorCode | ProposedCode; what: string; next?: string } | undefined {
+export function parseSourceError(error: unknown): { code: string; canonical?: ErrorCode; what: string; next?: string } | undefined {
   if (error instanceof SourceError) {
-    const canonical = canonicalCode(error.code)
+    const canonical = errorCodeOf(error.code)
     return { code: error.code, ...(canonical ? { canonical } : {}), what: error.what, next: error.next }
   }
   const message = error instanceof Error ? error.message : typeof error === "string" ? error : undefined
-  const match = message === undefined ? null : FAMILY_MESSAGE.exec(message.split("\n", 1)[0] ?? "")
+  const match = message === undefined ? null : SOURCE_ERROR_MESSAGE.exec(message.split("\n", 1)[0] ?? "")
   if (!match) return undefined
-  const canonical = canonicalCode(match[1]!)
+  const canonical = errorCodeOf(match[1]!)
   return { code: match[1]!, ...(canonical ? { canonical } : {}), what: match[2]!, ...(match[3] === undefined ? {} : { next: match[3] }) }
 }
 
@@ -648,12 +620,12 @@ function stable(value: unknown): unknown {
   return value
 }
 
-/** The new event fields a hash covers, in the one order they are hashed in (#45 §6). */
+/** The optional event fields a hash covers, in the one order they are hashed in. */
 const HASHED_EVENT_FIELDS = ["reply_to", "audience", "domains", "sections", "parts", "facts"] as const
 
 /**
- * One actor as the hash sees it: the role, id and name of contract 1, and, only when the actor carries one, its new
- * metadata (#45 §1) in a sorted object. An actor without metadata hashes exactly as it did before v0.3.
+ * One actor as the hash sees it: its role, id and name, and, only when the actor carries it, its metadata in a sorted
+ * object, so the order a plugin builds the metadata in does not change the hash.
  */
 function actorFields(actor: EventActor): unknown[] {
   const base: unknown[] = [actor.role, actor.id, actor.name ?? null]
@@ -662,9 +634,8 @@ function actorFields(actor: EventActor): unknown[] {
 }
 
 /**
- * `sha256:` and the hex digest of every field but the hash, in a fixed order. Contract 1's fields hash as they always
- * have; each new field is appended, with its name, only when it is present (#45 §6), so an event without them hashes
- * as it did in v0.2.
+ * `sha256:` and the hex digest of every field but the hash, in a fixed order. An optional field is appended, with its
+ * name, only when it is present, so a plugin's metadata and its key order do not change the hash of a plain event.
  */
 export function eventHash(event: Omit<SourceEvent, "hash">): string {
   const fields: unknown[] = [
@@ -715,7 +686,7 @@ const oneLine = (text: string) => clean(text).replace(/\s+/g, " ").trim()
 /**
  * A `SourceEvent` from a draft: the time in UTC ISO form, the title on one line and cut to 300 characters, the text cut
  * to 4096, actors without blanks or repeats and at most 20, labels likewise, a url only when it is https, the metadata
- * of #45 §2 normalised, and the hash. An actor's `kind`, identities and `self` are kept as the plugin gave them, and so
+ * normalised, and the hash. An actor's `kind`, identities and `self` are kept as the plugin gave them, and so
  * are an event's facts: `eventProblems` is where a wrong one is refused. Throws when the time is not a real time.
  */
 export function makeEvent(draft: EventDraft): SourceEvent {
@@ -807,15 +778,15 @@ export function fitPage(events: readonly SourceEvent[], limit: number, maxBytes:
 export interface ScreenOptions {
   /** False when the event is not the signed-in owner's (a shared mailbox, a delegated calendar). */
   readonly ownedBy?: (event: SourceEvent) => boolean
-  /** True when the event is instruction-shaped text from someone else. The library has no default (`docs/events.md`, D5). */
+  /** True when the event is instruction-shaped text from someone else. The library has no default. */
   readonly instruction?: (event: SourceEvent) => boolean
-  /** The secret detector; Memory's `secretKinds` by default. */
+  /** The secret detector; `secretKinds` by default. */
   readonly secrets?: (text: string) => readonly string[]
 }
 
 /**
  * The events a page may carry, and those it refuses for good, in order: not the owner's, then a secret in the title or
- * text (as Memory's store checks an import), then instruction-shaped. A refusal's detail never holds the content.
+ * text, then instruction-shaped. A refusal's detail never holds the content.
  */
 export function screenEvents(events: readonly SourceEvent[], options: ScreenOptions = {}): { events: SourceEvent[]; refused: RefusedEvent[] } {
   const detect = options.secrets ?? secretKinds
@@ -840,7 +811,7 @@ export function screenEvents(events: readonly SourceEvent[], options: ScreenOpti
   return { events: kept, refused }
 }
 
-// ── Probe (design §2.3; source-contract#8 and #4) ───────────────────────────
+// ── Probe ────────────────────────────────────────────────────────────────
 
 /** The tools-RPC method and tool every source plugin names `probe`: one per plugin, called per source. */
 export const PROBE = "probe"
@@ -950,7 +921,7 @@ export interface PageExtras {
   readonly asOf?: string
 }
 
-/** A result, with its source, account, owner and trust marker, and the extras given. Without extras, contract 1's. */
+/** A result, with its source, account, owner and trust marker, and the optional parts given. */
 export function eventsListResult(identity: EventsListIdentity, events: readonly SourceEvent[], cursor: string, more: boolean, extras: PageExtras = {}): EventsListResult {
   return {
     source: identity.source,
@@ -979,9 +950,9 @@ const SCHEMED = /^[a-z][a-z0-9+.-]*:\S+$/
 const HASH = /^sha256:[0-9a-f]{64}$/
 const CODE = /^[A-Z][A-Z0-9_]*$/
 const UNIT = /^[a-z][a-z0-9_-]*$/
-/** A lowercase domain: at least two labels, each one a letter or digit at either end (#45 §2). */
+/** A lowercase domain: at least two labels, each one a letter or digit at either end. */
 const DOMAIN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/
-/** A calendar date, `YYYY-MM-DD` (#45 §3). */
+/** A calendar date, `YYYY-MM-DD`. */
 const DATE = /^\d{4}-\d{2}-\d{2}$/
 
 /** A list as a sentence reads it: `a, b or c`. */
@@ -992,7 +963,7 @@ const text = (value: unknown, max: number, empty = false): value is string =>
 const line = (value: unknown, max: number, empty = false): value is string => text(value, max, empty) && !hasControl(value)
 const isoUtc = (value: unknown): value is string => typeof value === "string" && ISO_UTC.test(value) && Number.isFinite(Date.parse(value))
 
-/** One actor's problems (#45 §1), one sentence each; none when it keeps the contract. */
+/** One actor's problems, one sentence each; none when it keeps the contract. */
 function actorProblems(actor: Record<string, unknown>, at: string): string[] {
   const problems: string[] = []
   for (const key of Object.keys(actor)) if (!["role", "id", "name", "kind", "identities", "self"].includes(key)) problems.push(`${at} has the field "${key}", which the contract does not define`)
@@ -1029,7 +1000,7 @@ function actorProblems(actor: Record<string, unknown>, at: string): string[] {
   return problems
 }
 
-/** One event metadata field's problems (#45 §2), for each of `reply_to`, `audience` and `domains`. */
+/** One event metadata field's problems, for each of `reply_to`, `audience` and `domains`. */
 function targetProblems(e: Record<string, unknown>, where: string): string[] {
   const problems: string[] = []
   if (e.reply_to !== undefined && !line(e.reply_to, EVENT_LIMITS.replyTo)) {
@@ -1052,7 +1023,7 @@ function targetProblems(e: Record<string, unknown>, where: string): string[] {
   return problems
 }
 
-/** One event's long parts (#45 §2): its sections by heading, and the parts of a growing item. */
+/** One event's long parts: its sections by heading, and the parts of a growing item. */
 function partProblems(e: Record<string, unknown>, where: string, actorIds: ReadonlySet<string>): string[] {
   const problems: string[] = []
   if (e.sections !== undefined) {
@@ -1097,9 +1068,9 @@ function partProblems(e: Record<string, unknown>, where: string, actorIds: Reado
 }
 
 /**
- * One fact's problems (#45 §3), one sentence each; none when it keeps the contract. Each actor reference must be an
- * actor id on the same event, which is `actors`. The shape is closed: a fact carries no version (Memory stamps the
- * installed package's) and no field for a sensitive trait.
+ * One fact's problems, one sentence each; none when it keeps the contract. Each actor reference must be an actor id on
+ * the same event, which is `actors`. The shape is closed: a fact carries no version (a consumer stamps the installed
+ * package's) and no field for a sensitive trait.
  */
 export function factProblems(fact: unknown, actors: ReadonlySet<string>, where = "fact"): string[] {
   if (!plainObject(fact)) return [`${where} is not an object`]
@@ -1147,14 +1118,14 @@ export function factProblems(fact: unknown, actors: ReadonlySet<string>, where =
   return problems
 }
 
-/** One event's facts (#45 §3): at most 20, each a core type, each actor reference an actor of the same event. */
+/** One event's facts: at most 20, each a core type, each actor reference an actor of the same event. */
 function factsProblems(e: Record<string, unknown>, where: string, actorIds: ReadonlySet<string>): string[] {
   if (e.facts === undefined) return []
   if (!Array.isArray(e.facts) || e.facts.length > EVENT_LIMITS.facts) return [`${where}.facts must be a list of at most ${EVENT_LIMITS.facts}`]
   return (e.facts as unknown[]).flatMap((fact, index) => factProblems(fact, actorIds, `${where}.facts[${index}]`))
 }
 
-/** The event fields the contract defines, then those v0.3 adds (`#45`). */
+/** The event fields the contract defines, and its optional metadata. */
 const EVENT_KEYS: readonly string[] = ["source", "account", "external_id", "kind", "occurred_at", "thread", "actors", "title", "text", "url", "labels", "hash"]
 const EVENT_METADATA_KEYS: readonly string[] = ["reply_to", "audience", "domains", "sections", "parts", "facts"]
 
@@ -1204,7 +1175,7 @@ export function eventProblems(event: unknown, where = "event"): string[] {
   return problems
 }
 
-/** The fields contract 1 defines, then the optional ones the final page result adds. */
+/** The fields a page always carries, then the optional ones. */
 const RESULT_KEYS: readonly string[] = ["source", "account", "owner", "events", "cursor", "more", "trust"]
 const EXTRA_KEYS: readonly string[] = ["scope", "refused", "failed", "removals", "gap", "cost", "plugin", "asOf"]
 

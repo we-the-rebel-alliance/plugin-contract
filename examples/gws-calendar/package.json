@@ -1,9 +1,9 @@
 {
-  "name": "@joe-broadhead/opencode-gws",
+  "name": "@we-the-rebel-alliance/gws-plugin",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Example: the gws plugin's Calendar sources as contract version 1 declares them. Every address and meeting is invented.",
+  "description": "Example: the gws plugin's Calendar sources as the contract declares them. Every address and meeting is invented.",
   "sources": {
     "contractVersion": 1,
     "items": [

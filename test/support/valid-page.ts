@@ -37,7 +37,7 @@ export function validPage(page: Record<string, unknown>): Record<string, unknown
     owner: page["owner"] === null || page["owner"] === undefined ? { id: `${source}:owner`, label: "Conformance Owner" } : page["owner"],
     trust: "untrusted",
     asOf: "2026-11-13T09:00:00.000Z",
-    plugin: page["plugin"] ?? "@joe-broadhead/opencode-slack",
+    plugin: page["plugin"] ?? "@we-the-rebel-alliance/slack-plugin",
     ...(page["events"] === undefined ? {} : { events }),
     ...(page["refused"] === undefined ? {} : { refused: map(page["refused"], "reason", "instruction") }),
     ...(page["failed"] === undefined ? {} : { failed: map(page["failed"], "code", "RATE_LIMITED") }),

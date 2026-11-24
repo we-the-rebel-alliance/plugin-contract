@@ -1,4 +1,4 @@
-// @we-the-rebel-alliance/source-contract 0.3.0. Built by scripts/build.mjs; do not edit.
+// @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   ACTOR_KINDS,
   ACTOR_ROLES,
@@ -6,8 +6,6 @@ import {
   AUDIENCES,
   AUTHOR_ROLES,
   COMMITMENT_STATES,
-  CONTRACT1_CODES,
-  ERROR_ALIASES,
   ERROR_CODES,
   EVENTS_LIST,
   EVENT_KINDS,
@@ -24,7 +22,6 @@ import {
   PAGE,
   PROBE,
   PROBE_LIMITS,
-  PROPOSED_CODES,
   REFUSAL_REASONS,
   REMOVAL_REASONS,
   SCOPE_KEY_PATTERN,
@@ -32,8 +29,8 @@ import {
   SOURCE_PATTERN,
   SourceError,
   TRUST,
-  canonicalCode,
   cut,
+  errorCodeOf,
   eventHash,
   eventProblems,
   eventsListResult,
@@ -58,14 +55,12 @@ import {
   sinceTime,
   sourceNamespace,
   startTime
-} from "./chunks/chunk-LJL3EALP.js";
+} from "./chunks/chunk-BMJJJDZ6.js";
 import {
   decodeBoundCursor,
-  decodeCursor,
-  encodeBoundCursor,
-  encodeCursor
-} from "./chunks/chunk-NUBUQFLH.js";
-import "./chunks/chunk-CUITXC5J.js";
+  encodeBoundCursor
+} from "./chunks/chunk-7KJXMIQH.js";
+import "./chunks/chunk-WLRWVIVP.js";
 
 // src/internal/events-conformance.ts
 var describeError = (error) => error instanceof Error ? error.message.split("\n", 1)[0] : String(error);
@@ -181,7 +176,7 @@ async function eventsListConformance(list, fixtures) {
   await refused({ ...base, limit: PAGE.max + 1 }, `a limit of ${PAGE.max + 1}`, INPUT);
   await refused({ ...base, limit: 0 }, "a limit of 0", INPUT);
   await refused({ ...after("not-a-cursor"), limit: pageSize }, "a malformed cursor", CURSOR);
-  await refused({ ...after(encodeCursor(`${fixtures.source}-other`, {})), limit: pageSize }, "another source's cursor", CURSOR);
+  await refused({ ...after(encodeBoundCursor({ plugin: "conformance", source: `${fixtures.source}-other`, account: fixtures.account ?? "default" }, {})), limit: pageSize }, "another source's cursor", CURSOR);
   await refused({ ...base, source: `${fixtures.source}-other`, limit: pageSize }, "a source the plugin does not have", ["SOURCE_UNKNOWN", "INPUT_INVALID"]);
   const first = pages[0];
   if (fixtures.binding !== void 0 && first) {
@@ -220,8 +215,6 @@ export {
   AUDIENCES,
   AUTHOR_ROLES,
   COMMITMENT_STATES,
-  CONTRACT1_CODES,
-  ERROR_ALIASES,
   ERROR_CODES,
   EVENTS_LIST,
   EVENT_KINDS,
@@ -238,7 +231,6 @@ export {
   PAGE,
   PROBE,
   PROBE_LIMITS,
-  PROPOSED_CODES,
   REFUSAL_REASONS,
   REMOVAL_REASONS,
   SCOPE_KEY_PATTERN,
@@ -247,10 +239,8 @@ export {
   SourceError,
   TRUST,
   assertEventsListConformance,
-  canonicalCode,
   cut,
-  decodeCursor,
-  encodeCursor,
+  errorCodeOf,
   eventHash,
   eventProblems,
   eventsListConformance,

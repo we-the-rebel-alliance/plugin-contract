@@ -1,24 +1,23 @@
-// @we-the-rebel-alliance/source-contract 0.3.0. Built by scripts/build.mjs; do not edit.
+// @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
-  HINT_SCHEMA,
-  ROUTINE_SCHEMA
-} from "./chunks/chunk-ITQZIF2U.js";
+  OUTPUTS
+} from "./chunks/chunk-AFCXCE4V.js";
 import {
   FACT_SCHEMAS,
   SOURCES_SCHEMA
-} from "./chunks/chunk-YWD23SKJ.js";
+} from "./chunks/chunk-EMGW7BT2.js";
+import "./chunks/chunk-T2QSLHBQ.js";
+import "./chunks/chunk-2V4VLI45.js";
 import {
-  OUTPUTS
-} from "./chunks/chunk-GDBKZBG7.js";
-import "./chunks/chunk-WOH6G62Y.js";
-import "./chunks/chunk-DEXO7HMA.js";
-import "./chunks/chunk-6ZSJSJMV.js";
-import "./chunks/chunk-LJL3EALP.js";
-import "./chunks/chunk-NUBUQFLH.js";
-import "./chunks/chunk-CUITXC5J.js";
+  HINT_SCHEMA
+} from "./chunks/chunk-X5LDDGDL.js";
+import "./chunks/chunk-BQEBNVNU.js";
+import "./chunks/chunk-BMJJJDZ6.js";
+import "./chunks/chunk-7KJXMIQH.js";
+import "./chunks/chunk-WLRWVIVP.js";
 
 // src/schemas.ts
-var SCHEMAS = [SOURCES_SCHEMA, ...Object.values(OUTPUTS), ...Object.values(FACT_SCHEMAS), HINT_SCHEMA, ROUTINE_SCHEMA];
+var SCHEMAS = [SOURCES_SCHEMA, ...Object.values(OUTPUTS), ...Object.values(FACT_SCHEMAS), HINT_SCHEMA];
 export {
   SCHEMAS
 };

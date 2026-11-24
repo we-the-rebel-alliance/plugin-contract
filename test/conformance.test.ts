@@ -23,7 +23,7 @@ import {
   type PageCase,
 } from "../src/conformance.ts"
 
-const PLUGIN = "@joe-broadhead/opencode-slack"
+const PLUGIN = "@we-the-rebel-alliance/slack-plugin"
 const ACCOUNT = "T0PILOT01"
 const ISO = "2026-11-13T09:00:00.000Z"
 
@@ -81,7 +81,7 @@ const page = (over: Record<string, unknown> = {}): Record<string, unknown> => va
   ...over,
 })
 
-describe("the page fields Memory's checks read", () => {
+describe("the page fields Acme's checks read", () => {
   const options = { source: sourceOf(slackItem()), plugin: PLUGIN, input: {} }
 
   test("a page that answers to its source and carries a cursor has no problems", () => {
@@ -325,11 +325,11 @@ describe("sourceConformance", () => {
     assert.equal(report.incomplete, false)
     assert.deepEqual(
       report.checks.map((check) => check.name),
-      ["declaration", "hints", "routines", "page-result", "event-within-max-bytes", "failed-holds-cursor", "gap-and-cursor-expired", "gap-once-per-read", "refused-is-final", "removals-are-final", "actor-kind", "one-author", "facts", "commitment-key", "parts-stable", "billed-cost", "probe", "details", "suggest", "identity-grants", "output-schema", "rpc-id", "unused-grants"],
+      ["declaration", "hints", "page-result", "event-within-max-bytes", "failed-holds-cursor", "gap-and-cursor-expired", "gap-once-per-read", "refused-is-final", "removals-are-final", "actor-kind", "one-author", "facts", "commitment-key", "parts-stable", "billed-cost", "probe", "details", "suggest", "identity-grants", "output-schema", "rpc-id", "unused-grants"],
     )
     assert.deepEqual(
       report.checks.filter((check) => !check.ran).map((check) => check.name),
-      ["hints", "routines", "removals-are-final", "actor-kind", "one-author", "facts", "commitment-key", "parts-stable", "billed-cost", "output-schema", "rpc-id"],
+      ["hints", "removals-are-final", "actor-kind", "one-author", "facts", "commitment-key", "parts-stable", "billed-cost", "output-schema", "rpc-id"],
     )
   })
 

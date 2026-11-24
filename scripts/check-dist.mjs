@@ -6,8 +6,8 @@
 // - every module in dist/ imports only relative paths and `node:` built-ins;
 // - every declaration an export reaches imports only relative paths and `node:` built-ins, so a TypeScript consumer
 //   needs nothing installed either;
-// - every export loads from a copy of the package with no node_modules, on Node and on Bun (when Bun is installed;
-//   CI always has it).
+// - every export loads from a copy of the package with no node_modules, on Node and on Bun when Bun is installed.
+//   Bun is optional: `npm run check` must pass on a Node-only runner.
 import { spawnSync } from "node:child_process"
 import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -53,7 +53,7 @@ for (const file of reachableDeclarations(pkg, dist)) {
 }
 
 // Load every export from a bare copy: the package as a consumer installs it, with nothing beside it.
-const bare = mkdtempSync(join(tmpdir(), "source-contract-"))
+const bare = mkdtempSync(join(tmpdir(), "plugin-contract-"))
 try {
   const target = join(bare, "node_modules", ...pkg.name.split("/"))
   cpSync(join(root, "package.json"), join(target, "package.json"))
@@ -62,7 +62,6 @@ try {
   const runtimes = [["node", ["--input-type=module", "-e", script]]]
   const bun = spawnSync("bun", ["--version"], { encoding: "utf8" })
   if (bun.status === 0) runtimes.push(["bun", ["-e", script]])
-  else if (process.env.CI) problems.push("Bun is not installed, and CI must load dist/ on Bun too")
   else console.warn("check-dist: Bun is not installed here, so dist/ was loaded on Node only")
   for (const [command, args] of runtimes) {
     const run = spawnSync(command, args, { cwd: bare, encoding: "utf8" })
@@ -76,4 +75,4 @@ if (problems.length > 0) {
   console.error(`dist/ is not what the package promises:\n- ${problems.join("\n- ")}`)
   process.exit(1)
 }
-console.log(`dist/ ok: ${entries.length} entries load on Node${problems.length === 0 && spawnSync("bun", ["--version"]).status === 0 ? " and Bun" : ""}, importing only Node built-ins`)
+console.log(`dist/ ok: ${entries.length} entries load on Node${spawnSync("bun", ["--version"]).status === 0 ? " and Bun" : ""}, importing only Node built-ins`)

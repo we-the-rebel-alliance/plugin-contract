@@ -1,7 +1,7 @@
 {
-  "name": "@joe-broadhead/opencode-gws",
+  "name": "@we-the-rebel-alliance/gws-plugin",
   "version": "0.0.0-example",
-  "description": "A test descriptor in the shape of Memory's examples: not the plugin.",
+  "description": "A test descriptor in the shape of the examples: not the plugin.",
   "private": true,
   "sources": {
     "contractVersion": 1,

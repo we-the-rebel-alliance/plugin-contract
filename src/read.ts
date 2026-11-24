@@ -1,16 +1,16 @@
 /**
- * `read`: the consumer-side call (design §3). Every project reads a source the same way, with no host required:
+ * `read`: the consumer-side call (contract §7 and §9). Every app reads a source the same way, with no host required:
  *
- * 1. the descriptor comes from the installed package (`readInstalledDescriptor`), and the grant must be for the same
- *    descriptor hash, consumer source, account and scope;
+ * 1. the manifest comes from the installed package (`readInstalledDescriptor`), and the grant must be for the same
+ *    manifest hash, consumer source, account and scope;
  * 2. params, `since` and `pick` are resolved and checked before anything is called;
  * 3. the call runs in a session fenced by exactly the grant's rules (`sessionRules`), opened and closed by the host;
  * 4. the answer is checked: its account, `trust: "untrusted"`, its size against `maxBytes`, and a snapshot's `data`
  *    against its output schema; then `pick` keeps only the picked paths.
  *
- * The host is two calls: open a session with given rules, and call a plugin's tools-RPC method in it. jelly, Memory
- * standalone and Artifacts each implement them over their own OpenCode server. A project keeps its own cursor: `read`
- * returns the page and never stores anything.
+ * The host is two calls: open a session with given rules, and call a plugin's tools-RPC method in it. Each app
+ * implements them over its own OpenCode server. An app keeps its own cursor: `read` returns the page and never stores
+ * anything.
  */
 import type { InstalledDescriptor, SourceItem } from "./descriptor.ts"
 import { findSource, maxBytesOf } from "./descriptor.ts"
@@ -21,7 +21,7 @@ import { failure, failureFromError, type ReadFailure } from "./internal/failure.
 import { resolveParams, resolveSince, type ParamSpec, type ParamsContext } from "./params.ts"
 import { detailRules, grantCovers, probeRules, sessionRules, type Grant, type PermissionRule } from "./permission.ts"
 import { pick, pickProblemsForOutput } from "./pick.ts"
-import { checkOutput } from "./registry.ts"
+import { checkOutput } from "./outputs.ts"
 
 export type { FailureCode, ReadFailure } from "./internal/failure.ts"
 
@@ -64,7 +64,7 @@ export interface ReadRequest {
   readonly signal?: AbortSignal
 }
 
-/** An events page, as the plugin answered it (design §2.1). */
+/** An events page, as the plugin answered it (contract §7). */
 export interface EventsPage {
   readonly source: string
   readonly account: string
@@ -211,8 +211,8 @@ export function acceptAnswer(source: SourceItem, account: string, answer: unknow
   if (problem) return { ok: false, failure: problem }
   const value = answer as Record<string, unknown>
   if (source.kind === "events") {
-    // The page against the events contract with §2.1's additions, under the source's maxBytes (checked above), and the
-    // limit the read asked for.
+    // The page against the events contract, under the source's maxBytes (checked above), and the limit the read asked
+    // for.
     const problems = resultProblems(value, options.limit ?? PAGE.max, maxBytesOf(source))
     if (problems.length > 0) {
       return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s page breaks the events contract: ${problems.slice(0, 3).join("; ")}`, "Report it to the plugin's maintainers.") }
@@ -236,7 +236,7 @@ export function acceptAnswer(source: SourceItem, account: string, answer: unknow
   }
 }
 
-/** A detail read of one event (design §2.2 `details`). */
+/** A detail read of one event (contract §7, `details`). */
 export interface DetailRequest {
   readonly installed: InstalledDescriptor
   readonly source: string
@@ -265,9 +265,9 @@ export function detailFields(source: SourceItem, detailId: string, event: Readon
 }
 
 /**
- * Reads a declared detail of one event, in a session fenced by the source's own rules. The call is what Memory's
- * conformance kit checks a plugin with: `{ account, scope, fields }`, with the confirmed scope, so the plugin refuses an
- * event outside it.
+ * Reads a declared detail of one event, in a session fenced by the source's own rules. The call is what the conformance
+ * kit checks a plugin with: `{ account, scope, fields }`, with the confirmed scope, so the plugin refuses an event
+ * outside it.
  */
 export async function readDetail(host: ReadHost, request: DetailRequest): Promise<{ readonly ok: true; readonly answer: unknown } | { readonly ok: false; readonly failure: ReadFailure }> {
   const { installed, grant } = request
@@ -310,7 +310,7 @@ export interface ProbeAnswer {
  * Probes a source for an account, in a session fenced by its probe rules: the plugin's declared probe action
  * (`sources.probe.action`) and the source's declared identity operations (`permission.identity`), or, for a plugin
  * that declares neither yet, the source's own action and the identity operations the caller passes. The call is the
- * family's: `probe` with `{ source?, account }`.
+ * contract's form: `probe` with `{ source?, account }`.
  */
 export async function probe(host: ReadHost, request: { readonly installed: InstalledDescriptor; readonly source: string; readonly account: string; readonly identityOperations?: readonly string[]; readonly signal?: AbortSignal }): Promise<{ readonly ok: true; readonly answer: ProbeAnswer } | { readonly ok: false; readonly failure: ReadFailure }> {
   const source = findSource(request.installed.sources, request.source)
