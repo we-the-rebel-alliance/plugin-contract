@@ -16,7 +16,7 @@ import {
   type ToolDeclaration,
 } from "../src/conformance.ts"
 
-const PLUGIN = "@joe-broadhead/opencode-slack"
+const PLUGIN = "@we-the-rebel-alliance/slack-plugin"
 const ACCOUNT = "T0PILOT01"
 const ISO = "2026-11-13T09:00:00.000Z"
 
@@ -266,7 +266,7 @@ describe("a report is incomplete when a check did not run", () => {
       cost: { class: "free" },
     }
     const report = await sourceConformance({
-      plugin: "@joe-broadhead/opencode-gws",
+      plugin: "@we-the-rebel-alliance/gws-plugin",
       source: sourceOf(snapshot),
       tools: [{ id: "calendar_today", readOnly: true }],
       calls: {
@@ -299,7 +299,7 @@ describe("probe may assert only the identity operations", () => {
   })
   const page = (): Record<string, unknown> => validPage({
     source: "gws",
-    plugin: "@joe-broadhead/opencode-gws",
+    plugin: "@we-the-rebel-alliance/gws-plugin",
     account: "sam.rivera@example.com",
     owner: null,
     asOf: ISO,
@@ -313,7 +313,7 @@ describe("probe may assert only the identity operations", () => {
 
   const run = (probeAction: string, probeResource: string) =>
     sourceConformance({
-      plugin: "@joe-broadhead/opencode-gws",
+      plugin: "@we-the-rebel-alliance/gws-plugin",
       source: sourceOf(item()),
       tools: [{ id: "events_list", readOnly: true }],
       identityOperations: ["gmail.users.getProfile"],
@@ -549,7 +549,7 @@ describe("the conformance-only rules", () => {
         id: "mem.receipts",
         kind: "snapshot",
         tool: "snapshot_read",
-        output: "x-mem/receipt",
+        output: "x-acme/receipt",
         outputSchema: { type: "object", properties: Object.fromEntries(Array.from({ length: 900 }, (_, index) => [`k${index}`, { type: "string", description: "x".repeat(40) }])) },
         accounts: { named: false },
         permission: { tool: "mem.snapshot_read", operations: ["mem.receipts.list"] },
@@ -586,7 +586,7 @@ describe("the running session's unused-grant check", () => {
   })
   const page = (): Record<string, unknown> => validPage({
     source: "gws",
-    plugin: "@joe-broadhead/opencode-gws",
+    plugin: "@we-the-rebel-alliance/gws-plugin",
     account: "sam.rivera@example.com",
     cursor: "c1",
     more: false,
@@ -597,7 +597,7 @@ describe("the running session's unused-grant check", () => {
 
   test("a content operation no page asserts is reported by the running session", async () => {
     const report = await sourceConformance({
-      plugin: "@joe-broadhead/opencode-gws",
+      plugin: "@we-the-rebel-alliance/gws-plugin",
       source: sourceOf(item()),
       tools: [{ id: "events_list", readOnly: true }],
       identityOperations: ["gmail.users.getProfile"],
@@ -637,7 +637,7 @@ describe("identity operations", () => {
   })
   const page = (): Record<string, unknown> => validPage({
     source: "gws",
-    plugin: "@joe-broadhead/opencode-gws",
+    plugin: "@we-the-rebel-alliance/gws-plugin",
     account: "sam.rivera@example.com",
     cursor: "c1",
     more: false,
@@ -647,7 +647,7 @@ describe("identity operations", () => {
   })
   const run = (identityOperations: string[], pageAssertsIdentity = false) =>
     sourceConformance({
-      plugin: "@joe-broadhead/opencode-gws",
+      plugin: "@we-the-rebel-alliance/gws-plugin",
       source: sourceOf(item()),
       tools: [{ id: "events_list", readOnly: true }],
       identityOperations,
@@ -682,7 +682,7 @@ describe("identity operations", () => {
       permission: { events: "gws.events_list", operations: ["gmail.users.getProfile", "gmail.users.messages.list"], readsIdentity: true },
     })
     const report = await sourceConformance({
-      plugin: "@joe-broadhead/opencode-gws",
+      plugin: "@we-the-rebel-alliance/gws-plugin",
       source: sourceOf(declared),
       tools: [{ id: "events_list", readOnly: true }],
       identityOperations: ["gmail.users.getProfile"],
@@ -703,7 +703,7 @@ describe("identity operations", () => {
     })
     assert.ok(!report.problems.some((problem) => /identity operation/.test(problem)), report.problems.join("; "))
     const undeclared = await sourceConformance({
-      plugin: "@joe-broadhead/opencode-gws",
+      plugin: "@we-the-rebel-alliance/gws-plugin",
       source: sourceOf(item({ permission: { events: "gws.events_list", operations: ["gmail.users.messages.list"], readsIdentity: true } })),
       tools: [{ id: "events_list", readOnly: true }],
       identityOperations: ["gmail.users.getProfile"],
@@ -735,7 +735,7 @@ describe("identity operations", () => {
       cost: { class: "free" },
     })
     const report = await sourceConformance({
-      plugin: "@joe-broadhead/opencode-gws",
+      plugin: "@we-the-rebel-alliance/gws-plugin",
       source: sourceOf(empty),
       tools: [{ id: "events_list", readOnly: true }],
       sources: { probe: { action: "gws.probe" } },
@@ -780,7 +780,7 @@ describe("identity operations", () => {
       details: [{ id: "gws.gmail.message", tool: "gws_read", from: ["external_id"] }],
     }
     const report = await sourceConformance({
-      plugin: "@joe-broadhead/opencode-gws",
+      plugin: "@we-the-rebel-alliance/gws-plugin",
       source: sourceOf(withDetail),
       tools: [{ id: "events_list", readOnly: true }, { id: "gws_read", readOnly: true }],
       identityOperations: ["gmail.users.getProfile"],
@@ -809,7 +809,7 @@ describe("identity operations", () => {
   })
 })
 
-describe("the verb rule keeps Memory's promise", () => {
+describe("the verb rule refuses a write named as a read", () => {
   test("a tool name whose verb is a write verb, or that carries one, is refused", () => {
     for (const name of ["read_delete", "messages.getDelete", "getAndSend", "send_message", "delete_issue", "slack_post_message", "calendar_delete"]) {
       assert.ok(nameProblem(name) !== undefined, name)
@@ -1011,7 +1011,7 @@ describe("a page fetched atomically", () => {
   })
   const page = (over: Record<string, unknown> = {}): Record<string, unknown> => validPage({
     source: "calendar",
-    plugin: "@joe-broadhead/opencode-gws",
+    plugin: "@we-the-rebel-alliance/gws-plugin",
     account: "sam.rivera@example.com",
     owner: { id: "mailto:sam.rivera@example.com", label: "Sam Rivera" },
     asOf: ISO,
@@ -1025,7 +1025,7 @@ describe("a page fetched atomically", () => {
   })
   const run = (atomicPages?: { reason: string }) =>
     sourceConformance({
-      plugin: "@joe-broadhead/opencode-gws",
+      plugin: "@we-the-rebel-alliance/gws-plugin",
       source: sourceOf(item()),
       tools: [{ id: "events_list", readOnly: true }],
       identityOperations: ["calendar.calendarList.get"],
@@ -1089,7 +1089,7 @@ describe("a source whose cursors never expire", () => {
   })
   const page = (over: Record<string, unknown> = {}): Record<string, unknown> => validPage({
     source: "gmail",
-    plugin: "@joe-broadhead/opencode-gws",
+    plugin: "@we-the-rebel-alliance/gws-plugin",
     account: "sam.rivera@example.com",
     owner: { id: "mailto:sam.rivera@example.com", label: "Sam Rivera" },
     asOf: ISO,
@@ -1103,7 +1103,7 @@ describe("a source whose cursors never expire", () => {
   })
   const run = (noExpiry?: { reason: string }) =>
     sourceConformance({
-      plugin: "@joe-broadhead/opencode-gws",
+      plugin: "@we-the-rebel-alliance/gws-plugin",
       source: sourceOf(item()),
       tools: [{ id: "events_list", readOnly: true }],
       account: "sam.rivera@example.com",
@@ -1168,7 +1168,7 @@ describe("the kit drives the secret screening from a fixture", () => {
   })
   const page = (events: Record<string, unknown>[]): Record<string, unknown> => validPage({
     source: "gmail",
-    plugin: "@joe-broadhead/opencode-gws",
+    plugin: "@we-the-rebel-alliance/gws-plugin",
     account: "sam.rivera@example.com",
     owner: { id: "mailto:sam.rivera@example.com", label: "Sam Rivera" },
     asOf: ISO,
@@ -1181,7 +1181,7 @@ describe("the kit drives the secret screening from a fixture", () => {
   })
   const run = (answer: Record<string, unknown>) =>
     sourceConformance({
-      plugin: "@joe-broadhead/opencode-gws",
+      plugin: "@we-the-rebel-alliance/gws-plugin",
       source: sourceOf(item()),
       tools: [{ id: "events_list", readOnly: true }],
       cases: [{ name: "a page", input: {} }],
@@ -1228,7 +1228,7 @@ describe("a gap is answered once per read (#28)", () => {
   })
   const page = (over: Record<string, unknown> = {}): Record<string, unknown> => validPage({
     source: "gmail",
-    plugin: "@joe-broadhead/opencode-gws",
+    plugin: "@we-the-rebel-alliance/gws-plugin",
     account: "sam.rivera@example.com",
     owner: { id: "mailto:sam.rivera@example.com", label: "Sam Rivera" },
     asOf: ISO,
@@ -1244,7 +1244,7 @@ describe("a gap is answered once per read (#28)", () => {
   /** A read from since whose first page answers a gap; `second` answers the page its cursor names. */
   const run = (first: Record<string, unknown>, second?: Record<string, unknown>) =>
     sourceConformance({
-      plugin: "@joe-broadhead/opencode-gws",
+      plugin: "@we-the-rebel-alliance/gws-plugin",
       source: sourceOf(item()),
       tools: [{ id: "events_list", readOnly: true }],
       account: "sam.rivera@example.com",
@@ -1312,7 +1312,7 @@ describe("removals are final (#27)", () => {
   })
   const page = (over: Record<string, unknown> = {}): Record<string, unknown> => validPage({
     source: "gmail",
-    plugin: "@joe-broadhead/opencode-gws",
+    plugin: "@we-the-rebel-alliance/gws-plugin",
     account: "sam.rivera@example.com",
     owner: { id: "mailto:sam.rivera@example.com", label: "Sam Rivera" },
     asOf: ISO,
@@ -1326,7 +1326,7 @@ describe("removals are final (#27)", () => {
   })
   const run = (answer: Record<string, unknown>) =>
     sourceConformance({
-      plugin: "@joe-broadhead/opencode-gws",
+      plugin: "@we-the-rebel-alliance/gws-plugin",
       source: sourceOf(item()),
       tools: [{ id: "events_list", readOnly: true }],
       account: "sam.rivera@example.com",
@@ -1415,7 +1415,7 @@ describe("a rules source (#30, items 10 and 11)", () => {
   test("item 10: the kit fences a rules source's probe by its identityRules, exactly", async () => {
     const run = (probeAsserts: readonly { action: string; resource: string }[], permission: Record<string, unknown>) =>
       sourceConformance({
-        plugin: "@joe-broadhead/opencode-github",
+        plugin: "@we-the-rebel-alliance/github-plugin",
         source: sourceOf(github({ readsIdentity: true, ...permission })),
         sources: { probe: { action: "github.probe" } },
         tools: [{ id: "events_list", readOnly: true }],
@@ -1478,10 +1478,10 @@ describe("accounts.server (#30, item 9)", () => {
       ...plaud("plaud-{account}"),
       permission: { events: "plaud.events_list", operations: ["get_current_user", "list_files"], identity: ["get_current_user"], readsIdentity: true },
     })
-    const page = validPage({ source: "plaud", plugin: "@joe-broadhead/opencode-plaud", account: "work", owner: { id: "plaud:user-1", label: "Fixture" }, asOf: ISO, trust: "untrusted", events: [], cursor: "c1", more: false, refused: [], failed: [] })
+    const page = validPage({ source: "plaud", plugin: "@we-the-rebel-alliance/plaud-plugin", account: "work", owner: { id: "plaud:user-1", label: "Fixture" }, asOf: ISO, trust: "untrusted", events: [], cursor: "c1", more: false, refused: [], failed: [] })
     const run = (account: string, prefix: string) =>
       sourceConformance({
-        plugin: "@joe-broadhead/opencode-plaud",
+        plugin: "@we-the-rebel-alliance/plaud-plugin",
         source,
         sources: { probe: { action: "plaud.probe" } },
         tools: [{ id: "events_list", readOnly: true }],
@@ -1519,9 +1519,9 @@ describe("accounts.server (#30, item 9)", () => {
   })
 })
 
-// ── v0.3 (#45) ────────────────────────────────────────────────────────────
+// ── Actors, metadata and facts ────────────────────────────────────────────
 
-describe("the v0.3 checks (#45 §8)", () => {
+describe("the actor, fact and parts checks", () => {
   const itemOf = (over: Record<string, unknown> = {}): Record<string, unknown> => validPage({
     id: "slack.workspace",
     kind: "events",
@@ -1603,11 +1603,11 @@ describe("the v0.3 checks (#45 §8)", () => {
     assert.deepEqual((await checkOf("actor-kind", [withKind], { machineActors: [agent.id, "slack:B0PILOT02"] }))?.problems, [
       "the fixture names slack:B0PILOT02 as an agent, a bot or a service, and no page lists it",
     ])
-    // Without the fixture's word, the check does not apply: Memory alone knows what a person is.
+    // Without the fixture's word, the check does not apply: only the fixture knows what a person is.
     assert.deepEqual(await checkOf("actor-kind", [without]), { name: "actor-kind", ran: false, notApplicable: true, problems: [] })
   })
 
-  test("one-author: an event with more than one author is flagged for a plugin adopting v0.3", async () => {
+  test("one-author: an event with more than one author is flagged", async () => {
     const one = page({ events: [{ external_id: "C0PILOT001:1", actors: [human] }] })
     const two = page({ events: [{ external_id: "C0PILOT001:1", actors: [human, { ...human, id: "slack:U0PILOT02", name: "Other sender" }] }] })
     const mixed = page({ events: [{ external_id: "C0PILOT001:1", actors: [{ ...human, role: "author" }, human] }] })
@@ -1692,7 +1692,7 @@ describe("the v0.3 checks (#45 §8)", () => {
       `hints("hints/thread.md"): the hint is ${hint.length + 1501} characters, over the 1500 a hint may take`,
     ])
     assert.deepEqual((await checkOf("hints", [page()], { item, files: files(hint.replace("kinds: [message]", "kinds: [message]\napply: auto")), ownSources: ["slack.workspace"] }))?.problems, [
-      'hints("hints/thread.md"): the hint sets "apply", which a hint may not set: a hint is data, and Memory decides how its text is used',
+      'hints("hints/thread.md"): the hint sets "apply", which a hint may not set: a hint is data, and the consumer decides how its text is used',
     ])
     assert.deepEqual((await checkOf("hints", [page()], { item, files: files(hint), ownSources: ["other.source"] }))?.problems, [
       'hints("hints/thread.md"): the hint names the source "slack.workspace", which is not one of the plugin\'s own',
@@ -1706,20 +1706,4 @@ describe("the v0.3 checks (#45 §8)", () => {
     assert.deepEqual(await checkOf("hints", [page()]), { name: "hints", ran: false, notApplicable: true, problems: [] })
   })
 
-  test("routines: a declared routine reads only its own sources, and sets nothing of Memory's", async () => {
-    const routine = "---\nid: thread-actions\ntitle: Read a thread's actions\nreads: { sources: [slack.workspace], kinds: [message] }\nproduces: [commitment]\n---\nRead each reply."
-    const item = itemOf({ routines: ["routines/thread.md"] })
-    const files = (text: string | undefined) => (path: string) => (path === "routines/thread.md" ? text : undefined)
-    assert.deepEqual(await checkOf("routines", [page()], { item, files: files(routine), ownSources: ["slack.workspace"] }), { name: "routines", ran: true, notApplicable: false, problems: [] })
-    assert.deepEqual((await checkOf("routines", [page()], { item, files: files(routine.replace("sources: [slack.workspace]", "sources: [elsewhere.source]")), ownSources: ["slack.workspace"] }))?.problems, [
-      'routines("routines/thread.md"): the routine reads the source "elsewhere.source", which is not one of the plugin\'s own',
-    ])
-    assert.deepEqual((await checkOf("routines", [page()], { item, files: files(routine.replace("produces: [commitment]", "produces: [commitment]\ntier: deep")), ownSources: ["slack.workspace"] }))?.problems, [
-      'routines("routines/thread.md"): the routine sets "tier", which a routine may not set: the namespace, the tier, the schedule, the budget, the priority and the apply mode are Memory\'s',
-    ])
-    assert.deepEqual((await checkOf("routines", [page()], { item, files: files(undefined), ownSources: ["slack.workspace"] }))?.problems, [
-      'routines("routines/thread.md") is declared and the package holds no such file',
-    ])
-    assert.deepEqual(await checkOf("routines", [page()]), { name: "routines", ran: false, notApplicable: true, problems: [] })
-  })
 })

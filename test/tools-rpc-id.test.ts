@@ -1,4 +1,4 @@
-// The tools-RPC id (source-contract#4): `<plugin id>.tools`, checked against the 24 family plugins' own ids.
+// The tools-RPC id (plugin-contract#4): `<plugin id>.tools`, checked against the 24 family plugins' own ids.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 import { isToolsRpcId, PLUGIN_ID_PATTERN, pluginIdOf, registerToolsRpc, toolsRpcId, toolsRpcIdProblems } from "../src/tools-rpc.ts"

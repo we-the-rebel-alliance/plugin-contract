@@ -1,8 +1,8 @@
 /**
  * The tools RPC, version 2.3: every known tool a plugin owns or exposes, as an RPC method, so a script can call it
  * with no model. The family's shared `src/host/tools-rpc.ts` v2 (the part outside the PLUGIN-SPECIFIC block, identical
- * in all 24 plugins; SHA-256 of that part 15d82caa…2a6d), with Memory's v2.3 per-method resource resolver merged in.
- * `docs/tools-rpc.md` explains every change from v2 and from Memory's version.
+ * in all 24 plugins; SHA-256 of that part 15d82caa…2a6d), with the v2.3 per-method resource resolver merged in.
+ * `docs/tools-rpc.md` explains every change from v2 and from that version.
  *
  *   POST /api/rpc/<plugin id>.tools/<method>
  *   { "input": { "sessionID": "<session>", "input": <the tool's input> } }
@@ -74,7 +74,7 @@ export const isToolsRpcId = (id: unknown): id is string =>
 export const pluginIdOf = (id: string): string | undefined => (isToolsRpcId(id) ? id.slice(0, -TOOLS_RPC_SUFFIX.length) : undefined)
 
 /**
- * The problems with the tools-RPC id a descriptor declares (source-contract#4), one sentence each: it must be a
+ * The problems with the tools-RPC id a descriptor declares (plugin-contract#4), one sentence each: it must be a
  * tools-RPC id, and, when the consumer has the plugin's `describe` answer, the id that `describe` reports. `describe`
  * is a diagnostic (RPC ids have no owner in OpenCode), so a mismatch means the descriptor or the install is wrong, never
  * that the RPC answer wins.
@@ -147,11 +147,11 @@ export interface PluginMethod {
    *
    * A resolver may refuse with its own code and next step: a throw the plugin's `pluginError` maps, or any error that
    * carries `code`, `what` (or a message) and `next`, such as `events`' `SourceError`, reaches the caller as that
-   * failure (source-contract#22). `null`, a malformed resource, or an error with no code is RESOURCE_UNRESOLVED.
+   * failure (plugin-contract#22). `null`, a malformed resource, or an error with no code is RESOURCE_UNRESOLVED.
    */
   resource?(input: unknown): string | null
   /**
-   * (Opt-in, source-contract#22) What the resolver may name. `"read"`, the default: a `class: "read"` method's
+   * (Opt-in, plugin-contract#22) What the resolver may name. `"read"`, the default: a `class: "read"` method's
    * operation must be a read operation (`readOperation`). `"any"`: the method may resolve a change's operation, as gws's
    * `schema` and `plan` do (they read a change's parameters or dry-run it, and write nothing). Either way the session's
    * rules are evaluated on the exact `<account>:<operation>`; the read-verb rule is a heuristic about names, not a grant,
@@ -315,7 +315,7 @@ const UPSTREAM_LIMIT = 300
 export const LOCATION_HEADER = "x-opencode-directory"
 export const LOCATION_HINT = `Send the call to the location you mean: run it in that project with "opencode api ... -H \\"${LOCATION_HEADER}:$PWD\\"", or pass the location[directory] query parameter to the HTTP request.`
 
-/** (v2.3) The read verbs a read method's operation starts its last dotted segment with: Memory's `READ_VERBS`. */
+/** (v2.3) The read verbs a read method's operation starts its last dotted segment with. */
 export const READ_VERBS: readonly string[] = ["read", "get", "list", "search", "lookup", "view", "describe", "history", "query", "count", "status"]
 
 /**

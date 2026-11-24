@@ -1,196 +1,86 @@
-# `events` and `cursor`: from contract 1 to the final design
+# Events and cursors
 
-Contract 1 is the family's `src/host/events-list.ts` (SHA-256 `9d72fc8d…605e`), byte-identical in github, granola,
-gws, history, linear, plaud, slack, wisprflow and x. The final design is app#2346, comment 6853030617, §2.1 and §2.3.
+An events source is a feed. A plugin reads one with `events_list`, and an app keeps its own cursor. Contract §7 is the
+authority; this page is the working summary.
 
-**Everything is additive.** Contract 1's names, fields, limits and messages are unchanged. Every contract 1 page is a
-valid page. The family's own events suite passes unchanged (`test/events-contract1.test.ts`), and the nine plugins'
-recorded pages pass the package's conformance as recorded (`test/fixtures.test.ts`). Each addition is optional on the page,
-and it is checked whenever it is present.
+## The call
 
-## Module layout
+```js
+events_list({ source?, account?, scope?, cursor?, since?, limit? })
+```
 
-| Contract 1 (`events-list.ts`) | Package |
+- `source` names one of the plugin's sources; without it the plugin uses its first, and it refuses a source it does not
+  have.
+- `account` names one of the source's accounts; without it the plugin uses `default`. With more than one account, leaving
+  it out is `ACCOUNT_REQUIRED`.
+- `scope` narrows the source to what a person confirmed (labels, channels, repositories). Only a source that declares
+  scope keys accepts it, and a source that does not read a scope refuses one rather than ignore it.
+- `cursor` wins over `since`. With neither, the source starts 24 hours before now. A cursor the source did not issue is
+  refused as `CURSOR_INVALID`, never restarted silently.
+- `limit` is an integer from 1 to 500, 100 by default.
+
+## The page
+
+| Field | Meaning |
 |---|---|
-| the data model, `parseEventsListInput`, `makeEvent`, `eventHash`, `cut`, `oldestFirst`, `fitPage`, `eventsListResult`, `eventProblems`, `resultProblems`, the limits and the kinds | `src/internal/events.ts` |
-| `eventsListConformance`, `assertEventsListConformance` | `src/internal/events-conformance.ts` |
-| `encodeCursor`, `decodeCursor` | `src/cursor.ts` (also re-exported from `events`) |
-| — | `src/internal/secrets.ts`: Memory's `secretKinds`, ported |
+| `source`, `account`, `owner` | whose page it is, on an empty page too |
+| `events` | oldest first, at most `limit` |
+| `cursor`, `more` | where the next call starts. `more: false` is not "done": a later call may list new events. |
+| `trust` | always `"untrusted"`: an event's text is data, never instructions |
+| `scope` | the canonical scope the page was read under, when the call named one |
+| `refused[]` | events the source will never deliver, with a reason: `instruction`, `secret` or `owner`. The app may advance past them. |
+| `failed[]` | events the source could not read this time. Any entry holds the app's cursor back. |
+| `removals[]` | things the source listed before and no longer stands behind: `{ external_id, at, reason }`, with `reason` `deleted`, `withheld` or `expired` |
+| `gap` | `{ reason: "expired" \| "window-truncated", since }` when history is lost |
+| `cost` | what the provider reported this call cost: `{ units: [{ per, count }], usd? }` |
+| `asOf` | when the source read the page, UTC |
+| `plugin` | the plugin's package name or id, when it states one |
 
-`import … from "@we-the-rebel-alliance/source-contract/events"` gives what `events-list.ts` exported, plus the additions
-below, except `CONTRACT_VERSION`, which is the package entry's (`.`). A plugin adopts the package by replacing its
-copy's import path. `src/events.ts` is the entry; the code is under `src/internal/`.
+A removal is an answer, not a drop: the page's cursor covers it and it never holds the cursor back. An app applies the
+page's events first, then the removals. A `gap` is answered once, on the page where the source restarts its window; no
+later page of that read repeats it.
 
-## The final design's page result, mapped
+## The event
 
-| Design §2.1 / §2.3 | Contract 1 | Package | Status |
-|---|---|---|---|
-| `events`, `cursor`, `more` | yes | unchanged | done |
-| `refused[]`: final drops with a reason (instruction-shaped text from someone else, a secret, the wrong owner); the consumer may advance past them | — | `RefusedEvent { external_id, reason: "instruction" \| "secret" \| "owner", detail? }`. `screenEvents(events, { ownedBy?, instruction?, secrets? })` builds it. `detail` is one line and never holds content. An id may not also appear in `events` or `failed`. Conformance option `refused`: the ids a full listing refuses. | done; D5 |
-| `failed[]`: retryable drops; any entry holds the cursor back | — | `FailedEvent { external_id, code, retryAfterSec? }`, validated on the page. The rule that it holds the cursor is the consumer's; its check is Memory's (`hooks.after`). | done; seam |
-| `gap: { reason: "expired" \| "window-truncated", since }` when history is lost | — | `EventsGap`, exactly those two keys. `SourceError` carries `gap` for `CURSOR_EXPIRED`. A gap is answered once, on the page where the source restarts its window; no later page of that read repeats it (#28, the kit's `gap-once-per-read`). | done; D4 |
-| `cost`: what the provider reported, for billed sources | — | `EventsCost { units: [{ per, count }], usd? }`. `per` names the descriptor's `cost.units[].per`. | done; D6 |
-| `removals[]`: what a source no longer stands behind (#27) | — | `EventsRemoval { external_id, at, reason: "deleted" \| "withheld" \| "expired" }`, `REMOVAL_REASONS`, `removalProblems`, and `PageExtras.removals`. At most 500 per page, each id once, none also in `failed[]`, no `at` after `asOf`; an id may also be a tombstone event on the page. The kit's `removals-are-final` runs whenever an answer carries it. | done; D19 |
-| Actor metadata (#45 §1): `kind`, `identities`, `self` | — | `ACTOR_KINDS`, `ACTOR_ROLES`, `AUTHOR_ROLES`, `IDENTITY_STRENGTHS`, `EventIdentity`, `actorProblems`. `kind` is one of four, and an identity is scheme-qualified and never the actor's own id. A page may list several `from` actors, so a consumer reads the first `from`, or else the first `author`, as the author; the kit's `one-author` asks a plugin adopting v0.3 to list one. Conformance option `machineActors`: the kit's `actor-kind` holds a fixture's machines to a kind. | done; D20 |
-| Event metadata (#45 §2): `reply_to`, `audience`, `domains`, `sections`, `parts` | — | `AUDIENCES`, `EventSection`, `EventPart`, and the checks `eventProblems` runs. A section text takes its own 4,096 characters, and the kit's `parts-stable` holds a part id to its text across pages. | done; D20 |
-| `facts[]` (#45 §3): `commitment`, `person.attribute` and `meeting.attended`, `additionalProperties: false` | — | `FACT_TYPES`, `EventFact`, `factProblems`, and `FACT_SCHEMAS` in `schema` (`dist/schemas/fact.*.json`). A type is declared in the descriptor's `facts`; every actor reference names an actor on the same event; the kit's `facts` and `commitment-key` hold a type to the declaration and a key to its item. | done; D20 |
-| The event hash (#45 §6) | the fields in a fixed order, and nothing else | `eventHash` covers a new field only when it is present, with its keys sorted, so a v0.2 event hashes as it did and a plugin's key order does not matter. | done; D20 |
-| Cursor: opaque, versioned, bound to `(plugin, source, account, scope)`; foreign → `CURSOR_INVALID`; lost history → `CURSOR_EXPIRED` with `gap` | version 1, bound to the source only. Each plugin binds the rest in its own state (6 of 9 put the account in `a`; linear, slack and x bind only an owner hash in `o`, which all 9 carry). | `src/cursor`: version 2, `encodeBoundCursor` / `decodeBoundCursor`, with a 16-hex hash of the canonical binding. `acceptV1` reads the version 1 cursors collectors already hold, for the whole source only (see "Cursors" below). Conformance option `binding`: the same state rebound to another plugin, account or scope must be refused. | done; D12 |
-| Core kinds + `task`, `file`; extensions `x-<plugin>/<kind>` | 9 kinds | `EVENT_KINDS` (11), `EXTENSION_KIND`, `isEventKind`. Conformance option `kinds`: the descriptor's `reads`. | done; D13 |
-| Errors: the draft's table + `SCOPE_MISSING`, `BUDGET_EXCEEDED`, `SOURCE_DISABLED`; `AUTH_REQUIRED` aliases `NEEDS_SIGN_IN`; the message is `CODE: what happened. Next step: …` | each plugin's own codes | `ERROR_CODES` (14), `ERROR_ALIASES`, `CONTRACT1_CODES` (the family's `EVENTS_*` names), `canonicalCode`, `SourceError`, `parseSourceError`. Conformance option `codes`. | done; D3 |
-| `events_list` input `scope?` | refused as an unknown field | accepted only when the source declares `scopeKeys` (`parseEventsListInput(input, { scopeKeys })`), so a source that cannot narrow never silently reads more. Keys and values are checked, and the scope is canonicalised. Optional echo on the page (`scope`); conformance option `scopeEcho`. | done; D7 |
-| The draft's envelope: `plugin`, `asOf` | — | optional on the page | done; D1 |
-| `maxBytes` (64 KB default, up to 1 MB) | `MAX_PAGE_BYTES` = 900 000 | `MAX_BYTES`. `fitPage(events, limit, maxBytes)`, `resultProblems(result, limit, maxBytes)` and conformance option `maxBytes`. `MAX_PAGE_BYTES` is 65 536, the descriptor's default (D10, (b), adopted). | done |
-| The secret-pattern refusal (§3 `events`; the draft's conformance check 3) | — | `secretKinds`, Memory's `records/src/storable.js` at a70cda5, ported with types only. Used by `screenEvents`, and always checked by the conformance: an event that holds a secret belongs in `refused[]`. None of the nine fixtures trips it. | done; D14 |
-| `since: "-7d"`, `$me`, `pick` | — | not here: `params` (the app and Artifacts) resolves them before the call, so a source still receives an absolute `since` | out of scope |
-| `probe`, `snapshot_read`, `describe` | — | not in `events`. The probe and details checks are Memory's (`hooks`). | out of scope; D11 |
+| Field | Meaning |
+|---|---|
+| `source`, `account`, `external_id` | the source's own stable id for the item |
+| `kind` | `message`, `meeting`, `session`, `bookmark`, `issue`, `pr`, `commit`, `doc`, `event`, `task`, `file`, or `x-<name>/<kind>` |
+| `occurred_at` | UTC, as `Date.prototype.toISOString` writes it |
+| `thread` | a stable thread key, or `null` |
+| `actors` | at most 20: `role`, a scheme-qualified `id`, and optionally `name`, `kind` (`person`, `agent`, `bot`, `service`), `identities` and `self` |
+| `title`, `text` | at most 300 and 4,096 characters |
+| `url` | an https link, or `null` |
+| `labels` | at most 20 tags, without spaces |
+| `hash` | `sha256:` of every other field |
+| `reply_to`, `audience`, `domains` | the parent, who the item was for, and the recipient domains |
+| `sections`, `parts` | a long item by heading, and a growing item's parts |
+| `facts` | typed facts the source already holds in code: `commitment`, `person.attribute`, `meeting.attended` |
 
-## What the nine plugins need to change to pass with every option on
+Extensions use one rule: `x-<name>/<kind>`, both segments lowercase, at most 32 characters. A source's kind must be in
+its own namespace (the first segment of its source id), so one plugin cannot speak in another's vocabulary.
 
-The fixture runner records this, and fails if it changes:
+The hash covers the base fields and each optional field only when it is present, with object keys sorted. A source
+re-lists an item, with the same `external_id`, when it changes; the new `hash` marks the edit.
 
-- **Codes:** github, granola, linear, plaud, slack, wisprflow and x already pass `codes` (directly, or through
-  `CONTRACT1_CODES`). **gws** refuses a bad limit or source with `GWS_VALIDATION_ERROR`. **history** refuses with no
-  code at all (`The tool input is invalid. …`). Both need to change.
-- **Bound cursor:** none uses version 2 yet (they cannot until the package exists). Each moves when it adopts the
-  package, with `acceptV1` for one release.
-- **Scope, refused, failed, gap, cost:** none emits them yet. X is Wave 1's billed reference for `cost`. gws's
-  expired-history path (Gmail `historyId` too old) is the first `gap` / `CURSOR_EXPIRED`.
-- Every recorded page already fits the 64 KB default `maxBytes`, and uses only core kinds.
+## Cursors
 
-## With the app's modules (#5)
+A cursor is opaque base64url JSON of at most 1,024 characters, bound to `(plugin, source, account, scope)`. The binding
+is a 16-hex-digit hash inside the cursor, so a cursor from another plugin, source, account or scope is refused as
+`foreign` rather than restarted. The hash catches mix-ups; it is not a signature. A source still checks the state it
+keeps inside the cursor, and the grant — not the cursor — decides what may be read.
 
-- **One error table.** `src/internal/failure.ts` held the same twelve codes; it now takes `ERROR_CODES` from here, and
-  reads a plugin's code through `canonicalCode` (`AUTH_REQUIRED`, and contract 1's `EVENTS_CURSOR_INVALID`). `read`'s
-  `FailureCode` is `ErrorCode`.
-- **`read` checks an events page with `resultProblems`** under the source's `maxBytes`, as its TODO asked: a page with
-  §2.1's additions passes; a broken one is `SCHEMA_VIOLATION`. This makes `owner.label` required on a page read
-  through `read` (D8), where `read`'s `EventsPage` type had it optional.
-- **One `maxBytes` pair.** `descriptor`'s `DEFAULT_MAX_BYTES` and `MAX_BYTES_LIMIT` are `MAX_BYTES.default` and
-  `MAX_BYTES.max` from here.
-- **`reads` is an event kind, PROVISIONALLY.** `descriptor` checks a source's `reads` with `isEventKind` (a core kind
-  or `x-<plugin>/<kind>`), marked PROVISIONAL in the code until D13 and D15 are agreed. It names one kind, while
-  github's one source lists four (D15).
-- **Kept apart, on purpose:** `descriptor`'s `canonicalJson` and the cursor's canonical scope (the cursor must not pull
-  zod into its bundle); `read`'s `EventsPage` type and `SourceEvent`/`EventsListResult` here (`read` returns the
-  page as the plugin answered it); `permission`'s `Grant.scope` (lists only) and `Scope` here (a value or a list, D12).
+An app saves its cursor in the same transaction as the page it accepts. `failed[]` holds the cursor back; `refused[]`
+does not.
 
-## Probe (source-contract#8, #4)
+## Errors
 
-`probe` is one tools-RPC method per plugin (`PROBE`), called per source, as `probe({ source?, account? })`
-(`parseProbeInput` refuses anything else). It answers `ProbeResult`:
-`{ source, account, owner: { id, label }, scopes?, cost?, trust: "untrusted" }` (`probeResult` builds it).
+Every failure reads `CODE: What happened. Next step: What to do.` from one table (contract §12). A plugin may add a code;
+it declares the code in its manifest. The events module exports `ERROR_CODES`, `SourceError` and `parseSourceError`, and
+`canonicalCode` answers whether a code is in the table.
 
-- `owner.id` is what a host keys its cache on, and what `$me` resolves to.
-- `scopes` are the provider sign-in's scopes.
-- `cost` is what a billed source (X) charged for the probe, from its own price table.
+## Conformance
 
-`probeResultProblems` refuses any other field, so a probe that returned content fails. It also requires
-`owner.label` (D8).
-
-**One check (D230, #8).** `read.probe`, the conformance kit's `probeProblems` and `events.probeResultProblems` all judge an
-answer by `probeResultProblems`, so a probe that passes conformance is one a consumer accepts. Concretely:
-
-- `owner: { id, label }` is required. There is no `owner: null`.
-- `owner.verified: false` marks an owner the provider does not confirm (Wispr Flow's `wisprflow:credential:<id>`); `probeResult` carries it, the page's and the probe answer's owner checks accept it (only `false`; absent is the vouched owner), and `eventsListConformance` compares it with `fixtures.owner` (#30 item 13).
-- `owner.id` is scheme-qualified, as `docs/contract.md` gives an owner (`mailto:sam@example.com`, `slack:U0123`),
-  with the rule an actor's id follows: a lowercase scheme, `:`, then no whitespace. A bare `sam@example.com` fails.
-- A source that is not signed in refuses the probe with `NEEDS_SIGN_IN` and a `next` step. If a plugin answers
-  `owner: null` anyway, `read.probe` reports `NEEDS_SIGN_IN` and conformance fails it.
-- A local source (history, say) names a synthetic owner: `os-user:<user>@<host>`, with a label such as the user's name.
-- `source` is the name the plugin knows the source by, the descriptor's `input.source` (`gmail`), and the answer also
-  carries `trust: "untrusted"`.
-
-Which permission a probe runs under is the descriptor's to declare (`sources.probe.action` and `permission.identity`, #4 point 3).
-
-## Extension kinds (D13, source-contract#15)
-
-An `x-<namespace>/<kind>` belongs to the source whose id starts with `<namespace>`: `x-jelly/routine-run` only for a
-`jelly.*` source. This is the rule Memory's schema applies to `reads` in #21 (which supersedes #18), calling `isEventKindIn` itself. `isEventKindIn(kind, namespace)` checks
-it, `sourceNamespace` gives a source id's namespace, and `eventsListConformance`'s `namespace` option applies it to
-every page. `isEventKind` alone still accepts any well-formed extension.
-
-## Cursors: what the binding does and does not do
-
-- **`acceptV1`, for the whole source only.** A contract 1 cursor was issued for the whole source. `decodeBoundCursor`
-  accepts one, with `acceptV1`, only when the binding's scope is empty (absent or `{}`). For a scoped read, or after
-  any change of scope, it is refused (`CURSOR_INVALID`), and the consumer starts the scoped read again with `since`.
-  A scope change never resumes from an old cursor.
-- **The binding hash catches mix-ups; it does not stop forgery.** The hash makes a cursor sent to the wrong plugin,
-  source, account or scope fail loudly. It is not a signature: anyone holding a cursor can decode it and encode the
-  same state under another binding. A source therefore still checks the cursor's state against what it reads (as the
-  nine plugins do with their owner hash `o`), and the person's grant, enforced by the fenced session, decides what
-  may be read. A cursor never widens access (D18).
-
-## Decisions needed
-
-- **D1. Required or optional.** `refused`, `failed`, `plugin` and `asOf` are optional here, and an empty list is left
-  out, so contract 1 pages stay valid. Should version 1 make any of them required, or wait for version 2?
-  *Recommendation:* optional in v1.
-- **D2. The hash.** The draft says `hash = sha256(source:account:external_id)`. Contract 1 hashes every field, so an
-  edit changes it. Memory's `normalizeEvent` hashes the content without source, account or external_id. These are
-  three different hashes. *Recommendation:* keep contract 1's content hash. The consumer's id is separate (Memory
-  already derives `evt_…` from `source:account:external_id`), and Memory should read the library's hash rather than
-  recompute its own.
-- **D3. Codes for malformed input and an unknown source.** Decided (a): `INPUT_INVALID` and `SOURCE_UNKNOWN` are in
-  `ERROR_CODES`, and `read` passes them through as themselves. `PROPOSED_CODES` is empty, kept for one release.
-- **D4. The gap.** The final design has `{ reason: "expired" | "window-truncated", since }`. Memory's contract 2 has
-  `sync-token-expired | cursor-invalid | window-truncated` and an optional `until`. The package implements the
-  final design's shape and refuses `until`. Should `until` be allowed? (`cursor-invalid` is `CURSOR_INVALID`, an
-  error, not a gap.)
-- **D5. Instruction-shaped text.** There is no default detector. A source passes its own predicate to
-  `screenEvents`. Does the package own a heuristic, and who writes it? (A wrong positive drops a real event for good.)
-- **D6. Cost on the page.** Is it `{ units: [{ per, count }], usd? }`? Does `usd` come from the provider, or from the
-  descriptor's prices times `count`?
-- **D7. The scope echo, and `setup`.** Memory's contract 2 always echoes `scope` (`{}` for the whole source) and adds
-  a `setup` sentence. The final design names neither. The package echoes optionally (required only under
-  `scopeEcho`) and has no `setup`.
-- **D8. The owner.** The draft allows `owner: null` and an optional `label`. Contract 1 requires `{ id, label }`.
-  The package keeps contract 1's shape, because Memory checks the owner before it stores anything.
-- **D9. Actors.** The draft's `{ id, label? }` against contract 1's `{ role, id, name? }`. The package keeps contract
-  1's.
-- **D10. The default page cap.** A descriptor's `maxBytes` defaults to 64 KB and the host caps answers at it, but
-  contract 1's cap is 900 000. Plugins must pass their declared `maxBytes` to `fitPage`. Should the library's default
-  become 64 KB in v1? That breaks no recorded page, but it changes contract 1's constant.
-  **Decided: (b)**, adopted by the app on #7; `MAX_PAGE_BYTES` is 65 536.
-- **D11. Identity.** The final design's `probe` method, or Memory's contract 2 owner-only `events_list({ limit: 0 })`?
-  Contract 1 refuses `limit: 0`, and its conformance checks that refusal. The package keeps that, pending this
-  decision.
-- **D12. Scope canonical form.** Keys are sorted, and each list is sorted and deduplicated. A string and a one-item
-  list stay different. Agreed?
-- **D13. Extension kinds.** Each segment at most 32 characters (`EXTENSION_NAME`, the one rule for kinds and outputs; it was 64 for the whole kind). The `<plugin>` word is not checked against the plugin's id. Should
-  the conformance check it against the descriptor?
-- **D14. Who owns `src/internal/secrets.ts`.** It is Memory's code in a family-owned module. *Proposal:* both CODEOWNERS, with the
-  same test vectors on both sides.
-- **D15. One kind or several.** The descriptor's `reads` is one string, and the provisional check in `descriptor` takes
-  one kind; github's one source lists `commit`, `event`, `issue` and `pr`. Options: (a) `reads` takes a list, or (b)
-  `reads` stays one kind and github declares one source per kind (`github.commits`, `github.issues`, …).
-  *Recommendation:* (b), which keeps `reads` a string as the descriptor and its examples have it, and lets a person
-  consent per kind.
-- **D16. Which string `CursorBinding.plugin` is.** (a) the npm package name, (b) the descriptor's source-id prefix
-  (`gws` in `gws.gmail`), or (c) the tools-RPC plugin id (`google-workspace.gws`). The hash covers it, so renaming it
-  invalidates every cursor of that plugin. *Recommendation:* (b), the descriptor's prefix. It is the stable id
-  grants already use, and a package rename or a new RPC id does not move it.
-- **D17. `acceptV1` with a scope.** This is decided here, and needs confirmation: accepted only for an empty scope, refused for
-  any scoped read (see "Cursors"). *Recommendation:* keep this rule, and drop `acceptV1` one release after the plugins move.
-- **D18. Forgery.** (a) the binding hash only, with the source checking its state and the grant fencing the read (as
-  now), or (b) a keyed MAC with a plugin-held secret. *Recommendation:* (a) for v1. A forged cursor can only point a
-  read inside what the grant already allows, and (b) needs key storage in every plugin.
-- **D19. Retractions (#27).** A source that deletes or withholds something it listed needs to say so, so a consumer
-  can retract what it derived. Options: (a) an optional page key `removals[]` of `{ external_id, at, reason }`, or
-  (b) a removal as an event of kind `x-<plugin>/removal`. *Decided in #27:* (a). A removal is not content, needs no
-  hash, can name an id the provider has already pruned, and stays out of consumers' budgets and page sizes. jelly's
-  tombstone event stays legal beside it, and Memory keeps its interim label rule until jelly sends the key.
-- **D20. Actor, event and fact metadata (#45).** A page must say who an actor is across sources, who an item was for,
-  and what the source already holds in code. Options: (a) new optional actor and event fields, and a typed `facts[]`
-  with three core schemas declared by type, or (b) a single free-form `meta` object per event. *Decided in #45:* (a).
-  Every field is optional, so a v0.2 page stays valid; the hash covers a new field only when it is present; and the
-  shapes are closed, so a fact has no version and no sensitive field. Hints and routines are files, checked by their own
-  module, and they stay data: neither may set a decision of Memory's.
-- **R1. `maxBytes` and images (the app's `registry` decision).** `read` checks `maxBytes` against the answer's JSON
-  bytes, and §2.2 caps `maxBytes` at 1 MB. But `registry`'s `image` allows a `dataUri` of 1 MB of image (about 1.4 MB
-  of base64), so a full-size inline image is always `TOO_LARGE`. Options: (a) `maxBytes` counts the answer's bytes,
-  and `DATA_URI_MAX` shrinks to fit (about 1 MB of base64 including the envelope, about 760 KB raw; anything larger is
-  downscaled or sent as an https `url`); (b) `maxBytes` counts the payload before encoding; (c) an `image` source may
-  declare up to 1.5 MB. *Recommendation:* (a). **Adopted by the app in #9**: `image.dataUri` is capped at 1 MB less
-  4 KB, so the whole answer fits in `maxBytes`.
+`eventsListConformance` walks a recorded source whole and page by page, and checks every page with `resultProblems`. It
+proves the page shape, the sizes, the order, the hash, the kinds, the refusals, the bound cursor and the error codes.
+`npm run conformance:self-test` runs the same checks over the examples in `examples/`.

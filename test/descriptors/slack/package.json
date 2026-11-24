@@ -1,7 +1,7 @@
 {
-  "name": "@joe-broadhead/opencode-slack",
+  "name": "@we-the-rebel-alliance/slack-plugin",
   "version": "0.0.0-example",
-  "description": "A test descriptor in the shape of Memory's examples: not the plugin.",
+  "description": "A test descriptor in the shape of the examples: not the plugin.",
   "private": true,
   "sources": {
     "contractVersion": 1,

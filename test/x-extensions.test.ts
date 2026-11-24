@@ -1,16 +1,16 @@
-// Extension names (opencode-mem#58): `x-<namespace>/<name>` for an event kind, a source's reads and a snapshot's
+// Extension names: `x-<namespace>/<name>` for an event kind, a source's reads and a snapshot's
 // output, with an inline `outputSchema` for an `x-` output. Both directions, in a table.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 import { SOURCES_SCHEMA } from "../src/schema.ts"
 import { eventHash } from "../src/events.ts"
 import { declarationProblems, pageProblems, sourceConformance, type ConformanceCalls } from "../src/conformance.ts"
-import { checkOutput, isOutputName } from "../src/registry.ts"
+import { checkOutput, isOutputName } from "../src/outputs.ts"
 import { pickProblemsForOutput } from "../src/pick.ts"
 import { checkSources } from "../src/descriptor.ts"
 
-const PLUGIN = "@joe-broadhead/opencode-mem"
-const ACCOUNT = "mem@example.test"
+const PLUGIN = "@we-the-rebel-alliance/acme-plugin"
+const ACCOUNT = "acme@example.test"
 const ISO = "2026-11-13T09:00:00.000Z"
 
 const receiptSchema = {
@@ -21,25 +21,25 @@ const receiptSchema = {
 } as const
 
 const receipt = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
-  id: "mem.receipts",
+  id: "acme.receipts",
   kind: "snapshot",
   tool: "snapshot_read",
-  output: "x-mem/receipt",
+  output: "x-acme/receipt",
   outputSchema: receiptSchema,
   accounts: { named: false },
-  permission: { tool: "mem.snapshot_read", operations: ["mem.receipts.list"] },
+  permission: { tool: "acme.snapshot_read", operations: ["acme.receipts.list"] },
   cost: { class: "free" },
   ...over,
 })
 
-const memory = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
-  id: "mem.notes",
+const acme = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
+  id: "acme.notes",
   kind: "events",
-  reads: "x-mem/suggestion",
+  reads: "x-acme/suggestion",
   tool: "events_list",
-  input: { source: "mem" },
+  input: { source: "acme" },
   accounts: { named: false },
-  permission: { events: "mem.events_list", operations: ["mem.notes.list"] },
+  permission: { events: "acme.events_list", operations: ["acme.notes.list"] },
   cost: { class: "free" },
   ...over,
 })
@@ -52,15 +52,15 @@ const schemaProblems = (sources: unknown): readonly string[] => {
 
 describe("an extension name in the schema", () => {
   const cases: readonly { readonly name: string; readonly item: Record<string, unknown>; readonly ok: boolean }[] = [
-    { name: "a core reads", item: memory({ reads: "message" }), ok: true },
-    { name: "an x- reads", item: memory({ reads: "x-mem/suggestion" }), ok: true },
-    { name: "an x- reads with no name", item: memory({ reads: "x-mem/" }), ok: false },
-    { name: "a dotted reads", item: memory({ reads: "x.mem" }), ok: false },
+    { name: "a core reads", item: acme({ reads: "message" }), ok: true },
+    { name: "an x- reads", item: acme({ reads: "x-acme/suggestion" }), ok: true },
+    { name: "an x- reads with no name", item: acme({ reads: "x-acme/" }), ok: false },
+    { name: "a dotted reads", item: acme({ reads: "x.acme" }), ok: false },
     { name: "a registry output", item: receipt({ output: "agenda", outputSchema: undefined }), ok: true },
     { name: "an x- output with its schema", item: receipt(), ok: true },
     { name: "an x- output with no schema", item: receipt({ outputSchema: undefined }), ok: false },
     { name: "a registry output with a schema", item: receipt({ output: "agenda" }), ok: false },
-    { name: "an x- output with no name", item: receipt({ output: "x-mem/" }), ok: false },
+    { name: "an x- output with no name", item: receipt({ output: "x-acme/" }), ok: false },
   ]
 
   test("reads and output take a core name or x-<namespace>/<name>, and only an x- output has a schema", () => {
@@ -73,11 +73,11 @@ describe("an extension name in the schema", () => {
 
 describe("an extension name's namespace is the source's", () => {
   const cases: readonly { readonly name: string; readonly item: Record<string, unknown>; readonly ok: boolean }[] = [
-    { name: "reads x-mem on mem.notes", item: memory(), ok: true },
-    { name: "reads x-other on mem.notes", item: memory({ reads: "x-other/suggestion" }), ok: false },
-    { name: "output x-mem on mem.receipts", item: receipt(), ok: true },
-    { name: "output x-other on mem.receipts", item: receipt({ output: "x-other/receipt" }), ok: false },
-    { name: "reads x-mem on gws.gmail", item: memory({ id: "gws.gmail", permission: { events: "gws.events_list", operations: ["gmail.users.messages.list"] } }), ok: false },
+    { name: "reads x-acme on acme.notes", item: acme(), ok: true },
+    { name: "reads x-other on acme.notes", item: acme({ reads: "x-other/suggestion" }), ok: false },
+    { name: "output x-acme on acme.receipts", item: receipt(), ok: true },
+    { name: "output x-other on acme.receipts", item: receipt({ output: "x-other/receipt" }), ok: false },
+    { name: "reads x-acme on gws.gmail", item: acme({ id: "gws.gmail", permission: { events: "gws.events_list", operations: ["gmail.users.messages.list"] } }), ok: false },
   ]
 
   test("a mismatch is refused, and the schema itself cannot see it", () => {
@@ -96,22 +96,22 @@ describe("an extension name's namespace is the source's", () => {
 
 describe("an x- output is checked against its inline schema", () => {
   test("checkOutput and pick use the inline schema for an x- name", () => {
-    assert.equal(checkOutput("x-mem/receipt", { id: "r1", total: 3 }, receiptSchema).ok, true)
-    const bad = checkOutput("x-mem/receipt", { id: "r1" }, receiptSchema)
+    assert.equal(checkOutput("x-acme/receipt", { id: "r1", total: 3 }, receiptSchema).ok, true)
+    const bad = checkOutput("x-acme/receipt", { id: "r1" }, receiptSchema)
     assert.equal(bad.ok, false)
     if (!bad.ok) assert.ok(bad.problems.some((problem) => /total/.test(problem)), bad.problems.join("; "))
-    assert.deepEqual(pickProblemsForOutput("x-mem/receipt", ["id", "total"], receiptSchema), [])
-    assert.ok(pickProblemsForOutput("x-mem/receipt", ["nope"], receiptSchema).length > 0)
+    assert.deepEqual(pickProblemsForOutput("x-acme/receipt", ["id", "total"], receiptSchema), [])
+    assert.ok(pickProblemsForOutput("x-acme/receipt", ["nope"], receiptSchema).length > 0)
     // A registry name still uses the registry, and is still recognised.
     assert.equal(isOutputName("agenda"), true)
     assert.equal(checkOutput("agenda", {}).ok, false)
-    const noSchema = checkOutput("x-mem/receipt", { id: "r1", total: 1 })
+    const noSchema = checkOutput("x-acme/receipt", { id: "r1", total: 1 })
     assert.equal(noSchema.ok, false)
   })
 
   test("the descriptor accepts the declaration, and refuses a bad one", () => {
     assert.equal(checkSources(declarationOf(receipt())).ok, true)
-    assert.equal(checkSources(declarationOf(memory())).ok, true)
+    assert.equal(checkSources(declarationOf(acme())).ok, true)
     assert.equal(checkSources(declarationOf(receipt({ outputSchema: undefined }))).ok, false)
   })
 })
@@ -129,12 +129,12 @@ describe("conformance with an extension output", () => {
       snapshotCases: [{ window: "today" }],
       calls: {
         probe: async (input, context) => {
-          await context.permission.assert({ action: "mem.snapshot_read" })
-          return { source: "mem", account: (input as { account: string }).account, owner: { id: "mem:1", label: "Memory" }, trust: "untrusted" }
+          await context.permission.assert({ action: "acme.snapshot_read" })
+          return { source: "acme", account: (input as { account: string }).account, owner: { id: "acme:1", label: "Acme" }, trust: "untrusted" }
         },
         snapshot: async (_input, context) => {
-          await context.permission.assert({ action: "mem.snapshot_read" })
-          await context.permission.assert({ action: "mem.read", resources: [`${ACCOUNT}:mem.receipts.list`] })
+          await context.permission.assert({ action: "acme.snapshot_read" })
+          await context.permission.assert({ action: "acme.read", resources: [`${ACCOUNT}:acme.receipts.list`] })
           return { data, asOf: ISO }
         },
       },
@@ -150,25 +150,25 @@ describe("conformance with an extension output", () => {
 
   test("a page's x- kind must be in the source's namespace", () => {
     const source = (() => {
-      const checked = SOURCES_SCHEMA.check(declarationOf(memory()))
+      const checked = SOURCES_SCHEMA.check(declarationOf(acme()))
       if (!checked.ok) throw new Error(checked.problems.join("; "))
       return checked.value.items[0]!
     })()
     const options = { source, plugin: PLUGIN, input: {} }
     const page = (kind: string): Record<string, unknown> => ({
-      source: "mem",
+      source: "acme",
       plugin: PLUGIN,
       account: ACCOUNT,
-      owner: { id: "mem:1", label: "Memory" },
+      owner: { id: "acme:1", label: "Acme" },
       asOf: ISO,
       trust: "untrusted",
-      events: [{ ...(() => { const rest = { source: "mem", account: ACCOUNT, external_id: "n1", kind, occurred_at: ISO, title: "t", text: "", url: null, thread: null, actors: [], labels: [] }; return { ...rest, hash: eventHash(rest as never) } })() }],
+      events: [{ ...(() => { const rest = { source: "acme", account: ACCOUNT, external_id: "n1", kind, occurred_at: ISO, title: "t", text: "", url: null, thread: null, actors: [], labels: [] }; return { ...rest, hash: eventHash(rest as never) } })() }],
       cursor: "c1",
       more: false,
       refused: [],
       failed: [],
     })
-    assert.deepEqual(pageProblems(page("x-mem/suggestion"), options), [])
+    assert.deepEqual(pageProblems(page("x-acme/suggestion"), options), [])
     assert.ok(pageProblems(page("x-other/suggestion"), options).some((problem) => /namespace/.test(problem)))
   })
 })
@@ -195,8 +195,8 @@ describe("a source whose grants are stated verbatim", () => {
   test("the table: rules, operations, or neither, and never both", () => {
     const cases: readonly { readonly name: string; readonly item: Record<string, unknown>; readonly ok: boolean }[] = [
       { name: "rules verbatim", item: github(), ok: true },
-      { name: "operations", item: github({ permission: { events: "github.events_list", operations: ["mem.notes.list"] } }), ok: true },
-      { name: "both", item: github({ permission: { events: "github.events_list", operations: ["mem.notes.list"], rules: [{ action: "github_api", resource: "GET /user" }] } }), ok: false },
+      { name: "operations", item: github({ permission: { events: "github.events_list", operations: ["acme.notes.list"] } }), ok: true },
+      { name: "both", item: github({ permission: { events: "github.events_list", operations: ["acme.notes.list"], rules: [{ action: "github_api", resource: "GET /user" }] } }), ok: false },
       { name: "neither", item: github({ permission: { events: "github.events_list" } }), ok: false },
       { name: "a rule with no action", item: github({ permission: { events: "github.events_list", rules: [{ resource: "GET /user" }] } }), ok: false },
     ]
@@ -215,7 +215,7 @@ describe("a source whose grants are stated verbatim", () => {
     })()
     const run = (asserted: readonly string[]) =>
       sourceConformance({
-        plugin: "@joe-broadhead/opencode-github",
+        plugin: "@we-the-rebel-alliance/github-plugin",
         source,
         tools: [{ id: "events_list", readOnly: true }],
         sources: { rpc: "github.activity.tools", probe: { action: "github.probe" } },
@@ -227,7 +227,7 @@ describe("a source whose grants are stated verbatim", () => {
             for (const resource of asserted) await context.permission.assert({ action: "github_api", resources: [resource] })
             return {
               source: "github",
-              plugin: "@joe-broadhead/opencode-github",
+              plugin: "@we-the-rebel-alliance/github-plugin",
               account: "octo@example.test",
               owner: { id: "github:octocat", label: "Octocat" },
               asOf: ISO,

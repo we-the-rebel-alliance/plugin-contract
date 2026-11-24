@@ -180,7 +180,7 @@ describe("the resource resolver", () => {
   })
 })
 
-describe("gws's per-operation methods (source-contract#22)", () => {
+describe("gws's per-operation methods (plugin-contract#22)", () => {
   const CREATE = { account: "one", operation: "gmail.users.labels.create" }
   const plan = (extra: Parameters<typeof readMethod>[0] = {}) => readMethod({ name: "plan", action: "gws.plan", ...extra })
   const schema = (extra: Parameters<typeof readMethod>[0] = {}) => readMethod({ name: "schema", action: "gws.schema", ...extra })

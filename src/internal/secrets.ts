@@ -1,11 +1,10 @@
 /**
- * The secret-pattern refusal (design §3, `events`: "the one normaliser and hash, and the secret-pattern refusal").
+ * The secret-pattern refusal (contract §13): an event that holds a secret is refused, never delivered.
  *
- * Ported from Memory's `records/src/storable.js` (opencode-mem `main` at a70cda5, file SHA-256 0a1a0a37…c416),
- * `secretKinds` and its helpers, with type annotations only: the patterns and the decisions are Memory's, so an event
- * the library refuses is exactly one Memory's store would refuse (owner decision D3: a collected event that holds a
- * secret is never stored). Change it here and in Memory together; the test vectors in `test/events.test.ts`
- * ("the secret-pattern refusal") pin the behaviour.
+ * Ported from `opencode-mem`'s `records/src/storable.js` (at a70cda5, file SHA-256 0a1a0a37…c416), `secretKinds` and
+ * its helpers, with type annotations only, so a consumer that screens events with it refuses exactly what that store
+ * refuses. The patterns are conservative: a match is reported with its kind, and the caller refuses the event. The
+ * test vectors in `test/events.test.ts` ("the secret-pattern refusal") pin the behaviour.
  */
 /** A private key block, from its BEGIN line to its END line (or the end of the text). */
 const PRIVATE_KEY_BLOCK = /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----[\s\S]*?(?:-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----|$)/g

@@ -37,7 +37,7 @@ describe("sessionRules", () => {
     ])
   })
 
-  test("derive each operation's rule as Memory's conformance kit does", () => {
+  test("derive each operation's rule as the conformance kit does", () => {
     assert.deepEqual(operationRule(gmail, "gmail.users.messages.get", ana), { action: "gws.read", resource: `${ana}:gmail.users.messages.get`, effect: "allow" })
     assert.deepEqual(operationRule(slack, "slack_read_channel", "T0123"), { action: "slack_slack_read_channel", resource: "*", effect: "allow" })
     assert.equal(namespaceOf(today), "gws")
@@ -127,7 +127,7 @@ describe("detail and probe rules", () => {
 })
 
 describe("grantCovers", () => {
-  const grant: Grant = { consumer: "memory", source: "slack.workspace", account: "T0123", scope: { channels: ["C01", "C02"] }, descriptorHash: "sha256:x" }
+  const grant: Grant = { consumer: "notes", source: "slack.workspace", account: "T0123", scope: { channels: ["C01", "C02"] }, descriptorHash: "sha256:x" }
 
   test("covers the same source and account within the granted scope only", () => {
     assert.equal(grantCovers(grant, { source: "slack.workspace", account: "T0123", scope: { channels: ["C01"] } }), true)

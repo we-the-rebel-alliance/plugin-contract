@@ -1,5 +1,5 @@
 /**
- * The rules a JSON Schema cannot express, carried from Memory's connector kit into contract version 1.
+ * The rules a JSON Schema cannot express, carried into the conformance kit.
  *
  * Everything here is a conformance check, not a schema: the read-verb allowlist, the verb and joiner lists, the
  * namespace an action must be in, the `urlHosts` suffix rules, and the uniqueness a JSON Schema cannot state. The
@@ -41,7 +41,7 @@ export interface DeclarationOptions {
 export const READ_VERBS: readonly string[] = ["get", "list", "read", "search", "query", "fetch", "count", "describe", "probe", "status", "lookup", "view", "history", "find"]
 
 /**
- * The verb tokens that can only change something: a name carrying one anywhere is refused (Memory's promise, design
+ * The verb tokens that can only change something: a name carrying one anywhere is refused (the contract's promise,
  * comment index 6). Curated, and documented here as the one list: each is a verb whose only sense is a change or a
  * send. A word that is also a noun is not here; it is in `NOUN_VERBS`.
  *
@@ -104,7 +104,7 @@ function joinerProblem(name: string, tokens: readonly string[]): string | undefi
  * Why a name is not a read's, or undefined when it is one.
  *
  * 1. `and`/`then` followed by a verb makes a compound, and is refused.
- * 2. An unambiguous write verb anywhere in the name is refused (Memory's promise).
+ * 2. An unambiguous write verb anywhere in the name is refused (the contract's promise).
  * 3. The name's first token is where its verb sits. A read verb there makes it a read; a noun-verb there is a write
  *    (`post_message`); a plain noun is a namespace or a noun name, and then the next token is the verb's position, so
  *    `slack_post_message` is refused while `events_list` and `slack_read_channel` are reads and `calendar_today` names
@@ -135,7 +135,7 @@ function verbPosition(tokens: readonly string[]): { readonly token: string; read
   return undefined
 }
 
-/** `nameProblem`, and the name must carry a read verb. Memory's stricter form, for a read a consumer names. */
+/** `nameProblem`, and the name must carry a read verb: the stricter form, for a read a consumer names. */
 export function readVerbProblem(name: unknown): string | undefined {
   const problem = nameProblem(name)
   if (problem !== undefined) return problem
@@ -170,7 +170,7 @@ export function operationProblem(operation: unknown): string | undefined {
 /** The most bytes an inline `outputSchema` may take, measured as compact JSON. */
 export const MAX_OUTPUT_SCHEMA_BYTES = 32768
 
-/** Every field of a contract-1 event. */
+/** Every field of an event. */
 export const EVENT_FIELDS: readonly string[] = ["external_id", "kind", "occurred_at", "title", "text", "url", "thread", "actors", "labels", "hash"]
 
 /** The event fields a `details` entry may take its input from: identifiers, never an event's own prose. */
@@ -396,16 +396,14 @@ export function declarationProblems(sources: unknown, options: DeclarationOption
       if (problem !== null) problems.push(`${at}.urlHosts has ${JSON.stringify(host)}, which ${problem}`)
     }
 
-    // (#45) A fact type, a hint file and a routine file are each named once: a list that repeats one says nothing more.
+    // A fact type and a hint file are each named once: a list that repeats one says nothing more.
     const factTypes = item.kind === "events" ? (item.facts ?? []) : []
     for (const type of unique(factTypes)) {
       if (factTypes.filter((entry) => entry === type).length > 1) problems.push(`${at}.facts lists "${type}" twice: a fact type is declared once`)
     }
-    for (const key of ["hints", "routines"] as const) {
-      const paths = item[key] ?? []
-      for (const path of unique(paths)) {
-        if (paths.filter((entry) => entry === path).length > 1) problems.push(`${at}.${key} lists "${path}" twice: one file is declared once`)
-      }
+    const hintPaths = item.hints ?? []
+    for (const path of unique(hintPaths)) {
+      if (hintPaths.filter((entry) => entry === path).length > 1) problems.push(`${at}.hints lists "${path}" twice: one file is declared once`)
     }
   }
   // An act's preview writes nothing. Its commit may be a write, so the read-verb rule is not applied to the commit.

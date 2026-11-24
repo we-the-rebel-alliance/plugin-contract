@@ -1,24 +1,24 @@
 /**
- * `broker-client`: a consumer uses a host's broker when one is offered, and reads embedded when none is (design §3 and
- * §4.3). Nothing here needs a host: standalone Memory and Artifacts read embedded with `read`.
+ * `broker-client`: a consumer uses a host's broker when one is offered, and reads embedded when none is (contract §9).
+ * Nothing here needs a host: an app reads embedded with `read`.
  *
- * A broker is a thin layer a host builds over the same library. jelly's (Wave 2) adds a persistent cache keyed by the
- * provider identity from `probe` plus `(source, account, scope, params, window)`, per-person budgets and cadence, and
- * an audit line per read with no content. The host holds the grants it drew consent for, and may only narrow them: a
- * cached answer serves a consumer only when that consumer's own grant covers the same source, account and scope, never
+ * A broker is a thin layer a host builds over the same library. It adds a persistent cache keyed by the provider
+ * identity from `probe` plus `(source, account, scope, params, window)`, per-person budgets and cadence, and an audit
+ * line per read with no content. The host holds the grants it drew consent for, and may only narrow them: a cached
+ * answer serves a consumer only when that consumer's own grant covers the same source, account and scope, never
  * another person or viewer. It never advances a consumer's cursor and never transforms an answer.
  *
  * **The wire shape** is one request and one answer (`BrokerRequest`, `BrokerAnswer`), so any host can offer a broker
- * through its own channel: jelly sends them as the `broker` kind of `jelly.core.request` (source-contract#8).
+ * through its own channel.
  *
  * - `{ offered: false }`: no broker now; the client reads embedded, for this request.
  * - `{ offered: true, ok: true, value }`: `value` is the plugin's answer, untransformed. The client checks it exactly as
  *   an embedded read does (`acceptAnswer`) and applies `pick`, so a broker never needs to be trusted for shape.
  * - `{ offered: true, ok: false, code, message }`: a refusal, read through the error table.
  *
- * **How a broker is offered.** The consumer's own code passes the transport, from a channel it already trusts (for
- * Memory inside jelly, jelly's core plugin). Never find one by asking over RPC: an RPC id has no owner in OpenCode, so
- * another plugin could answer in the broker's name (app#2346, the ask of OpenCode).
+ * **How a broker is offered.** The consumer's own code passes the transport, from a channel it already trusts. Never
+ * find one by asking over RPC: an RPC id has no owner in OpenCode, so another plugin could answer in the broker's
+ * name.
  */
 import { canonicalScope } from "./cursor.ts"
 import { failureFromError } from "./internal/failure.ts"
@@ -31,7 +31,7 @@ export interface BrokerRequest {
   readonly version: string
   /** The descriptor hash the consumer consented under; a broker whose own copy differs refuses with PERMISSION_DENIED. */
   readonly descriptorHash: string
-  /** Who reads, such as `memory`: for the broker's grant check and its audit line. */
+  /** Who reads, such as `notes`: for the broker's grant check and its audit line. */
   readonly consumer: string
   readonly source: string
   readonly account?: string
@@ -66,17 +66,6 @@ export type ReaderOutcome = ReadOutcome & {
 /** A consumer's reader. */
 export interface SourceReader {
   read(request: ReadRequest): Promise<ReaderOutcome>
-}
-
-/**
- * Codes a host may send before it takes the package's error table, read as the table's. The table's own codes pass
- * through unchanged.
- */
-export const BROKER_CODE_ALIASES: Readonly<Record<string, string>> = {
-  NOT_GRANTED: "PERMISSION_DENIED",
-  UNKNOWN_SOURCE: "UNAVAILABLE",
-  INVALID_INPUT: "SCHEMA_VIOLATION",
-  PROVIDER_ERROR: "UNAVAILABLE",
 }
 
 /** The request a broker receives for a consumer's read: references to the installed package, never its descriptor or the grant. */
@@ -131,9 +120,8 @@ export function sourceReader(options: { readonly host: ReadHost; readonly broker
       }
       if (!isBrokerAnswer(answer) || !answer.offered) return embedded(request)
       if (!answer.ok) {
-        const code = BROKER_CODE_ALIASES[answer.code] ?? answer.code
         const failure = failureFromError({
-          code,
+          code: answer.code,
           message: answer.message,
           data: { ...(answer.next === undefined ? {} : { next: answer.next }), ...(answer.retryAfterSec === undefined ? {} : { retryAfterSec: answer.retryAfterSec }) },
         })

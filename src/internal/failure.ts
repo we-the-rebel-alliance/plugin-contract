@@ -1,9 +1,8 @@
 /**
- * A read's failure, in the family's form: `CODE: what happened. Next step: …`.
+ * A read's failure, in the contract's form: `CODE: what happened. Next step: …` (contract §12).
  *
- * The codes are the one error table in `events` (`ERROR_CODES`, design §2.1). A plugin's code is read through
- * `canonicalCode`: `AUTH_REQUIRED` is `NEEDS_SIGN_IN`, and contract 1's names (`EVENTS_CURSOR_INVALID`) are the
- * table's.
+ * The codes are the one error table in `events` (`ERROR_CODES`). A plugin's own code is read through `canonicalCode`;
+ * a code the table does not hold is `UNAVAILABLE`.
  */
 import { canonicalCode, ERROR_CODES, type ErrorCode } from "./events.ts"
 
@@ -32,11 +31,11 @@ export function failure(code: FailureCode, what: string, next: string, retryAfte
 
 /**
  * A plugin's or a host's error as a read failure: its `code` (or the code its message starts with) when the contract
- * knows it, with `AUTH_REQUIRED` read as `NEEDS_SIGN_IN`; anything else is UNAVAILABLE, with the message's first line.
+ * knows it; anything else is UNAVAILABLE, with the message's first line.
  *
  * A plugin's `INPUT_INVALID` or `SOURCE_UNKNOWN` (a malformed input, or a source the plugin does not have) passes
- * through as itself (D3 (a)). Trying again will not help, so its fallback next step says to compare the descriptor with
- * the installed plugin rather than to try again.
+ * through as itself. Trying again will not help, so its fallback next step says to compare the installed plugin with
+ * the manifest rather than to try again.
  */
 export function failureFromError(error: unknown): ReadFailure {
   const record = typeof error === "object" && error !== null ? (error as Record<string, unknown>) : {}
@@ -48,7 +47,7 @@ export function failureFromError(error: unknown): ReadFailure {
   const code = canonical !== undefined && (FAILURE_CODES as readonly string[]).includes(canonical) ? (canonical as FailureCode) : undefined
   const first = message.split(/\r?\n/, 1)[0]!.slice(0, 300)
   const fallback = refusedInput
-    ? "Check the source's descriptor against the installed plugin's version; if they match, report it to the plugin's maintainers."
+    ? "Check the installed plugin against its manifest; if they match, report it to the plugin's maintainers."
     : "Try again later; if it keeps failing, check the plugin's status."
   const next = typeof data["next"] === "string" ? data["next"] : (/Next step: (.*)$/.exec(first)?.[1] ?? fallback)
   const what = first.replace(/^[A-Z][A-Z_]+:\s*/, "").replace(/\s*Next step:.*$/, "")

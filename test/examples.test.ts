@@ -64,7 +64,7 @@ describe("the examples", () => {
     assert.ok(checked > 0)
   })
 
-  test("every check Memory adds runs on at least one example", async () => {
+  test("every check Acme adds runs on at least one example", async () => {
     const results = await runExamples({ root, schema, conformance, events })
     const ran = new Set(results.flatMap((result) => result.reports.flatMap((report) => report.checks.filter((check) => check.ran).map((check) => check.name))))
     for (const name of ["declaration", "page-result", "failed-holds-cursor", "gap-and-cursor-expired", "refused-is-final", "probe", "details", "suggest", "unused-grants"]) {

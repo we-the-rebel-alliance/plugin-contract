@@ -1,9 +1,9 @@
 /**
- * The three core fact schemas (#45 §3), in zod, so `npm run build` publishes each as `dist/schemas/fact.<type>.json`.
+ * The three core fact schemas, in zod, so `npm run build` publishes each as `dist/schemas/fact.<type>.json`.
  *
  * A fact is derived in a plugin's code from provider fields, never from free text, and it is declared by type in the
- * descriptor's `facts`. Each schema is a closed shape (`additionalProperties: false`): a fact carries no version, since
- * Memory stamps the installed package's version on each fact it files, and none has a field for a sensitive trait.
+ * manifest's `facts`. Each schema is a closed shape (`additionalProperties: false`): a fact carries no version, since a
+ * consumer stamps the installed package's version on each fact it files, and none has a field for a sensitive trait.
  *
  * The plain types and the checks a runtime makes are `events`': `EventFact`, `factProblems` and `eventProblems`.
  */
@@ -64,7 +64,7 @@ export const FACT_SCHEMAS = {
   "meeting.attended": validator("fact.meeting.attended", meetingAttended),
 }
 
-/** The schema of a core fact type, or undefined for a type v0.3 does not have. */
+/** The schema of a core fact type, or undefined for a type the contract does not have. */
 export function factSchema(type: string): Validator<unknown> | undefined {
   return Object.hasOwn(FACT_SCHEMAS, type) ? FACT_SCHEMAS[type as FactType] : undefined
 }

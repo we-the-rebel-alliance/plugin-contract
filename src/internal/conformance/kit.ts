@@ -36,7 +36,7 @@ import {
 } from "./permission.ts"
 import { AUTHOR_ROLES, removalProblems } from "../events.ts"
 import { maxBytesOf } from "../../descriptor.ts"
-import { hintProblems, routineProblems } from "../../hints.ts"
+import { hintProblems } from "../../hints.ts"
 import { sessionRules } from "../../permission.ts"
 import { toolsRpcIdProblems } from "../../tools-rpc.ts"
 import { pageChecks, type PageOptions } from "./page.ts"
@@ -129,14 +129,13 @@ export interface SourceConformanceOptions {
    */
   readonly machineActors?: readonly string[] | undefined
   /**
-   * A hint or routine file's text, from the plugin's own package, by the path its descriptor declares (#45 §4, §5):
+   * A hint file's text, from the plugin's own package, by the path its manifest declares:
    * `(path) => readFileSync(join(here, path), "utf8")`. Undefined when the package holds no such file. Without it, the
-   * `hints` and `routines` checks cannot run, and a source that declares a file is not ok.
+   * `hints` check cannot run, and a source that declares a file is not ok.
    */
   readonly files?: ((path: string) => string | undefined) | undefined
   /**
-   * Every source id the plugin declares, for the own-source rule of a hint and a routine (#45 §4, §5). Default: the
-   * source under test.
+   * Every source id the plugin declares, for the own-source rule of a hint. Default: the source under test.
    */
   readonly ownSources?: readonly string[] | undefined
 }
@@ -178,7 +177,6 @@ const RECOVERY_SINCE = "2026-01-01T00:00:00.000Z"
 const CHECKS = [
   "declaration",
   "hints",
-  "routines",
   "page-result",
   "event-within-max-bytes",
   "failed-holds-cursor",
@@ -234,14 +232,14 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
 
   add("declaration", declarationProblems({ contractVersion: 1, items: [source] }, { tools }))
 
-  // A hint and a routine are files the package ships beside the source (#45 §4, §5): each is read, checked and named
-  // in the report. Without a reader, or without the file, the declaration names something nothing can prove.
+  // A hint is a file the package ships beside the source: each is read, checked and named in the report. Without a
+  // reader, or without the file, the declaration names something nothing can prove.
   const ownSources = options.ownSources ?? [source.id]
   const readFile = options.files
-  const fileCheck = (paths: readonly string[], kind: "hints" | "routines"): string[] => {
+  const fileCheck = (paths: readonly string[]): string[] => {
     const problems: string[] = []
     for (const path of paths) {
-      const where = `${kind}("${path}")`
+      const where = `hints("${path}")`
       if (readFile === undefined) {
         problems.push(`${where} is declared and the kit has no file reader: pass files, (path) => the file's text`)
         continue
@@ -251,15 +249,13 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
         problems.push(`${where} is declared and the package holds no such file`)
         continue
       }
-      const found = kind === "hints" ? hintProblems(text, { sources: ownSources }) : routineProblems(text, { sources: ownSources })
+      const found = hintProblems(text, { sources: ownSources })
       problems.push(...found.map((problem) => `${where}: ${problem}`))
     }
     return problems
   }
   const declaredHints = source.hints ?? []
-  const declaredRoutines = source.routines ?? []
-  add("hints", fileCheck(declaredHints, "hints"), declaredHints.length > 0, declaredHints.length === 0)
-  add("routines", fileCheck(declaredRoutines, "routines"), declaredRoutines.length > 0, declaredRoutines.length === 0)
+  add("hints", fileCheck(declaredHints), declaredHints.length > 0, declaredHints.length === 0)
 
   const shape: string[] = []
   const cursor: string[] = []

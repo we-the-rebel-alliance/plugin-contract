@@ -1,6 +1,5 @@
 /**
- * The `sources` descriptor validator: the top-level `sources` key of a source plugin's package.json, contract version
- * 1 (design app#2346 §2.2).
+ * The `sources` manifest validator: the top-level `sources` key of a source plugin's package.json, wire version 1.
  *
  * The package's `schema` entry exports it:
  *
@@ -41,5 +40,5 @@ export type {
   Suggest,
 } from "./internal/schema/types.ts"
 
-/** The validator for a plugin's `sources` declaration, contract version 1. */
+/** The validator for a plugin's `sources` declaration, wire version 1. */
 export const SOURCES_SCHEMA: Validator<Sources> = validator("sources", sourcesSchema)

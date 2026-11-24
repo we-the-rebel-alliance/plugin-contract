@@ -1,17 +1,14 @@
 /**
- * The output schema registry (design §2.4): the shapes a snapshot source's `data` may take, by name.
+ * The output schema registry (contract §7): the shapes a snapshot source's `data` may take, by name.
  *
- * A snapshot source names one in its descriptor (`"output": "agenda"`), and its `snapshot_read` answers `data` valid
- * against it. A project that can render a schema can render every source that outputs it: an `agenda` is an agenda,
- * whichever plugin read it.
+ * A snapshot source names one in its manifest (`"output": "agenda"`), and its read answers `data` valid against it. An
+ * app that can render a schema can render every source that outputs it: an `agenda` is an agenda, whichever plugin read
+ * it. Apps render shapes; plugins never render.
  *
- * Seeded from what is in production: jelly's Home template schemas (`protocol/contracts/src/home-data.ts` in
- * we-the-rebel-alliance/app), where `agenda` is gws `calendar.today`'s shape, with `thread`, `table` and `record`.
- * Host-neutral changes from the seed: enums are closed (a producer must send a known value); `image` takes an https
- * `url` or a `dataUri` (jelly's saved-file id is jelly's own), and its `dataUri` is capped so the whole answer fits in
- * the 1 MB a source's `maxBytes` allows, so gws `images.read` fits (app#2346).
+ * Enums are closed (a producer must send a known value). `image` takes an https `url` or a `dataUri`, and its `dataUri`
+ * is capped so the whole answer fits in the 1 MB a source's `maxBytes` allows.
  *
- * The registry only grows within a contract version: a name is never removed or narrowed, so a source that validates
+ * The registry only grows: within wire version 1, a name is never removed or narrowed, so a source that validates
  * today still validates under a later minor version.
  */
 import * as z from "zod"

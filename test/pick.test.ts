@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 import { MAX_PICK_PATHS, missingPaths, pick, pickProblems, pickProblemsForOutput } from "../src/pick.ts"
 
-// The cases of Artifacts' `pickFields` and `missingFields` tests (src/providers/connector.test.ts), ported.
+// The field picker's cases: paths that reach a value, paths that do not, and the limits.
 const OUTPUT = {
   threads: [
     { id: "thread-1", snippet: "Hello", historyId: "1" },

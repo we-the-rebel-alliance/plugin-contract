@@ -6,6 +6,15 @@ import { validator } from "../src/internal/validator.ts"
 import * as z from "zod"
 
 describe("the package", () => {
+  test("is @we-the-rebel-alliance/plugin-contract at 0.0.0, and exports outputs rather than registry", () => {
+    const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"))
+    assert.equal(pkg.name, "@we-the-rebel-alliance/plugin-contract")
+    assert.equal(pkg.version, "0.0.0")
+    assert.equal(pkg.repository.url, "git+https://github.com/we-the-rebel-alliance/plugin-contract.git")
+    assert.deepEqual(pkg.exports["./outputs"], { types: "./dist/outputs.d.ts", default: "./dist/outputs.js" })
+    assert.equal(pkg.exports["./registry"], undefined)
+  })
+
   test("implements contract version 1 and reads it", () => {
     assert.equal(CONTRACT_VERSION, 1)
     assert.ok(SUPPORTED_CONTRACT_VERSIONS.includes(CONTRACT_VERSION))

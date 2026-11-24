@@ -1,9 +1,9 @@
 /**
- * The page result of `events_list`: the `events` module's shape, plus Memory's three checks.
+ * The page result of `events_list`: the `events` module's shape, plus three checks.
  *
  * The shape is the authority's: `resultProblems` (the same call `read` makes) validates the envelope, every event, the
  * lists of drops, `gap` and `cost`, and types the page as `EventsListResult`. On top of it this file keeps only what
- * Memory adds:
+ * The kit adds:
  *
  * - `failed[]` holds the cursor back: a page with a retryable drop answers the cursor it was called with;
  * - `refused[]` is final, and the family's `secretKinds` runs over every page, so an event holding a secret is refused

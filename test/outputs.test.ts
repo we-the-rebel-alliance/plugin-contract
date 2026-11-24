@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
-import { checkOutput, IMAGE_DATA_URI_MAX, isOutputName, OUTPUT_NAMES, OUTPUTS, outputValidator } from "../src/registry.ts"
+import { checkOutput, IMAGE_DATA_URI_MAX, isOutputName, OUTPUT_NAMES, OUTPUTS, outputValidator } from "../src/outputs.ts"
 
 /** One valid `data` per registered output: what a source answers, and what a project renders. */
 const VALID: Record<string, unknown> = {
@@ -25,7 +25,7 @@ const VALID: Record<string, unknown> = {
 }
 
 describe("the output registry", () => {
-  test("holds jelly's Home templates, with thread, table and record", () => {
+  test("holds the Home shapes, with thread, table and record", () => {
     assert.deepEqual(OUTPUT_NAMES, ["agenda", "inbox", "metric", "list", "progress", "note", "links", "countdown", "image", "thread", "table", "record"])
   })
 

@@ -1,21 +1,9 @@
-// The hint and routine file formats (#45 §4, §5): what a plugin may ship beside its sources, and every way a file
-// breaks the contract. A hint says how to read one kind of item; a routine is a meaning Memory's core extractor cannot
-// find even with hints. Both are data: a hint is quoted inside Memory's prompt, and a routine is run alone later.
+// The hint file format: what a plugin may ship beside its sources, and every way a hint breaks the contract. A hint
+// says how to read one kind of item, and it is data: a model-based consumer decides how its text is used.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 import { expect } from "./support/expect.ts"
-import {
-  FORBIDDEN_HINT_KEYS,
-  FORBIDDEN_ROUTINE_KEYS,
-  HINT_MAX,
-  HINT_SCHEMA,
-  hintProblems,
-  PRODUCES_TYPES,
-  parseFrontmatter,
-  ROUTINE_BODY_MAX,
-  ROUTINE_SCHEMA,
-  routineProblems,
-} from "../src/hints.ts"
+import { FORBIDDEN_HINT_KEYS, HINT_MAX, HINT_SCHEMA, hintProblems, PRODUCES_TYPES, parseFrontmatter } from "../src/hints.ts"
 
 const OURS = ["granola.meetings", "granola.notes"]
 
@@ -26,30 +14,17 @@ produces: [commitment, decision]
 ---
 Owners are listed under "Action items" as "<name>: <task> (<date>)". "We agreed" lines in the Summary are decisions.`
 
-const ROUTINE = `---
-id: meeting-actions
-title: Read the action items of a meeting
-reads: { sources: [granola.meetings], kinds: [meeting] }
-produces: [commitment]
----
-Read the section headed "Action items" and answer one commitment for each owner and task.`
-
 const hint = (text: string): readonly string[] => hintProblems(text, { sources: OURS })
 /** A hint whose frontmatter carries one more key. */
 const hintWith = (extra: string): string =>
   `---\nsource: granola.meetings\nkinds: [meeting]\nproduces: [commitment]${extra === "" ? "" : `\n${extra}`}\n---\nOwners are listed under "Action items".`
-/** A routine whose frontmatter carries one more key. */
-const routineWith = (extra: string): string =>
-  `---\nid: meeting-actions\ntitle: Read the action items\nreads: { sources: [granola.meetings], kinds: [meeting] }\nproduces: [commitment]${extra === "" ? "" : `\n${extra}`}\n---\nRead each owner's task.`
-const routine = (text: string): readonly string[] => routineProblems(text, { sources: OURS })
-
 /** A hint of exactly `characters`, whose frontmatter and body both stay well formed. */
 const sized = (characters: number): string => {
   const head = "---\nsource: granola.meetings\nkinds: [meeting]\n---\n"
   return head + "a".repeat(Math.max(0, characters - head.length))
 }
 
-describe("a hint file (#45 §4)", () => {
+describe("a hint file", () => {
   test("reads its frontmatter and keeps the body as it is", () => {
     const parsed = parseFrontmatter(HINT)
     assert.ok(parsed.ok)
@@ -76,24 +51,24 @@ describe("a hint file (#45 §4)", () => {
     expect(hint(HINT.replace("kinds: [meeting]", "kinds: []"))).toEqual(["kinds: must name at least one kind"])
   })
 
-  test("produces names a type Memory's core extractor finds, and no other", () => {
-    // §4's own example, restored: a hint may name a decision as well as a commitment.
+  test("produces names a knowledge type a model may extract, and no other", () => {
+    // A hint may name a decision as well as a commitment.
     expect(PRODUCES_TYPES).toEqual(["commitment", "decision", "fact", "preference", "constraint", "person", "project"])
     expect(hint(HINT)).toEqual([])
     for (const type of PRODUCES_TYPES) expect(hint(`---\nsource: granola.meetings\nkinds: [meeting]\nproduces: [${type}]\n---\nOwners are listed.`), type).toEqual([])
-    // A structured fact type is not a knowledge type a hint helps Memory find, and a plugin's own name never is.
+    // A structured fact type is not a knowledge type a hint helps a model find, and a plugin's own name never is.
     for (const type of ["person.attribute", "meeting.attended", "x.anything", "x-granola/decision", "timeline", "voice"]) {
       expect(hint(`---\nsource: granola.meetings\nkinds: [meeting]\nproduces: [${type}]\n---\nOwners are listed.`), type).toEqual([
-        "produces[0]: must be a type Memory's core extractor finds (commitment, decision, fact, preference, constraint, person or project)",
+        "produces[0]: must be a knowledge type (commitment, decision, fact, preference, constraint, person or project)",
       ])
     }
   })
 
-  test("may not set a decision of Memory's: an unknown key or one of the forbidden ones fails", () => {
+  test("may not set a decision of the consumer: an unknown key or one of the forbidden ones fails", () => {
     expect(FORBIDDEN_HINT_KEYS).toEqual(["apply", "stated_by", "space", "budget", "priority"])
     expect(hint(hintWith(""))).toEqual([])
     for (const key of FORBIDDEN_HINT_KEYS) {
-      expect(hint(hintWith(`${key}: auto`)), key).toEqual([`the hint sets "${key}", which a hint may not set: a hint is data, and Memory decides how its text is used`])
+      expect(hint(hintWith(`${key}: auto`)), key).toEqual([`the hint sets "${key}", which a hint may not set: a hint is data, and the consumer decides how its text is used`])
     }
     expect(hint(hintWith("version: 3"))).toEqual(['the hint has the key "version", which a hint does not have (source, kinds, produces)'])
   })
@@ -119,61 +94,5 @@ describe("a hint file (#45 §4)", () => {
     assert.deepEqual(generated["required"], ["source", "kinds"])
     assert.deepEqual(generated["properties"]["produces"]["items"]["enum"], [...PRODUCES_TYPES])
     assert.equal(HINT_SCHEMA.check({ source: "granola.meetings", kinds: ["meeting"], apply: "auto" }).ok, false)
-  })
-})
-
-describe("a routine file (#45 §5)", () => {
-  test("reads its frontmatter, with the sources and kinds it reads", () => {
-    const parsed = parseFrontmatter(ROUTINE)
-    assert.ok(parsed.ok)
-    assert.deepEqual(parsed.value.frontmatter, {
-      id: "meeting-actions",
-      title: "Read the action items of a meeting",
-      reads: { sources: ["granola.meetings"], kinds: ["meeting"] },
-      produces: ["commitment"],
-    })
-    expect(routine(ROUTINE)).toEqual([])
-  })
-
-  test("holds its instructions in a body of at most 4,000 characters", () => {
-    expect(ROUTINE_BODY_MAX).toBe(4000)
-    const close = ROUTINE.indexOf("---\n", 4) + 4
-    const withBody = (characters: number): string => `${ROUTINE.slice(0, close)}${"b".repeat(characters)}`
-    expect(routine(withBody(ROUTINE_BODY_MAX))).toEqual([])
-    expect(routine(withBody(ROUTINE_BODY_MAX + 1))).toEqual(["the routine's body is 4001 characters, over the 4000 its instructions may take"])
-  })
-
-  test("reads only the plugin's own sources", () => {
-    expect(routine(ROUTINE.replace("sources: [granola.meetings]", "sources: [granola.notes]"))).toEqual([])
-    expect(routine(ROUTINE.replace("sources: [granola.meetings]", "sources: [slack.messages]"))).toEqual(['the routine reads the source "slack.messages", which is not one of the plugin\'s own'])
-    expect(routine(ROUTINE.replace("sources: [granola.meetings]", "sources: []"))).toEqual(["reads.sources: must name at least one source"])
-  })
-
-  test("names a title and a routine id, and produces a type Memory finds", () => {
-    assert.ok(routine(ROUTINE.replace("title: Read the action items of a meeting\n", "")).some((problem) => problem.startsWith("title:")))
-    expect(routine(ROUTINE.replace("id: meeting-actions", "id: Meeting Actions"))).toEqual(["id: must be a lowercase word such as meeting-actions"])
-    expect(routine(ROUTINE.replace("produces: [commitment]", "produces: [decision, preference]"))).toEqual([])
-    expect(routine(ROUTINE.replace("produces: [commitment]", "produces: [person.attribute]"))).toEqual([
-      "produces[0]: must be a type Memory's core extractor finds (commitment, decision, fact, preference, constraint, person or project)",
-    ])
-  })
-
-  test("may not set a tier, a schedule, a budget, a priority, an apply mode, a stated_by or a namespace", () => {
-    expect(FORBIDDEN_ROUTINE_KEYS).toEqual(["tier", "schedule", "budget", "priority", "apply", "stated_by", "namespace"])
-    const why = "the namespace, the tier, the schedule, the budget, the priority and the apply mode are Memory's"
-    expect(routine(routineWith(""))).toEqual([])
-    for (const key of FORBIDDEN_ROUTINE_KEYS) {
-      expect(routine(routineWith(`${key}: auto`)), key).toEqual([`the routine sets "${key}", which a routine may not set: ${why}`])
-    }
-    expect(routine(routineWith("version: 2"))).toEqual(['the routine has the key "version", which a routine does not have (id, title, reads, produces)'])
-  })
-
-  test("publishes a JSON Schema that refuses an unknown key", () => {
-    expect(ROUTINE_SCHEMA.name).toBe("routine")
-    const generated = ROUTINE_SCHEMA.jsonSchema() as Record<string, any>
-    assert.equal(generated["additionalProperties"], false)
-    assert.deepEqual(generated["required"], ["id", "title", "reads", "produces"])
-    assert.deepEqual(generated["properties"]["produces"]["items"]["enum"], [...PRODUCES_TYPES])
-    assert.equal(ROUTINE_SCHEMA.check({ id: "a", title: "b", reads: { sources: ["a.b"], kinds: ["meeting"] }, produces: ["commitment"], tier: 1 }).ok, false)
   })
 })
