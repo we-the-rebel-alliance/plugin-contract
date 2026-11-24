@@ -305,6 +305,8 @@ export interface SourceEvent {
   readonly parts?: EventPart[]
   /** Typed facts the source derives in code, at most 20, each of a type the manifest declares. */
   readonly facts?: EventFact[]
+  /** #42: the item's https thumbnail, present only when the read asked and the item has one. Outside `eventHash`. */
+  readonly thumbnail?: string
 }
 
 /** The signed-in source account, with the organizations its provider reports (#44 item 2). */
