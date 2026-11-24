@@ -61,9 +61,9 @@ The module map of the contract (§15), and what this package ships today:
 | `cursor` | plugin | bound cursor codec | here |
 | `bus` | plugin | typed `changed`, `status` and `account` emitters | landing |
 | `grant` | plugin | action-grant verifier | landing |
-| `outputs` | both | the snapshot shape registry and its JSON Schemas | here |
-| `read`, `act` | app | fenced reads and actions, through the catalog or embedded | here |
-| `params`, `pick` | app | relative times, `$me`, field selection | here |
+| [`outputs`](docs/outputs.md) | both | the snapshot shape registry and its JSON Schemas | here |
+| [`read`](docs/read.md), [`act`](docs/act.md) | app | fenced reads and actions, through the catalog or embedded | here |
+| [`params`](docs/params.md), [`pick`](docs/pick.md) | app | relative times, `$me`, field selection | here |
 | `catalog` | app, catalog | installed manifests | landing |
 | `conformance` | CI | the kit | here |
 | `kit` | dev | the `plugin-kit` binary | landing |
@@ -71,11 +71,12 @@ The module map of the contract (§15), and what this package ships today:
 
 The package also ships the pieces `register` and `catalog` will replace — `descriptor` (reads the current `sources`
 block from an installed package), `list` (lists installed declarations), `permission` (exact session rules from a grant),
-`tools-rpc` (the tools-RPC transport) and `broker-client` (a host's broker when one is offered) — and `hints`, the hint
-file format. They keep working until their replacements land.
+`tools-rpc` (the tools-RPC transport) and `broker-client` (a host's broker when one is offered) — and [`hints`](docs/hints.md),
+the hint file format. They keep working until their replacements land.
 
 `docs/conformance.md` describes the kit. `docs/events.md` describes the feed model. `docs/outputs.md` describes the
-snapshot shapes. `docs/tools-rpc.md` describes the transport.
+snapshot shapes. `docs/read.md`, `docs/act.md`, `docs/params.md` and `docs/pick.md` describe the app side, and
+`docs/hints.md` the hint file. `docs/tools-rpc.md` describes the transport.
 
 ## plugin-kit
 
@@ -102,7 +103,10 @@ its own `dist/`. Node 22 or later runs it; CI checks Node 24.
 - [The plugin standard](docs/plugin-standard.md): what every `<name>-plugin` repository must be.
 - [Supported plugins](SUPPORTED.md): the plugins and their state.
 - [Decisions](docs/decisions.md): the settled decisions behind v0.
-- [Conformance](docs/conformance.md), [events and cursors](docs/events.md), [`tools-rpc`](docs/tools-rpc.md).
+- [Conformance](docs/conformance.md), [events and cursors](docs/events.md), [outputs](docs/outputs.md),
+  [`tools-rpc`](docs/tools-rpc.md).
+- The app side: [read](docs/read.md), [act](docs/act.md), [params](docs/params.md), [pick](docs/pick.md).
+- [Hints](docs/hints.md): the generic hint file format.
 - [AGENTS.template.md](AGENTS.template.md): the agent guide every plugin starts from.
 - [CONTRIBUTING.md](CONTRIBUTING.md): how to build and check this package.
 

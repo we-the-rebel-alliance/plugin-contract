@@ -16,7 +16,7 @@ One owner per job. A neighbour points to the owner and never claims the job.
 | Job | Owner | Neighbours, which must point to the owner |
 |---|---|---|
 | Find or read past OpenCode sessions | OpenCode's session tools, `opencode.session.search` and `opencode.session.read` (`experimental.sqlite_fts`) | utilities' session stopgaps, for status, spend and exact text only |
-| Remember things across sessions and people | a shared recall service (`opencode-mem`, hosted and shared) | a hosted MCP server's recall text; OpenCode's home recall setting stays off |
+| Remember things across sessions and people | a shared recall service (hosted and shared) | a hosted MCP server's recall text; OpenCode's home recall setting stays off |
 | Scheduled, recurring or event-triggered work | OpenCode automations | boxd `run` (not the default) |
 | Parallel work in OpenCode sessions on other boxd machines | `boxd-plugin` | — |
 | A helper on the same machine | the `subagent` tool | the `drive-sessions` skill draft, only if an eval shows it helps |
