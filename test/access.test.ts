@@ -15,6 +15,7 @@ import {
   rulesFor,
   serverOf,
   sessionRules,
+  toolAction,
   unguardedAgents,
   withRules,
   type AccessContext,
@@ -135,6 +136,21 @@ describe("the access levels", () => {
     const builtRules = built.rulesFor(own, "read-only", ["default", "work"])
     assert.ok(builtRules.some((rule) => rule.action === "demo-work_files_delete" && rule.effect === "deny"))
     assert.equal(built.evaluate(builtRules, "demo-work_files_delete"), "deny")
+  })
+
+  test("a one-letter plugin keeps the vendor's case in its MCP action", () => {
+    const own = value((m) => {
+      m.plugin.name = "x"
+      m.sources[0].id = "x.messages"
+      m.sources[1].id = "x.channels"
+      m.actions[0].id = "x.messages.send"
+      delete m.methods["mcp:*"]
+      m.methods["mcp:getJiraIssue"] = { class: "read" }
+    })
+    const rules = rulesFor(own, "all", ["work"])
+    assert.ok(rules.some((rule) => rule.action === "x-work_getJiraIssue" && rule.effect === "allow"))
+    assert.equal(toolAction("x-work", "getJiraIssue"), "x-work_getJiraIssue")
+    assert.equal(methodAction("x", "status"), "x.status")
   })
 
   test("the per-alias server derivation refuses an alias the plugin does not declare", () => {

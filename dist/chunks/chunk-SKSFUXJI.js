@@ -4,22 +4,22 @@ import {
 } from "./chunk-ED3MMWUJ.js";
 import {
   acceptAnswer
-} from "./chunk-IDA3YFD6.js";
+} from "./chunk-A25A2PTL.js";
 import {
   effectFor,
   evaluate,
   serverOf,
   sessionRules,
   toolAction
-} from "./chunk-LJBRNDIR.js";
+} from "./chunk-X3273KH4.js";
 import {
   maxBytesOf,
   methodAccounts,
   readInstalledManifest
-} from "./chunk-QO4BENAJ.js";
+} from "./chunk-US3HZZEZ.js";
 import {
   checkOutput
-} from "./chunk-SWSUBLXW.js";
+} from "./chunk-PHAILRZF.js";
 import {
   BUS_EVENTS,
   ERROR_CODES,
@@ -35,7 +35,7 @@ import {
   removalProblems,
   sourceNamespace,
   thumbnailUrlProblems
-} from "./chunk-CQOJNZW4.js";
+} from "./chunk-4FRULGHN.js";
 import {
   secretKinds
 } from "./chunk-L3NVT2DE.js";
@@ -74,6 +74,7 @@ function accountFindings(manifest, recorded, options = {}) {
   const findings = [];
   const name = manifest.plugin.name;
   const aliases = recorded?.aliases ?? [];
+  const cursorBearing = manifest.sources.some((source) => source.kind === "events");
   if (manifest.accounts === void 0) {
     if (aliases.length > 0) {
       findings.push(error("accounts.undeclared", `the fixture records the accounts ${aliases.join(", ")}, and capabilities declares no accounts`, { path: "capabilities.accounts", fix: "Remove the accounts block, or declare how they are held." }));
@@ -88,7 +89,7 @@ function accountFindings(manifest, recorded, options = {}) {
     findings.push(
       options.record === true ? warning("accounts.recorded", `${name} declares accounts and records no two-account behaviour yet`, { path: "fixtures/conformance.json" }) : error("accounts.recorded", `${name} declares accounts and records no two-account behaviour`, {
         path: "fixtures/conformance.json",
-        fix: "Record two aliases with ACCOUNT_REQUIRED, ACCOUNT_UNKNOWN and a cursor that another account may not use."
+        fix: cursorBearing ? "Record two aliases with ACCOUNT_REQUIRED, ACCOUNT_UNKNOWN and a cursor that another account may not use." : "Record two aliases with ACCOUNT_REQUIRED and ACCOUNT_UNKNOWN."
       })
     );
     return findings;
@@ -127,7 +128,6 @@ function accountFindings(manifest, recorded, options = {}) {
     const method = typeof unknown.method === "string" ? unknown.method : "";
     if (method === "" || manifest.methods[method] === void 0) findings.push(error("accounts.unknown", `the unknown-account case names ${String(unknown.method)}, which is not a declared method`, { path: "fixtures/conformance.json" }));
   }
-  const cursorBearing = manifest.sources.some((source) => source.kind === "events");
   const cursors = recorded.cursors ?? [];
   if (cursorBearing && cursors.length === 0) {
     findings.push(error("accounts.cursors", "the fixture records no cursor another account may not use: a cursor is bound to its account", { path: "fixtures/conformance.json", fix: "Record one page under two aliases, and the CURSOR_INVALID refusal for the other." }));

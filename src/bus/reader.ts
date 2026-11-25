@@ -41,7 +41,7 @@ export function busEventType<const K extends BusEventName>(name: string, event: 
   return `rpc.${name}.${event}`
 }
 
-const RPC_TYPE = /^rpc\.([a-z0-9]{2,31})\.([a-z0-9_]+)$/
+const RPC_TYPE = /^rpc\.([a-z0-9]{1,31})\.([a-z0-9_]+)$/
 
 /**
  * Read one `/api/event` payload as one of `name`'s bus events.

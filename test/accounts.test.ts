@@ -19,7 +19,8 @@ import {
   statusAnswer,
 } from "../src/accounts.ts"
 import { decodeBoundCursor, encodeBoundCursor } from "../src/cursor.ts"
-import { checkManifest, type Manifest } from "../src/manifest.ts"
+import { checkManifest, EXTENSION_KEY, PLUGIN_NAME, type Manifest } from "../src/manifest.ts"
+import { serverOf } from "../src/access.ts"
 import { validate } from "../src/register/validate.ts"
 import { manifest } from "./support/manifest.ts"
 
@@ -45,6 +46,25 @@ describe("aliases", () => {
     assert.equal(accountLabel("Slack", "work"), "Slack (work)")
     assert.equal(accountLabel("Slack", DEFAULT_ALIAS), "Slack")
     assert.throws(() => accountName("slack", "Work"), /not an account alias/)
+  })
+
+  test("a one-letter plugin name derives x and x-work, distinct from an x-work extension key", () => {
+    assert.equal(accountName("x", DEFAULT_ALIAS), "x")
+    assert.equal(accountName("x", "work"), "x-work")
+    assert.deepEqual(serverOf("x", "work", ["work"]), { ok: true, value: "x-work" })
+    assert.equal(PLUGIN_NAME.test("x"), true)
+    assert.equal(EXTENSION_KEY.test("x-work"), true)
+    const value = checkedManifest((m) => {
+      m.plugin.name = "x"
+      m.sources[0].id = "x.messages"
+      m.sources[1].id = "x.channels"
+      m.actions[0].id = "x.messages.send"
+      m["x-work"] = { placement: "sidebar" }
+    })
+    assert.deepEqual(value["x-work"], { placement: "sidebar" })
+    const plan = accountsOf(value, { accounts: { work: {} } })
+    assert.equal(plan.ok, true)
+    assert.deepEqual(plan.ok ? plan.value.accounts.map((account) => account.alias) : [], ["work"])
   })
 })
 

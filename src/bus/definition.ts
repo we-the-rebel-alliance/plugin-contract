@@ -60,8 +60,8 @@ export type BusEvents = {
   readonly account: { readonly schema: BusSchema }
 }
 
-/** Contract §3: lowercase letters and digits, 2 to 31 characters, no hyphen (a hyphen separates an account alias). */
-const PLUGIN_NAME = /^[a-z0-9]{2,31}$/
+/** Contract §3: lowercase letters and digits, 1 to 31 characters, no hyphen (a hyphen separates an account alias). */
+const PLUGIN_NAME = /^[a-z0-9]{1,31}$/
 
 /** Whether `value` is a plugin name under contract §3. */
 export function isPluginName(value: unknown): value is string {
@@ -72,7 +72,7 @@ export function isPluginName(value: unknown): value is string {
 export function assertPluginName(name: unknown): asserts name is string {
   if (isPluginName(name)) return
   const shown = typeof name === "string" ? `"${name}"` : typeof name
-  throw new Error(`bus: ${shown} is not a plugin name. Next step: use 2 to 31 lowercase letters or digits, with no hyphen (contract §3).`)
+  throw new Error(`bus: ${shown} is not a plugin name. Next step: use 1 to 31 lowercase letters or digits, with no hyphen (contract §3).`)
 }
 
 /** One segment of a capability id: lowercase letters, digits and hyphens, starting with a letter. */

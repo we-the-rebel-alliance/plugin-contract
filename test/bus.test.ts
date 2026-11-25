@@ -106,19 +106,22 @@ describe("the bus writer (contract §10)", () => {
     ])
   })
 
-  test("derives the event type from the plugin name", () => {
+  test("derives the event type from the plugin name, including a one-letter name", () => {
     assert.equal(busEventType("slack", "changed"), "rpc.slack.changed")
     assert.equal(busEventType("gws", "account"), "rpc.gws.account")
+    assert.equal(busEventType("x", "changed"), "rpc.x.changed")
+    assert.equal(capabilityPattern("x"), "^x\\.[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)*$")
   })
 
   test("a plugin name that breaks contract §3 is refused", () => {
     const registration: BusRegistration = { events: { async emit() {} } }
-    for (const name of ["slack-plugin", "Slack", "a", "1".repeat(32), "sla_ck", "", " slack", "slack!"]) {
+    for (const name of ["slack-plugin", "Slack", "1".repeat(32), "sla_ck", "", " slack", "slack!"]) {
       assert.throws(() => createBus(name, registration), /is not a plugin name/, name)
     }
     assert.throws(() => createBus(42 as unknown as string, registration), /is not a plugin name/)
-    for (const name of ["slack", "gws", "x1", "a1", "1a", "a".repeat(31)]) assert.equal(isPluginName(name), true, name)
-    for (const name of ["a", "a".repeat(32), "slack-plugin", "Slack", "sla_ck", "", 42]) assert.equal(isPluginName(name), false, String(name))
+    assert.doesNotThrow(() => createBus("x", registration))
+    for (const name of ["x", "slack", "gws", "x1", "a1", "1a", "a".repeat(31)]) assert.equal(isPluginName(name), true, name)
+    for (const name of ["a".repeat(32), "slack-plugin", "Slack", "sla_ck", "", 42]) assert.equal(isPluginName(name), false, String(name))
   })
 
   test("refuses malformed data with its field paths and emits nothing", async () => {
@@ -188,6 +191,14 @@ describe("the bus writer (contract §10)", () => {
     ]
     for (const result of results) assert.deepEqual(result, { ok: false, reason: "secret" })
     assert.deepEqual(emitted, [])
+  })
+
+  test("a one-letter plugin reads its own rpc.x.changed event", () => {
+    const data = changed({ capability: "x.mentions" })
+    assert.deepEqual(readBusEvent(payload("rpc.x.changed", data), { name: "x" }), {
+      ok: true,
+      event: { type: "rpc.x.changed", name: "x", event: "changed", data },
+    })
   })
 
   test("accepts prose that is not a secret", async () => {
@@ -305,7 +316,7 @@ describe("the bus reader (contract §10)", () => {
   })
 
   test("refuses a bad plugin name instead of silently matching nothing", () => {
-    for (const name of ["Slack", "slack-plugin", "a", ""]) {
+    for (const name of ["Slack", "slack-plugin", "", "a".repeat(32)]) {
       assert.throws(() => readBusEvent(payload("rpc.slack.changed", changed()), { name }), /is not a plugin name/, name)
     }
   })
