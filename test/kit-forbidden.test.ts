@@ -167,6 +167,32 @@ describe("plugin-kit forbidden", () => {
     }
   })
 
+  test("a reasoned allowance suppresses a secret inside a signed grant claim and names the reason", () => {
+    const local = temp()
+    try {
+      const base64 = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url")
+      // A generated test key verifies the token, so its raw text is exempt and only the decoded claim is screened.
+      const { publicKey, privateKey } = generateKeyPairSync("ed25519")
+      const header = base64({ alg: "Ed25519", kid: "test" })
+      const payload = base64({ to: "person@example.test", api_key: `sk-${"A1b2C3d4E5f6G7h8I9j0"}` })
+      const token = `${header}.${payload}.${sign(null, Buffer.from(`${header}.${payload}`), privateKey).toString("base64url")}`
+      const pem = publicKey.export({ type: "spki", format: "pem" }).toString()
+      write(
+        join(local.dir, "fixtures", "conformance.json"),
+        JSON.stringify({ grants: { publicKey: pem, cases: [{ name: "leak", token, input: { to: "person@example.test" }, request: {}, expect: { ok: true } }] } }, null, 2),
+      )
+      assert.equal(forbiddenFindings(local.dir).filter((finding) => finding.id === "FORBIDDEN.secret").length, 1)
+      write(join(local.dir, ALLOW_FILE), "fixtures/conformance.json:secret This fixture quotes the shape as documentation.\n")
+      const findings = forbiddenFindings(local.dir)
+      assert.equal(findings.filter((finding) => finding.id === "FORBIDDEN.secret").length, 0)
+      const suppressed = findings.filter((finding) => finding.id === "FORBIDDEN.suppressed")
+      assert.equal(suppressed.length, 1)
+      assert.match(suppressed[0]?.message ?? "", /secret is suppressed for fixtures\/conformance\.json: This fixture quotes the shape as documentation\./)
+    } finally {
+      local.cleanup()
+    }
+  })
+
   test("a verified grant case's email must be on example.test or example.com; a negative case is not scanned", () => {
     const local = temp()
     try {
@@ -217,6 +243,41 @@ describe("plugin-kit forbidden", () => {
       assert.equal(findings.length, 1)
       assert.equal(findings[0]?.path, "docs/guide.md")
       assert.match(findings[0]?.message ?? "", /line 4 holds what looks like a token/)
+    } finally {
+      local.cleanup()
+    }
+  })
+
+  test("a reasoned secret allowance suppresses a per-line finding and reports it; an entry with no reason does not", () => {
+    const local = temp()
+    try {
+      write(join(local.dir, "docs", "leak.md"), 'token: "lin_api_abcdefghijklmnopqrstuvwxyz0123456789"\n')
+      assert.equal(forbiddenFindings(local.dir).filter((finding) => finding.id === "FORBIDDEN.secret").length, 1)
+      write(join(local.dir, ALLOW_FILE), "docs/leak.md:secret \n")
+      assert.equal(forbiddenFindings(local.dir).filter((finding) => finding.id === "FORBIDDEN.secret").length, 1)
+      write(join(local.dir, ALLOW_FILE), "docs/leak.md:secret This page quotes the shape as documentation.\n")
+      const findings = forbiddenFindings(local.dir)
+      assert.equal(findings.filter((finding) => finding.id === "FORBIDDEN.secret").length, 0)
+      const suppressed = findings.filter((finding) => finding.id === "FORBIDDEN.suppressed")
+      assert.equal(suppressed.length, 1)
+      assert.equal(suppressed[0]?.level, "warning")
+      assert.match(suppressed[0]?.message ?? "", /This page quotes the shape as documentation\./)
+    } finally {
+      local.cleanup()
+    }
+  })
+
+  test("a reasoned secret allowance suppresses a whole-file finding too", () => {
+    const local = temp()
+    try {
+      write(join(local.dir, "docs", "leak.md"), 'token:\n"lin_api_abcdefghijklmnopqrstuvwxyz0123456789"\n')
+      const reported = forbiddenFindings(local.dir).filter((finding) => finding.id === "FORBIDDEN.secret")
+      assert.equal(reported.length, 1)
+      assert.match(reported[0]?.message ?? "", /the file holds what looks like a token/)
+      write(join(local.dir, ALLOW_FILE), "docs/leak.md:secret This page quotes the shape as documentation.\n")
+      const findings = forbiddenFindings(local.dir)
+      assert.equal(findings.filter((finding) => finding.id === "FORBIDDEN.secret").length, 0)
+      assert.equal(findings.filter((finding) => finding.id === "FORBIDDEN.suppressed").length, 1)
     } finally {
       local.cleanup()
     }

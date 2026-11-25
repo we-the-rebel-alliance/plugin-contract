@@ -654,7 +654,7 @@ function forbiddenFindings(dir, options = {}) {
         const key = `secret:${lineNumber}:${kind}`;
         if (seen.has(key)) continue;
         seen.add(key);
-        findings.push({
+        add(findings, used, allowed, {
           id: "FORBIDDEN.secret",
           level: "error",
           path: relative2,

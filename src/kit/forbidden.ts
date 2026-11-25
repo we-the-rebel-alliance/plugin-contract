@@ -198,6 +198,7 @@ export function forbiddenFindings(dir: string, options: ForbiddenOptions = {}): 
     const exempt = relative.endsWith("fixtures/conformance.json") ? grantTokens(text) : []
     const withoutGrants = exempt.reduce((value, token) => value.split(token).join("<grant-token>"), text)
     // The raw token exemption does not hide what the signed claims carry: decode the payload and screen it.
+    // A claim's findings take the same allowance path as every other pattern.
     if (relative.endsWith("fixtures/conformance.json")) for (const finding of grantClaimFindings(relative, text)) add(findings, used, allowed, finding)
     const lines = text.split(/\r?\n/)
     const scanLines = withoutGrants.split(/\r?\n/)
@@ -245,7 +246,7 @@ export function forbiddenFindings(dir: string, options: ForbiddenOptions = {}): 
         const key = `secret:${lineNumber}:${kind}`
         if (seen.has(key)) continue
         seen.add(key)
-        findings.push({
+        add(findings, used, allowed, {
           id: "FORBIDDEN.secret",
           level: "error",
           path: relative,

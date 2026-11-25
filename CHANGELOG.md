@@ -15,6 +15,9 @@ Detector fixes, with no wire change: the surface stays at v1. They ship with the
 - **`FORBIDDEN.main-branch`:** only a `main` link under the plugin's own GitHub owner is a finding, read from
   `package.json` `repository`. A third-party repository's `main` branch is legitimate, and a package with no repository
   has no owner to flag.
+- **`FORBIDDEN.secret` and the allowance file:** every secret finding, per line, whole file or decoded signed claim,
+  now goes through `.plugin-kit/forbidden-allow`; a reasoned `secret` entry suppresses it and reports
+  `FORBIDDEN.suppressed`, and an entry without a reason still does not.
 - **`plugin-kit release` outside a plugin:** it reads the package before the check and refuses a `package.json` with no
   `capabilities` with one `KIT_NOT_A_PLUGIN` error naming `scripts/release.mjs`; no conformance or check runs.
 
