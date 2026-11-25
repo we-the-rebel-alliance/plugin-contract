@@ -104,7 +104,9 @@ repository prefixes, not ordinary words that happen to be product names.
 A real site that must name an app is allowed in `.plugin-kit/forbidden-allow`, one `<path>:<pattern-id> <reason>` per
 line, such as `docs/quote.md:app-name This page documents the product itself.` The pattern id is the finding id without
 `FORBIDDEN.`, so a fixture that must name a real address uses `grant-email`. A used allowance removes that finding and is
-reported as a `FORBIDDEN.suppressed` warning with its reason; a line with no reason is not an allowance.
+reported as a `FORBIDDEN.suppressed` warning with its reason; a line with no reason is not an allowance. A
+`FORBIDDEN.secret` that names the line holding the credential is never allowable; only a whole-file or decoded
+signed-claim secret finding can be suppressed.
 
 ### `release`
 
