@@ -5,8 +5,8 @@
  * `AssertInput.Encoded` in `dist/permission.d.ts`). A tool's `permission` option only hides a fully denied tool, and
  * `tool.add` adds no ask (`core/src/tool.ts:327,500`; `core/src/tool/AGENTS.md:53-55`;
  * `plugin/src/promise/adapter.ts:574`). So every handler invocation calls `ctx.permission.assert` once, with the
- * method's action `<name>.<method>` and the resources its declared operations name (`<alias>:<operation>`, or `["*"]`
- * when it declares none). The host evaluates the session's rules and asks when the last matching rule says `ask`; a
+ * method's action `<name>.<method>` and the resources its declared operations name (`<alias>:<operation>`, or
+ * `<alias>:*` when it declares none). The host evaluates the session's rules and asks when the last matching rule says `ask`; a
  * deny or a rejection rejects. A tool or Code Mode call may save a pattern scoped to this method's action and account
  * (`<account>:*`) so "Always allow" cannot become a project-wide `*`; an RPC call never saves, because its answer
  * applies to that one call only.
@@ -16,6 +16,7 @@
  */
 import { evaluate, methodAction, type PermissionRule } from "../access.ts"
 import type { MethodEntry } from "./handlers.ts"
+import { refusal, RegisterError } from "./errors.ts"
 
 /** The part of the plugin context the gate asserts through. */
 export interface GateContext {
@@ -34,7 +35,8 @@ export interface GateContext {
 /** The resources a method's gate names: its operations on the account, or `*` when it declares none. */
 export function resourcesFor(entry: MethodEntry, account: string): readonly string[] {
   const operations = entry.item.operations ?? []
-  return operations.length === 0 ? ["*"] : operations.map((operation) => `${account}:${operation}`)
+  // A method with no operations asks for the account's own wildcard, the same pattern a tool-door "Always" saves.
+  return operations.length === 0 ? [`${account}:*`] : operations.map((operation) => `${account}:${operation}`)
 }
 
 /**
@@ -60,11 +62,14 @@ export async function gate(
   context: GateContext,
   name: string,
   entry: MethodEntry,
-  call: { readonly sessionID: string; readonly agent?: string; readonly messageID: string; readonly id: string },
+  call: { readonly sessionID: string; readonly agent?: string; readonly messageID: string; readonly id: string; readonly signal?: AbortSignal },
   account: string,
   options: { readonly save: boolean; readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string } },
 ): Promise<void> {
-  await context.permission.assert({
+  const cancelled = () => new RegisterError(refusal("UNAVAILABLE", "the call was cancelled while its permission ask was pending", "Retry the call."))
+  const signal = call.signal
+  if (signal?.aborted) throw cancelled()
+  const pending = context.permission.assert({
     sessionID: call.sessionID,
     ...(call.agent === undefined ? {} : { agent: call.agent }),
     action: methodAction(name, entry.name),
@@ -73,4 +78,22 @@ export async function gate(
     ...(options.save ? { save: [`${account}:*`] } : {}),
     ...(options.source === undefined ? {} : { source: options.source }),
   })
+  // A late rejection after an abort is not the caller's answer: the abandoned call already lost its race.
+  pending.catch(() => undefined)
+  if (signal === undefined) {
+    await pending
+    return
+  }
+  let onAbort: (() => void) | undefined
+  try {
+    await Promise.race([
+      pending,
+      new Promise<never>((_, reject) => {
+        onAbort = () => reject(cancelled())
+        signal.addEventListener("abort", onAbort, { once: true })
+      }),
+    ])
+  } finally {
+    if (onAbort !== undefined) signal.removeEventListener("abort", onAbort)
+  }
 }

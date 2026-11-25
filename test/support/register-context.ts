@@ -47,6 +47,8 @@ export interface HarnessOptions {
   readonly options?: Readonly<Record<string, unknown>>
   /** Whether an ask is answered yes. Default true; a test that proves the refusal sets it false. */
   readonly answerAsks?: boolean
+  /** Whether an ask waits for `releaseAsks`. Default false; a test that re-records or aborts while the ask waits sets it true. */
+  readonly holdAsks?: boolean
 }
 
 export interface Harness {
@@ -57,6 +59,14 @@ export interface Harness {
   readonly assertions: Assertion[]
   readonly namespaces: { name: string; description: string }[]
   readonly rpc: RpcHost
+  /** Flip whether an ask is answered, for a test that refuses first and retries the same plan. */
+  readonly setAnswerAsks: (value: boolean) => void
+  /** Resolve the next ask that is entered, for a test that acts while the ask waits. */
+  readonly waitForAsk: () => Promise<void>
+  /** Answer every held ask. */
+  readonly releaseAsks: () => void
+  /** Flip whether a later ask waits, so a retry can answer at once. */
+  readonly setHoldAsks: (value: boolean) => void
 }
 
 const sessionRefusal = (sessionID: string) => Object.assign(new Error(`Session not found: ${sessionID}`), { _tag: "Session.NotFoundError" })
@@ -68,7 +78,10 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
   const tools = new Map<string, RecordedTool>()
   const assertions: Assertion[] = []
   const namespaces: { name: string; description: string }[] = []
-  const answerAsks = options.answerAsks ?? true
+  let answerAsks = options.answerAsks ?? true
+  let holdAsks = options.holdAsks ?? false
+  const askListeners: (() => void)[] = []
+  const heldAsks: (() => void)[] = []
   const rpc = makeRpcHost()
 
   const rulesFor = (sessionID: string, agentID?: string): readonly PermissionRule[] => {
@@ -138,6 +151,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
           resources: input.resources,
           ...(input.save === undefined ? {} : { save: input.save }),
         })
+        for (const listener of askListeners.splice(0)) listener()
         const rules = rulesFor(input.sessionID, input.agent)
         let effect: PermissionRule["effect"] = "allow"
         for (const resource of input.resources.length === 0 ? ["*"] : input.resources) {
@@ -146,6 +160,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
           if (found === "ask") effect = "ask"
         }
         if (effect === "ask" && !answerAsks) throw askRefusal(input.action)
+        if (effect === "ask" && holdAsks) await new Promise<void>((resolve) => heldAsks.push(resolve))
       },
     },
     rpc: {
@@ -153,7 +168,21 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
     },
   }
 
-  return { ctx, agents, sessions, tools, assertions, namespaces, rpc }
+  return {
+    ctx,
+    agents,
+    sessions,
+    tools,
+    assertions,
+    namespaces,
+    rpc,
+    setAnswerAsks: (value) => void (answerAsks = value),
+    waitForAsk: () => new Promise<void>((resolve) => askListeners.push(resolve)),
+    releaseAsks: () => {
+      for (const resolve of heldAsks.splice(0)) resolve()
+    },
+    setHoldAsks: (value) => void (holdAsks = value),
+  }
 }
 
 /** The permission rules the fake agent holds, for a test that checks the generated access. */

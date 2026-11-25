@@ -209,6 +209,7 @@ async function invoke(
   rpc: RpcCallContext,
   freshAsks: Set<string>,
 ): Promise<unknown> {
+  let prepared: Awaited<ReturnType<typeof prepareCall>> | undefined
   try {
     if (!plain(raw)) throw new RegisterError(refusal("INPUT_INVALID", "the RPC envelope must be an object", 'Pass {"sessionID":"<session>","input":<the method\'s input>}.'))
     const sessionID = raw["sessionID"]
@@ -218,7 +219,6 @@ async function invoke(
     const resolved = await rulesOf(context, sessionID)
     const nonRead = entry.item.class !== "read"
     const callID = `rpc:${randomUUID()}`
-    let prepared
     let gated = false
     let fresh = false
     if (nonRead) {
@@ -252,7 +252,7 @@ async function invoke(
         const effect = callEffect(environment.name, entry, prepared.account, resolved.rules)
         if (effect === "allow") {
           // An allow rule is not a confirmation. Run the gate first so it is the one permission evaluation, then refuse.
-          await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: callID }, prepared.account, { save: false })
+          await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: callID, signal: rpc.signal }, prepared.account, { save: false })
           gated = true
           throw new RegisterError(refusal("PERMISSION_DENIED", `${environment.name}.${entry.name} is a ${entry.item.class} and an allow rule is not a confirmation for RPC`, "A non-read method over RPC needs a permission ask or a host-signed action grant."))
         }
@@ -261,12 +261,13 @@ async function invoke(
     } else {
       prepared = prepareCall(entry, input, environment.accounts, environment.plans)
     }
+    if (prepared === undefined) throw new RegisterError(refusal("UNAVAILABLE", "the RPC call prepared no input", "Try again; if it keeps failing, check the plugin's status."))
     if (!gated) {
       const source = { type: "tool" as const, messageID: "msg_rpc", id: callID }
       if (fresh) freshAsks.add(callID)
       try {
         // A fresh one-call ask: the evaluate hook turns an allow that came only from a saved approval back into ask.
-        await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: callID }, prepared.account, { save: false, ...(fresh ? { source } : {}) })
+        await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: callID, signal: rpc.signal }, prepared.account, { save: false, ...(fresh ? { source } : {}) })
       } catch (error) {
         throw new RegisterError(permissionRefusal(error, `${environment.name}.${entry.name}`))
       } finally {
@@ -278,6 +279,8 @@ async function invoke(
     const value = await execute(entry, prepared, { sessionID, agent: resolved.agent, messageID, id, signal: rpc.signal, progress: async () => {}, door: "rpc" }, environment.plans)
     return value === undefined ? null : JSON.parse(JSON.stringify(value))
   } catch (error) {
+    // A refusal before the handler releases the plan; after the handler starts, consume already made this a no-op.
+    if (prepared?.reservation !== undefined) environment.plans.release(prepared.reservation)
     const own = refusalOf(error)
     const failure = own ?? refusal("UNAVAILABLE", "the RPC call failed", "Try again; if it keeps failing, check the plugin's status.")
     return rpc.error("failed", failure.message, { code: failure.code, next: failure.next })

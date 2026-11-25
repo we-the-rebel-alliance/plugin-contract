@@ -100,8 +100,8 @@ export function namespaceOf(source: Pick<SourceItem, "id">): string {
  * `<account>:<operation>`, a bare one (an MCP tool) as `<server>_<operation>` on `*`. The same derivation as the
  * conformance kit, so declared equals asserted means the same thing in a plugin's CI and in a consumer's session.
  *
- * The alias is the grant's own account, which the app resolved from the plugin's manifest before it issued the grant;
- * `serverOf` in `./rules.ts` is the deriving form that also refuses an alias the plugin does not declare.
+ * The aliases come from the plugin's own `status.accounts` (contract §11), passed by the read/act host; `serverOf` in
+ * `./rules.ts` is the deriving form that also refuses an alias the plugin does not declare.
  */
 export function operationRule(
   source: Pick<SourceItem, "id">,
@@ -145,6 +145,7 @@ export function sessionRules(source: SourceItem, grant: Pick<Grant, "source" | "
   if (grant.source !== source.id) return { ok: false, problems: [`the grant is for ${grant.source}, not ${source.id}`] }
   const problem = accountProblem(grant.account)
   if (problem) return { ok: false, problems: [problem] }
+  if (!aliases.includes(grant.account)) return { ok: false, problems: [`the account alias "${grant.account}" is not one this plugin declares`] }
   const method = methodAction(source)
   const operations = source.operations ?? []
   const checked = operations.map((operation) => operationRule(source, operation, grant.account, aliases))
@@ -162,6 +163,7 @@ export function actSessionRules(manifest: Manifest, act: Pick<ActionItem, "id" |
   if (grant.action !== act.id) return { ok: false, problems: [`the grant is for ${grant.action}, not ${act.id}`] }
   const problem = accountProblem(grant.account)
   if (problem) return { ok: false, problems: [problem] }
+  if (!aliases.includes(grant.account)) return { ok: false, problems: [`the account alias "${grant.account}" is not one this plugin declares`] }
   const method = phase === "preview" ? act.preview : act.commit
   const declared = findMethod(manifest, method)
   if (declared === undefined) return { ok: false, problems: [`${act.id} names no declared method ${method}`] }
@@ -192,6 +194,7 @@ export function detailRules(source: SourceItem, detailId: string, grant: Pick<Gr
 export function probeRules(source: SourceItem, account: string, identityOperations: readonly string[], probeAction?: string, aliases: readonly string[] = []): Checked<readonly PermissionRule[]> {
   const problem = accountProblem(account)
   if (problem) return { ok: false, problems: [problem] }
+  if (!aliases.includes(account)) return { ok: false, problems: [`the account alias "${account}" is not one this plugin declares`] }
   const method = probeAction ?? methodAction(source)
   const checked = identityOperations.map((operation) => operationRule(source, operation, account, aliases))
   const failed = checked.find((rule) => !rule.ok)

@@ -1,7 +1,7 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   findMethod
-} from "./chunk-RIPYHT4Z.js";
+} from "./chunk-WXKPUWDE.js";
 import {
   DEFAULT_ALIAS,
   accountsOf,
@@ -114,6 +114,7 @@ function sessionRules(source, grant, aliases = []) {
   if (grant.source !== source.id) return { ok: false, problems: [`the grant is for ${grant.source}, not ${source.id}`] };
   const problem = accountProblem(grant.account);
   if (problem) return { ok: false, problems: [problem] };
+  if (!aliases.includes(grant.account)) return { ok: false, problems: [`the account alias "${grant.account}" is not one this plugin declares`] };
   const method = methodAction2(source);
   const operations = source.operations ?? [];
   const checked = operations.map((operation) => operationRule(source, operation, grant.account, aliases));
@@ -125,6 +126,7 @@ function actSessionRules(manifest, act, grant, phase, aliases = []) {
   if (grant.action !== act.id) return { ok: false, problems: [`the grant is for ${grant.action}, not ${act.id}`] };
   const problem = accountProblem(grant.account);
   if (problem) return { ok: false, problems: [problem] };
+  if (!aliases.includes(grant.account)) return { ok: false, problems: [`the account alias "${grant.account}" is not one this plugin declares`] };
   const method = phase === "preview" ? act.preview : act.commit;
   const declared = findMethod(manifest, method);
   if (declared === void 0) return { ok: false, problems: [`${act.id} names no declared method ${method}`] };
@@ -145,6 +147,7 @@ function detailRules(source, detailId, grant, aliases = []) {
 function probeRules(source, account, identityOperations, probeAction, aliases = []) {
   const problem = accountProblem(account);
   if (problem) return { ok: false, problems: [problem] };
+  if (!aliases.includes(account)) return { ok: false, problems: [`the account alias "${account}" is not one this plugin declares`] };
   const method = probeAction ?? methodAction2(source);
   const checked = identityOperations.map((operation) => operationRule(source, operation, account, aliases));
   const failed = checked.find((rule) => !rule.ok);

@@ -289,6 +289,8 @@ describe("sessionRules", () => {
     assert.equal(missing.ok, false, "a missing alias list does not fall back to the grant's own account")
     if (!missing.ok) assert.match(missing.problems[0]!, /not an account alias|not one this plugin declares/)
     assert.equal(sessionRules(messages, { source: "demo.messages", account: "work" }, ["default"]).ok, false, "a dotted operation also checks the alias")
+    const noOperations = { ...channels, operations: undefined } as typeof channels
+    assert.equal(sessionRules(noOperations, { source: "demo.channels", account: "work" }, ["default"]).ok, false, "a source without operations also checks the alias")
   })
 
   test("refuse a declared operation with a wildcard", () => {

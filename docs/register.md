@@ -80,7 +80,8 @@ Every call passes one gate, `ctx.permission.assert`, once (OpenCode 2.4.1 `Permi
 `tool.add` adds no ask, so the register calls the gate itself for every door. A **read** runs when the rules allow it, or asks when they
 say `ask`; a `deny` refuses it. The plugin's own `access` level is final: under `read-only` a non-read RPC call is
 refused even with a grant; under `ask-changes` or `all` it needs an ask or a valid grant. An `allow` rule is not a
-confirmation. RPC asks never save: an answer applies to that one call.
+confirmation. RPC asks never save: an answer applies to that one call. A call's `signal` cancels a pending ask: the
+gate refuses at once, so a commit releases its plan instead of holding it until expiry.
 
 A **non-read** method over RPC needs one of contract §8's two confirmations (LD-5):
 
@@ -129,18 +130,20 @@ A `plans: true` method answers `{ planId, method }` and may carry §8's preview 
 `cost`, `trust`); `method` must be the one declared method whose `commits` names the plan (`PLAN_INVALID` otherwise).
 A `commits: "<plan>"` method accepts exactly `{ planId }` from that plan, with no `account`. The register stores each
 plan's account (and expiry, 15 minutes) in the plugin instance: a commit runs as that account, and its permission gate
-names that account. An unknown or expired `planId` is `PLAN_INVALID`. A grant for a commit must name the plan's
-account; another account is `ACCOUNT_MISMATCH`. The handler's own input schema is not used for a commit.
+names that account. A `planId` commits once, only through the method its plan named; a second commit is `PLAN_USED` and
+another method is `PLAN_INVALID`. A commit reserves the plan before its permission ask or grant check; a refusal
+releases it, and the handler's start consumes it, so a failed handler still uses the plan. A handler starts only when
+its reservation still holds a live, unreplaced plan; an expired plan or a planId recorded again while the ask waits
+refuses the call (`PLAN_INVALID` or `PLAN_USED`) and the handler does not run. An unknown or expired `planId` is
+`PLAN_INVALID`. A grant for a commit must name the plan's account; another account is
+`ACCOUNT_MISMATCH`. The handler's own input schema is not used for a commit.
 
 ## Permissions on operations
 
-For a method that declares `operations`, the register asserts permissions on each one before the handler runs:
-
-- a dotted operation, such as `gmail.users.messages.get`, is the method's action on `<alias>:<operation>`;
-- a bare operation, an MCP tool, is `<server>_<operation>` on `*`, with the server derived per alias.
-
-A rule for `work` therefore reaches only `<name>-work_<tool>`, never another alias's tools. A denied or rejected
-assertion is `PERMISSION_DENIED`.
+The one gate asks the method's action `<name>.<method>` on `<alias>:<operation>` for each declared operation, or on
+`<alias>:*` when the method declares none. Pass-through MCP tools keep their own `<server>_<tool>` access rules, one
+per alias, so a rule for `work` never reaches another alias's tools. A denied or rejected gate is
+`PERMISSION_DENIED`.
 
 ## Errors
 
@@ -150,7 +153,8 @@ Every failure reads `CODE: What happened. Next step: What to do.` (contract §12
 |---|---|
 | `INPUT_INVALID` | The input is not an object, breaks the handler's schema, or names an account a `none` method cannot take. |
 | `SCHEMA_VIOLATION` | The answer breaks the handler's output schema. |
-| `PLAN_INVALID` | A plan or commit does not carry the contract's shape, or names the wrong committing method. |
+| `PLAN_INVALID` | A plan or commit does not carry the contract's shape, names the wrong committing method, or is unknown/expired. |
+| `PLAN_USED` | The plan was already committed once. |
 | `ACCOUNT_REQUIRED`, `ACCOUNT_UNKNOWN` | The account cannot be resolved through `accounts`. |
 | `PERMISSION_DENIED` | A rule denies the call, an ask is rejected, or a non-read RPC call has no ask or grant. |
 | `GRANT_INVALID` | A grant did not verify, for any reason the verifier publishes. |

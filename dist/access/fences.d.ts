@@ -77,8 +77,8 @@ export declare function namespaceOf(source: Pick<SourceItem, "id">): string;
  * `<account>:<operation>`, a bare one (an MCP tool) as `<server>_<operation>` on `*`. The same derivation as the
  * conformance kit, so declared equals asserted means the same thing in a plugin's CI and in a consumer's session.
  *
- * The alias is the grant's own account, which the app resolved from the plugin's manifest before it issued the grant;
- * `serverOf` in `./rules.ts` is the deriving form that also refuses an alias the plugin does not declare.
+ * The aliases come from the plugin's own `status.accounts` (contract §11), passed by the read/act host; `serverOf` in
+ * `./rules.ts` is the deriving form that also refuses an alias the plugin does not declare.
  */
 export declare function operationRule(source: Pick<SourceItem, "id">, operation: string, account: string, aliases?: readonly string[], kind?: "operation" | "tool"): Checked<PermissionRule>;
 /**

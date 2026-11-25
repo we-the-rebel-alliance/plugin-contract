@@ -25,8 +25,9 @@ export type HostDefinition = {
   readonly events: Readonly<Record<string, { readonly schema: unknown }>>
 }
 
-/** A handler's call context; `error` exists so a handler can answer a declared error, as core's does. */
+/** A handler's call context; `signal` cancels a waiting ask and `error` answers a declared error, as core's does. */
 export interface HostContext {
+  readonly signal: AbortSignal
   readonly error: (type: string, message: string, data?: unknown) => Error
 }
 
@@ -76,7 +77,7 @@ export interface PublishedEvent {
 
 export interface RpcHost {
   register(definition: HostDefinition, handlers: HostHandlers): Promise<HostRegistration>
-  call(rpcID: string, name: string, input: unknown): Promise<unknown>
+  call(rpcID: string, name: string, input: unknown, options?: { readonly signal?: AbortSignal }): Promise<unknown>
   readonly published: PublishedEvent[]
   /** The number of live registrations for an id, for a test that inspects the map. */
   count(id: string): number
@@ -159,7 +160,7 @@ export function makeRpcHost(): RpcHost {
         },
       }
     },
-    async call(rpcID, name, input) {
+    async call(rpcID, name, input, options) {
       const entry = registrations.get(rpcID)?.at(-1)
       if (entry === undefined) throw new RpcFailure("rpc.unavailable", `RPC is unavailable: ${rpcID}`)
       if (!Object.hasOwn(entry.definition.methods, name) || !Object.hasOwn(entry.handlers, name)) {
@@ -175,7 +176,10 @@ export function makeRpcHost(): RpcHost {
       }
       let result: unknown
       try {
-        result = await handler(parsed, { error: (type, text, data) => Object.assign(new Error(text), { type, data }) })
+        result = await handler(parsed, {
+          signal: options?.signal ?? new AbortController().signal,
+          error: (type, text, data) => Object.assign(new Error(text), { type, data }),
+        })
       } catch (cause) {
         throw new RpcFailure("rpc.internal", `RPC call failed: ${message(cause)}`)
       }

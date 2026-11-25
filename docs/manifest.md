@@ -128,7 +128,7 @@ One table covers every callable, so a consumer knows how risky a call is before 
 | `class` | `read`, `write`, `send`, `share`, `delete`, `export` or `admin`. Required. |
 | `accounts` | `optional` when the method takes an `account`, `none` when it does not. Defaults to `none`. |
 | `operations` | The provider operations the method may assert, for grants and session rules. |
-| `plans` | `true` for a method that dry-runs a change and answers `{ planId, method }`. |
+| `plans` | `true` for a method that dry-runs a change and answers `{ planId, method }`; the planId commits once, only through that method. |
 | `commits` | The planning method this method commits. It then takes only `{ planId }`. |
 | `effect` | A narrowing of `access`: `ask` or `deny`, never `allow`. |
 | `pinned` | `true` for the one method Code Mode sends on every turn. |
@@ -141,7 +141,7 @@ Rules:
   plugin's sessions call it, and its signature stays within about 1,000 tokens.
 - `delete_*` and `remove_*` are class `delete`; `send_*` and `post_*` are class `send`; `share_*` is class `share`
   (contract §16, joe-broadhead/opencode-linear#28). The rule applies to contract method names, not to `mcp:<tool>`.
-- Pass-through MCP tools are declared as `mcp:<tool>` or `mcp:*`.
+- Pass-through MCP tools are declared as `mcp:<tool>` or `mcp:*`. Two tool names that normalise to the same effective OpenCode action (`files.delete` and `files_delete`) are refused at both names.
 
 ### `sources`
 

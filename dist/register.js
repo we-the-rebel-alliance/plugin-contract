@@ -11,14 +11,14 @@ import {
   effectFor,
   evaluate,
   methodAction
-} from "./chunks/chunk-PRLLFQV2.js";
+} from "./chunks/chunk-MIBCHKMR.js";
 import {
   manifestHash
-} from "./chunks/chunk-RIPYHT4Z.js";
-import "./chunks/chunk-SBSFNGFN.js";
+} from "./chunks/chunk-WXKPUWDE.js";
+import "./chunks/chunk-L5LSEI5N.js";
 import {
   errorCodeOf
-} from "./chunks/chunk-4TUKQJKX.js";
+} from "./chunks/chunk-DKSE7KD4.js";
 import {
   problemsOf
 } from "./chunks/chunk-FTEX4OOT.js";
@@ -41,34 +41,7 @@ import "./chunks/chunk-7KJXMIQH.js";
 import "./chunks/chunk-WLRWVIVP.js";
 
 // src/register/rpc.ts
-import { randomUUID } from "node:crypto";
-
-// src/register/assertions.ts
-function resourcesFor(entry, account) {
-  const operations = entry.item.operations ?? [];
-  return operations.length === 0 ? ["*"] : operations.map((operation) => `${account}:${operation}`);
-}
-function callEffect(name, entry, account, rules) {
-  const action = methodAction(name, entry.name);
-  let effect = evaluate(rules, action, "*");
-  for (const resource of resourcesFor(entry, account)) {
-    const found = evaluate(rules, action, resource);
-    if (found === "deny") return "deny";
-    if (found === "ask") effect = "ask";
-  }
-  return effect;
-}
-async function gate(context, name, entry, call, account, options) {
-  await context.permission.assert({
-    sessionID: call.sessionID,
-    ...call.agent === void 0 ? {} : { agent: call.agent },
-    action: methodAction(name, entry.name),
-    resources: resourcesFor(entry, account),
-    // Save only this method's own action for this account. Never `*`, which would be a project-wide allow.
-    ...options.save ? { save: [`${account}:*`] } : {},
-    ...options.source === void 0 ? {} : { source: options.source }
-  });
-}
+import { randomUUID as randomUUID2 } from "node:crypto";
 
 // src/register/errors.ts
 var RegisterError = class extends Error {
@@ -114,24 +87,104 @@ function reasonOf(error) {
   return redactReason(error instanceof Error ? error.message : String(error));
 }
 
+// src/register/assertions.ts
+function resourcesFor(entry, account) {
+  const operations = entry.item.operations ?? [];
+  return operations.length === 0 ? [`${account}:*`] : operations.map((operation) => `${account}:${operation}`);
+}
+function callEffect(name, entry, account, rules) {
+  const action = methodAction(name, entry.name);
+  let effect = evaluate(rules, action, "*");
+  for (const resource of resourcesFor(entry, account)) {
+    const found = evaluate(rules, action, resource);
+    if (found === "deny") return "deny";
+    if (found === "ask") effect = "ask";
+  }
+  return effect;
+}
+async function gate(context, name, entry, call, account, options) {
+  const cancelled = () => new RegisterError(refusal("UNAVAILABLE", "the call was cancelled while its permission ask was pending", "Retry the call."));
+  const signal = call.signal;
+  if (signal?.aborted) throw cancelled();
+  const pending = context.permission.assert({
+    sessionID: call.sessionID,
+    ...call.agent === void 0 ? {} : { agent: call.agent },
+    action: methodAction(name, entry.name),
+    resources: resourcesFor(entry, account),
+    // Save only this method's own action for this account. Never `*`, which would be a project-wide allow.
+    ...options.save ? { save: [`${account}:*`] } : {},
+    ...options.source === void 0 ? {} : { source: options.source }
+  });
+  pending.catch(() => void 0);
+  if (signal === void 0) {
+    await pending;
+    return;
+  }
+  let onAbort;
+  try {
+    await Promise.race([
+      pending,
+      new Promise((_, reject) => {
+        onAbort = () => reject(cancelled());
+        signal.addEventListener("abort", onAbort, { once: true });
+      })
+    ]);
+  } finally {
+    if (onAbort !== void 0) signal.removeEventListener("abort", onAbort);
+  }
+}
+
 // src/register/plans.ts
+import { randomUUID } from "node:crypto";
 var PLAN_TTL_MS = 15 * 6e4;
 function planStore(options = {}) {
   const now = options.now ?? Date.now;
   const ttl = options.ttlMs ?? PLAN_TTL_MS;
   const plans = /* @__PURE__ */ new Map();
+  const prune = () => {
+    const at = now();
+    for (const [id, plan2] of plans) if (plan2.expires <= at) plans.delete(id);
+  };
+  const same = (plan2, reservation) => plan2.reserved === reservation.token && !plan2.used;
   return {
-    record(planId, account) {
-      plans.set(planId, { account, expires: now() + ttl });
+    record(planId, account, method) {
+      prune();
+      plans.set(planId, { account, method, expires: now() + ttl, reserved: void 0, used: false });
     },
-    accountOf(planId) {
+    reserve(planId, method) {
+      prune();
       const plan2 = plans.get(planId);
-      if (plan2 === void 0) return { ok: false, problems: [`there is no plan '${planId}'; plan again and commit with the planId it answers`] };
-      if (plan2.expires <= now()) {
-        plans.delete(planId);
-        return { ok: false, problems: [`the plan '${planId}' has expired; plan again and commit with the new planId`] };
+      if (plan2 === void 0) return { ok: false, code: "PLAN_INVALID", problems: [`there is no plan '${planId}'; plan again and commit with the planId it answers`] };
+      if (plan2.used || plan2.reserved !== void 0) return { ok: false, code: "PLAN_USED", problems: [`the plan '${planId}' is already reserved or used; plan again to make a new one`] };
+      if (plan2.method !== method) return { ok: false, code: "PLAN_INVALID", problems: [`the plan '${planId}' commits ${plan2.method}, not ${method}`] };
+      const reservation = { planId, method, account: plan2.account, token: randomUUID() };
+      plan2.reserved = reservation.token;
+      return { ok: true, reservation };
+    },
+    release(reservation) {
+      const plan2 = plans.get(reservation.planId);
+      if (plan2 !== void 0 && same(plan2, reservation)) plan2.reserved = void 0;
+    },
+    consume(reservation) {
+      const plan2 = plans.get(reservation.planId);
+      if (plan2 === void 0) {
+        prune();
+        return { ok: false, code: "PLAN_INVALID", problems: [`there is no plan '${reservation.planId}'; plan again and commit with the new planId`] };
       }
-      return { ok: true, value: plan2.account };
+      if (plan2.expires <= now()) {
+        plans.delete(reservation.planId);
+        return { ok: false, code: "PLAN_INVALID", problems: [`the plan '${reservation.planId}' expired before its handler started; plan again`] };
+      }
+      prune();
+      if (plan2.used) return { ok: false, code: "PLAN_USED", problems: [`the plan '${reservation.planId}' was already used; plan again`] };
+      if (plan2.reserved !== reservation.token) return { ok: false, code: "PLAN_USED", problems: [`the plan '${reservation.planId}' was re-recorded or reserved by another call; plan again`] };
+      plan2.used = true;
+      plan2.reserved = void 0;
+      return { ok: true, account: plan2.account };
+    },
+    get size() {
+      prune();
+      return plans.size;
     }
   };
 }
@@ -297,11 +350,16 @@ function prepareCall(entry, raw, accounts, plans) {
   const { input, account } = checkedInput(entry, raw);
   if (entry.item.commits !== void 0) {
     const planId = typeof input["planId"] === "string" ? input["planId"] : "";
-    const plan2 = plans.accountOf(planId);
-    if (!plan2.ok) throw new RegisterError(refusal("PLAN_INVALID", plan2.problems.join("; "), "Plan again, then commit with the planId it answers."));
-    const resolved2 = accounts.length === 0 ? { ok: true, alias: plan2.value } : resolveAccount(accounts, { account: plan2.value });
-    if (!resolved2.ok) throw new RegisterError(refusal("ACCOUNT_UNKNOWN", resolved2.what, resolved2.next));
-    return { input, account: resolved2.alias };
+    const plan2 = plans.reserve(planId, entry.name);
+    if (!plan2.ok) throw new RegisterError(refusal(plan2.code, plan2.problems.join("; "), "Plan again, then commit with the planId it answers."));
+    try {
+      const resolved2 = accounts.length === 0 ? { ok: true, alias: plan2.reservation.account } : resolveAccount(accounts, { account: plan2.reservation.account });
+      if (!resolved2.ok) throw new RegisterError(refusal("ACCOUNT_UNKNOWN", resolved2.what, resolved2.next));
+      return { input, account: resolved2.alias, reservation: plan2.reservation };
+    } catch (error) {
+      plans.release(plan2.reservation);
+      throw error;
+    }
   }
   const resolved = entry.item.accounts === "optional" ? resolveAccount(accounts, { account }) : { ok: true, alias: DEFAULT_ALIAS };
   if (!resolved.ok) throw new RegisterError(refusal(resolved.code, resolved.what, resolved.next));
@@ -326,9 +384,13 @@ function failureOf(entry, error) {
   return refusal("UNAVAILABLE", `${entry.name} failed: ${reasonOf(error)}`, "Try again; if it keeps failing, check the plugin's status.");
 }
 async function execute(entry, prepared, call, plans) {
+  if (prepared.reservation !== void 0) {
+    const taken = plans.consume(prepared.reservation);
+    if (!taken.ok) throw new RegisterError(refusal(taken.code, taken.problems.join("; "), "Plan again, then commit with the new planId it answers."));
+  }
   try {
     const value = checkedOutput(entry, await entry.handler.run(prepared.input, { ...call, account: prepared.account }));
-    if (entry.item.plans === true) plans.record(value.planId, prepared.account);
+    if (entry.item.plans === true) plans.record(value.planId, prepared.account, entry.commit ?? entry.name);
     return value;
   } catch (error) {
     if (error instanceof RegisterError) throw error;
@@ -421,6 +483,7 @@ async function verify(environment, wiring, request, entry, account) {
   return checked.ok ? { ok: true, account: checked.claims.account } : { ok: false, refusal: refusal("GRANT_INVALID", checked.reason, "Ask the host to issue a fresh grant for this action and input."), code: checked.code };
 }
 async function invoke(context, environment, level, entry, wiring, raw, rpc, freshAsks) {
+  let prepared;
   try {
     if (!plain4(raw)) throw new RegisterError(refusal("INPUT_INVALID", "the RPC envelope must be an object", `Pass {"sessionID":"<session>","input":<the method's input>}.`));
     const sessionID = raw["sessionID"];
@@ -429,8 +492,7 @@ async function invoke(context, environment, level, entry, wiring, raw, rpc, fres
     if (!plain4(input)) throw new RegisterError(refusal("INPUT_INVALID", "the RPC envelope needs an input object", "Pass the method's input as the envelope's input."));
     const resolved = await rulesOf(context, sessionID);
     const nonRead = entry.item.class !== "read";
-    const callID = `rpc:${randomUUID()}`;
-    let prepared;
+    const callID = `rpc:${randomUUID2()}`;
     let gated = false;
     let fresh = false;
     if (nonRead) {
@@ -456,7 +518,7 @@ async function invoke(context, environment, level, entry, wiring, raw, rpc, fres
         prepared = prepareCall(entry, input, environment.accounts, environment.plans);
         const effect = callEffect(environment.name, entry, prepared.account, resolved.rules);
         if (effect === "allow") {
-          await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: callID }, prepared.account, { save: false });
+          await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: callID, signal: rpc.signal }, prepared.account, { save: false });
           gated = true;
           throw new RegisterError(refusal("PERMISSION_DENIED", `${environment.name}.${entry.name} is a ${entry.item.class} and an allow rule is not a confirmation for RPC`, "A non-read method over RPC needs a permission ask or a host-signed action grant."));
         }
@@ -465,11 +527,12 @@ async function invoke(context, environment, level, entry, wiring, raw, rpc, fres
     } else {
       prepared = prepareCall(entry, input, environment.accounts, environment.plans);
     }
+    if (prepared === void 0) throw new RegisterError(refusal("UNAVAILABLE", "the RPC call prepared no input", "Try again; if it keeps failing, check the plugin's status."));
     if (!gated) {
       const source = { type: "tool", messageID: "msg_rpc", id: callID };
       if (fresh) freshAsks.add(callID);
       try {
-        await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: callID }, prepared.account, { save: false, ...fresh ? { source } : {} });
+        await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: callID, signal: rpc.signal }, prepared.account, { save: false, ...fresh ? { source } : {} });
       } catch (error) {
         throw new RegisterError(permissionRefusal(error, `${environment.name}.${entry.name}`));
       } finally {
@@ -477,11 +540,12 @@ async function invoke(context, environment, level, entry, wiring, raw, rpc, fres
       }
     }
     const messageID = "msg_rpc";
-    const id = `rpc:${randomUUID()}`;
+    const id = `rpc:${randomUUID2()}`;
     const value = await execute(entry, prepared, { sessionID, agent: resolved.agent, messageID, id, signal: rpc.signal, progress: async () => {
     }, door: "rpc" }, environment.plans);
     return value === void 0 ? null : JSON.parse(JSON.stringify(value));
   } catch (error) {
+    if (prepared?.reservation !== void 0) environment.plans.release(prepared.reservation);
     const own = refusalOf(error);
     const failure = own ?? refusal("UNAVAILABLE", "the RPC call failed", "Try again; if it keeps failing, check the plugin's status.");
     return rpc.error("failed", failure.message, { code: failure.code, next: failure.next });
@@ -536,8 +600,9 @@ function toolRegistrations(environment, context) {
     output: entry.output,
     options: { namespace: environment.name, permission: `${environment.name}.${entry.name}`, codemode: codemodeFor(entry) },
     async execute(raw, callContext) {
+      let prepared;
       try {
-        const prepared = prepareCall(entry, raw, environment.accounts, environment.plans);
+        prepared = prepareCall(entry, raw, environment.accounts, environment.plans);
         await gate(context, environment.name, entry, callContext, prepared.account, {
           save: true,
           source: { type: "tool", messageID: callContext.messageID, id: callContext.id }
@@ -545,6 +610,7 @@ function toolRegistrations(environment, context) {
         const value = await execute(entry, prepared, toolCall(callContext, callContext.codemode === true ? "codemode" : "tool"), environment.plans);
         return { output: value, content: textOf(value) };
       } catch (error) {
+        if (prepared?.reservation !== void 0) environment.plans.release(prepared.reservation);
         throw new Error(error instanceof RegisterError ? error.message : permissionRefusal(error, `${environment.name}.${entry.name}`).message);
       }
     }

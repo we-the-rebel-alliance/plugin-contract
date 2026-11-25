@@ -2,9 +2,9 @@
 
 The consumer side of a source read (contract §7 and §9). An app resolves the manifest of the installed package, checks
 that the person's grant covers the read, and calls the plugin's method inside a session fenced by exactly the grant's
-rules. The app keeps its own cursor; `read` returns the page and stores nothing. Every request carries `aliases`, the
-plugin's declared account aliases from its options, so a fence refuses an undeclared account instead of inventing a
-server name.
+rules. The app keeps its own cursor; `read` returns the page and stores nothing. The host also reads the plugin's
+`status` answer (contract §11), and its `status.accounts` supply the aliases a fence may name; a caller cannot invent
+that list, and status that is unavailable is refused rather than defaulted.
 
 ## What a read does
 

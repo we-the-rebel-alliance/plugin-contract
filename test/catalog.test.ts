@@ -290,6 +290,9 @@ function fakeHost(answer: (method: string, input: Readonly<Record<string, unknow
       sessions.set(sessionID, rules)
       return { sessionID, close: async () => void closed++ }
     },
+    async status() {
+      return { name: "demo", accounts: [{ alias: ana }] }
+    },
     async call({ method, sessionID, input }) {
       const rules = sessions.get(sessionID)!
       calls.push({ method, input, rules })
@@ -317,7 +320,6 @@ const todayRequest = (extra: Partial<ReadRequest> = {}): ReadRequest => ({
   consumer: "notes.home",
   grant: grantFor("demo.channels"),
   context,
-  aliases: [ana],
   ...extra,
 })
 

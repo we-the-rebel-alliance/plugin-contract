@@ -49,6 +49,7 @@ const CODE_MEANING: Readonly<Record<string, string>> = {
   SCHEMA_VIOLATION: "an answer does not keep the contract's shape",
   PERMISSION_DENIED: "the person's grant does not cover the call",
   PLAN_INVALID: "the plan is missing, or belongs to another method",
+  PLAN_USED: "the plan was already used by an earlier commit",
   GRANT_INVALID: "the action grant did not verify, or was already spent",
   HOST_UNTESTED: "OpenCode is outside the plugin's tested range",
   OPTIONS_INVALID: "the plugin's options do not match their schema",

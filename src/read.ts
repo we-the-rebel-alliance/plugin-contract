@@ -8,11 +8,12 @@
  * 4. the answer is checked: its account, `trust: "untrusted"`, its size against `maxBytes`, and a snapshot's `data`
  *    against its output schema; then `pick` keeps only the picked paths.
  *
- * The host is two calls: open a session with given rules, and call a plugin's RPC method in it. Each app
- * implements them over its own OpenCode server. An app keeps its own cursor: `read` returns the page and never stores
- * anything.
+ * The host reads the plugin's status for its account aliases, then opens a session with given rules and calls the
+ * plugin's RPC method in it. Each app implements them over its own OpenCode server. An app keeps its own cursor:
+ * `read` returns the page and never stores anything.
  */
 import { findMethod, findSource, maxBytesOf, type InstalledManifest, type OwnerOrg, type SourceItem } from "./manifest.ts"
+import { DEFAULT_ALIAS } from "./accounts/alias.ts"
 import { canonicalScope } from "./cursor.ts"
 import type { Checked } from "./internal/checked.ts"
 import { PAGE, probeResultProblems, resultProblems } from "./internal/events.ts"
@@ -28,6 +29,12 @@ export type { FailureCode, ReadFailure } from "./internal/failure.ts"
 export interface ReadHost {
   /** Opens a session whose rules are exactly `rules`, for one read; `close` ends it. */
   openSession(request: { readonly rules: readonly PermissionRule[]; readonly title: string }): Promise<{ readonly sessionID: string; close(): Promise<void> }>
+  /**
+   * Reads the installed plugin's `status` answer (contract §11). Its `accounts` supply the aliases a fence may name;
+   * the host calls the plugin's status method, never a caller-supplied list. Absent: a fenced call refuses rather than
+   * guess the accounts.
+   */
+  status?(request: { readonly package: string }): Promise<unknown>
   /**
    * Calls a plugin's method in that session: `POST /api/rpc/<plugin id>/<method>` with `{ sessionID, input }`. The
    * host maps the package to its plugin id, from its own record of installed plugins.
@@ -59,8 +66,6 @@ export interface ReadRequest {
   /** A snapshot read. */
   readonly pick?: readonly string[]
   readonly context: ParamsContext
-  /** The plugin's declared account aliases, from its manifest options. Fences refuse an undeclared alias. */
-  readonly aliases: readonly string[]
   readonly signal?: AbortSignal
 }
 
@@ -167,6 +172,38 @@ function checkAnswer(source: SourceItem, account: string, answer: unknown): Read
   return undefined
 }
 
+/**
+ * The aliases a fence may name, from the installed plugin's own `status.accounts` (contract §11). The host reads the
+ * status; a caller cannot invent the list. A host without a status reader, or a status without an accounts list, is
+ * refused rather than defaulted. A plugin with no accounts has one implicit `default` account.
+ */
+export async function statusAliases(host: ReadHost, installed: InstalledManifest): Promise<{ readonly ok: true; readonly value: readonly string[] } | { readonly ok: false; readonly failure: ReadFailure }> {
+  if (host.status === undefined) {
+    return { ok: false, failure: failure("UNAVAILABLE", `${installed.package} does not expose its status`, "The host must read the plugin's status before it can fence an account.") }
+  }
+  let answer: unknown
+  try {
+    answer = await host.status({ package: installed.package })
+  } catch (error) {
+    return { ok: false, failure: failureFromError(error) }
+  }
+  if (!plain(answer) || !Array.isArray(answer["accounts"])) {
+    return { ok: false, failure: failure("UNAVAILABLE", `${installed.package}'s status does not list its accounts`, "The host must read the plugin's status before it can fence an account.") }
+  }
+  const aliases: string[] = []
+  for (const account of answer["accounts"]) {
+    if (!plain(account) || typeof account["alias"] !== "string" || account["alias"] === "") {
+      return { ok: false, failure: failure("UNAVAILABLE", `${installed.package}'s status has an account without an alias`, "The host must read the plugin's status before it can fence an account.") }
+    }
+    aliases.push(account["alias"])
+  }
+  const unique = [...new Set(aliases)]
+  if (unique.length === 0 && installed.manifest.accounts !== undefined) {
+    return { ok: false, failure: failure("UNAVAILABLE", `${installed.package}'s status lists no accounts`, "The host must read a status with the plugin's declared accounts before it can fence one.") }
+  }
+  return { ok: true, value: unique.length === 0 ? [DEFAULT_ALIAS] : unique }
+}
+
 /** Runs one call in a fenced session, and always closes the session. */
 async function fencedCall(host: ReadHost, rules: Checked<readonly PermissionRule[]>, call: Omit<Parameters<ReadHost["call"]>[0], "sessionID">, title: string): Promise<{ ok: true; answer: unknown } | { ok: false; failure: ReadFailure }> {
   if (!rules.ok) return { ok: false, failure: failure("PERMISSION_DENIED", rules.problems.join("; "), "Fix the source's declaration or the grant.") }
@@ -186,9 +223,11 @@ export async function read(host: ReadHost, request: ReadRequest): Promise<ReadOu
   const prepared = prepare(request)
   if ("ok" in prepared) return prepared
   const { source, input } = prepared
+  const accounts = await statusAliases(host, request.installed)
+  if (!accounts.ok) return { ok: false, failure: accounts.failure }
   const called = await fencedCall(
     host,
-    sessionRules(source, request.grant, request.aliases),
+    sessionRules(source, request.grant, accounts.value),
     { package: request.installed.package, method: source.method, input, ...(request.signal ? { signal: request.signal } : {}) },
     `${request.consumer} reads ${source.id}`,
   )
@@ -249,8 +288,6 @@ export interface DetailRequest {
   readonly consumer: string
   /** The event the detail is read for, as the source listed it. Inputs come only from its API fields. */
   readonly event: Readonly<Record<string, unknown>>
-  /** The plugin's declared account aliases. */
-  readonly aliases: readonly string[]
   readonly signal?: AbortSignal
 }
 
@@ -288,10 +325,12 @@ export async function readDetail(host: ReadHost, request: DetailRequest): Promis
   const fields = detailFields(source, request.detail, request.event)
   if (!fields.ok) return { ok: false, failure: failure("SCHEMA_VIOLATION", fields.problems.join("; "), "Read details only for events the source listed.") }
   const detail = source.details!.find((entry) => entry.id === request.detail)!
+  const accounts = await statusAliases(host, installed)
+  if (!accounts.ok) return { ok: false, failure: accounts.failure }
   const scope = grant.scope === undefined ? {} : (canonicalScope(grant.scope) as Record<string, string[]>)
   const called = await fencedCall(
     host,
-    detailRules(source, request.detail, grant, request.aliases),
+    detailRules(source, request.detail, grant, accounts.value),
     { package: installed.package, method: detail.method, input: { account: grant.account, scope, fields: fields.value }, ...(request.signal ? { signal: request.signal } : {}) },
     `${request.consumer} reads ${request.detail}`,
   )
@@ -319,16 +358,18 @@ export interface ProbeAnswer {
  * operations it declares, or the identity operations the caller passes. The source's own method action fences the
  * read; `probe` adds no content. The call is `probe` with `{ source?, account }`.
  */
-export async function probe(host: ReadHost, request: { readonly installed: InstalledManifest; readonly source: string; readonly account: string; readonly identityOperations?: readonly string[]; readonly aliases: readonly string[]; readonly signal?: AbortSignal }): Promise<{ readonly ok: true; readonly answer: ProbeAnswer } | { readonly ok: false; readonly failure: ReadFailure }> {
+export async function probe(host: ReadHost, request: { readonly installed: InstalledManifest; readonly source: string; readonly account: string; readonly identityOperations?: readonly string[]; readonly signal?: AbortSignal }): Promise<{ readonly ok: true; readonly answer: ProbeAnswer } | { readonly ok: false; readonly failure: ReadFailure }> {
   const source = findSource(request.installed.manifest, request.source)
   if (!source) return { ok: false, failure: failure("UNAVAILABLE", `${request.installed.package} declares no source ${request.source}`, "Check the source id.") }
   const method = findMethod(request.installed.manifest, "probe")
   if (method === undefined) return { ok: false, failure: failure("PERMISSION_DENIED", `${request.installed.package} declares no probe method`, "Declare probe in the manifest's methods.") }
   const identity = request.identityOperations ?? method.operations ?? []
   const name = typeof source.input?.["source"] === "string" ? { source: source.input["source"] } : {}
+  const accounts = await statusAliases(host, request.installed)
+  if (!accounts.ok) return { ok: false, failure: accounts.failure }
   const called = await fencedCall(
     host,
-    probeRules(source, request.account, identity, `${namespaceOf(source)}.probe`, request.aliases),
+    probeRules(source, request.account, identity, `${namespaceOf(source)}.probe`, accounts.value),
     { package: request.installed.package, method: "probe", input: { ...name, account: request.account }, ...(request.signal ? { signal: request.signal } : {}) },
     `probe ${source.id}`,
   )
