@@ -17,7 +17,7 @@ export declare const TESTED_OPENCODE: "2.4.1";
  * `assertHost` both read this one predicate.
  */
 export declare function hostInRange(version: string): boolean;
-/** A plugin's name: 2–31 lowercase letters or digits, no hyphen, which separates an account alias (§3). */
+/** A plugin's name: 1–31 lowercase letters or digits, no hyphen, which separates an account alias (§3). */
 export declare const PLUGIN_NAME: RegExp;
 /** An app-only key: `x-<app>`, lowercase, ignored by every other app. */
 export declare const EXTENSION_KEY: RegExp;
@@ -85,7 +85,7 @@ export interface HostRange {
 }
 /** A plugin's identity (§3, §4). */
 export interface PluginInfo {
-    /** The one name everything derives from: 2–31 lowercase letters or digits, no hyphen. */
+    /** The one name everything derives from: 1–31 lowercase letters or digits, no hyphen. */
     readonly name: string;
     /** The name a person sees, such as `Google Workspace`. */
     readonly title: string;

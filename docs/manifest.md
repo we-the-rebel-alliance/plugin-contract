@@ -63,7 +63,7 @@ app ignores and no app may require.
 }
 ```
 
-- `name`: 2–31 lowercase letters or digits, **no hyphen**. A hyphen separates an account alias, and everything derives
+- `name`: 1–31 lowercase letters or digits, **no hyphen**. A hyphen separates an account alias, and everything derives
   from the name: repository, package, tool namespace, RPC id, permission actions, capability ids, integrations, MCP
   servers and bus events (contract §3).
 - `title`, `summary`: what a person reads.
@@ -142,7 +142,7 @@ Rules:
   plugin's sessions call it, and its signature stays within about 1,000 tokens.
 - `delete_*` and `remove_*` are class `delete`; `send_*` and `post_*` are class `send`; `share_*` is class `share`
   (contract §16, joe-broadhead/opencode-linear#28). The rule applies to contract method names, not to `mcp:<tool>`.
-- Pass-through MCP tools are declared as `mcp:<tool>` or `mcp:*`. Two tool names that normalise to the same effective OpenCode action (`files.delete` and `files_delete`) are refused at both names.
+- Pass-through MCP tools are declared as `mcp:<tool>` or `mcp:*` and keep the vendor's case (`mcp:getJiraIssue`). Two tool names that normalise to the same effective OpenCode action (`files.delete` and `files_delete`), or that differ only in case (OpenCode's matcher is case-insensitive on Windows), are refused at both names.
 
 ### `sources`
 

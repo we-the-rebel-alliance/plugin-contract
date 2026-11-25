@@ -29,6 +29,9 @@ export function accountFindings(manifest: Manifest, recorded: RecordedAccounts |
   const findings: Finding[] = []
   const name = manifest.plugin.name
   const aliases = recorded?.aliases ?? []
+  // Cursors are the contract's page boundary for an events source (contract §7). A snapshot read returns the latest
+  // state, and a plugin with no source has nothing to page, so only an events source requires one.
+  const cursorBearing = manifest.sources.some((source) => source.kind === "events")
 
   if (manifest.accounts === undefined) {
     if (aliases.length > 0) {
@@ -47,7 +50,9 @@ export function accountFindings(manifest: Manifest, recorded: RecordedAccounts |
         ? warning("accounts.recorded", `${name} declares accounts and records no two-account behaviour yet`, { path: "fixtures/conformance.json" })
         : error("accounts.recorded", `${name} declares accounts and records no two-account behaviour`, {
             path: "fixtures/conformance.json",
-            fix: "Record two aliases with ACCOUNT_REQUIRED, ACCOUNT_UNKNOWN and a cursor that another account may not use.",
+            fix: cursorBearing
+              ? "Record two aliases with ACCOUNT_REQUIRED, ACCOUNT_UNKNOWN and a cursor that another account may not use."
+              : "Record two aliases with ACCOUNT_REQUIRED and ACCOUNT_UNKNOWN.",
           }),
     )
     return findings
@@ -92,11 +97,8 @@ export function accountFindings(manifest: Manifest, recorded: RecordedAccounts |
     if (method === "" || manifest.methods[method] === undefined) findings.push(error("accounts.unknown", `the unknown-account case names ${String(unknown.method)}, which is not a declared method`, { path: "fixtures/conformance.json" }))
   }
 
-  // Cursors are the contract's page boundary for an events source (contract §7): a snapshot read returns the latest
-  // state, and a plugin with no source has nothing to page. An events source is the only cursor-bearing read the
-  // manifest can declare, so only that declaration requires a recorded cursor; a no-source plugin would have to
-  // invent one, which no honest fixture can do.
-  const cursorBearing = manifest.sources.some((source) => source.kind === "events")
+  // A snapshot read returns the latest state and a plugin with no source has nothing to page; only an events source
+  // requires a recorded cursor. A no-source plugin would have to invent one, which no honest fixture can do.
   const cursors = recorded.cursors ?? []
   if (cursorBearing && cursors.length === 0) {
     findings.push(error("accounts.cursors", "the fixture records no cursor another account may not use: a cursor is bound to its account", { path: "fixtures/conformance.json", fix: "Record one page under two aliases, and the CURSOR_INVALID refusal for the other." }))

@@ -2,7 +2,7 @@
 import {
   isExtensionOutput,
   isOutputName
-} from "./chunk-SWSUBLXW.js";
+} from "./chunk-PHAILRZF.js";
 import {
   ACCOUNT_MECHANISMS,
   ACTION_EFFECTS,
@@ -24,7 +24,7 @@ import {
   SOURCE_SIGNALS,
   TESTED_OPENCODE,
   isEventKindIn
-} from "./chunk-CQOJNZW4.js";
+} from "./chunk-4FRULGHN.js";
 import {
   _enum,
   array,
@@ -89,7 +89,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 var plain = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var METHOD_NAME = /^[a-z][a-z0-9_]*$/;
-var MCP_METHOD_NAME = /^mcp:(?:[a-z0-9][a-z0-9_.-]{0,99}|\*)$/;
+var MCP_METHOD_NAME = /^mcp:(?:[A-Za-z0-9][A-Za-z0-9_.-]{0,99}|\*)$/;
 var SOURCE_ID = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)+$/;
 var SCOPE_KEY = /^[a-z][a-z0-9_]{0,31}$/;
 var OPERATION = /^[A-Za-z][A-Za-z0-9._-]{0,199}$/;
@@ -119,7 +119,7 @@ var host = strictObject({
   if (new Set(value.tested).size !== value.tested.length) context.addIssue({ code: "custom", path: ["tested"], message: "must not repeat a release" });
 }).describe("The OpenCode range, and the releases the plugin was tested on.");
 var plugin = strictObject({
-  name: string().regex(PLUGIN_NAME, { error: "must be 2 to 31 lowercase letters or digits, with no hyphen" }),
+  name: string().regex(PLUGIN_NAME, { error: "must be 1 to 31 lowercase letters or digits, with no hyphen" }),
   title: nonEmpty(80),
   summary: nonEmpty(300),
   vendor,
@@ -266,7 +266,7 @@ function optionProblems(schema) {
 }
 var versionField = literal(MANIFEST_VERSION);
 var optionsField = record(string(), unknown()).describe("JSON Schema 2020-12 of the plugin's options. It must include access.");
-var normalizedMCPTool = (tool) => tool.replace(/[^A-Za-z0-9_-]/g, "_");
+var normalizedMCPTool = (tool) => tool.replace(/[^A-Za-z0-9_-]/g, "_").toLowerCase();
 var methodsField = record(methodName, methodItem).superRefine((methods, context) => {
   const groups = /* @__PURE__ */ new Map();
   for (const name of Object.keys(methods)) {
@@ -283,7 +283,7 @@ var methodsField = record(methodName, methodItem).superRefine((methods, context)
       context.addIssue({
         code: "custom",
         path: [name],
-        message: `collides with ${names.filter((other) => other !== name).join(", ")} after OpenCode rewrites both MCP tool names to ${effective}`
+        message: `collides with ${names.filter((other) => other !== name).join(", ")}: OpenCode's tool action is ${effective} (punctuation becomes _, and Windows matches case-insensitively)`
       });
     }
   }

@@ -17,7 +17,7 @@ function hostInRange(version) {
   const [major, minor, patch] = [Number(match[1]), Number(match[2]), Number(match[3])];
   return major === 2 && minor === 4 && patch >= 1;
 }
-var PLUGIN_NAME = /^[a-z0-9]{2,31}$/;
+var PLUGIN_NAME = /^[a-z0-9]{1,31}$/;
 var EXTENSION_KEY = /^x-[a-z][a-z0-9-]*$/;
 var METHOD_CLASSES = ["read", "write", "send", "share", "delete", "export", "admin"];
 var METHOD_ACCOUNTS = ["optional", "none"];

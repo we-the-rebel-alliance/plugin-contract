@@ -44,8 +44,9 @@ no compatibility with v0.x of `source-contract`, no legacy aliases, nothing depr
 
 ## 3. Names
 
-A plugin has one `<name>`: lowercase letters and digits, 2–31 characters, no hyphen (a hyphen separates an account
-alias). Everything derives from it:
+A plugin has one `<name>`: lowercase letters and digits, 1–31 characters, no hyphen (a hyphen separates an account
+alias). Everything derives from it. A one-letter name is valid: `x` is a plugin name, and `x-<app>` is a manifest
+extension key; the two never share a namespace.
 
 | Thing | Form | Example (`slack`, account `work`) |
 |---|---|---|
@@ -313,8 +314,9 @@ Remote apps can't read the disk, and RPC is untrusted for manifests. The **catal
 - The manifest validates; names follow §3; `plugin.host` matches the built bundle.
 - Every method in `methods` is registered through doors 1 and 3, and every registered tool is in `methods`.
 - Method names fit their class: `delete_*` and `remove_*` are `delete`; `send_*` and `post_*` are `send`; `share_*` is `share`.
-- `options` validates the plugin's defaults; `accounts` behaviour holds with two recorded aliases (`ACCOUNT_REQUIRED`,
-  `ACCOUNT_UNKNOWN`, per-account cursors that don't cross over).
+- `options` validates the plugin's defaults; `accounts` behaviour holds with two recorded aliases
+  (`ACCOUNT_REQUIRED`, `ACCOUNT_UNKNOWN`), plus a per-account cursor that doesn't cross over only when the plugin
+  declares an events source.
 - Events pages: the existing checks (sizes, kinds, hash, one author, gap once, removals, failed holds the cursor, secrets refused).
 - Snapshots validate against their output shape; previews write nothing (recorded); actions' preview and commit differ.
 - A non-`read` method called over RPC (door 3) without a permission ask or a valid action grant is refused (§8).

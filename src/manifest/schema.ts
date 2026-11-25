@@ -43,7 +43,7 @@ const plain = (value: unknown): value is Record<string, unknown> => typeof value
 
 /** The most characters a name, an operation or a line may take. */
 const METHOD_NAME = /^[a-z][a-z0-9_]*$/
-const MCP_METHOD_NAME = /^mcp:(?:[a-z0-9][a-z0-9_.-]{0,99}|\*)$/
+const MCP_METHOD_NAME = /^mcp:(?:[A-Za-z0-9][A-Za-z0-9_.-]{0,99}|\*)$/
 const SOURCE_ID = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)+$/
 const SCOPE_KEY = /^[a-z][a-z0-9_]{0,31}$/
 const OPERATION = /^[A-Za-z][A-Za-z0-9._-]{0,199}$/
@@ -86,7 +86,7 @@ const host = z
 
 const plugin = z
   .strictObject({
-    name: z.string().regex(PLUGIN_NAME, { error: "must be 2 to 31 lowercase letters or digits, with no hyphen" }),
+    name: z.string().regex(PLUGIN_NAME, { error: "must be 1 to 31 lowercase letters or digits, with no hyphen" }),
     title: nonEmpty(80),
     summary: nonEmpty(300),
     vendor,
@@ -299,9 +299,12 @@ const optionsField = z.record(z.string(), z.unknown()).describe("JSON Schema 202
 /**
  * OpenCode 2.4.1's tool-name normalisation (`core/src/tool/runtime.ts:300`): every character outside letters, digits,
  * `_` and `-` becomes `_`. Two MCP tool names that normalise to the same effective action would collide on the host, so
- * a manifest refuses both, at both declared names. `mcp:*` is a wildcard, not a tool name, and is excluded.
+ * a manifest refuses both, at both declared names. The comparison folds case because OpenCode's permission matcher is
+ * case-insensitive on Windows (`core/src/util/wildcard.ts`; the installed `chunks/model-resolver-rv14dqc6.js:17` adds
+ * the `i` flag when `process.platform === "win32"`), so names that differ only in case would collide there.
+ * `mcp:*` is a wildcard, not a tool name, and is excluded.
  */
-const normalizedMCPTool = (tool: string): string => tool.replace(/[^A-Za-z0-9_-]/g, "_")
+const normalizedMCPTool = (tool: string): string => tool.replace(/[^A-Za-z0-9_-]/g, "_").toLowerCase()
 
 const methodsField = z
   .record(methodName, methodItem)
@@ -321,7 +324,7 @@ const methodsField = z
         context.addIssue({
           code: "custom",
           path: [name],
-          message: `collides with ${names.filter((other) => other !== name).join(", ")} after OpenCode rewrites both MCP tool names to ${effective}`,
+          message: `collides with ${names.filter((other) => other !== name).join(", ")}: OpenCode's tool action is ${effective} (punctuation becomes _, and Windows matches case-insensitively)`,
         })
       }
     }

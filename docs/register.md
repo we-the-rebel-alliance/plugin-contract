@@ -57,7 +57,8 @@ const handlers = {
 
 `register` refuses a declared method with no handler, a handler the manifest does not declare, and a handler for a
 pass-through MCP method (`mcp:*`). A pass-through MCP method is declared in `methods` for its class and access rule; the
-vendor's server owns its tool, so this module does not register or proxy it.
+vendor's server owns its tool, so this module does not register or proxy it. Its tool name keeps the vendor's case,
+so the action is `<server>_getJiraIssue`, not a lowercased rewrite.
 
 A handler needs no state of its own. `call.bus` is the writer from the one RPC registration, and
 `call.unguardedAgents()` asks the host for the agents whose rules no longer give every generated rule its effect; it

@@ -64,7 +64,7 @@ await registration.bus.emit("account", { account: "personal", state: "needs_sign
 
 `busEvents(name)` validates the name and returns `changed`, `status` and `account` for the one RPC registration's
 `events` block; the register keeps only the events the manifest declares. It throws at setup for a name that breaks
-contract §3: lowercase letters and digits, 2 to 31 characters, no hyphen. A plugin name is a bug in the plugin, not data
+contract §3: lowercase letters and digits, 1 to 31 characters, no hyphen. A plugin name is a bug in the plugin, not data
 from a provider. Everything after setup is returned, never thrown.
 
 ### In a handler

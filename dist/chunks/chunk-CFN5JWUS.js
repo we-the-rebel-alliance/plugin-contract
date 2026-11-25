@@ -18,14 +18,14 @@ import {
 var BUS_EVENTS = ["changed", "status", "account"];
 var BUS_STATES = ["ready", "needs_sign_in", "error"];
 var REASON_MAX = 160;
-var PLUGIN_NAME = /^[a-z0-9]{2,31}$/;
+var PLUGIN_NAME = /^[a-z0-9]{1,31}$/;
 function isPluginName(value) {
   return typeof value === "string" && PLUGIN_NAME.test(value);
 }
 function assertPluginName(name) {
   if (isPluginName(name)) return;
   const shown = typeof name === "string" ? `"${name}"` : typeof name;
-  throw new Error(`bus: ${shown} is not a plugin name. Next step: use 2 to 31 lowercase letters or digits, with no hyphen (contract \xA73).`);
+  throw new Error(`bus: ${shown} is not a plugin name. Next step: use 1 to 31 lowercase letters or digits, with no hyphen (contract \xA73).`);
 }
 var CAPABILITY_SEGMENT = "[a-z][a-z0-9-]*";
 function capabilityPattern(name) {
@@ -99,7 +99,7 @@ function checkBusData(name, event, value) {
 function busEventType(name, event) {
   return `rpc.${name}.${event}`;
 }
-var RPC_TYPE = /^rpc\.([a-z0-9]{2,31})\.([a-z0-9_]+)$/;
+var RPC_TYPE = /^rpc\.([a-z0-9]{1,31})\.([a-z0-9_]+)$/;
 function readBusEvent(payload, options) {
   assertPluginName(options.name);
   if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return { ok: false, reason: "not-a-bus-event", problems: [] };

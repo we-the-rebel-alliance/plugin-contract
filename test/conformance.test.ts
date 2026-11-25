@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url"
 import { REASON_MAX } from "../src/accounts.ts"
 import { serverOf, toolAction } from "../src/access.ts"
 import { runConformance, t0, t1 } from "../src/conformance.ts"
-import { readInstalledManifest, type Manifest } from "../src/manifest.ts"
+import { checkManifest, readInstalledManifest, type Manifest } from "../src/manifest.ts"
 import { staticFindings } from "../src/internal/conformance/static.ts"
 import { grantAliasFindings, GRANT_ASSERT_TIMEOUT_MS, hostRuntimeProblem } from "../src/internal/conformance/host.ts"
 import type { AssertResult, HostRun } from "../src/internal/host/index.ts"
@@ -242,6 +242,17 @@ describe("T0", () => {
     writeFileSync(join(good, "AGENTS.md"), "Call `fixture_list_files`.\n")
     assert.ok(!ids(staticFindings(good, fixture().manifest, { namespace: "fixture" })).includes("T0.tools"))
   })
+  test("a vendor-cased pass-through MCP tool is accepted, and warns only beside mcp:*", () => {
+    const { manifest, installed } = fixture()
+    const value = clone(manifest) as any
+    value.methods["mcp:getJiraIssue"] = { class: "read" }
+    const checked = checkManifest(value)
+    assert.equal(checked.ok, true, checked.ok ? "" : checked.problems.join("\n"))
+    if (!checked.ok) return
+    const found = declarationFindings({ package: installed.package, manifest: checked.value })
+    assert.deepEqual(errors(found), [])
+  })
+
   test("a pinned method without evidence is refused", () => {
     const directory = copy()
     const fixtureFile = join(directory, "fixtures", "conformance.json")
@@ -368,6 +379,10 @@ describe("recorded sources, accounts, status, actions and grants", () => {
     const noSources = clone(manifest) as any
     noSources.sources = []
     assert.ok(!ids(accountFindings(noSources, without)).includes("accounts.cursors"))
+    const eventHint = accountFindings(manifest, undefined).find((finding) => finding.id === "accounts.recorded")
+    const sourceHint = accountFindings(noSources, undefined).find((finding) => finding.id === "accounts.recorded")
+    assert.match(eventHint?.fix ?? "", /cursor/)
+    assert.equal(sourceHint?.fix?.includes("cursor") ?? false, false)
     // A snapshot returns the latest state, not a page: it has no cursor either.
     const snapshotOnly = clone(manifest) as any
     snapshotOnly.sources = [{ id: "fixture.messages", kind: "snapshot", method: "events_list", output: "agenda", cost: { class: "free" } }]

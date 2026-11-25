@@ -50,12 +50,28 @@ describe("the manifest", () => {
     assert.equal(checked.value.methods.send_message?.class, "send")
   })
 
-  test("refuses a version other than 1, and a plugin name with a hyphen, a capital or one character", () => {
+  test("refuses a version other than 1, and a plugin name with a hyphen, a capital or 32 characters", () => {
     has(manifest((m) => (m.version = 2)), "capabilities.version")
     has(manifest((m) => (m.plugin.name = "demo-app")), "capabilities.plugin.name")
     has(manifest((m) => (m.plugin.name = "Demo")), "capabilities.plugin.name")
-    has(manifest((m) => (m.plugin.name = "d")), "capabilities.plugin.name")
     has(manifest((m) => (m.plugin.name = "a".repeat(32))), "capabilities.plugin.name")
+  })
+
+  test("accepts a one-letter plugin name, and keeps x- extension keys separate from account names", () => {
+    const value = manifest((m) => {
+      m.plugin.name = "x"
+      m.sources[0].id = "x.messages"
+      m.sources[1].id = "x.channels"
+      m.actions[0].id = "x.messages.send"
+      m["x-work"] = { placement: "sidebar" }
+    })
+    assert.deepEqual(problems(value), [])
+    const checked = checkManifest(value)
+    assert.equal(checked.ok, true, checked.ok ? "" : checked.problems.join("\n"))
+    if (!checked.ok) return
+    assert.equal(checked.value.plugin.name, "x")
+    assert.deepEqual(checked.value["x-work"], { placement: "sidebar" })
+    assert.equal(checked.value.accounts?.via, "integration")
   })
 
   test("enforces the v0 host range and the tested release (D7)", () => {
@@ -103,7 +119,20 @@ describe("the manifest", () => {
     has(manifest((m) => (m.methods["other:tool"] = { class: "read" })), "capabilities.methods.other:tool")
   })
 
-  test("refuses MCP tool names that collide after OpenCode's rewrite", () => {
+  test("accepts vendor-cased MCP tool names and refuses malformed ones", () => {
+    const jira = manifest((m) => {
+      for (const [tool, methodClass] of [
+        ["getJiraIssue", "read"],
+        ["addOrEditJiraIssueComment", "write"],
+        ["searchJiraIssuesUsingJql", "read"],
+      ] as const) m.methods[`mcp:${tool}`] = { class: methodClass }
+    })
+    assert.deepEqual(problems(jira), [])
+    has(manifest((m) => (m.methods["mcp:Bad Name"] = { class: "read" })), "capabilities.methods.mcp:Bad Name")
+    has(manifest((m) => (m.methods["mcp:-x"] = { class: "read" })), "capabilities.methods.mcp:-x")
+  })
+
+  test("refuses MCP tool names that collide after OpenCode's rewrite, or differ only in case", () => {
     const both = problems(manifest((m) => {
       m.methods["mcp:files.delete"] = { class: "delete" }
       m.methods["mcp:files_delete"] = { class: "delete" }
@@ -113,6 +142,12 @@ describe("the manifest", () => {
     assert.deepEqual(problems(manifest((m) => (m.methods["mcp:files.delete"] = { class: "delete" }))), [])
     assert.deepEqual(problems(manifest((m) => (m.methods["mcp:files_delete"] = { class: "delete" }))), [])
     assert.deepEqual(problems(manifest((m) => (m.methods["mcp:*"] = { class: "read" }))), [])
+    const cased = problems(manifest((m) => {
+      m.methods["mcp:getIssue"] = { class: "read" }
+      m.methods["mcp:GetIssue"] = { class: "read" }
+    }))
+    assert.ok(cased.some((problem) => problem.startsWith("capabilities.methods.mcp:getIssue") && problem.includes("collides with")), cased.join("\n"))
+    assert.ok(cased.some((problem) => problem.startsWith("capabilities.methods.mcp:GetIssue") && problem.includes("collides with")), cased.join("\n"))
   })
 
   test("allows none or one pinned method, and none by default", () => {

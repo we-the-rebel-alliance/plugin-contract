@@ -9,7 +9,7 @@ import {
   capabilityPattern,
   isPluginName,
   readBusEvent
-} from "./chunks/chunk-OWUXQ6GV.js";
+} from "./chunks/chunk-CFN5JWUS.js";
 import "./chunks/chunk-FTEX4OOT.js";
 import "./chunks/chunk-L3NVT2DE.js";
 import "./chunks/chunk-OJKZGBMB.js";
