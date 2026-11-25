@@ -44,7 +44,7 @@ export declare function prepareCall(entry: MethodEntry, raw: unknown, accounts: 
 /** The answer, checked; a plan must name the method that commits it, and must not mint its own id. */
 export declare function checkedOutput(entry: MethodEntry, value: unknown): unknown;
 /** Run a prepared call's handler, checking its answer and mapping its failure. */
-export declare function execute(environment: CallEnvironment, entry: MethodEntry, prepared: PreparedCall, call: Omit<MethodCall, "account" | "plan" | "bus" | "access" | "unguardedAgents">, bus: BusReader): Promise<unknown>;
+export declare function execute(environment: CallEnvironment, entry: MethodEntry, prepared: PreparedCall, call: Omit<MethodCall, "account" | "plan" | "bus" | "unguardedAgents">, bus: BusReader): Promise<unknown>;
 /** The door's call context from an OpenCode tool context. */
 export declare function toolCall(context: {
     readonly sessionID: string;
@@ -53,4 +53,4 @@ export declare function toolCall(context: {
     readonly id: string;
     readonly signal: AbortSignal;
     readonly progress: (update: Readonly<Record<string, unknown>>) => Promise<void>;
-}, door: Exclude<Door, "rpc">): Omit<MethodCall, "account" | "plan" | "bus" | "access" | "unguardedAgents">;
+}, door: Exclude<Door, "rpc">): Omit<MethodCall, "account" | "plan" | "bus" | "unguardedAgents">;

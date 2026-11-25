@@ -66,6 +66,13 @@ The first release in `we-the-rebel-alliance`: the contract at wire version 1, gr
   whole `status` answer from the manifest, the installed and host versions, the account states, the problems and
   `call.unguardedAgents()`, so a status handler keeps no state between `register` and the call; `events` exports
   `PAGE_SCHEMA`, `PROBE_SCHEMA` and `LIST_OPTIONS_SCHEMA`, so a plugin reuses the answer shapes instead of copying them.
+- **The pre-tag API freeze:** the writer is the only way to emit — `register` does not return the RPC events emitter, so
+  `registration.bus` and `call.bus` are the only writers, and every emit passes the schema and secret checks. A handler
+  call carries no access registration: nothing on `call` can change or dispose the rules. `call.unguardedAgents()`
+  answers `{ ok: true, agents }` or `{ ok: false, error }` instead of throwing, and `statusAnswer` takes that answer
+  and reports a failure as a problem. The examples build every page with `eventsListResult`, `parseEventsListInput`
+  and `fitPage`, and every probe with `probeResult`. `events` exports an explicit list, and `cut`, `PAGE` and `PROBE`
+  are internal.
 - **Plan safety:** the register copies each recorded plan with `structuredClone`, so nothing the handler or the public
   answer holds can change `call.plan` later, and refuses a plan over `PLAN_MAX_BYTES` (64 KB of JSON) or one a copy
   cannot carry with `PLAN_INVALID`.

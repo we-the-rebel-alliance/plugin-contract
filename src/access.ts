@@ -27,7 +27,7 @@ export {
 } from "./access/rules.ts"
 export type { AccessLevel } from "./access/rules.ts"
 export { applyAccess, unguardedAgents, withRules } from "./access/agents.ts"
-export type { AccessContext, AccessRegistration, AccessRequest, AgentEditor, AgentLike } from "./access/agents.ts"
+export type { AccessContext, AccessRegistration, AccessRequest, AgentEditor, AgentLike, UnguardedAgentsResult } from "./access/agents.ts"
 export {
   ACCOUNT_PATTERN,
   accountProblem,

@@ -47,7 +47,8 @@ last one, so a second registration with id `<name>` would hide the plugin's meth
 
 `register` builds the writer from that one registration, returns it as `registration.bus`, and gives the same writer to
 every handler call as `call.bus`. There is no flag and no placeholder: `register` always builds the writer, and only the
-manifest's declared events are registered.
+manifest's declared events are registered. The raw events emitter is not part of the registration a plugin holds:
+`registration.bus` and `call.bus` are the only ways to emit, so every emit passes the writer's schema and secret checks.
 
 ```ts
 import { register } from "@we-the-rebel-alliance/plugin-contract/register"
@@ -61,10 +62,10 @@ await registration.bus.emit("changed", { capability: "slack.mentions", account: 
 await registration.bus.emit("account", { account: "personal", state: "needs_sign_in" })
 ```
 
-`busEvents(name)` validates the name and returns `changed`, `status` and `account` for the registration's `events`; the
-register keeps only the events the manifest declares. It throws at setup for a name that breaks contract §3: lowercase
-letters and digits, 2 to 31 characters, no hyphen. A plugin name is a bug in the plugin, not data from a provider.
-Everything after setup is returned, never thrown.
+`busEvents(name)` validates the name and returns `changed`, `status` and `account` for the one RPC registration's
+`events` block; the register keeps only the events the manifest declares. It throws at setup for a name that breaks
+contract §3: lowercase letters and digits, 2 to 31 characters, no hyphen. A plugin name is a bug in the plugin, not data
+from a provider. Everything after setup is returned, never thrown.
 
 ### In a handler
 

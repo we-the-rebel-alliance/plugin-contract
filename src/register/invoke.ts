@@ -150,7 +150,7 @@ export async function execute(
   environment: CallEnvironment,
   entry: MethodEntry,
   prepared: PreparedCall,
-  call: Omit<MethodCall, "account" | "plan" | "bus" | "access" | "unguardedAgents">,
+  call: Omit<MethodCall, "account" | "plan" | "bus" | "unguardedAgents">,
   bus: BusReader,
 ): Promise<unknown> {
   if (prepared.reservation !== undefined) {
@@ -165,8 +165,14 @@ export async function execute(
         account: prepared.account,
         ...(prepared.plan === undefined ? {} : { plan: prepared.plan }),
         bus: bus(),
-        access: environment.access,
-        unguardedAgents: async () => unguardedAgents(await environment.agents(), environment.access.rules),
+        unguardedAgents: async () => {
+          try {
+            return { ok: true, agents: unguardedAgents(await environment.agents(), environment.access.rules) }
+          } catch (error) {
+            // The host's agent list is unknown, never empty: answer the redacted line and let status report it.
+            return { ok: false, error: reasonOf(error) }
+          }
+        },
       }),
     )
     if (entry.item.plans === true) {
@@ -195,6 +201,6 @@ export function toolCall(
     readonly progress: (update: Readonly<Record<string, unknown>>) => Promise<void>
   },
   door: Exclude<Door, "rpc">,
-): Omit<MethodCall, "account" | "plan" | "bus" | "access" | "unguardedAgents"> {
+): Omit<MethodCall, "account" | "plan" | "bus" | "unguardedAgents"> {
   return { sessionID: context.sessionID, agent: context.agent, messageID: context.messageID, id: context.id, signal: context.signal, progress: context.progress, door }
 }

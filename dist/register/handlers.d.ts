@@ -6,7 +6,7 @@
  * checks that every declared method has a handler and every handler is declared, so a manifest and its code cannot
  * drift apart.
  */
-import type { AccessRegistration } from "../access/agents.js";
+import type { UnguardedAgentsResult } from "../access/agents.js";
 import type { Bus } from "../bus.js";
 import type { JsonSchema, Manifest, MethodItem } from "../manifest.js";
 /** Which door a call came through. */
@@ -29,10 +29,8 @@ export interface MethodCall {
     readonly plan?: unknown;
     /** The typed bus writer, always present: `register` builds it from its one RPC registration (contract §10). */
     readonly bus: Bus;
-    /** The access rules this plugin generated, as `register` applied them. */
-    readonly access: AccessRegistration;
     /** The agents whose rules no longer give every generated rule its effect, asked when the call needs them. */
-    unguardedAgents(): Promise<readonly string[]>;
+    unguardedAgents(): Promise<UnguardedAgentsResult>;
     readonly door: Door;
 }
 /** One method's handler: its shapes, its description and its work. */

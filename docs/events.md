@@ -97,14 +97,17 @@ codes. `npm run conformance:self-test` runs the kit over the examples in `exampl
 
 | Export | Does |
 |---|---|
-| `EVENT_KINDS`, `EVENTS_LIST`, `EVENT_LIMITS`, `EXTENSION_KIND`, `EXTENSION_NAME`, `EXTENSION_SEGMENT_MAX`, `FIRST_RUN_HOURS`, `MAX_BYTES`, `MAX_PAGE_BYTES`, `PAGE`, `PROBE`, `PROBE_LIMITS`, `TRUST`, `SINCE_PATTERN`, `SOURCE_PATTERN`, `SCOPE_KEY_PATTERN` | the model's constants, patterns and bounds |
+| `EVENT_KINDS`, `EVENTS_LIST`, `EVENT_LIMITS`, `EXTENSION_KIND`, `EXTENSION_NAME`, `EXTENSION_SEGMENT_MAX`, `FIRST_RUN_HOURS`, `MAX_BYTES`, `MAX_PAGE_BYTES`, `PROBE_LIMITS`, `TRUST`, `SINCE_PATTERN`, `SOURCE_PATTERN`, `SCOPE_KEY_PATTERN` | the model's constants, patterns and bounds |
 | `CoreKind`, `EventKind`, `ExtensionKind`, `GapReason`, `RefusalReason`, `RemovalReason`, `ActorKind`, `ActorRole`, `Audience`, `AttendanceResponse`, `CommitmentState`, `FactType`, `IdentityStrength` | the closed sets and their types |
 | `GAP_REASONS`, `REFUSAL_REASONS`, `REMOVAL_REASONS`, `ACTOR_KINDS`, `ACTOR_ROLES`, `AUDIENCES`, `AUTHOR_ROLES`, `ATTENDANCE_RESPONSES`, `COMMITMENT_STATES`, `FACT_TYPES`, `IDENTITY_STRENGTHS` | the values those sets hold |
 | `SourceEvent`, `EventDraft`, `EventActor`, `EventFact`, `EventIdentity`, `EventPart`, `EventSection`, `EventsCost`, `EventsGap`, `EventsListIdentity`, `EventsListInput`, `EventsListRequest`, `EventsListResult`, `EventsOwner`, `EventsRemoval`, `FailedEvent`, `PageExtras`, `ProbeInput`, `ProbeResult`, `RefusedEvent`, `FactCommitment`, `FactMeetingAttended`, `FactPersonAttribute`, `Scope` | the page, the event, the probe and the fact shapes |
-| `makeEvent`, `eventHash`, `screenEvents`, `secretKinds`, `cut`, `oldestFirst` | normalise an event, hash it, and refuse a secret or instruction-shaped text |
+| `makeEvent`, `eventHash`, `screenEvents`, `secretKinds`, `oldestFirst` | normalise an event, hash it, and refuse a secret or instruction-shaped text |
 | `resultProblems`, `eventProblems`, `factProblems`, `removalProblems`, `scopeProblems`, `fitPage` | the checks and the page-size fit |
 | `eventsListResult`, `parseEventsListInput`, `parseProbeInput`, `probeResult`, `probeResultProblems`, `sinceTime`, `startTime` | the events call: its input, its default window and its answer |
 | `PAGE_SCHEMA`, `PROBE_SCHEMA`, `LIST_OPTIONS_SCHEMA` | the JSON Schema of an events page, of a probe answer, and of a `list_*` method's `{ options }` answer, for a handler's output |
 | `extensionNamespace`, `isEventKind`, `isEventKindIn`, `isExtensionName`, `sourceNamespace` | the `x-<name>/<kind>` namespace rules |
 | `ERROR_CODES`, `ErrorCode`, `errorCodeOf`, `SourceError`, `parseSourceError` | the one error table (contract §12) |
 | `EventProblemOptions`, `ScreenOptions`, `ParseOptions` | the options of the checks |
+
+`cut`, `PAGE` and `PROBE` are internal to the package: they are not exported from `./events`, so a plugin names its
+`probe` method itself and passes the source's `maxBytes`, or `MAX_PAGE_BYTES`, to `fitPage`.

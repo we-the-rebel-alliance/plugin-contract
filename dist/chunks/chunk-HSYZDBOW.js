@@ -1,12 +1,12 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   findMethod
-} from "./chunk-RUROPP57.js";
+} from "./chunk-WUXTQJJP.js";
 import {
   DEFAULT_ALIAS,
   accountsOf,
   isAlias
-} from "./chunk-MNSDPFNH.js";
+} from "./chunk-OJKZGBMB.js";
 
 // src/access/rules.ts
 var ACCESS_LEVELS = ["all", "ask-changes", "read-only"];

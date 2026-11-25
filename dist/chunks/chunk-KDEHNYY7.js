@@ -1,7 +1,7 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   EXTENSION_NAME
-} from "./chunk-VAFQUKZ3.js";
+} from "./chunk-YTAZMRBO.js";
 import {
   problemsOf,
   validator

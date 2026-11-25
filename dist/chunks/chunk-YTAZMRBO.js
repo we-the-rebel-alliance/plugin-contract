@@ -463,7 +463,6 @@ function screenEvents(events, options = {}) {
   }
   return { events: kept, refused };
 }
-var PROBE = "probe";
 var PROBE_LIMITS = { scopes: 64, scope: 256 };
 var PROBE_SCHEMA = {
   type: "object",
@@ -977,13 +976,11 @@ export {
   scopeProblems,
   parseEventsListInput,
   startTime,
-  cut,
   eventHash,
   makeEvent,
   oldestFirst,
   fitPage,
   screenEvents,
-  PROBE,
   PROBE_LIMITS,
   PROBE_SCHEMA,
   LIST_OPTIONS_SCHEMA,

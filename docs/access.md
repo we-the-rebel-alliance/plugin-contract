@@ -12,8 +12,9 @@ const agents = unguardedAgents((await ctx.agent.list()).data, access.rules)
 ```
 
 `register` calls `applyAccess` itself, so a plugin that only calls `register` gets its access rules too. A status
-handler reads the same two values from its call, with no setup state: `call.access` is the registration and
-`await call.unguardedAgents()` is the list. Import `access` directly when a test wants the rules.
+handler reads the agents from its call, with no setup state: `await call.unguardedAgents()` answers `{ ok: true, agents }`
+or `{ ok: false, error }` and never throws. A handler gets no access registration, so nothing on a call can change the
+rules or dispose them. Import `access` directly when a test wants the rules.
 
 ## The three levels
 
@@ -98,7 +99,7 @@ A refused read or act keeps its own codes (`PERMISSION_DENIED`, `SOURCE_DISABLED
 |---|---|
 | `ACCESS_LEVELS`, `DEFAULT_ACCESS`, `AccessLevel` | the three levels, the default, and the level type |
 | `accessLevel`, `rulesFor`, `effectFor`, `methodAction`, `isMcpMethod`, `serverOf`, `toolAction`, `normalizeToolName`, `aliasesFrom` | derive the rules from `options.access` and `methods` |
-| `applyAccess`, `unguardedAgents`, `withRules`, `AccessContext`, `AccessRegistration`, `AccessRequest`, `AgentEditor`, `AgentLike` | install the rules into every agent and name the agents that lack them |
+| `applyAccess`, `unguardedAgents`, `withRules`, `AccessContext`, `AccessRegistration`, `AccessRequest`, `AgentEditor`, `AgentLike`, `UnguardedAgentsResult` | install the rules into every agent, name the agents that lack them, and answer a handler's `unguardedAgents()` |
 | `sessionRules`, `detailRules`, `probeRules`, `actSessionRules`, `grantCovers`, `operationRule`, `evaluate`, `namespaceOf`, `accountProblem`, `ACCOUNT_PATTERN`, `DENY_ALL`, `Grant`, `ActGrant`, `ActPhase`, `PermissionRule` | the fenced session a grant compiles to, and its checks |
 
 `register` calls `applyAccess`; the fence helpers are the same rule language on the app side.

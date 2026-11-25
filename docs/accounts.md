@@ -208,11 +208,12 @@ async run(_input, call) {
 - `name` and `host` (`{ version, range, tested }`) come from the manifest.
 - `state` is `error` when `problems` is not empty, else `needs_sign_in` when an account is, else `ready`.
 - `nextStep` is the first problem, redacted; else the sign-in sentence; else `null`.
-- `unguardedAgents` and `access` come from the call, which `register` fills from its own registration: no handler reads
-  state written after `register` returned.
+- `unguardedAgents` comes from the call, which `register` fills from its own registration: no handler reads state
+  written after `register` returned.
 
-An agent list that cannot be read is unknown, never zero: catch the error from `call.unguardedAgents()`, pass it as a
-`problems` entry, and the state says `error`.
+An agent list that cannot be read is unknown, never zero: `call.unguardedAgents()` answers `{ ok: false, error }` instead
+of throwing, and `statusAnswer` appends the error to `problems`, writes `unguardedAgents: []` and says `error`. A status
+handler writes no try/catch.
 
 ## Two accounts, end to end
 

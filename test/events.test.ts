@@ -4,6 +4,7 @@ import { createHash } from "node:crypto"
 import { describe, test } from "node:test"
 import { expect } from "./support/expect.ts"
 import { failureFromError } from "../src/internal/failure.ts"
+import { PROBE } from "../src/internal/events.ts"
 import { encodeBoundCursor, decodeBoundCursor, type CursorBinding } from "../src/cursor.ts"
 import { validate } from "../src/register/validate.ts"
 import {
@@ -36,7 +37,6 @@ import {
   MAX_PAGE_BYTES,
   parseEventsListInput,
   parseProbeInput,
-  PROBE,
   probeResult,
   probeResultProblems,
   parseSourceError,

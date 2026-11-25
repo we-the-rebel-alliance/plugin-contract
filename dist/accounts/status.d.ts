@@ -9,6 +9,7 @@
  * the account states and the problems it already knows: no state kept between `register` and the handler, no shape
  * copied.
  */
+import type { UnguardedAgentsResult } from "../access/agents.js";
 import type { JsonSchema, Manifest, Owner } from "../manifest/types.js";
 import type { AccountProfile } from "./profiles.js";
 /** What an account can be. */
@@ -52,8 +53,8 @@ export interface StatusInput {
     readonly accounts: readonly AccountStatus[];
     /** Why the plugin is not ready before any account is asked: a failed registration, an unreadable agent list. */
     readonly problems?: readonly string[] | undefined;
-    /** The agents whose rules no longer give every generated rule its effect, from `access.unguardedAgents`. */
-    readonly unguardedAgents: readonly string[];
+    /** The agents whose rules no longer give every generated rule its effect: `await call.unguardedAgents()`. */
+    readonly unguardedAgents: UnguardedAgentsResult;
 }
 /** The `status` answer (contract §11), as `STATUS_SCHEMA` describes it. */
 export interface StatusAnswer {
@@ -72,9 +73,10 @@ export interface StatusAnswer {
 }
 /**
  * The whole `status` answer from what the handler knows: the manifest, the installed and host versions, every alias's
- * state, the problems setup recorded, and the agents the generated rules miss. `state` is `error` when there is a
- * problem, else `needs_sign_in` when an account is, else `ready`; `nextStep` is the first redacted problem, the
- * sign-in sentence, or null. A handler needs no state of its own: it passes the values it has and answers this.
+ * state, the problems setup recorded, and what `call.unguardedAgents()` answered. `state` is `error` when there is a
+ * problem, else `needs_sign_in` when an account is, else `ready`; a failed agent list is one more problem, and its
+ * list is empty rather than a zero it did not read. `nextStep` is the first redacted problem, the sign-in sentence, or
+ * null. A handler needs no state of its own: it passes the values it has and answers this.
  */
 export declare function statusAnswer(input: StatusInput): StatusAnswer;
 /**
