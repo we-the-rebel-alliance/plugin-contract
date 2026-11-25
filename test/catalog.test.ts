@@ -5,7 +5,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { after, describe, test } from "node:test"
 import { checkManifest, manifestHash } from "../src/manifest.ts"
-import { evaluate, type Grant, type PermissionRule } from "../src/permission.ts"
+import { evaluate, type Grant, type PermissionRule } from "../src/access.ts"
 import type { ReadHost, ReadRequest } from "../src/read.ts"
 import {
   brokerRequest,
@@ -317,6 +317,7 @@ const todayRequest = (extra: Partial<ReadRequest> = {}): ReadRequest => ({
   consumer: "notes.home",
   grant: grantFor("demo.channels"),
   context,
+  aliases: [ana],
   ...extra,
 })
 

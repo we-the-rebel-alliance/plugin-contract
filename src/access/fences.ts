@@ -201,7 +201,7 @@ export function probeRules(source: SourceItem, account: string, identityOperatio
 
 /**
  * How OpenCode decides an action on a resource under `rules`: the last rule whose action and resource match wins (`*`
- * matches any run of characters and `?` one), and no match asks. The same evaluation the register and the tools RPC run.
+ * matches any run of characters and `?` one), and no match asks. The same evaluation the register and the RPC door run.
  */
 export function evaluate(rules: readonly PermissionRule[], action: string, resource = "*"): PermissionRule["effect"] {
   return rules.findLast((rule) => wildcard(rule.action, action) && wildcard(rule.resource, resource))?.effect ?? "ask"
