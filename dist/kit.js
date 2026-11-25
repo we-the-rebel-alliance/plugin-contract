@@ -12,7 +12,7 @@ import {
   mcpAddress,
   renderGeneratedDocs,
   waitForActivation
-} from "./chunks/chunk-6IPYRCBC.js";
+} from "./chunks/chunk-5NJZDSKV.js";
 import "./chunks/chunk-ED3MMWUJ.js";
 import "./chunks/chunk-IDA3YFD6.js";
 import "./chunks/chunk-6WEY3U6L.js";

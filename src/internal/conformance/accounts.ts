@@ -92,9 +92,14 @@ export function accountFindings(manifest: Manifest, recorded: RecordedAccounts |
     if (method === "" || manifest.methods[method] === undefined) findings.push(error("accounts.unknown", `the unknown-account case names ${String(unknown.method)}, which is not a declared method`, { path: "fixtures/conformance.json" }))
   }
 
+  // Cursors are the contract's page boundary for an events source (contract §7): a snapshot read returns the latest
+  // state, and a plugin with no source has nothing to page. An events source is the only cursor-bearing read the
+  // manifest can declare, so only that declaration requires a recorded cursor; a no-source plugin would have to
+  // invent one, which no honest fixture can do.
+  const cursorBearing = manifest.sources.some((source) => source.kind === "events")
   const cursors = recorded.cursors ?? []
-  if (cursors.length === 0) {
-    findings.push(error("accounts.cursors", "the fixture records no cursor another account may not use: a cursor is bound to its account", { path: "fixtures/conformance.json" }))
+  if (cursorBearing && cursors.length === 0) {
+    findings.push(error("accounts.cursors", "the fixture records no cursor another account may not use: a cursor is bound to its account", { path: "fixtures/conformance.json", fix: "Record one page under two aliases, and the CURSOR_INVALID refusal for the other." }))
   }
   for (const [index, cursor] of cursors.entries()) {
     const at = `cursors[${index}]`
