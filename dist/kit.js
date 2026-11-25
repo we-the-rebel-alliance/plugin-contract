@@ -12,12 +12,12 @@ import {
   mcpAddress,
   renderGeneratedDocs,
   waitForActivation
-} from "./chunks/chunk-Y3G4X6PH.js";
+} from "./chunks/chunk-2LYQB6UV.js";
 import "./chunks/chunk-ED3MMWUJ.js";
-import "./chunks/chunk-NN56F557.js";
+import "./chunks/chunk-3OFJLXBK.js";
 import "./chunks/chunk-6WEY3U6L.js";
 import "./chunks/chunk-JMBXK6YH.js";
-import "./chunks/chunk-P5R5UOSZ.js";
+import "./chunks/chunk-MIBCHKMR.js";
 import {
   checkManifest
 } from "./chunks/chunk-WXKPUWDE.js";

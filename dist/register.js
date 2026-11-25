@@ -11,7 +11,7 @@ import {
   effectFor,
   evaluate,
   methodAction
-} from "./chunks/chunk-P5R5UOSZ.js";
+} from "./chunks/chunk-MIBCHKMR.js";
 import {
   manifestHash
 } from "./chunks/chunk-WXKPUWDE.js";

@@ -12,7 +12,7 @@ import {
   namespaceOf,
   probeRules,
   sessionRules
-} from "./chunk-P5R5UOSZ.js";
+} from "./chunk-MIBCHKMR.js";
 import {
   findMethod,
   findSource,
@@ -146,6 +146,9 @@ async function statusAliases(host, installed) {
     aliases.push(account["alias"]);
   }
   const unique = [...new Set(aliases)];
+  if (unique.length === 0 && installed.manifest.accounts !== void 0) {
+    return { ok: false, failure: failure("UNAVAILABLE", `${installed.package}'s status lists no accounts`, "The host must read a status with the plugin's declared accounts before it can fence one.") };
+  }
   return { ok: true, value: unique.length === 0 ? [DEFAULT_ALIAS] : unique };
 }
 async function fencedCall(host, rules, call, title) {

@@ -198,6 +198,9 @@ export async function statusAliases(host: ReadHost, installed: InstalledManifest
     aliases.push(account["alias"])
   }
   const unique = [...new Set(aliases)]
+  if (unique.length === 0 && installed.manifest.accounts !== undefined) {
+    return { ok: false, failure: failure("UNAVAILABLE", `${installed.package}'s status lists no accounts`, "The host must read a status with the plugin's declared accounts before it can fence one.") }
+  }
   return { ok: true, value: unique.length === 0 ? [DEFAULT_ALIAS] : unique }
 }
 

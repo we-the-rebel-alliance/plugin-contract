@@ -148,6 +148,10 @@ describe("read a snapshot", () => {
     const empty = await read(noAccounts, todayRequest())
     assert.equal(empty.ok, false)
     if (!empty.ok) assert.equal(empty.failure.code, "UNAVAILABLE")
+    const emptyDeclared = { ...fake.host, status: async () => ({ name: "demo", accounts: [] }) }
+    const declared = await read(emptyDeclared, todayRequest())
+    assert.equal(declared.ok, false, "a plugin with accounts and an empty status account list is refused")
+    if (!declared.ok) assert.equal(declared.failure.code, "UNAVAILABLE")
   })
 
 describe("read events", () => {
