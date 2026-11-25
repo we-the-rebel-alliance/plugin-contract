@@ -4,21 +4,21 @@ import {
 } from "./chunk-ED3MMWUJ.js";
 import {
   acceptAnswer
-} from "./chunk-WWPEFWNU.js";
+} from "./chunk-NN56F557.js";
 import {
   effectFor,
   evaluate,
   serverOf,
   toolAction
-} from "./chunk-PRLLFQV2.js";
+} from "./chunk-P5R5UOSZ.js";
 import {
   maxBytesOf,
   methodAccounts,
   readInstalledManifest
-} from "./chunk-RIPYHT4Z.js";
+} from "./chunk-WXKPUWDE.js";
 import {
   checkOutput
-} from "./chunk-SBSFNGFN.js";
+} from "./chunk-L5LSEI5N.js";
 import {
   BUS_EVENTS,
   ERROR_CODES,
@@ -33,7 +33,7 @@ import {
   removalProblems,
   sourceNamespace,
   thumbnailUrlProblems
-} from "./chunk-4TUKQJKX.js";
+} from "./chunk-DKSE7KD4.js";
 import {
   secretKinds
 } from "./chunk-L3NVT2DE.js";
@@ -11726,6 +11726,7 @@ var CODE_MEANING = {
   SCHEMA_VIOLATION: "an answer does not keep the contract's shape",
   PERMISSION_DENIED: "the person's grant does not cover the call",
   PLAN_INVALID: "the plan is missing, or belongs to another method",
+  PLAN_USED: "the plan was already used by an earlier commit",
   GRANT_INVALID: "the action grant did not verify, or was already spent",
   HOST_UNTESTED: "OpenCode is outside the plugin's tested range",
   OPTIONS_INVALID: "the plugin's options do not match their schema",
