@@ -283,6 +283,82 @@ describe("the examples", () => {
     )
   })
 
+  test("a since read between events, paged one at a time, returns every matching event exactly once", async () => {
+    // Between the first event of each fixture (10:15) and the rest: the filtered read must skip the first event, keep
+    // more than one, and page through only those. A since before every event cannot prove the cursor keeps the filter.
+    const since = "2026-11-18T10:20:00.000Z"
+    interface Answer {
+      readonly [key: string]: unknown
+      readonly notes?: readonly Record<string, unknown>[]
+      readonly messages?: readonly Record<string, unknown>[]
+    }
+    interface ExampleProvider {
+      readonly [key: string]: unknown
+      listNotes?(input: Record<string, unknown>): Promise<Answer>
+      listMessages?(input: Record<string, unknown>): Promise<Answer>
+    }
+    /** The base provider plus one later event, so the test has a filtered page and an unfiltered page that differ. */
+    function withLateEvent(provider: ExampleProvider, method: "listNotes" | "listMessages", collection: "notes" | "messages", stamp: "updated_at" | "sent_at", extra: Record<string, unknown>): ExampleProvider {
+      const list = provider[method]
+      if (list === undefined) throw new Error(`the provider has no ${method}`)
+      return {
+        ...provider,
+        [method]: async (input: Record<string, unknown>) => {
+          const all = await list({ ...input, since: undefined, position: 0, limit: 100 })
+          const items = [...(all[collection] ?? []), extra]
+          const at = typeof input.since === "string" ? Date.parse(input.since) : undefined
+          const kept = at === undefined ? items : items.filter((item) => Date.parse(String(item[stamp])) > at)
+          const position = typeof input.position === "number" ? input.position : 0
+          const limit = typeof input.limit === "number" ? input.limit : 100
+          const page = kept.slice(position, position + limit)
+          return { ...all, [collection]: page, next_position: position + page.length, more: position + page.length < kept.length }
+        },
+      }
+    }
+    const cases = [
+      { name: "integration", source: "notes", method: "listNotes", collection: "notes", stamp: "updated_at", extraId: "note-work-3" },
+      { name: "mcp", source: "messages", method: "listMessages", collection: "messages", stamp: "sent_at", extraId: "M-WORK-4" },
+    ] as const
+    for (const item of cases) {
+      const providerModule = (await import(pathToFileURL(join(root, "examples", item.name, "provider.js")).href)) as { createHarbourProvider?(): object; createTrellisProvider?(): object }
+      const base = (item.name === "integration" ? providerModule.createHarbourProvider?.() : providerModule.createTrellisProvider?.()) as ExampleProvider | undefined
+      assert.ok(base, `${item.name} exports no provider`)
+      const list = item.name === "integration" ? base.listNotes : base.listMessages
+      assert.ok(list, `${item.name} has no ${item.method}`)
+      const template = (await list.call(base, { account: "work", limit: 1 }))[item.collection]?.[0]
+      assert.ok(template, `${item.name} has no event to copy`)
+      const extra = { ...template, id: item.extraId, title: "Late handover", text: "A later event keeps the since window honest.", url: `https://example.test/${item.extraId}`, [item.stamp]: "2026-11-20T08:00:00.000Z" }
+      const provider = withLateEvent(base, item.method, item.collection, item.stamp, extra)
+      const handlersModule = (await import(pathToFileURL(join(root, "examples", item.name, "handlers.js")).href)) as {
+        createHandlers(parts: object): { events_list: { run(input: Record<string, unknown>, call: { account: string }): Promise<{ events: { external_id: string }[]; cursor: string; more: boolean }> } }
+      }
+      const handlers = handlersModule.createHandlers({
+        provider,
+        manifest: manifestOf(item.name),
+        options: { accounts: { work: {}, personal: {} } },
+        version: "0.0.0",
+        hostVersion: "2.4.1",
+        accountProblems: [],
+        state: {},
+      })
+      const unfiltered = await handlers.events_list.run({ source: item.source, limit: 100 }, call("work"))
+      const filtered = await handlers.events_list.run({ source: item.source, since, limit: 100 }, call("work"))
+      const expected = filtered.events.map((event) => event.external_id)
+      assert.ok(expected.length > 1, `${item.name}: the since must keep more than one event`)
+      assert.ok(expected.length < unfiltered.events.length, `${item.name}: the since must exclude at least one event`)
+      const seen: string[] = []
+      let cursor: string | undefined
+      for (let page = 0; page <= expected.length; page++) {
+        const answer = await handlers.events_list.run({ source: item.source, limit: 1, ...(cursor === undefined ? { since } : { cursor }) }, call("work"))
+        seen.push(...answer.events.map((event) => event.external_id))
+        if (!answer.more) break
+        cursor = answer.cursor
+      }
+      assert.deepEqual(seen, expected, `${item.name}: since + limit 1 must keep the filter across pages`)
+      assert.equal(new Set(seen).size, seen.length, `${item.name}: no event repeats`)
+    }
+  })
+
   test("the Harbour read_note answers TOO_LARGE instead of trimming a detail page over maxBytes", async () => {
     const handlersModule = (await import(pathToFileURL(join(root, "examples", "integration", "handlers.js")).href)) as {
       createHandlers(parts: object): { read_note: { run(input: { external_id: string }, call: { account: string }): Promise<unknown> } }
