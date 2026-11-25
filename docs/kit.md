@@ -23,7 +23,7 @@ command exits `0` when it passes, `1` when a finding is an error, and `2` for a 
 |---|---|---|
 | `check` | everything a pull request needs: the conformance report (T0/T1, accounts, grants, events, unsupported host), the doc file set, forbidden patterns, no bundled kit | `--host <release>` (repeatable), `--json` |
 | `docs` | writes each conformance-rendered section between its generated block | `--check`, `--json` |
-| `record` | runs the conformance record pass, then redacts `fixtures/conformance.json` | `--account <alias>`, `--fixtures <path>`, `--check`, `--json` |
+| `record` | runs the conformance record pass, then redacts `fixtures/conformance.json` | `--account <alias>`, `--check`, `--json` |
 | `conformance` | the whole conformance report | `--host <release>`, `--record`, `--json` |
 | `hosts` | the OpenCode release matrix: `[2.4.1]` | `--json` |
 | `release <version>` | checks, then a local 0.0.x tag; CI publishes the GitHub release | `--dry-run`, `--json` |
@@ -69,9 +69,9 @@ deterministic: the same manifest makes the same bytes, so edit the manifest, nev
 ### `record`
 
 `record` runs `runConformance(pluginDir, { record: true })`, then reads the plugin's one fixture at
-`fixtures/conformance.json` (`readFixture`'s location), redacts it, and writes it back. `--fixtures <path>` names another
-fixture file. `--account <alias>` must name an alias in the fixture's `accounts.aliases`; an unknown alias is a
-`KIT_ACCOUNT_UNKNOWN` refusal, never a fallback to another file.
+`fixtures/conformance.json` (`readFixture`'s location), redacts it, and writes it back. `--account <alias>` must name
+an alias in the fixture's `accounts.aliases`; an unknown alias is a `KIT_ACCOUNT_UNKNOWN` refusal, never a fallback to
+another file.
 
 Redaction replaces:
 
@@ -83,7 +83,7 @@ Redaction replaces:
   `full_name` with `<redacted:personal>`;
 - a sensitive URL query value (`token`, `key`, `signature`, `password`, `email`, `code`) with `<redacted>`.
 
-A conformance fixture's `grants` section is signed test data; `record` leaves it unchanged. The pass is deterministic
+A conformance fixture's `grants.publicKey` and a `grants.cases[].token` that key verifies are signed test data; `record` leaves them unchanged, and redacts every other grant field. The pass is deterministic
 and idempotent: keys keep their order, a placeholder carries no pattern, and a second run changes nothing. `record --check` records nothing and fails (`RECORD.unredacted`) when a committed fixture still needs a
 redaction, so CI can run it on every pull request.
 
@@ -95,7 +95,7 @@ The scan reads text files outside `node_modules`, `dist` and the other generated
 |---|---|
 | `FORBIDDEN.app-name` | an app identifier in code, manifest or docs. An `x-<app>` key is allowed: the prefix is the one place a name belongs. |
 | `FORBIDDEN.main-branch` | a GitHub `blob/main`, `tree/main`, `raw/main` or `raw.githubusercontent.com/…/main` link. Every repository in the org uses `master`. |
-| `FORBIDDEN.secret` | a credential the contract's own detector (`secretKinds`) recognises. A conformance fixture's signed test-grant tokens are public test data, not credentials, and are not reported. |
+| `FORBIDDEN.secret` | a credential the contract's own detector (`secretKinds`) recognises. A conformance fixture's `grants.publicKey` and a `grants.cases[].token` that key verifies are public test data, not credentials, and are not reported. |
 
 The app list is `src/kit/forbidden-apps.ts`, the kit's one denylist. It targets the app's own identifiers and
 repository prefixes, not ordinary words that happen to be product names.

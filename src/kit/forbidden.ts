@@ -12,11 +12,11 @@
  * The scan reads text files only, outside `node_modules`, `dist` and the other generated directories, and never a
  * lockfile: its registry paths and integrity hashes are not the plugin's text.
  */
-import { basename } from "node:path"
+import { basename, join } from "node:path"
 import { secretKinds } from "../internal/secrets.ts"
 import { isTextFile, readText, relativePath, walkFiles } from "./files.ts"
-import { join } from "node:path"
 import { FORBIDDEN_APPS, type ForbiddenApp } from "./forbidden-apps.ts"
+import { verifiedGrantTokens } from "./grant-token.ts"
 import type { CommandContext, Finding } from "./types.ts"
 import { hasError, sortFindings } from "./types.ts"
 import { print } from "./output.ts"
@@ -80,11 +80,10 @@ function add(findings: Finding[], used: Map<Allowance, number>, allowances: read
   findings.push(finding)
 }
 
-/** The signed test-grant tokens a conformance fixture records; they are public test data, not credentials. */
+/** The signed test-grant tokens a conformance fixture records; only a token its own public key verifies is exempt. */
 function grantTokens(text: string): string[] {
   try {
-    const value = JSON.parse(text) as { grants?: { cases?: readonly { token?: unknown }[] } }
-    return (value.grants?.cases ?? []).flatMap((entry) => (typeof entry.token === "string" ? [entry.token] : []))
+    return [...verifiedGrantTokens(JSON.parse(text))]
   } catch {
     return []
   }

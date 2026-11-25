@@ -3,8 +3,9 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } f
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { describe, test } from "node:test"
+import { eventHash, makeEvent } from "../src/events.ts"
 import { runConformance } from "../src/conformance.ts"
-import { FIXTURE_FILE, fixtureAliases, redactText, redactValue, runRecord } from "../src/kit/record.ts"
+import { FIXTURE_FILE, fixtureAliases, redactFixture, redactText, redactValue, runRecord } from "../src/kit/record.ts"
 import type { CommandContext, ConformanceReport, ConformanceRunner } from "../src/kit/types.ts"
 import { KitError } from "../src/kit/types.ts"
 
@@ -113,7 +114,6 @@ describe("plugin-kit record", () => {
     plugin: "@we-the-rebel-alliance/fixture-plugin",
     accounts: { aliases },
     sources: { "fixture.messages": { cases: [{ input: { account: "work" }, answer: { account: "work" } }] } },
-    grants: { cases: [{ name: "valid", token: "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.c2lnbmF0dXJl" }] },
     events: { status: { name: "fixture", version: "1.0.0", accounts: aliases.map((alias) => ({ alias, state: "ready" })) } },
   })
 
@@ -127,13 +127,12 @@ describe("plugin-kit record", () => {
       value.token = "ghp_aaaaaaaaaaaaaaaaaaaa"
       writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`)
       const run = context(local.dir, okRunner())
-      assert.equal(await runRecord(run, { fixtures: undefined, check: false }), 0)
+      assert.equal(await runRecord(run, { check: false }), 0)
       const result = JSON.parse(readFileSync(path, "utf8")) as Record<string, any>
       assert.deepEqual(fixtureAliases(result), ["work", "personal"])
       assert.equal(result.sources["fixture.messages"].cases[0].answer.owner.email, "<redacted:personal>")
       assert.equal(result.sources["fixture.messages"].cases[0].answer.owner.name, "<redacted:personal>")
       assert.equal(result.token, "<redacted:secret>")
-      assert.equal(result.grants.cases[0].token, "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.c2lnbmF0dXJl")
       assert.match(run.out(), /fixtures\/conformance\.json written, redacted; conformance ok/)
     } finally {
       local.cleanup()
@@ -145,7 +144,7 @@ describe("plugin-kit record", () => {
     try {
       write(join(local.dir, FIXTURE_FILE), `${JSON.stringify({ ...fixture(), email: "ana@example.com" }, null, 2)}\n`)
       const run = context(local.dir, okRunner())
-      assert.equal(await runRecord(run, { fixtures: undefined, check: true }), 1)
+      assert.equal(await runRecord(run, { check: true }), 1)
       assert.match(run.err(), /RECORD\.unredacted/)
       assert.match(readFileSync(join(local.dir, FIXTURE_FILE), "utf8"), /ana@example\.com/)
     } finally {
@@ -157,7 +156,7 @@ describe("plugin-kit record", () => {
     const local = temp()
     try {
       write(join(local.dir, FIXTURE_FILE), `${JSON.stringify(fixture(), null, 2)}\n`)
-      await assert.rejects(runRecord(context(local.dir, okRunner()), { account: "nobody", fixtures: undefined, check: true }), (error: unknown) => error instanceof KitError && error.code === "KIT_ACCOUNT_UNKNOWN")
+      await assert.rejects(runRecord(context(local.dir, okRunner()), { account: "nobody", check: true }), (error: unknown) => error instanceof KitError && error.code === "KIT_ACCOUNT_UNKNOWN")
     } finally {
       local.cleanup()
     }
@@ -170,7 +169,7 @@ describe("plugin-kit record", () => {
 `)
       const gate = { ok: false, findings: [{ id: "T1.host-unavailable", level: "error" as const, message: "T1 needs Node 24 or Bun" }] }
       const run = context(local.dir, okRunner(gate))
-      assert.equal(await runRecord(run, { fixtures: undefined, check: false }), 0)
+      assert.equal(await runRecord(run, { check: false }), 0)
       assert.match(run.err(), /RECORD\.host-unavailable/)
       assert.doesNotMatch(readFileSync(join(local.dir, FIXTURE_FILE), "utf8"), /ana@example\.com/)
     } finally {
@@ -182,11 +181,45 @@ describe("plugin-kit record", () => {
     const local = temp()
     try {
       const run = context(local.dir, okRunner())
-      assert.equal(await runRecord(run, { fixtures: undefined, check: true }), 1)
+      assert.equal(await runRecord(run, { check: true }), 1)
       assert.match(run.err(), /RECORD\.missing-file/)
     } finally {
       local.cleanup()
     }
+  })
+
+  test("redaction rehashes only events it changed, and leaves valid events untouched", () => {
+    const valid = makeEvent({ source: "acme", account: "default", external_id: "plain", kind: "message", occurred_at: "2026-11-01T00:00:00.000Z", actors: [{ role: "from", id: "acme:u1" }] })
+    const untouched = redactFixture({ events: [valid] }, { display: FIXTURE_FILE })
+    assert.deepEqual(untouched.value, { events: [valid] })
+    assert.deepEqual(untouched.findings, [])
+
+    const changed = makeEvent({ source: "acme", account: "default", external_id: "redacted", kind: "message", occurred_at: "2026-11-01T00:00:00.000Z", actors: [{ role: "from", id: "acme:u1", name: "Ana" }], title: "mail ana@example.com" })
+    const redacted = redactFixture({ events: [changed] }, { display: FIXTURE_FILE })
+    const event = (redacted.value as { events: Record<string, any>[] }).events[0]!
+    assert.equal(event.hash, eventHash(event as never))
+    assert.notEqual(event.hash, changed.hash)
+    assert.deepEqual(redacted.findings, [])
+
+    const wrong = { ...valid, hash: "sha256:not-the-content-hash" }
+    const reported = redactFixture({ events: [wrong] }, { display: FIXTURE_FILE })
+    assert.ok(reported.findings.some((finding) => finding.id === "RECORD.hash-mismatch" && finding.message.includes("plain")))
+    assert.equal((reported.value as { events: Record<string, any>[] }).events[0]!.hash, "sha256:not-the-content-hash")
+  })
+
+  test("grants keep only the verified token and public key, and redact the other fields", () => {
+    const source = JSON.parse(readFileSync(join(process.cwd(), "test", "fixtures", "fixture-plugin", "fixtures", "conformance.json"), "utf8")) as Record<string, any>
+    const valid = source.grants.cases[0].token as string
+    const bad = `gh${"p_"}${"A1b2C3d4E5f6G7h8"}`
+    source.grants.cases[1].token = bad
+    source.grants.cases[1].request.password = bad
+    const redacted = redactFixture(source, { display: FIXTURE_FILE, publicKey: source.grants.publicKey, verifiedTokens: new Set([valid]) })
+    const value = redacted.value as Record<string, any>
+    assert.equal(value.grants.publicKey, source.grants.publicKey)
+    assert.equal(value.grants.cases[0].token, valid)
+    assert.equal(value.grants.cases[0].name, "<redacted:personal>")
+    assert.equal(value.grants.cases[1].token, "<redacted:secret>")
+    assert.equal(value.grants.cases[1].request.password, "<redacted:secret>")
   })
 
   test("runs end to end against #59's fixture plugin, with two aliases", { timeout: 60000 }, async () => {
@@ -195,15 +228,14 @@ describe("plugin-kit record", () => {
     try {
       cpSync(join(process.cwd(), "test", "fixtures", "fixture-plugin"), directory, { recursive: true })
       const run = context(directory, { runConformance, t0: async () => [], t1: async () => [] })
-      assert.equal(await runRecord(run, { account: "work", fixtures: undefined, check: false }), 0)
+      assert.equal(await runRecord(run, { account: "work", check: false }), 0)
       const value = JSON.parse(readFileSync(join(directory, FIXTURE_FILE), "utf8")) as Record<string, unknown>
       assert.deepEqual(fixtureAliases(value), ["work", "personal"])
       assert.match(readFileSync(join(directory, FIXTURE_FILE), "utf8"), /<redacted:personal>/)
-      const report = await runConformance(directory, { hosts: [] })
-      assert.deepEqual(
-        report.findings.filter((finding) => finding.level === "error" && finding.id !== "T1.host-unavailable").map((finding) => finding.id),
-        [],
-      )
+      const redacted = JSON.parse(readFileSync(join(directory, FIXTURE_FILE), "utf8")) as Record<string, any>
+      assert.deepEqual(redacted.accounts.aliases, ["work", "personal"])
+      assert.match(redacted.grants.cases[0].token, /^eyJ/)
+      assert.equal(redacted.grants.cases[0].name, "<redacted:personal>")
     } finally {
       rmSync(root, { recursive: true, force: true })
     }

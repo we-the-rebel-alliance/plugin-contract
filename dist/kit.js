@@ -38,7 +38,7 @@ import "./chunks/chunk-WLRWVIVP.js";
 
 // src/kit/cli.ts
 import { execFile } from "node:child_process";
-import { resolve as resolve2 } from "node:path";
+import { resolve } from "node:path";
 
 // src/kit/bundled.ts
 import { existsSync, readFileSync as readFileSync2, statSync as statSync2 } from "node:fs";
@@ -418,8 +418,7 @@ async function runDocs(context, options) {
 }
 
 // src/kit/forbidden.ts
-import { basename as basename2 } from "node:path";
-import { join as join5 } from "node:path";
+import { basename as basename2, join as join5 } from "node:path";
 
 // src/kit/forbidden-apps.ts
 var FORBIDDEN_APPS = Object.freeze([
@@ -428,6 +427,50 @@ var FORBIDDEN_APPS = Object.freeze([
   { name: "Jelly", pattern: /jelly-(?:ops|rpc|plugin|models|family)\b/gi },
   { name: "Toqan", pattern: /\btoqan\b/gi }
 ]);
+
+// src/kit/grant-token.ts
+import { createPublicKey, verify } from "node:crypto";
+function isEd25519PublicKey(value) {
+  if (typeof value !== "string") return false;
+  try {
+    return createPublicKey(value).asymmetricKeyType === "ed25519";
+  } catch {
+    return false;
+  }
+}
+function verifiesGrantToken(token, publicKey) {
+  if (typeof token !== "string" || typeof publicKey !== "string") return false;
+  const parts = token.split(".");
+  if (parts.length !== 3 || parts.some((part) => part.length === 0)) return false;
+  try {
+    const key = createPublicKey(publicKey);
+    const signature = Buffer.from(parts[2], "base64url");
+    return verify(null, Buffer.from(`${parts[0]}.${parts[1]}`, "utf8"), key, signature);
+  } catch {
+    return false;
+  }
+}
+function verifiedGrantTokens(value) {
+  const grants = typeof value === "object" && value !== null ? value["grants"] : void 0;
+  if (typeof grants !== "object" || grants === null) return /* @__PURE__ */ new Set();
+  const record = grants;
+  const publicKey = record["publicKey"];
+  const cases = record["cases"];
+  if (!isEd25519PublicKey(publicKey) || !Array.isArray(cases)) return /* @__PURE__ */ new Set();
+  const verified = /* @__PURE__ */ new Set();
+  for (const entry of cases) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const token = entry["token"];
+    if (typeof token === "string" && verifiesGrantToken(token, publicKey)) verified.add(token);
+  }
+  return verified;
+}
+function fixturePublicKey(value) {
+  const grants = typeof value === "object" && value !== null ? value["grants"] : void 0;
+  if (typeof grants !== "object" || grants === null) return void 0;
+  const key = grants["publicKey"];
+  return isEd25519PublicKey(key) ? key : void 0;
+}
 
 // src/kit/forbidden.ts
 var SKIPPED_FILES = /* @__PURE__ */ new Set(["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lockb", "composer.lock", "Cargo.lock"]);
@@ -463,8 +506,7 @@ function add(findings, used, allowances2, finding) {
 }
 function grantTokens(text) {
   try {
-    const value = JSON.parse(text);
-    return (value.grants?.cases ?? []).flatMap((entry) => typeof entry.token === "string" ? [entry.token] : []);
+    return [...verifiedGrantTokens(JSON.parse(text))];
   } catch {
     return [];
   }
@@ -642,7 +684,7 @@ async function runHosts(context) {
 }
 
 // src/kit/record.ts
-import { join as join6, resolve } from "node:path";
+import { join as join6 } from "node:path";
 var PLACEHOLDER = {
   secret: "<redacted:secret>",
   email: "<redacted:email>",
@@ -662,26 +704,58 @@ function redactText(text) {
   result = result.replace(/([?&](?:access_token|refresh_token|token|key|api_key|apikey|secret|client_secret|signature|sig|password|email|code)=)[^&#\s]+/gi, `$1${PLACEHOLDER.query}`);
   return result;
 }
-function rehash(value) {
-  if (Array.isArray(value)) return value.map(rehash);
-  if (typeof value !== "object" || value === null) return value;
-  const result = {};
-  for (const [key, item] of Object.entries(value)) result[key] = rehash(item);
-  if (typeof result["external_id"] === "string" && typeof result["hash"] === "string" && Array.isArray(result["actors"])) {
+function isEvent(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value) && typeof value["external_id"] === "string" && typeof value["hash"] === "string" && Array.isArray(value["actors"]);
+}
+var withoutHash = (event) => Object.fromEntries(Object.entries(event).filter(([key]) => key !== "hash"));
+function redactFixture(value, options) {
+  const redacted = redactValue(value, [], { publicKey: options.publicKey, verifiedTokens: options.verifiedTokens });
+  const findings = [];
+  const walk = (before, after, path) => {
+    if (Array.isArray(before) && Array.isArray(after)) return after.map((item, index) => walk(before[index], item, path));
+    if (typeof before !== "object" || before === null || Array.isArray(before)) return after;
+    if (typeof after !== "object" || after === null || Array.isArray(after)) return after;
+    const source = before;
+    const result = after;
+    for (const key of Object.keys(source)) result[key] = walk(source[key], result[key], [...path, key]);
+    if (!isEvent(source) || !isEvent(result)) return result;
+    const changed = JSON.stringify(withoutHash(source)) !== JSON.stringify(withoutHash(result));
+    let valid = true;
     try {
-      result["hash"] = eventHash(result);
+      valid = eventHash(source) === source["hash"];
     } catch {
     }
-  }
-  return result;
+    if (!valid) {
+      findings.push({
+        id: "RECORD.hash-mismatch",
+        level: "error",
+        path: options.display,
+        message: `the event ${source["external_id"]} records a hash that does not match its pre-redaction content`,
+        fix: "Record the fixture again from the provider; a wrong hash is not something redaction can repair."
+      });
+    }
+    if (changed) {
+      try {
+        result["hash"] = eventHash(result);
+      } catch {
+      }
+    }
+    return result;
+  };
+  return { value: walk(value, redacted, []), findings };
 }
-function redactValue(value, path = []) {
-  if (path[0] === "grants") return value;
+function redactValue(value, path = [], context = {}) {
   if (typeof value === "string") return redactText(value);
-  if (Array.isArray(value)) return value.map((item) => redactValue(item, path));
+  if (Array.isArray(value)) return value.map((item) => redactValue(item, path, context));
   if (typeof value !== "object" || value === null) return value;
   const result = {};
   for (const [key, item] of Object.entries(value)) {
+    const keepsPublicKey = key === "publicKey" && path.length === 1 && path[0] === "grants" && item === context.publicKey;
+    const keepsVerifiedToken = key === "token" && path.length === 2 && path[0] === "grants" && path[1] === "cases" && typeof item === "string" && context.verifiedTokens?.has(item) === true;
+    if (keepsPublicKey || keepsVerifiedToken) {
+      result[key] = item;
+      continue;
+    }
     if (SECRET_KEY.test(key)) {
       result[key] = PLACEHOLDER.secret;
       continue;
@@ -691,7 +765,7 @@ function redactValue(value, path = []) {
       result[key] = PLACEHOLDER.personal;
       continue;
     }
-    result[key] = redactValue(item, [...path, key]);
+    result[key] = redactValue(item, [...path, key], context);
   }
   return result;
 }
@@ -709,6 +783,7 @@ function recordReport(report) {
   });
   return { ok: !hasError(findings), findings };
 }
+var FIXTURE_FILE = "fixtures/conformance.json";
 function fixtureAt(path, display) {
   const text = readText(path);
   if (text === void 0) {
@@ -728,7 +803,7 @@ function fixtureAliases(value) {
   return Array.isArray(aliases) ? aliases.filter((alias) => typeof alias === "string") : [];
 }
 async function runRecord(context, options) {
-  const file = options.fixtures === void 0 ? join6(context.dir, "fixtures", "conformance.json") : resolve(context.dir, options.fixtures);
+  const file = join6(context.dir, FIXTURE_FILE);
   const report = recordReport(options.check ? { ok: true, findings: [] } : await (await context.conformance()).runConformance(context.dir, { record: true }));
   const display = relativePath(context.dir, file);
   const read = fixtureAt(file, display);
@@ -741,12 +816,13 @@ async function runRecord(context, options) {
   if (options.account !== void 0 && !aliases.includes(options.account)) {
     throw new KitError("KIT_ACCOUNT_UNKNOWN", `the fixture records no account alias ${JSON.stringify(options.account)}`, `record one of ${aliases.length === 0 ? "the fixture's aliases" : aliases.join(", ")}, or pass --account with one of them`);
   }
-  const redacted = rehash(redactValue(read.value));
+  const redaction = redactFixture(read.value, { display, publicKey: fixturePublicKey(read.value), verifiedTokens: verifiedGrantTokens(read.value) });
+  const redacted = redaction.value;
   const output = `${JSON.stringify(redacted, null, 2)}
 `;
   const changed = output !== read.text;
   if (changed && !options.check) writeJsonIfChanged(file, redacted);
-  const findings = [...report.findings, ...changed && options.check ? [{ id: "RECORD.unredacted", level: "error", path: display, message: "the fixture still holds a secret or personal data", fix: "run plugin-kit record without --check and commit the redacted fixture" }] : []];
+  const findings = [...report.findings, ...redaction.findings, ...changed && options.check ? [{ id: "RECORD.unredacted", level: "error", path: display, message: "the fixture still holds a secret or personal data", fix: "run plugin-kit record without --check and commit the redacted fixture" }] : []];
   printResult(context, findings, options, file, changed ? 1 : 0, report, changed ? options.check ? "needs redaction" : "redacted" : "unchanged");
   return report.ok && !hasError(findings) ? 0 : 1;
 }
@@ -932,13 +1008,12 @@ Options:
   --host <release>          a host for check or conformance (repeatable)
   --check                   report drift only (docs, record)
   --account <alias>         the account a recording belongs to
-  --fixtures <path>         the fixture file (default: fixtures/conformance.json)
   --record                  record while running conformance
   --dry-run                 write nothing (release)
   --wave <name>             the SUPPORTED.md wave cell
   --status <state>          the SUPPORTED.md status cell
 `;
-var VALUE_FLAGS = /* @__PURE__ */ new Set(["dir", "host", "account", "fixtures", "wave", "status"]);
+var VALUE_FLAGS = /* @__PURE__ */ new Set(["dir", "host", "account", "wave", "status"]);
 var BOOLEAN_FLAGS = /* @__PURE__ */ new Set(["json", "check", "record", "dry-run", "help"]);
 function parse(argv) {
   if (argv.length === 0 || argv.includes("--help") || argv.includes("-h")) return "help";
@@ -1012,7 +1087,7 @@ async function main(argv, options = {}) {
     return 0;
   }
   const context = {
-    dir: resolve2(options.cwd ?? process.cwd(), flag(parsed, "dir") ?? "."),
+    dir: resolve(options.cwd ?? process.cwd(), flag(parsed, "dir") ?? "."),
     io,
     conformance: options.conformance ?? (() => loadConformance()),
     git: options.git ?? defaultGit,
@@ -1028,7 +1103,7 @@ async function main(argv, options = {}) {
       case "docs":
         return await runDocs(context, { check: bool(parsed, "check") });
       case "record":
-        return await runRecord(context, { account: flag(parsed, "account"), fixtures: flag(parsed, "fixtures"), check: bool(parsed, "check") });
+        return await runRecord(context, { account: flag(parsed, "account"), check: bool(parsed, "check") });
       case "conformance":
         return await runConformance(context, { hosts: hosts(parsed), record: bool(parsed, "record") });
       case "hosts":
