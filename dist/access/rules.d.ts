@@ -1,0 +1,44 @@
+import type { Checked } from "../internal/checked.js";
+import type { Manifest, MethodItem } from "../manifest.js";
+import type { PermissionRule } from "./fences.js";
+/** The three levels of the `access` option (contract §6), in the order the table lists them. */
+export declare const ACCESS_LEVELS: readonly ["all", "ask-changes", "read-only"];
+export type AccessLevel = (typeof ACCESS_LEVELS)[number];
+/** The level when the option is absent. */
+export declare const DEFAULT_ACCESS: AccessLevel;
+/** The `access` option, or `all` when it is absent; refused when it is not one of the three levels. */
+export declare function accessLevel(options?: Readonly<Record<string, unknown>>): Checked<AccessLevel>;
+/** True for a manifest method that classifies a pass-through MCP tool (`mcp:<tool>` or `mcp:*`). */
+export declare function isMcpMethod(method: string): boolean;
+/** The permission action of a plugin's own method (contract §3): `<name>.<method>`. */
+export declare function methodAction(name: string, method: string): string;
+/**
+ * OpenCode 2.4.1's tool-name normalisation: every character outside letters, digits, `_` and `-` becomes `_`
+ * (`core/src/tool/runtime.ts:300`; the installed core's `chunks/model-resolver-6zneq7kt.js:220-221`).
+ */
+export declare function normalizeToolName(name: string): string;
+/**
+ * The permission action of an MCP tool on `server`, exactly as OpenCode builds its effective tool name: the server is
+ * the namespace with dots replaced by underscores, then `_` and the normalised tool name
+ * (`core/src/tool/runtime.ts:300`). `mcp:*` keeps its wildcard: server `demo-work` yields `demo-work_*`.
+ */
+export declare function toolAction(server: string, tool: string): string;
+/** The effect a method's class and `effect` give under `level`. `effect` only narrows: ask or deny. */
+export declare function effectFor(method: Pick<MethodItem, "class" | "effect">, level: AccessLevel): PermissionRule["effect"];
+/**
+ * The integration or MCP server name of `alias` (§3, §5): `<name>` for `default`, `<name>-<alias>` otherwise. Refused
+ * when `alias` is not one of the plugin's declared aliases, so a rule can never be derived for an account that does not
+ * exist. This is the one per-alias derivation: `operationRule`, the access rules and the conformance kit all use it.
+ */
+export declare function serverOf(name: string, alias: string, aliases: readonly string[]): Checked<string>;
+/** The declared aliases from the plugin's options, or `default` when the plugin has no accounts option. */
+export declare function aliasesFrom(options?: Readonly<Record<string, unknown>>): readonly string[];
+/**
+ * The rules `level` generates for `manifest`, one per method and, for pass-through MCP tools, one per alias: every
+ * alias gets its own `<server>_<tool>` rule, so a rule for `work` can never reach another alias's tools.
+ *
+ * Wildcard rules come first and specific ones after, because OpenCode's last matching rule wins: a later `mcp:*` must
+ * never override a `mcp:send_message`. Two declarations of the same action and resource keep the last manifest entry,
+ * as the manifest's own order says.
+ */
+export declare function rulesFor(manifest: Manifest, level: AccessLevel, aliases?: readonly string[]): readonly PermissionRule[];

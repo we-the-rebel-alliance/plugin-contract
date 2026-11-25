@@ -29,8 +29,8 @@ consequences:
 | `account` | `{ account, state }` | an account signed in, out, or needs sign-in |
 
 - `capability` is one of the plugin's own capability ids, `<name>.<capability>`, such as `slack.mentions`.
-- `account` is an account alias under contract §5: lowercase letters, digits and underscores, starting with a letter
-  (`default`, `work`, `work_2`).
+- `account` is an account alias under contract §5: lowercase letters and digits, starting with a letter
+  (`default`, `work`, `personal`).
 - `state` is `ready`, `needs_sign_in` or `error` (contract §5).
 - `reason` is a short one-line explanation, at most 160 characters: `write`, `webhook`, `token-refresh`. It is for a log
   or a diagnostic, not for the app to render as content.

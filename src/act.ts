@@ -16,11 +16,11 @@ import { MAX_BYTES_DEFAULT, findAction, type ActionEffect, type ActionItem, type
 import type { Checked } from "./internal/checked.ts"
 import { failure, failureFromError, type ReadFailure } from "./internal/failure.ts"
 import { problemsOf } from "./internal/validator.ts"
-import { actSessionRules, type ActGrant, type ActPhase, type PermissionRule } from "./permission.ts"
+import { actSessionRules, type ActGrant, type ActPhase, type PermissionRule } from "./access.ts"
 import type { ReadHost } from "./read.ts"
 
 export type { ReadFailure } from "./internal/failure.ts"
-export type { ActGrant, ActPhase } from "./permission.ts"
+export type { ActGrant, ActPhase } from "./access.ts"
 
 /** What a project's host does for `act`: a read host, plus a confirmation check when it can issue one. */
 export interface ActHost extends ReadHost {
@@ -51,6 +51,8 @@ export interface ActRequest {
    * and for a local commit. An empty token is not a confirmation.
    */
   readonly confirmation?: string
+  /** The plugin's declared account aliases, from its manifest options. */
+  readonly aliases: readonly string[]
   readonly signal?: AbortSignal
 }
 
@@ -227,7 +229,7 @@ export async function act(host: ActHost, request: ActRequest): Promise<ActOutcom
   if (inputProblems.length > 0) return refused("SCHEMA_VIOLATION", inputProblems.join("; "), "Pass only the input the act's schema describes.")
   const called = await fencedCall(
     host,
-    actSessionRules(installed.manifest, declared, grant, request.phase),
+    actSessionRules(installed.manifest, declared, grant, request.phase, request.aliases),
     {
       package: installed.package,
       method: request.phase === "preview" ? declared.preview : declared.commit,

@@ -2,24 +2,25 @@
 import {
   failure,
   failureFromError
-} from "./chunks/chunk-XYUBWIBF.js";
+} from "./chunks/chunk-SQQJ24OZ.js";
 import {
   actSessionRules
-} from "./chunks/chunk-GTCKBHY7.js";
+} from "./chunks/chunk-HBOP7XMF.js";
+import "./chunks/chunk-R6LVJOLA.js";
 import {
   findAction
-} from "./chunks/chunk-GENAPX63.js";
-import "./chunks/chunk-34YMSPZQ.js";
+} from "./chunks/chunk-YRYY3WXH.js";
+import "./chunks/chunk-FZW2HFUR.js";
+import {
+  MAX_BYTES_DEFAULT
+} from "./chunks/chunk-4TUKQJKX.js";
 import {
   problemsOf
 } from "./chunks/chunk-S3ZVQTGH.js";
+import "./chunks/chunk-L3NVT2DE.js";
 import {
   fromJSONSchema
 } from "./chunks/chunk-3GQYQSG2.js";
-import {
-  MAX_BYTES_DEFAULT
-} from "./chunks/chunk-OGAJDQ7Z.js";
-import "./chunks/chunk-L3NVT2DE.js";
 import "./chunks/chunk-7KJXMIQH.js";
 import "./chunks/chunk-WLRWVIVP.js";
 
@@ -154,7 +155,7 @@ async function act(host, request) {
   if (inputProblems.length > 0) return refused("SCHEMA_VIOLATION", inputProblems.join("; "), "Pass only the input the act's schema describes.");
   const called = await fencedCall(
     host,
-    actSessionRules(installed.manifest, declared, grant, request.phase),
+    actSessionRules(installed.manifest, declared, grant, request.phase, request.aliases),
     {
       package: installed.package,
       method: request.phase === "preview" ? declared.preview : declared.commit,

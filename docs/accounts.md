@@ -16,7 +16,7 @@ import {
 
 ## Aliases
 
-- Pattern: `^[a-z][a-z0-9_]{0,31}$` — one lowercase letter, then up to 31 lowercase letters, digits or underscores.
+- Pattern: `^[a-z][a-z0-9]{0,31}$` — one lowercase letter, then up to 31 lowercase letters or digits. No underscore.
 - The account with no alias is `default`.
 - A hyphen separates the plugin's name from an alias, so an alias itself has none.
 - An alias is the last segment of an integration or MCP server name and the first half of a permission resource

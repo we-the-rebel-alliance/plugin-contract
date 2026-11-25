@@ -130,8 +130,7 @@ One table covers every callable, so a consumer knows how risky a call is before 
 | `operations` | The provider operations the method may assert, for grants and session rules. |
 | `plans` | `true` for a method that dry-runs a change and answers `{ planId, method }`. |
 | `commits` | The planning method this method commits. It then takes only `{ planId }`. |
-| `effect` | An override of `access`: `allow`, `ask` or `deny`. |
-| `agent` | `false` leaves the method out of agent prompts; it stays in Code Mode, automations and RPC. |
+| `effect` | A narrowing of `access`: `ask` or `deny`, never `allow`. |
 | `pinned` | `true` for the one method Code Mode sends on every turn. |
 
 Rules:

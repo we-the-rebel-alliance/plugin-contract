@@ -28,9 +28,9 @@ const checkedManifest = (change: (value: any) => void = () => {}): Manifest => {
 }
 
 describe("aliases", () => {
-  test("one lowercase letter, then up to 31 lowercase letters, digits or underscores", () => {
-    for (const alias of ["default", "work", "work_2", "a", "a".repeat(32)]) assert.equal(isAlias(alias), true, alias)
-    for (const alias of ["Work", "2work", "work-2", "work 2", "", "a".repeat(33)]) assert.equal(isAlias(alias), false, alias)
+  test("one lowercase letter, then up to 31 lowercase letters or digits; no underscore", () => {
+    for (const alias of ["default", "work", "personal", "a", "a".repeat(32)]) assert.equal(isAlias(alias), true, alias)
+    for (const alias of ["Work", "2work", "work-2", "work_2", "work 2", "", "a".repeat(33)]) assert.equal(isAlias(alias), false, alias)
     assert.equal(aliasProblem("work"), undefined)
     assert.match(aliasProblem("work-2") ?? "", /must match/)
     assert.match(aliasProblem(2) ?? "", /must be a string/)

@@ -339,7 +339,8 @@ describe("read's failures take the table", () => {
     expect(failureFromError(Object.assign(new Error("no such account"), { data: { code: "ACCOUNT_UNKNOWN", next: "Pass a known account." } })).code).toBe("ACCOUNT_UNKNOWN")
   })
 
-  test("a code the table does not hold is UNAVAILABLE, with no alias for it", () => {
+  test("NEEDS_SIGN_IN passes through the table, so read never reports a sign-in as UNAVAILABLE", () => {
+    expect(failureFromError(new Error("NEEDS_SIGN_IN: the sign-in expired. Next step: Sign in again.")).code).toBe("NEEDS_SIGN_IN")
     expect(failureFromError(new Error("AUTH_REQUIRED: the sign-in expired. Next step: Sign in again.")).code).toBe("UNAVAILABLE")
   })
 })

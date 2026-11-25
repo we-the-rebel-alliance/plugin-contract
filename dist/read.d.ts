@@ -8,7 +8,7 @@
  * 4. the answer is checked: its account, `trust: "untrusted"`, its size against `maxBytes`, and a snapshot's `data`
  *    against its output schema; then `pick` keeps only the picked paths.
  *
- * The host is two calls: open a session with given rules, and call a plugin's tools-RPC method in it. Each app
+ * The host is two calls: open a session with given rules, and call a plugin's RPC method in it. Each app
  * implements them over its own OpenCode server. An app keeps its own cursor: `read` returns the page and never stores
  * anything.
  */
@@ -16,7 +16,7 @@ import { type InstalledManifest, type OwnerOrg, type SourceItem } from "./manife
 import type { Checked } from "./internal/checked.js";
 import { type ReadFailure } from "./internal/failure.js";
 import { type ParamsContext } from "./params.js";
-import { type Grant, type PermissionRule } from "./permission.js";
+import { type Grant, type PermissionRule } from "./access.js";
 export type { FailureCode, ReadFailure } from "./internal/failure.js";
 /** What a project's host does for `read`. */
 export interface ReadHost {
@@ -58,6 +58,8 @@ export interface ReadRequest {
     /** A snapshot read. */
     readonly pick?: readonly string[];
     readonly context: ParamsContext;
+    /** The plugin's declared account aliases, from its manifest options. Fences refuse an undeclared alias. */
+    readonly aliases: readonly string[];
     readonly signal?: AbortSignal;
 }
 /** An events page, as the plugin answered it (design §2.1). */
@@ -130,6 +132,8 @@ export interface DetailRequest {
     readonly consumer: string;
     /** The event the detail is read for, as the source listed it. Inputs come only from its API fields. */
     readonly event: Readonly<Record<string, unknown>>;
+    /** The plugin's declared account aliases. */
+    readonly aliases: readonly string[];
     readonly signal?: AbortSignal;
 }
 /**
@@ -176,6 +180,7 @@ export declare function probe(host: ReadHost, request: {
     readonly source: string;
     readonly account: string;
     readonly identityOperations?: readonly string[];
+    readonly aliases: readonly string[];
     readonly signal?: AbortSignal;
 }): Promise<{
     readonly ok: true;

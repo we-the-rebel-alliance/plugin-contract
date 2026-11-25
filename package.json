@@ -22,6 +22,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./access": {
+      "types": "./dist/access.d.ts",
+      "default": "./dist/access.js"
+    },
     "./accounts": {
       "types": "./dist/accounts.d.ts",
       "default": "./dist/accounts.js"
@@ -70,10 +74,6 @@
       "types": "./dist/params.d.ts",
       "default": "./dist/params.js"
     },
-    "./permission": {
-      "types": "./dist/permission.d.ts",
-      "default": "./dist/permission.js"
-    },
     "./pick": {
       "types": "./dist/pick.d.ts",
       "default": "./dist/pick.js"
@@ -82,6 +82,10 @@
       "types": "./dist/read.d.ts",
       "default": "./dist/read.js"
     },
+    "./register": {
+      "types": "./dist/register.d.ts",
+      "default": "./dist/register.js"
+    },
     "./schema": {
       "types": "./dist/schema.d.ts",
       "default": "./dist/schema.js"
@@ -89,10 +93,6 @@
     "./schemas": {
       "types": "./dist/schemas.d.ts",
       "default": "./dist/schemas.js"
-    },
-    "./tools-rpc": {
-      "types": "./dist/tools-rpc.d.ts",
-      "default": "./dist/tools-rpc.js"
     },
     "./package.json": "./package.json"
   },
@@ -108,6 +108,7 @@
   },
   "devDependencies": {
     "@opencode/plugin": "2.4.1",
+    "@opencode/sdk": "2.4.1",
     "@types/node": "24.19.2",
     "effect": "4.1.0",
     "esbuild": "0.28.2",

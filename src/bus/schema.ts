@@ -39,7 +39,7 @@ interface BusValidators {
 
 const ACCOUNT = ALIAS_PATTERN
 const ONE_LINE_RE = /^[^\r\n]+$/
-const ACCOUNT_EXPECTATION = "must be an account alias: lowercase letters, digits and underscores, starting with a letter (contract §5)"
+const ACCOUNT_EXPECTATION = "must be an account alias: lowercase letters and digits, starting with a letter (contract §5)"
 
 function validatorsFor(name: string): BusValidators {
   const capability = new RegExp(capabilityPattern(name))

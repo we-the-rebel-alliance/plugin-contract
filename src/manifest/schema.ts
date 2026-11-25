@@ -119,8 +119,7 @@ const methodItem = z
     operations: z.array(z.string().regex(OPERATION, { error: "must be a provider operation of letters, digits, dots, underscores or hyphens" })).min(1).optional(),
     plans: z.literal(true).optional().describe("The method dry-runs a change and answers { planId, method }."),
     commits: methodName.optional().describe("The planning method this method commits. It then takes only { planId }."),
-    effect: z.enum(METHOD_EFFECTS).optional().describe("An override of the access setting."),
-    agent: z.literal(false).optional().describe("Leave the method out of agent prompts; it stays in Code Mode, automations and RPC."),
+    effect: z.enum(METHOD_EFFECTS).optional().describe("A narrowing of the access setting: ask or deny, never allow."),
     pinned: z.literal(true).optional().describe("The one method Code Mode sends on every turn. None by default."),
   })
   .superRefine((value, context) => {
