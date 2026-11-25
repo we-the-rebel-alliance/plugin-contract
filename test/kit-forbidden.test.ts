@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { describe, test } from "node:test"
@@ -83,14 +83,19 @@ describe("plugin-kit forbidden", () => {
     }
   })
 
-  test("a signed test grant in a conformance fixture is test data, not a leaked credential", () => {
+  test("only a signed test grant is exempt; an unverified token and another grant field are secrets", () => {
     const local = temp()
     try {
-      const token = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.c2lnbmF0dXJl"
-      write(join(local.dir, "fixtures", "conformance.json"), JSON.stringify({ grants: { cases: [{ token }] } }))
+      const source = JSON.parse(readFileSync(join(process.cwd(), "test", "fixtures", "fixture-plugin", "fixtures", "conformance.json"), "utf8")) as Record<string, any>
+      const file = join(local.dir, "fixtures", "conformance.json")
+      write(file, JSON.stringify(source, null, 2))
       assert.equal(forbiddenFindings(local.dir).filter((finding) => finding.id === "FORBIDDEN.secret").length, 0)
-      write(join(local.dir, "fixtures", "conformance.json"), JSON.stringify({ token }))
-      assert.equal(forbiddenFindings(local.dir).filter((finding) => finding.id === "FORBIDDEN.secret").length, 1)
+      const bad = `gh${"p_"}${"A1b2C3d4E5f6G7h8"}`
+      source.grants.cases[1].token = bad
+      source.grants.cases[1].request.password = bad
+      write(file, JSON.stringify(source, null, 2))
+      const findings = forbiddenFindings(local.dir).filter((finding) => finding.id === "FORBIDDEN.secret")
+      assert.ok(findings.length >= 2)
     } finally {
       local.cleanup()
     }

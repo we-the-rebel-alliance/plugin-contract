@@ -72,7 +72,6 @@ Options:
   --host <release>          a host for check or conformance (repeatable)
   --check                   report drift only (docs, record)
   --account <alias>         the account a recording belongs to
-  --fixtures <path>         the fixture file (default: fixtures/conformance.json)
   --record                  record while running conformance
   --dry-run                 write nothing (release)
   --wave <name>             the SUPPORTED.md wave cell
@@ -85,7 +84,7 @@ interface Parsed {
   readonly flags: ReadonlyMap<string, string | true | readonly string[]>
 }
 
-const VALUE_FLAGS = new Set(["dir", "host", "account", "fixtures", "wave", "status"])
+const VALUE_FLAGS = new Set(["dir", "host", "account", "wave", "status"])
 const BOOLEAN_FLAGS = new Set(["json", "check", "record", "dry-run", "help"])
 
 function parse(argv: readonly string[]): Parsed | "help" {
@@ -180,7 +179,7 @@ export async function main(argv: readonly string[], options: MainOptions = {}): 
       case "docs":
         return await runDocs(context, { check: bool(parsed, "check") })
       case "record":
-        return await runRecord(context, { account: flag(parsed, "account"), fixtures: flag(parsed, "fixtures"), check: bool(parsed, "check") })
+        return await runRecord(context, { account: flag(parsed, "account"), check: bool(parsed, "check") })
       case "conformance":
         return await runConformance(context, { hosts: hosts(parsed), record: bool(parsed, "record") })
       case "hosts":

@@ -8,9 +8,10 @@
  * Redaction is deterministic and idempotent: a placeholder contains no pattern, so a second run changes nothing. It never
  * reorders keys, so a diff shows only the values that were replaced.
  */
-import { join, resolve } from "node:path"
+import { join } from "node:path"
 import { eventHash } from "../events.ts"
 import { secretKinds } from "../internal/secrets.ts"
+import { fixturePublicKey, verifiedGrantTokens } from "./grant-token.ts"
 import { readText, relativePath, writeJsonIfChanged } from "./files.ts"
 import type { CommandContext, Finding } from "./types.ts"
 import { hasError, KitError, sortFindings } from "./types.ts"
@@ -50,31 +51,93 @@ export function redactText(text: string): string {
   return result
 }
 
-/** Recompute an event's hash after redaction, so a redacted fixture still satisfies the page check. */
-function rehash(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(rehash)
-  if (typeof value !== "object" || value === null) return value
-  const result: Record<string, unknown> = {}
-  for (const [key, item] of Object.entries(value)) result[key] = rehash(item)
-  if (typeof result["external_id"] === "string" && typeof result["hash"] === "string" && Array.isArray(result["actors"])) {
+/** An event-shaped object: the hash and the content a page check compares. */
+function isEvent(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    typeof (value as Record<string, unknown>)["external_id"] === "string" &&
+    typeof (value as Record<string, unknown>)["hash"] === "string" &&
+    Array.isArray((value as Record<string, unknown>)["actors"])
+  )
+}
+
+const withoutHash = (event: Record<string, unknown>): Record<string, unknown> => Object.fromEntries(Object.entries(event).filter(([key]) => key !== "hash"))
+
+/** What a redaction found: the value to write, and any event whose recorded hash did not match its content. */
+export interface FixtureRedaction {
+  readonly value: unknown
+  readonly findings: Finding[]
+}
+
+/**
+ * Redact a fixture and repair only the events that redaction changed. An unchanged event keeps its recorded hash; an
+ * event whose recorded hash was already wrong is named as a finding instead of being silently corrected.
+ */
+export function redactFixture(value: unknown, options: { readonly display: string; readonly publicKey?: string | undefined; readonly verifiedTokens?: ReadonlySet<string> | undefined }): FixtureRedaction {
+  const redacted = redactValue(value, [], { publicKey: options.publicKey, verifiedTokens: options.verifiedTokens })
+  const findings: Finding[] = []
+  const walk = (before: unknown, after: unknown, path: readonly string[]): unknown => {
+    if (Array.isArray(before) && Array.isArray(after)) return after.map((item, index) => walk(before[index], item, path))
+    if (typeof before !== "object" || before === null || Array.isArray(before)) return after
+    if (typeof after !== "object" || after === null || Array.isArray(after)) return after
+    const source = before as Record<string, unknown>
+    const result = after as Record<string, unknown>
+    for (const key of Object.keys(source)) result[key] = walk(source[key], result[key], [...path, key])
+    if (!isEvent(source) || !isEvent(result)) return result
+    const changed = JSON.stringify(withoutHash(source)) !== JSON.stringify(withoutHash(result))
+    let valid = true
     try {
-      result["hash"] = eventHash(result as never)
+      valid = eventHash(source as never) === source["hash"]
     } catch {
-      // A malformed event is the conformance check's finding, not a reason to make record throw.
+      // A malformed event is the conformance check's finding; record does not invent a hash for it.
     }
+    if (!valid) {
+      findings.push({
+        id: "RECORD.hash-mismatch",
+        level: "error",
+        path: options.display,
+        message: `the event ${source["external_id"]} records a hash that does not match its pre-redaction content`,
+        fix: "Record the fixture again from the provider; a wrong hash is not something redaction can repair.",
+      })
+    }
+    if (changed) {
+      try {
+        result["hash"] = eventHash(result as never)
+      } catch {
+        // The conformance check names the malformed event.
+      }
+    }
+    return result
   }
-  return result
+  return { value: walk(value, redacted, []), findings }
+}
+
+/** The context a redaction needs to recognise a fixture's signed test grants. */
+export interface RedactionContext {
+  readonly publicKey?: string | undefined
+  readonly verifiedTokens?: ReadonlySet<string> | undefined
 }
 
 /** Replace credentials and personal data in a JSON value, preserving its keys and their order. */
-export function redactValue(value: unknown, path: readonly string[] = []): unknown {
-  // A conformance fixture's `grants` are signed test cases: their names, inputs and tokens are fixture data, not secrets.
-  if (path[0] === "grants") return value
+export function redactValue(value: unknown, path: readonly string[] = [], context: RedactionContext = {}): unknown {
+  // A verified case is one signed unit: its token's digest covers the input, so the key vouches for the whole case.
+  if (path.length === 2 && path[0] === "grants" && path[1] === "cases" && typeof value === "object" && value !== null && !Array.isArray(value)) {
+    const token = (value as Record<string, unknown>)["token"]
+    if (typeof token === "string" && context.verifiedTokens?.has(token) === true) return value
+  }
   if (typeof value === "string") return redactText(value)
-  if (Array.isArray(value)) return value.map((item) => redactValue(item, path))
+  if (Array.isArray(value)) return value.map((item) => redactValue(item, path, context))
   if (typeof value !== "object" || value === null) return value
   const result: Record<string, unknown> = {}
   for (const [key, item] of Object.entries(value)) {
+    const keepsPublicKey = key === "publicKey" && path.length === 1 && path[0] === "grants" && item === context.publicKey
+    const keepsVerifiedToken = key === "token" && path.length === 2 && path[0] === "grants" && path[1] === "cases" && typeof item === "string" && context.verifiedTokens?.has(item) === true
+    if (keepsPublicKey || keepsVerifiedToken) {
+      result[key] = item
+      continue
+    }
     if (SECRET_KEY.test(key)) {
       result[key] = PLACEHOLDER.secret
       continue
@@ -86,7 +149,7 @@ export function redactValue(value: unknown, path: readonly string[] = []): unkno
       result[key] = PLACEHOLDER.personal
       continue
     }
-    result[key] = redactValue(item, [...path, key])
+    result[key] = redactValue(item, [...path, key], context)
   }
   return result
 }
@@ -138,9 +201,9 @@ export function fixtureAliases(value: Record<string, unknown>): string[] {
 /** `plugin-kit record`: run the recorder, then redact and write the one fixture #59 reads. */
 export async function runRecord(
   context: CommandContext,
-  options: { readonly account?: string | undefined; readonly fixtures: string | undefined; readonly check: boolean },
+  options: { readonly account?: string | undefined; readonly check: boolean },
 ): Promise<number> {
-  const file = options.fixtures === undefined ? join(context.dir, "fixtures", "conformance.json") : resolve(context.dir, options.fixtures)
+  const file = join(context.dir, FIXTURE_FILE)
   const report = recordReport(options.check ? { ok: true, findings: [] } : await (await context.conformance()).runConformance(context.dir, { record: true }))
   const display = relativePath(context.dir, file)
   const read = fixtureAt(file, display)
@@ -153,11 +216,12 @@ export async function runRecord(
   if (options.account !== undefined && !aliases.includes(options.account)) {
     throw new KitError("KIT_ACCOUNT_UNKNOWN", `the fixture records no account alias ${JSON.stringify(options.account)}`, `record one of ${aliases.length === 0 ? "the fixture's aliases" : aliases.join(", ")}, or pass --account with one of them`)
   }
-  const redacted = rehash(redactValue(read.value))
+  const redaction = redactFixture(read.value, { display, publicKey: fixturePublicKey(read.value), verifiedTokens: verifiedGrantTokens(read.value) })
+  const redacted = redaction.value
   const output = `${JSON.stringify(redacted, null, 2)}\n`
   const changed = output !== read.text
   if (changed && !options.check) writeJsonIfChanged(file, redacted)
-  const findings = [...report.findings, ...(changed && options.check ? [{ id: "RECORD.unredacted", level: "error" as const, path: display, message: "the fixture still holds a secret or personal data", fix: "run plugin-kit record without --check and commit the redacted fixture" }] : [])]
+  const findings = [...report.findings, ...redaction.findings, ...(changed && options.check ? [{ id: "RECORD.unredacted", level: "error" as const, path: display, message: "the fixture still holds a secret or personal data", fix: "run plugin-kit record without --check and commit the redacted fixture" }] : [])]
   printResult(context, findings, options, file, changed ? 1 : 0, report, changed ? (options.check ? "needs redaction" : "redacted") : "unchanged")
   return report.ok && !hasError(findings) ? 0 : 1
 }

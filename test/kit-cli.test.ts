@@ -239,6 +239,12 @@ describe("plugin-kit's command line", () => {
     }
   })
 
+  test("record no longer takes an alternate fixture path", async () => {
+    const answer = await run(["record", "--fixtures", "elsewhere.json"])
+    assert.equal(answer.code, 2)
+    assert.match(answer.err, /KIT_USAGE: --fixtures is not an option/)
+  })
+
   test("--json prints a KitError as one JSON object on stdout, not a plain line", async () => {
     const missing = await run(["supported", "--dir", "/nonexistent/plugin", "--json"])
     assert.equal(missing.code, 1)
