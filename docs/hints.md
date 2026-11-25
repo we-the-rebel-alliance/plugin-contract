@@ -22,8 +22,8 @@ that needs one ships it with that consumer instead. The reader for a hint file i
 
 | Export | Does |
 |---|---|
-| `parseFrontmatter(text, what?)` | a hint's frontmatter and body, or every problem with them |
-| `hintProblems(text, { sources })` | every problem with a hint file; none when it keeps the contract |
+| `parseFrontmatter` | `parseFrontmatter(text, what?)`: a hint's frontmatter and body, or every problem with them |
+| `hintProblems` | `hintProblems(text, { sources })`: every problem with a hint file; none when it keeps the contract |
 | `HINT_SCHEMA` | the frontmatter schema, published as `dist/schemas/hint.json` |
 | `HINT_MAX`, `HINT_KEYS`, `FORBIDDEN_HINT_KEYS`, `PRODUCES_TYPES` | the limits, keys and knowledge types |
 | `HintFrontmatter`, `ProducesType`, `Frontmatter`, `FileOptions` | the types |

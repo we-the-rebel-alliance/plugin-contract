@@ -18,10 +18,10 @@ Which params a snapshot source takes, and which may be relative or `$me`, its ma
 
 | Export | Does |
 |---|---|
-| `resolveParams(declared, given, context)` | resolves a snapshot read's params, or names every problem |
-| `resolveSince(since, context)` | resolves an events read's `since` |
-| `resolveRelativeTime(value, context)` | one relative time, as a UTC ISO date-time |
-| `resolveWindow(name, context)` | a named window, midnight to midnight |
+| `resolveParams` | `resolveParams(declared, given, context)`: a snapshot read's params, or every problem |
+| `resolveSince` | `resolveSince(since, context)`: an events read's `since` |
+| `resolveRelativeTime` | one relative time, as a UTC ISO date-time |
+| `resolveWindow` | a named window, midnight to midnight |
 | `ParamsContext` | `{ now, timeZone, me? }` |
 | `ParamSpec` | `{ relative?, me? }`, as a manifest declares one param |
 | `ME`, `WINDOWS`, `WindowName`, `ResolvedWindow` | the marker, the windows and their shapes |

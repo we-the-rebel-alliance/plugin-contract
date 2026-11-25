@@ -182,3 +182,13 @@ registration follows `ToolEditor.add` and `Tool.Options.codemode` (`dist/promise
 `@opencode/schema/dist/tool.d.ts`); the RPC registration follows `RpcDomain.register` and `RpcRegistration`
 (`dist/promise/rpc.d.ts`, `dist/promise/registration.d.ts`); the permission ask follows `PermissionDomain.assert`
 (`dist/promise/permission.d.ts`).
+
+## Exports
+
+| Export | Does |
+|---|---|
+| `register` | doors 1–3 from one handler table, a manifest and the optional grant wiring |
+| `RegisterContext`, `RegisterWiring`, `Registration`, `GrantWiring` | the context it takes, the wiring, and what it returns |
+| `methodEntries`, `Door`, `HandlerTable`, `MethodCall`, `MethodEntry`, `MethodHandler` | the handler table and one call's context |
+| `COMMIT_INPUT`, `PLAN_OUTPUT` | the shapes a planning method answers and a commit takes |
+| `refusal`, `refusalOf`, `RegisterError`, `Refusal` | a handler's own refusal, in the contract's form |

@@ -329,3 +329,13 @@ it.
 - It does not run the action, validate the action's input against its JSON Schema, or emit events. Those are the
   plugin's `register` and handler work.
 - It does not make a grant confidential. Do not log the token; treat it as a bearer capability until `exp`.
+
+## Exports
+
+| Export | Does |
+|---|---|
+| `GRANT_ALG`, `GRANT_TYP`, `GRANT_INVALID`, `MAX_GRANT_LENGTH`, `MAX_INPUT_BYTES`, `MAX_INPUT_DEPTH`, `DEFAULT_CLOCK_SKEW_SEC`, `MAX_CLOCK_SKEW_SEC`, `DEFAULT_MAX_LIFETIME_SEC`, `MAX_LIFETIME_SEC` | the published format and its limits |
+| `signGrant`, `SignGrantRequest`, `GrantHeader`, `GrantClaims`, `GrantKeyMaterial` | the host's signer and the claims it signs |
+| `canonicalJson`, `canonicalScope`, `digestInput`, `GrantInputError`, `GrantScope` | the canonical input and scope the digest covers |
+| `verifyGrant`, `GRANT_CODES`, `GrantCode`, `GrantFailure`, `GrantSuccess`, `GrantOutcome` | the plugin's verifier and every refusal |
+| `GrantRequest`, `GrantKeys`, `GrantStore`, `ConfirmationRule`, `GrantActions` | the request, the trusted keys, the durable store and the confirmation rules |

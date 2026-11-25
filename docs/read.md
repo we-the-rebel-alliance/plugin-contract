@@ -20,12 +20,12 @@ that list, and status that is unavailable is refused rather than defaulted.
 
 | Export | Does |
 |---|---|
-| `read(host, request)` | reads a source under a grant; never throws for a refused or failed read |
-| `readDetail(host, request)` | reads one declared detail of an event, pinned to the confirmed scope |
-| `probe(host, request)` | reads the signed-in owner and scopes; it reads no content |
-| `checkReadRequest(request)` | the checks before any call, and the source and scope to read |
-| `acceptAnswer(source, account, answer, options?)` | checks an answer as a read does, then applies `pick` |
-| `detailFields(source, detailId, event)` | the event fields a detail may take, and nothing else |
+| `read` | `read(host, request)` reads a source under a grant; never throws for a refused or failed read |
+| `readDetail` | `readDetail(host, request)` reads one declared detail of an event, pinned to the confirmed scope |
+| `probe` | `probe(host, request)` reads the signed-in owner and scopes; it reads no content |
+| `checkReadRequest` | the checks before any call, and the source and scope to read |
+| `acceptAnswer` | `acceptAnswer(source, account, answer, options?)` checks an answer as a read does, then applies `pick` |
+| `detailFields` | the event fields a detail may take, and nothing else |
 | `ReadHost`, `ReadRequest`, `ReadOutcome` | the host the app supplies, one read, and its result |
 | `EventsPage`, `Snapshot`, `DetailRequest`, `ProbeAnswer` | the checked shapes |
 | `FailureCode`, `ReadFailure` | the contract's error table, as a failure |

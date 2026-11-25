@@ -10,10 +10,10 @@ A path is dotted segments. A segment ending in `[]` maps over an array: `items[]
 
 | Export | Does |
 |---|---|
-| `pick(data, paths)` | only the picked paths of `data`, in its own nesting |
-| `pickProblems(paths, schema?)` | every problem with a pick: grammar, limits, repeats, and paths the schema cannot have |
-| `pickProblemsForOutput(output, paths, schema?)` | the same against a registered output, or an `x-` output's inline schema |
-| `missingPaths(data, paths)` | the paths that reach nothing, for a diagnostic; never a failure |
+| `pick` | `pick(data, paths)`: only the picked paths of `data`, in its own nesting |
+| `pickProblems` | `pickProblems(paths, schema?)`: every problem with a pick: grammar, limits, repeats, and paths the schema cannot have |
+| `pickProblemsForOutput` | the same against a registered output, or an `x-` output's inline schema |
+| `missingPaths` | the paths that reach nothing, for a diagnostic; never a failure |
 | `MAX_PICK_PATHS`, `MAX_PICK_PATH_LENGTH`, `PICK_PATH` | the limits and the grammar |
 | `JsonSchema` | a JSON Schema object or boolean, as the checks take it |
 
