@@ -30,7 +30,9 @@ for (const name of existsSync(examples) ? readdirSync(examples).sort() : []) {
   const report = await conformance.runConformance(directory)
   findings += report.findings.length
   problems.push(...report.findings.map((finding) => `examples/${name}: ${finding.level} ${finding.id}: ${finding.message}`))
-  console.log(`examples/${name}: ${installed.value.manifest.sources.map((source) => source.id).join(", ")} (${installed.value.hash})`)
+  const methods = Object.keys(installed.value.manifest.methods).length
+  const sources = installed.value.manifest.sources.map((source) => source.id).join(", ") || "no sources"
+  console.log(`examples/${name}: ${methods} methods, ${sources} (${installed.value.hash})`)
 }
 if (count === 0) {
   console.error("the conformance self-test found no examples: add one under examples/")

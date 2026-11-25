@@ -1,0 +1,74 @@
+{
+  "name": "@we-the-rebel-alliance/harbour-plugin",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Example: a notes service with two accounts held by the integration mechanism. Every person, space and note is invented.",
+  "exports": {
+    "./server": "./index.js"
+  },
+  "capabilities": {
+    "version": 1,
+    "plugin": {
+      "name": "harbour",
+      "title": "Harbour",
+      "summary": "Notes from Harbour, as contract events, with a sign-in per account.",
+      "vendor": { "id": "harbour", "name": "Harbour", "domain": "harbour.example.com" },
+      "icons": [{ "src": "assets/icon.svg", "type": "image/svg+xml" }],
+      "host": { "opencode": ">=2.4.1 <2.5.0", "tested": ["2.4.1"] }
+    },
+    "accounts": {
+      "via": "integration",
+      "profile": { "$ref": "#/options/properties/accounts/additionalProperties" },
+      "owner": "mailto"
+    },
+    "options": {
+      "type": "object",
+      "properties": {
+        "access": { "type": "string", "enum": ["all", "ask-changes", "read-only"], "default": "all", "description": "How much the plugin's methods may do." },
+        "accounts": {
+          "type": "object",
+          "description": "One profile per account alias.",
+          "additionalProperties": {
+            "type": "object",
+            "properties": { "workspace": { "type": "string", "description": "The Harbour workspace this alias reads." } },
+            "additionalProperties": false
+          }
+        },
+        "allowUntestedHost": { "type": "boolean", "default": false, "description": "Start outside the tested OpenCode range." }
+      },
+      "additionalProperties": false
+    },
+    "methods": {
+      "status": { "class": "read", "accounts": "none" },
+      "probe": { "class": "read", "accounts": "optional", "operations": ["harbour.users.get"] },
+      "events_list": { "class": "read", "accounts": "optional", "operations": ["harbour.users.get", "harbour.notes.list", "harbour.notes.get"] },
+      "read_note": { "class": "read", "accounts": "optional", "operations": ["harbour.notes.get"] },
+      "list_spaces": { "class": "read", "accounts": "optional", "operations": ["harbour.spaces.list"] }
+    },
+    "sources": [
+      {
+        "id": "harbour.notes",
+        "kind": "events",
+        "reads": "doc",
+        "method": "events_list",
+        "input": { "source": "notes" },
+        "service": { "id": "harbour.notes", "label": "Notes" },
+        "operations": ["harbour.users.get", "harbour.notes.list", "harbour.notes.get"],
+        "scope": {
+          "keys": ["spaces"],
+          "describe": "The spaces to read. Every space is read when none is confirmed.",
+          "suggest": { "method": "list_spaces", "operations": ["harbour.spaces.list"] }
+        },
+        "cadence": { "suggestMinutes": 5 },
+        "private": true,
+        "cost": { "class": "free" },
+        "maxBytes": 262144,
+        "details": [{ "id": "harbour.notes.note", "method": "read_note", "from": ["external_id"] }],
+        "urlHosts": ["docs.harbour.example.com"]
+      }
+    ],
+    "actions": [],
+    "events": {}
+  }
+}

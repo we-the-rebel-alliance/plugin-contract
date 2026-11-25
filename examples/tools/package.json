@@ -1,0 +1,39 @@
+{
+  "name": "@we-the-rebel-alliance/glyph-plugin",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Example: a tools-only plugin with no accounts and no sources. It counts words, keeps short notes, and plans a write before committing it.",
+  "exports": {
+    "./server": "./index.js"
+  },
+  "capabilities": {
+    "version": 1,
+    "plugin": {
+      "name": "glyph",
+      "title": "Glyph",
+      "summary": "Short text tools: count words, keep a note, and plan the write before committing it.",
+      "vendor": { "id": "glyph", "name": "Glyph", "domain": "glyph.example" },
+      "icons": [{ "src": "assets/icon.svg", "type": "image/svg+xml" }],
+      "host": { "opencode": ">=2.4.1 <2.5.0", "tested": ["2.4.1"] }
+    },
+    "options": {
+      "type": "object",
+      "properties": {
+        "access": { "type": "string", "enum": ["all", "ask-changes", "read-only"], "default": "all", "description": "How much the plugin's methods may do." },
+        "allowUntestedHost": { "type": "boolean", "default": false, "description": "Start outside the tested OpenCode range." }
+      },
+      "additionalProperties": false
+    },
+    "methods": {
+      "status": { "class": "read", "accounts": "none" },
+      "word_count": { "class": "read", "accounts": "none" },
+      "read_note": { "class": "read", "accounts": "none" },
+      "plan_write_note": { "class": "read", "plans": true, "accounts": "none", "operations": ["glyph.notes.write"] },
+      "write_note": { "class": "write", "commits": "plan_write_note", "accounts": "none", "operations": ["glyph.notes.write"] }
+    },
+    "sources": [],
+    "actions": [],
+    "events": { "changed": {} }
+  }
+}

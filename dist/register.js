@@ -24,6 +24,7 @@ import {
 } from "./chunks/chunk-FTEX4OOT.js";
 import "./chunks/chunk-L3NVT2DE.js";
 import {
+  DEFAULT_ALIAS,
   accountsOf,
   redactReason,
   resolveAccount
@@ -302,7 +303,7 @@ function prepareCall(entry, raw, accounts, plans) {
     if (!resolved2.ok) throw new RegisterError(refusal("ACCOUNT_UNKNOWN", resolved2.what, resolved2.next));
     return { input, account: resolved2.alias };
   }
-  const resolved = resolveAccount(accounts, { account });
+  const resolved = entry.item.accounts === "optional" ? resolveAccount(accounts, { account }) : { ok: true, alias: DEFAULT_ALIAS };
   if (!resolved.ok) throw new RegisterError(refusal(resolved.code, resolved.what, resolved.next));
   return { input, account: resolved.alias };
 }

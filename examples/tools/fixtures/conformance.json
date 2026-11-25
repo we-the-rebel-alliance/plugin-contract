@@ -1,0 +1,33 @@
+{
+  "$comment": "Recorded from the plugin's own handlers: a tools-only plugin with no accounts and no sources, a read, and a plan/commit pair that emits changed. Every note is invented.",
+  "plugin": "@we-the-rebel-alliance/glyph-plugin",
+  "events": {
+    "emitted": [
+      "changed"
+    ],
+    "status": {
+      "name": "glyph",
+      "version": "0.0.0",
+      "host": {
+        "version": "2.4.1",
+        "range": ">=2.4.1 <2.5.0",
+        "tested": [
+          "2.4.1"
+        ]
+      },
+      "state": "ready",
+      "accounts": [],
+      "unguardedAgents": [],
+      "nextStep": null
+    }
+  },
+  "rpc": {
+    "inputs": {
+      "plan_write_note": {
+        "id": "welcome",
+        "text": "A planned note."
+      }
+    }
+  },
+  "namespace": "Short text tools: count words, keep a note, and plan the write before committing it."
+}

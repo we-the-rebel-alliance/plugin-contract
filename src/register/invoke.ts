@@ -77,7 +77,9 @@ export function prepareCall(entry: MethodEntry, raw: unknown, accounts: readonly
     if (!resolved.ok) throw new RegisterError(refusal("ACCOUNT_UNKNOWN", resolved.what, resolved.next))
     return { input, account: resolved.alias }
   }
-  const resolved = resolveAccount(accounts, { account })
+  // A method declared `accounts: "none"` takes no account: it runs as the internal default even when the plugin has
+  // several aliases. Only an `accounts: "optional"` method resolves one, and then a missing account is ACCOUNT_REQUIRED.
+  const resolved = entry.item.accounts === "optional" ? resolveAccount(accounts, { account }) : { ok: true as const, alias: DEFAULT_ALIAS }
   if (!resolved.ok) throw new RegisterError(refusal(resolved.code, resolved.what, resolved.next))
   return { input, account: resolved.alias }
 }
