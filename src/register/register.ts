@@ -9,8 +9,9 @@
  *
  * `register` validates the handler table against the manifest's `methods`, resolves the accounts once, generates the
  * access rules into every agent, registers one tool per method in the plugin's namespace, registers one RPC id
- * `<name>` that carries the bus events, and returns the registration. `createBus(name, registration)` wraps it; a
- * plugin never calls `ctx.rpc.register` itself.
+ * `<name>` that carries the bus events, and returns the registration. With `{ bus: true }` it also builds the typed bus
+ * writer from that registration and attaches it to every handler call as `call.bus`; a plugin never calls
+ * `ctx.rpc.register` itself.
  *
  * A handler's input and answer are checked against its schemas, the account is resolved through `accounts`, provider
  * operations are asserted on `<alias>:<operation>`, and a failure is mapped to contract §12. A non-read method over
@@ -22,9 +23,9 @@ import type { Manifest } from "../manifest.ts"
 import { applyAccess, type AccessContext, type AccessRegistration } from "../access/agents.ts"
 import { installRpc, type GrantWiring, type RpcContext } from "./rpc.ts"
 import { installTools, type ToolContext } from "./tools.ts"
-import { prepare, type CallEnvironment } from "./invoke.ts"
+import { prepare, type BusRef, type CallEnvironment } from "./invoke.ts"
 import type { HandlerTable } from "./handlers.ts"
-import { assertPluginName } from "../bus.ts"
+import { assertPluginName, createBus, type Bus } from "../bus.ts"
 
 /** The plugin context the register needs: `ctx`, as OpenCode passes it to `setup`, narrowed structurally. */
 export interface RegisterContext {
@@ -37,16 +38,23 @@ export interface RegisterContext {
   readonly rpc: RpcContext["rpc"]
 }
 
-/** What a plugin may wire into the register beyond the host context: the action-grant verifier. */
+/** What a plugin may wire into the register beyond the host context: the action-grant verifier, and the bus. */
 export interface RegisterWiring {
   readonly grant?: GrantWiring | undefined
+  /**
+   * Create the bus writer from the registration's events and attach it to every handler call as `call.bus`. One step,
+   * so a plugin needs no mutable placeholder between `register` and `createBus`.
+   */
+  readonly bus?: boolean | undefined
 }
 
-/** The live registration: the bus wraps it, and disposing it removes the tools, the RPC id and the access rules. */
+/** The live registration: the bus wraps it when wired, and disposing it removes the tools, the RPC id and the rules. */
 export interface Registration {
   readonly name: string
   readonly access: AccessRegistration
   readonly events: { emit(name: string, data: unknown): Promise<void> }
+  /** The typed bus writer, when `wiring.bus` is `true`. */
+  readonly bus?: Bus | undefined
   dispose(): Promise<void>
 }
 
@@ -80,7 +88,7 @@ async function withCleanup<T>(cleanup: readonly (() => Promise<void>)[], action:
  * Wire the plugin's methods through doors 1–3 and generate its access rules.
  *
  * The table and the manifest must name the same methods; a declared method without a handler is refused at setup, as
- * is a handler the manifest does not declare. The returned registration is what `createBus` takes.
+ * is a handler the manifest does not declare. `{ bus: true }` returns the writer as `registration.bus`.
  */
 export async function register(context: RegisterContext, manifest: Manifest, handlers: HandlerTable, wiring: RegisterWiring = {}): Promise<Registration> {
   const name = manifest.plugin.name
@@ -94,13 +102,19 @@ export async function register(context: RegisterContext, manifest: Manifest, han
   }
   return withCleanup([() => access.dispose()], async () => {
     const environment: CallEnvironment = prepare(manifest, handlers, accounts)
-    const tools = await installTools(context, environment)
-    return withCleanup([() => tools.dispose()], async () => {
-      const rpc = await installRpc(context, environment, access.level, wiring.grant)
+    // The RPC registration comes first: its events emitter is what the bus wraps, and every door receives the writer.
+    // The ref is filled after the bus exists; calls happen after setup, so both doors read the same writer.
+    const busRef: BusRef = {}
+    const rpc = await installRpc(context, environment, access.level, wiring.grant, busRef)
+    const bus = wiring.bus === true ? createBus(name, rpc) : undefined
+    busRef.current = bus
+    return withCleanup([() => rpc.dispose()], async () => {
+      const tools = await installTools(context, environment, busRef)
       return {
         name,
         access,
         events: rpc.events,
+        ...(bus === undefined ? {} : { bus }),
         async dispose() {
           await rpc.dispose().catch(() => undefined)
           await tools.dispose().catch(() => undefined)

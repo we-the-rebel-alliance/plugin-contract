@@ -1,5 +1,5 @@
 import { type Scope } from "../cursor.js";
-import { type Owner } from "../manifest/types.js";
+import { type JsonSchema, type Owner } from "../manifest/types.js";
 export type { Scope } from "../cursor.js";
 export { secretKinds } from "./secrets.js";
 /** The tool's and the tools-RPC method's name. */
@@ -296,6 +296,13 @@ export interface EventsListInput {
     readonly source?: string;
     readonly scope?: Scope;
 }
+/**
+ * The JSON Schema of an events page (contract §7 and §11): whose page it is, its events oldest first, the cursor and
+ * `more`, and the untrusted trust marker. `additionalProperties: true` lets the optional parts the page defines
+ * (`refused`, `failed`, `removals`, `gap`, `cost`, `plugin`, `asOf`, `scope`) pass. A source reuses this constant for
+ * its `events_list` handler's output instead of copying the shape.
+ */
+export declare const PAGE_SCHEMA: JsonSchema;
 export interface EventsListResult {
     /** The source every event names, also on an empty page. */
     readonly source: string;
@@ -495,6 +502,12 @@ export interface ProbeResult {
     readonly cost?: EventsCost;
     readonly trust: typeof TRUST;
 }
+/**
+ * The JSON Schema of a probe answer (contract §11): whose the source is, the sign-in's scopes, what the probe cost, and
+ * the untrusted marker. It has no field for content, so a probe that returned an event or its text fails. A source
+ * reuses this constant for its `probe` handler's output instead of copying the shape.
+ */
+export declare const PROBE_SCHEMA: JsonSchema;
 /** `probe`'s input checked, or its problems, naming fields and never values. Anything but source and account is refused. */
 export declare function parseProbeInput(input: unknown): {
     ok: true;

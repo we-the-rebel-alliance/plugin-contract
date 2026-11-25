@@ -39,6 +39,16 @@ export interface Assertion {
   readonly action: string
   readonly resources: readonly string[]
   readonly save?: readonly string[]
+  readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
+}
+
+/** One ask the fake host is holding, as `permission.list` reports it. */
+export interface PendingAsk {
+  readonly id: string
+  readonly sessionID: string
+  readonly action: string
+  readonly resources: readonly string[]
+  readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
 }
 
 export interface HarnessOptions {
@@ -59,6 +69,8 @@ export interface Harness {
   readonly assertions: Assertion[]
   readonly namespaces: { name: string; description: string }[]
   readonly rpc: RpcHost
+  /** The asks currently waiting for an answer, as `permission.list` reports them. */
+  readonly pending: () => readonly PendingAsk[]
   /** Flip whether an ask is answered, for a test that refuses first and retries the same plan. */
   readonly setAnswerAsks: (value: boolean) => void
   /** Resolve the next ask that is entered, for a test that acts while the ask waits. */
@@ -81,7 +93,8 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
   let answerAsks = options.answerAsks ?? true
   let holdAsks = options.holdAsks ?? false
   const askListeners: (() => void)[] = []
-  const heldAsks: (() => void)[] = []
+  const heldAsks = new Map<string, { ask: PendingAsk; resolve: () => void; reject: (error: unknown) => void }>()
+  let askCount = 0
   const rpc = makeRpcHost()
 
   const rulesFor = (sessionID: string, agentID?: string): readonly PermissionRule[] => {
@@ -150,6 +163,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
           action: input.action,
           resources: input.resources,
           ...(input.save === undefined ? {} : { save: input.save }),
+          ...(input.source === undefined ? {} : { source: input.source }),
         })
         for (const listener of askListeners.splice(0)) listener()
         const rules = rulesFor(input.sessionID, input.agent)
@@ -160,7 +174,26 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
           if (found === "ask") effect = "ask"
         }
         if (effect === "ask" && !answerAsks) throw askRefusal(input.action)
-        if (effect === "ask" && holdAsks) await new Promise<void>((resolve) => heldAsks.push(resolve))
+        if (effect === "ask" && holdAsks) {
+          const ask: PendingAsk = {
+            id: `ask_${++askCount}`,
+            sessionID: input.sessionID,
+            action: input.action,
+            resources: input.resources,
+            ...(input.source === undefined ? {} : { source: input.source }),
+          }
+          await new Promise<void>((resolve, reject) => heldAsks.set(ask.id, { ask, resolve, reject }))
+        }
+      },
+      async list(input) {
+        return [...heldAsks.values()].map((held) => held.ask).filter((ask) => ask.sessionID === input.sessionID)
+      },
+      async reply(input) {
+        const held = heldAsks.get(input.requestID)
+        if (held === undefined) return
+        heldAsks.delete(input.requestID)
+        if (input.decision === "reject") held.reject(askRefusal(held.ask.action))
+        else held.resolve()
       },
     },
     rpc: {
@@ -176,10 +209,14 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
     assertions,
     namespaces,
     rpc,
+    pending: () => [...heldAsks.values()].map((held) => held.ask),
     setAnswerAsks: (value) => void (answerAsks = value),
     waitForAsk: () => new Promise<void>((resolve) => askListeners.push(resolve)),
     releaseAsks: () => {
-      for (const resolve of heldAsks.splice(0)) resolve()
+      for (const [id, held] of [...heldAsks]) {
+        heldAsks.delete(id)
+        held.resolve()
+      }
     },
     setHoldAsks: (value) => void (holdAsks = value),
   }

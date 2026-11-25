@@ -1,6 +1,6 @@
 import { type AccessLevel } from "../access.js";
 import { type GrantKeys, type GrantScope, type GrantStore } from "../grant.js";
-import { type CallEnvironment } from "./invoke.js";
+import { type BusRef, type CallEnvironment } from "./invoke.js";
 /** What the plugin wires into the grant verifier: the host's keys, the audience and the durable ledger. */
 export interface GrantWiring {
     /** The public keys the host signs with, by `kid`, and revoked ids. */
@@ -70,6 +70,24 @@ export interface RpcContext {
         }) => void | Promise<void>): Promise<{
             dispose(): Promise<void>;
         }>;
+        /** The session's pending asks, so a cancelled call can reject its own. */
+        list?(input: {
+            readonly sessionID: string;
+        }): Promise<readonly {
+            readonly id: string;
+            readonly source?: {
+                readonly type: "tool";
+                readonly messageID: string;
+                readonly id: string;
+            } | undefined;
+        }[]>;
+        /** Answer a pending ask; a cancellation answers `reject`. */
+        reply?(input: {
+            readonly sessionID: string;
+            readonly requestID: string;
+            readonly decision: "reject";
+            readonly message?: string | undefined;
+        }): Promise<void>;
     };
     readonly rpc: {
         register(definition: unknown, handlers: Readonly<Record<string, (input: unknown, context: RpcCallContext) => Promise<unknown>>>): Promise<RpcRegistration>;
@@ -83,4 +101,4 @@ export interface RpcRegistration {
     dispose(): Promise<void>;
 }
 /** The RPC definition and handlers, and the one registration that carries the bus events. */
-export declare function installRpc(context: RpcContext, environment: CallEnvironment, level: AccessLevel, wiring?: GrantWiring): Promise<RpcRegistration>;
+export declare function installRpc(context: RpcContext, environment: CallEnvironment, level: AccessLevel, wiring?: GrantWiring, bus?: BusRef): Promise<RpcRegistration>;

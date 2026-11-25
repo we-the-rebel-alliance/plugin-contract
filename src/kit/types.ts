@@ -19,10 +19,11 @@ export interface Finding {
   readonly fix?: string | undefined
 }
 
-/** What the conformance module answers: whether the plugin conforms, and every finding. */
+/** What the conformance module answers: whether the plugin conforms, every finding, and the T1 checks that ran. */
 export interface ConformanceReport {
   readonly ok: boolean
   readonly findings: Finding[]
+  readonly checks?: readonly string[] | undefined
 }
 
 /** The options the conformance module takes, exactly as `src/conformance.ts` publishes them. */

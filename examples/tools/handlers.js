@@ -1,33 +1,15 @@
 // The Glyph plugin's one handler table: a tools-only plugin with no accounts and no sources.
 //
 // A read is a pure function. A write is planned first with `plan_write_note`, then committed with `write_note`, and the
-// commit emits the contract's `changed` bus event. `index.js` gives this table its one bus writer after `register`.
-import { NO_ACCOUNTS } from "../../dist/accounts.js"
+// commit emits the contract's `changed` bus event through `call.bus`, which `register(ctx, manifest, handlers,
+// { bus: true })` attaches.
+import { NO_ACCOUNTS, redactReason, STATUS_SCHEMA } from "../../dist/accounts.js"
 import { unguardedAgents } from "../../dist/access.js"
-import { refusal, RegisterError } from "../../dist/register.js"
+import { COMMIT_INPUT, refusal, RegisterError } from "../../dist/register.js"
 
 const PLUGIN = "glyph"
 const OBJECT = { type: "object", additionalProperties: true }
 const EMPTY = { type: "object", properties: {}, additionalProperties: false }
-const STATUS = {
-  type: "object",
-  properties: {
-    name: { type: "string" },
-    version: { type: "string" },
-    host: {
-      type: "object",
-      properties: { version: { type: "string" }, range: { type: "string" }, tested: { type: "array", items: { type: "string" } } },
-      required: ["version", "range", "tested"],
-      additionalProperties: false,
-    },
-    state: { type: "string", enum: ["ready", "needs_sign_in", "error"] },
-    accounts: { type: "array", items: { type: "object", additionalProperties: true } },
-    unguardedAgents: { type: "array", items: { type: "string" } },
-    nextStep: {},
-  },
-  required: ["name", "version", "host", "state", "accounts", "unguardedAgents", "nextStep"],
-  additionalProperties: false,
-}
 const COUNT = {
   type: "object",
   properties: { words: { type: "integer" }, characters: { type: "integer" } },
@@ -47,10 +29,9 @@ const NOTE = {
  * @param {object} parts
  * @param {object} parts.manifest the installed capabilities
  * @param {string} parts.version the installed package version, for status
- * @param {{ emit: (event: string, data: unknown) => Promise<unknown> }} parts.bus the bus writer, set by `index.js`
  * @param {{ access?: { rules: unknown[] }, agents?: () => Promise<unknown[]>, hostVersion?: string }} [parts.state] registration state status reads
  */
-export function createHandlers({ manifest, version, bus, state = {} }) {
+export function createHandlers({ manifest, version, state = {} }) {
   const hostRange = manifest.plugin.host.opencode
   const tested = manifest.plugin.host.tested
   const notes = new Map([["welcome", "Glyph keeps short notes in memory."]])
@@ -59,24 +40,26 @@ export function createHandlers({ manifest, version, bus, state = {} }) {
     status: {
       description: "Read Glyph's state, its host range and its (empty) account list.",
       input: EMPTY,
-      output: STATUS,
+      output: STATUS_SCHEMA,
       async run() {
         let unguarded = []
+        let agentsError
         if (state.access !== undefined && state.agents !== undefined) {
           try {
             unguarded = [...unguardedAgents(await state.agents(), state.access.rules)]
-          } catch {
-            unguarded = []
+          } catch (error) {
+            // An unreadable agent list is unknown, never zero: status says error, with a redacted next step.
+            agentsError = redactReason(error instanceof Error ? error.message : String(error)).slice(0, 200)
           }
         }
         return {
           name: PLUGIN,
           version,
           host: { version: state.hostVersion ?? tested[0], range: hostRange, tested },
-          state: "ready",
+          state: agentsError === undefined ? "ready" : "error",
           accounts: [...NO_ACCOUNTS],
           unguardedAgents: unguarded,
-          nextStep: null,
+          nextStep: agentsError ?? null,
         }
       },
     },
@@ -114,12 +97,11 @@ export function createHandlers({ manifest, version, bus, state = {} }) {
       },
       output: OBJECT,
       async run(input) {
-        // The register mints the planId; the planned note travels to the commit as call.plan.
+        // The register mints the planId; the answer is the person's preview and the commit's call.plan. The preview
+        // carries the text the commit will write, so the person confirms exactly what is written.
         return {
           method: "write_note",
-          id: input.id,
-          text: input.text,
-          output: { id: input.id, characters: input.text.length },
+          output: { id: input.id, text: input.text, characters: input.text.length },
           changes: [`Replace the text of ${input.id}.`],
           trust: "untrusted",
         }
@@ -128,15 +110,16 @@ export function createHandlers({ manifest, version, bus, state = {} }) {
 
     write_note: {
       description: "Commit a planned note write.",
-      input: EMPTY,
+      input: COMMIT_INPUT,
       output: NOTE,
       async run(input, call) {
-        const planned = call.plan
-        if (planned === undefined || typeof planned !== "object" || typeof planned.id !== "string" || typeof planned.text !== "string") {
+        // The commit writes only what the preview showed the person, read from the plan's preview fields.
+        const planned = call.plan?.output
+        if (planned === undefined || typeof planned.id !== "string" || typeof planned.text !== "string") {
           throw new RegisterError(refusal("PLAN_INVALID", "Glyph holds no plan for this commit", "Plan the write again, then commit the new planId."))
         }
         notes.set(planned.id, planned.text)
-        await bus.emit("changed", { capability: "glyph.notes", account: call.account, reason: "write" })
+        await call.bus.emit("changed", { capability: "glyph.notes", account: call.account, reason: "write" })
         return { id: planned.id, text: planned.text }
       },
     },

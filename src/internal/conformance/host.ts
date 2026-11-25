@@ -10,13 +10,14 @@
  * - the access matrix holds for every real agent at `all`, `ask-changes` and `read-only`, using `effectFor` from
  *   `./access` (`T1.permissions`);
  * - a non-read method over RPC with an allow rule and no grant is refused (LD-5, `T1.rpc-confirmation`);
+ * - a grant for one alias cannot reach another alias's MCP tool (`T1.grant-alias`);
  * - a pinned tool matches the manifest and its signature stays within the Code Mode budget (`T1.pinned`);
  * - two aliases ask for a missing account and refuse an unknown one against the running plugin (`T1.accounts`).
  *
  * An unsupported release must refuse with `HOST_UNTESTED` and a next step, unless `allowUntestedHost` is true.
  */
-import { effectFor, evaluate, serverOf, toolAction, type AccessLevel, type PermissionRule } from "../../access.ts"
-import { OPENCODE_RANGE, type Manifest } from "../../manifest.ts"
+import { effectFor, evaluate, serverOf, sessionRules, toolAction, type AccessLevel, type PermissionRule } from "../../access.ts"
+import { hostInRange, OPENCODE_RANGE, type Manifest } from "../../manifest.ts"
 import { createHost, type HostRun } from "../host/index.ts"
 import { error, warning, type Finding } from "./report.ts"
 
@@ -25,14 +26,6 @@ export const SUPPORTED_HOST = "2.4.1"
 
 /** The first release outside the v0 range, for the unsupported-host check. */
 export const UNSUPPORTED_HOST = "2.5.0"
-
-/** True when `host` is inside the v0 range (`>=2.4.1 <2.5.0`). */
-export function hostInRange(host: string): boolean {
-  const match = /^(\d+)\.(\d+)\.(\d+)/.exec(host)
-  if (match === null) return false
-  const [major, minor, patch] = [Number(match[1]), Number(match[2]), Number(match[3])]
-  return major === 2 && minor === 4 && patch >= 1
-}
 
 /** The Node major a real host needs: `@opencode/sdk` 2.4.1 uses `await using`. */
 const nodeMajor = Number(process.versions.node.split(".")[0])
@@ -47,10 +40,11 @@ export function hostRuntimeProblem(nodeVersion: string = process.versions.node, 
   })
 }
 
-/** What a T1 check found and the real run it judged. */
+/** What a T1 check found, the real run it judged, and the check ids that ran. */
 export interface HostInspection {
   readonly findings: readonly Finding[]
   readonly run?: HostRun | undefined
+  readonly checks?: readonly string[] | undefined
 }
 
 /** Every T1 finding for one host, and the real run when it happened. */
@@ -76,7 +70,7 @@ export async function inspectHost(directory: string, manifest: Manifest, host: s
       }
       const findings: Finding[] = []
       if (!refused.refusal.includes("Next step: ")) findings.push(error("T1.unsupported-host", `the refusal of OpenCode ${host} reads "${refused.refusal.slice(0, 160)}", and every failure reads CODE: What happened. Next step: What to do.`, { path: "capabilities.plugin.host" }))
-      return { run: refused, findings }
+      return { run: refused, findings, checks: ["T1.unsupported-host"] }
     } finally {
       await refused.close()
     }
@@ -113,8 +107,13 @@ export async function inspectHost(directory: string, manifest: Manifest, host: s
     findings.push(...pinnedFindings(manifest, run))
     findings.push(...(await permissionFindings(directory, manifest, host, run, pluginOptions, options.accounts ?? [])))
     findings.push(...(await rpcFindings(manifest, run, options.inputs ?? {}, options.accounts ?? [])))
+    findings.push(...(await grantAliasFindings(manifest, run, options.accounts ?? [])))
     if (options.realAccounts === true) findings.push(...(await accountFindings(manifest, run, options.accounts ?? [], options.inputs ?? {}, options.accountMethod, options.accountCursor)))
-    return { run, findings }
+    const checks = ["T1.id", "T1.doors", "T1.codemode", "T1.events", "T1.pinned", "T1.permissions"]
+    if (run.rpc !== undefined) checks.push("T1.rpc-confirmation")
+    if (grantAliasApplies(manifest, options.accounts ?? [])) checks.push("T1.grant-alias")
+    if (options.realAccounts === true && manifest.accounts !== undefined && (options.accounts ?? []).length >= 2) checks.push("T1.accounts")
+    return { run, findings, checks }
   } finally {
     await run.close()
   }
@@ -274,6 +273,61 @@ async function rpcFindings(manifest: Manifest, run: HostRun, inputs: Readonly<Re
     if (answer.ok || answer.code !== "PERMISSION_DENIED") {
       findings.push(error("T1.rpc-confirmation", `${method} is class ${item.class} and its RPC call ran with an allow rule and no grant${answer.ok ? "" : ` (${answer.code})`}`, { path: `capabilities.methods.${method}`, fix: "Refuse a non-read method over RPC unless an ask was answered or a valid action grant verifies (contract §8)." }))
     }
+  }
+  return findings
+}
+
+/**
+ * The grant fence is per alias: a grant for one alias's source allows that alias's MCP tool and denies every other
+ * alias's, on the real session and the real `ctx.permission.assert`. The mcp example proves it in the self-test.
+ */
+function grantAliasApplies(manifest: Manifest, aliases: readonly string[]): boolean {
+  return (
+    aliases.length >= 2 &&
+    Object.keys(manifest.methods).some((method) => method.startsWith("mcp:")) &&
+    manifest.sources.some((entry) => (entry.operations ?? []).some((operation) => !operation.includes(".")))
+  )
+}
+
+async function grantAliasFindings(manifest: Manifest, run: HostRun, aliases: readonly string[]): Promise<Finding[]> {
+  if (!grantAliasApplies(manifest, aliases)) return []
+  const source = manifest.sources.find((entry) => (entry.operations ?? []).some((operation) => !operation.includes(".")))
+  if (source === undefined) return []
+  const operation = (source.operations ?? []).find((entry) => !entry.includes("."))
+  const first = aliases[0]
+  const second = aliases[1]
+  if (operation === undefined || first === undefined || second === undefined) return []
+  const works = serverOf(manifest.plugin.name, first, aliases)
+  const other = serverOf(manifest.plugin.name, second, aliases)
+  if (!works.ok || !other.ok) return []
+  const fenced = sessionRules(source, { source: source.id, account: first }, aliases)
+  if (!fenced.ok) {
+    return [error("T1.grant-alias", `a grant for ${first} could not compile to session rules: ${fenced.problems.join("; ")}`, { path: `capabilities.sources.${source.id}`, fix: "Declare an operation that derives a fenced rule for each alias." })]
+  }
+  const allowed = toolAction(works.value, operation)
+  const denied = toolAction(other.value, operation)
+  const sessionID = await run.session(fenced.value)
+  const findings: Finding[] = []
+  try {
+    await run.assert({ sessionID, action: allowed, resources: ["*"] })
+  } catch {
+    findings.push(
+      error("T1.grant-alias", `a grant for ${first} does not allow its own tool ${allowed}`, {
+        path: `capabilities.sources.${source.id}`,
+        fix: "Derive the fenced rule from operationRule, so the granted alias's MCP tool is allowed.",
+      }),
+    )
+  }
+  try {
+    await run.assert({ sessionID, action: denied, resources: ["*"] })
+    findings.push(
+      error("T1.grant-alias", `a grant for ${first} allows ${second}'s tool ${denied}, so one alias can reach another alias's tools`, {
+        path: `capabilities.sources.${source.id}`,
+        fix: "Compile the grant to the granted alias's server only, never to a wildcard that matches another alias.",
+      }),
+    )
+  } catch {
+    // The real host denies the other alias's tool, as the fence requires.
   }
   return findings
 }

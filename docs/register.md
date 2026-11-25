@@ -4,23 +4,32 @@
 
 ```ts
 import { Plugin } from "@opencode/plugin"
-import { createBus } from "@we-the-rebel-alliance/plugin-contract/bus"
-import { register } from "@we-the-rebel-alliance/plugin-contract/register"
+import { assertHost, register } from "@we-the-rebel-alliance/plugin-contract/register"
 import { manifest } from "./manifest.ts"
 import { handlers } from "./handlers/index.ts"
 
 export default Plugin.define({
   id: manifest.plugin.name,
   async setup(ctx) {
-    const registration = await register(ctx, manifest, handlers)
+    assertHost(ctx, manifest)
+    const registration = await register(ctx, manifest, handlers, { bus: true })
     return () => registration.dispose()
   },
 })
 ```
 
-The returned registration carries the bus events emitter, so a plugin wraps it with `createBus(name, registration)`
-(§10). Only the events the manifest declares are registered; emitting an undeclared one answers `unavailable`. A plugin
-never calls `ctx.rpc.register` itself, never adds a tool itself, and never evaluates a permission rule itself.
+The returned registration carries the bus events emitter. With `{ bus: true }` the register also builds the typed writer
+and returns it as `registration.bus`, and every handler call carries it as `call.bus` (§10), so a plugin needs no mutable
+placeholder between `register` and `createBus`. Only the events the manifest declares are registered; emitting an
+undeclared one answers `unavailable`. A plugin never calls `ctx.rpc.register` itself, never adds a tool itself, and never
+evaluates a permission rule itself.
+
+## The host gate
+
+`assertHost(ctx, manifest)` reads `ctx.app.version` and the manifest's `plugin.host.opencode` range and refuses an
+untested release with `HOST_UNTESTED` and a next step (`hostInRange` is the one predicate). A supported host returns, and
+so does `options.allowUntestedHost: true`. Call it first in `setup`, before registering anything, so an untested host
+leaves no half-wired plugin behind.
 
 ## The handler table
 
@@ -81,7 +90,8 @@ Every call passes one gate, `ctx.permission.assert`, once (OpenCode 2.4.1 `Permi
 say `ask`; a `deny` refuses it. The plugin's own `access` level is final: under `read-only` a non-read RPC call is
 refused even with a grant; under `ask-changes` or `all` it needs an ask or a valid grant. An `allow` rule is not a
 confirmation. RPC asks never save: an answer applies to that one call. A call's `signal` cancels a pending ask: the
-gate refuses at once, so a commit releases its plan instead of holding it until expiry.
+gate rejects the request it opened (found by the call's source id) so nothing stays on the person's screen, refuses at
+once, and a commit releases its plan instead of holding it until expiry.
 
 A **non-read** method over RPC needs one of contract §8's two confirmations (LD-5):
 
@@ -128,12 +138,22 @@ The register resolves the account through the `accounts` module before the handl
 - The handler receives the resolved alias as `call.account`, and the input without the selector.
 
 The input is checked against the handler's schema (`INPUT_INVALID`), the answer against its output schema
-(`SCHEMA_VIOLATION`). A schema with `additionalProperties: false` also refuses an unknown key.
+(`SCHEMA_VIOLATION`). A schema with `additionalProperties: false` also refuses an unknown key. A plugin reuses the
+package's output schemas instead of copying them: `STATUS_SCHEMA` from `accounts` for `status`, and `PAGE_SCHEMA` and
+`PROBE_SCHEMA` from `events` for an events source's `events_list` and `probe`.
 
 A `plans: true` method answers the committing `method` and §8's preview fields it carries (`output`, `reaches`,
 `changes`, `cost`, `trust`), and any private plan data; it must not answer a `planId` (`PLAN_INVALID`). The register
-mints the `planId` itself with 128 random bits as base64url, keeps the handler's full answer, and publishes only
-`{ planId, method, output?, reaches?, changes?, cost?, trust? }`. It never reuses a live id.
+mints the `planId` itself with 128 random bits as base64url, copies the handler's full answer with `structuredClone`
+(so neither the handler nor the public answer can change the stored plan), and publishes only
+`{ planId, method, output?, reaches?, changes?, cost?, trust? }`. It never reuses a live id. A stored plan is at most
+`PLAN_MAX_BYTES` (64 KB of JSON); an answer a copy cannot carry, or one over the cap, is `PLAN_INVALID` with a next step.
+
+**Put everything the commit will write into the preview fields the person sees.** `output`, `reaches`, `changes`,
+`cost` and `trust` are the confirmation; private plan data is only for what the preview cannot show, such as an opaque
+handle the provider issued. The commit must not trust anything the person did not see: a value the person could not
+review must not change what the commit writes.
+
 A `commits: "<plan>"` method accepts exactly `{ planId }` from that plan, with no `account`, and receives the plan
 handler's full answer as `call.plan`; its answer is checked against the handler's own output schema, and an app's `act`
 expects `{ output, trust }` and checks `output` against the action's `output`. The register stores each
@@ -187,8 +207,9 @@ registration follows `ToolEditor.add` and `Tool.Options.codemode` (`dist/promise
 
 | Export | Does |
 |---|---|
-| `register` | doors 1–3 from one handler table, a manifest and the optional grant wiring |
+| `register` | doors 1–3 from one handler table, a manifest and the optional grant and bus wiring |
+| `assertHost`, `HostContext` | the host gate: `ctx.app.version` against the manifest's range, refusing `HOST_UNTESTED` |
 | `RegisterContext`, `RegisterWiring`, `Registration`, `GrantWiring` | the context it takes, the wiring, and what it returns |
 | `methodEntries`, `Door`, `HandlerTable`, `MethodCall`, `MethodEntry`, `MethodHandler` | the handler table and one call's context |
-| `COMMIT_INPUT`, `PLAN_OUTPUT` | the shapes a planning method answers and a commit takes |
+| `COMMIT_INPUT`, `PLAN_OUTPUT`, `PLAN_MAX_BYTES` | the shapes a planning method answers and a commit takes, and the most bytes of JSON a stored plan may take |
 | `refusal`, `refusalOf`, `RegisterError`, `Refusal` | a handler's own refusal, in the contract's form |

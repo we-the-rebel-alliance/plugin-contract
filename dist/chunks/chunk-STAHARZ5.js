@@ -4,21 +4,22 @@ import {
 } from "./chunk-ED3MMWUJ.js";
 import {
   acceptAnswer
-} from "./chunk-3OFJLXBK.js";
+} from "./chunk-LRXS6ETF.js";
 import {
   effectFor,
   evaluate,
   serverOf,
+  sessionRules,
   toolAction
-} from "./chunk-MIBCHKMR.js";
+} from "./chunk-ZEP3QZCO.js";
 import {
   maxBytesOf,
   methodAccounts,
   readInstalledManifest
-} from "./chunk-WXKPUWDE.js";
+} from "./chunk-7Z4DMIE3.js";
 import {
   checkOutput
-} from "./chunk-L5LSEI5N.js";
+} from "./chunk-OXBQN5YW.js";
 import {
   BUS_EVENTS,
   ERROR_CODES,
@@ -28,20 +29,22 @@ import {
   PAGE,
   REFUSAL_REASONS,
   eventHash,
+  hostInRange,
   isEventKindIn,
   ownerProblems,
   removalProblems,
   sourceNamespace,
   thumbnailUrlProblems
-} from "./chunk-DKSE7KD4.js";
+} from "./chunk-2BPMCEJ3.js";
 import {
   secretKinds
 } from "./chunk-L3NVT2DE.js";
 import {
   ACCOUNT_STATES,
+  REASON_MAX,
   aliasProblem,
   isAlias
-} from "./chunk-JWZEPM5E.js";
+} from "./chunk-YJVHB7PG.js";
 import {
   fromJSONSchema
 } from "./chunk-4YITQAYJ.js";
@@ -11284,6 +11287,7 @@ async function createHost(options) {
   const tools = [];
   let namespace;
   let rpc;
+  let assertAction;
   const asks = [];
   let setupError;
   let setupDone = false;
@@ -11293,7 +11297,7 @@ async function createHost(options) {
     async setup(context) {
       const real = context;
       const toolDomain = real["tool"];
-      const permissionDomain = real["permission"];
+      const permission = real["permission"];
       const rpcDomain = real["rpc"];
       const toolProxy = new Proxy(toolDomain, {
         get(toolTarget, field2) {
@@ -11343,7 +11347,7 @@ async function createHost(options) {
           return typeof value === "function" ? value.bind(rpcTarget) : value;
         }
       });
-      const permissionProxy = new Proxy(permissionDomain, {
+      const permissionProxy = new Proxy(permission, {
         get(permissionTarget, field2) {
           if (field2 === "assert") {
             return async (input) => {
@@ -11355,6 +11359,7 @@ async function createHost(options) {
           return typeof value === "function" ? value.bind(permissionTarget) : value;
         }
       });
+      assertAction = (input) => permissionProxy.assert(input);
       const proxy = new Proxy(real, {
         get(target, property) {
           if (property === "options") return pluginOptions;
@@ -11443,6 +11448,10 @@ async function createHost(options) {
       const created = await host.sessions.create({ location: { directory: options.directory }, agent: options.agent ?? "build", permissions: rules });
       return created.id;
     },
+    async assert(input) {
+      if (assertAction === void 0) throw new HostError("HOST_UNAVAILABLE", "the plugin never reached setup, so this run has no permission domain", "fix the load failure first, then run T1 again");
+      await assertAction({ sessionID: input.sessionID, action: input.action, resources: input.resources ?? ["*"] });
+    },
     async close() {
       if (closed) return;
       closed = true;
@@ -11465,6 +11474,9 @@ function emptyRun(options, entry, failure) {
     async session() {
       return "";
     },
+    async assert() {
+      throw new HostError("HOST_UNAVAILABLE", failure, "fix the load failure first, then run T1 again");
+    },
     async close() {
     }
   };
@@ -11472,12 +11484,6 @@ function emptyRun(options, entry, failure) {
 
 // src/internal/conformance/host.ts
 var UNSUPPORTED_HOST = "2.5.0";
-function hostInRange(host) {
-  const match = /^(\d+)\.(\d+)\.(\d+)/.exec(host);
-  if (match === null) return false;
-  const [major, minor, patch] = [Number(match[1]), Number(match[2]), Number(match[3])];
-  return major === 2 && minor === 4 && patch >= 1;
-}
 var nodeMajor = Number(process.versions.node.split(".")[0]);
 function hostRuntimeProblem(nodeVersion = process.versions.node, bunVersion = process.versions.bun ?? null) {
   if (bunVersion !== null) return void 0;
@@ -11508,7 +11514,7 @@ async function inspectHost(directory, manifest, host, options = {}) {
       }
       const findings = [];
       if (!refused.refusal.includes("Next step: ")) findings.push(error("T1.unsupported-host", `the refusal of OpenCode ${host} reads "${refused.refusal.slice(0, 160)}", and every failure reads CODE: What happened. Next step: What to do.`, { path: "capabilities.plugin.host" }));
-      return { run: refused, findings };
+      return { run: refused, findings, checks: ["T1.unsupported-host"] };
     } finally {
       await refused.close();
     }
@@ -11541,8 +11547,13 @@ async function inspectHost(directory, manifest, host, options = {}) {
     findings.push(...pinnedFindings(manifest, run));
     findings.push(...await permissionFindings(directory, manifest, host, run, pluginOptions, options.accounts ?? []));
     findings.push(...await rpcFindings(manifest, run, options.inputs ?? {}, options.accounts ?? []));
+    findings.push(...await grantAliasFindings(manifest, run, options.accounts ?? []));
     if (options.realAccounts === true) findings.push(...await accountFindings2(manifest, run, options.accounts ?? [], options.inputs ?? {}, options.accountMethod, options.accountCursor));
-    return { run, findings };
+    const checks = ["T1.id", "T1.doors", "T1.codemode", "T1.events", "T1.pinned", "T1.permissions"];
+    if (run.rpc !== void 0) checks.push("T1.rpc-confirmation");
+    if (grantAliasApplies(manifest, options.accounts ?? [])) checks.push("T1.grant-alias");
+    if (options.realAccounts === true && manifest.accounts !== void 0 && (options.accounts ?? []).length >= 2) checks.push("T1.accounts");
+    return { run, findings, checks };
   } finally {
     await run.close();
   }
@@ -11668,6 +11679,50 @@ async function rpcFindings(manifest, run, inputs, aliases) {
     if (answer.ok || answer.code !== "PERMISSION_DENIED") {
       findings.push(error("T1.rpc-confirmation", `${method} is class ${item.class} and its RPC call ran with an allow rule and no grant${answer.ok ? "" : ` (${answer.code})`}`, { path: `capabilities.methods.${method}`, fix: "Refuse a non-read method over RPC unless an ask was answered or a valid action grant verifies (contract \xA78)." }));
     }
+  }
+  return findings;
+}
+function grantAliasApplies(manifest, aliases) {
+  return aliases.length >= 2 && Object.keys(manifest.methods).some((method) => method.startsWith("mcp:")) && manifest.sources.some((entry) => (entry.operations ?? []).some((operation) => !operation.includes(".")));
+}
+async function grantAliasFindings(manifest, run, aliases) {
+  if (!grantAliasApplies(manifest, aliases)) return [];
+  const source = manifest.sources.find((entry) => (entry.operations ?? []).some((operation2) => !operation2.includes(".")));
+  if (source === void 0) return [];
+  const operation = (source.operations ?? []).find((entry) => !entry.includes("."));
+  const first = aliases[0];
+  const second = aliases[1];
+  if (operation === void 0 || first === void 0 || second === void 0) return [];
+  const works = serverOf(manifest.plugin.name, first, aliases);
+  const other = serverOf(manifest.plugin.name, second, aliases);
+  if (!works.ok || !other.ok) return [];
+  const fenced = sessionRules(source, { source: source.id, account: first }, aliases);
+  if (!fenced.ok) {
+    return [error("T1.grant-alias", `a grant for ${first} could not compile to session rules: ${fenced.problems.join("; ")}`, { path: `capabilities.sources.${source.id}`, fix: "Declare an operation that derives a fenced rule for each alias." })];
+  }
+  const allowed = toolAction(works.value, operation);
+  const denied = toolAction(other.value, operation);
+  const sessionID = await run.session(fenced.value);
+  const findings = [];
+  try {
+    await run.assert({ sessionID, action: allowed, resources: ["*"] });
+  } catch {
+    findings.push(
+      error("T1.grant-alias", `a grant for ${first} does not allow its own tool ${allowed}`, {
+        path: `capabilities.sources.${source.id}`,
+        fix: "Derive the fenced rule from operationRule, so the granted alias's MCP tool is allowed."
+      })
+    );
+  }
+  try {
+    await run.assert({ sessionID, action: denied, resources: ["*"] });
+    findings.push(
+      error("T1.grant-alias", `a grant for ${first} allows ${second}'s tool ${denied}, so one alias can reach another alias's tools`, {
+        path: `capabilities.sources.${source.id}`,
+        fix: "Compile the grant to the granted alias's server only, never to a wildcard that matches another alias."
+      })
+    );
+  } catch {
   }
   return findings;
 }
@@ -12073,7 +12128,7 @@ function busFindings(manifest, recorded, options = {}) {
   return findings;
 }
 var STATUS_KEYS = ["name", "version", "host", "state", "accounts", "unguardedAgents", "nextStep"];
-var ACCOUNT_KEYS = ["alias", "state", "owner"];
+var ACCOUNT_KEYS = ["alias", "state", "owner", "reason"];
 var HOST_KEYS = ["version", "range", "tested"];
 function statusFindings(manifest, version, answer, aliases) {
   if (!plain2(answer)) return [error("status.shape", "the fixture records no status answer", { path: "fixtures/conformance.json" })];
@@ -12102,7 +12157,7 @@ function statusFindings(manifest, version, answer, aliases) {
     const seen = /* @__PURE__ */ new Set();
     for (const [index, entry] of accounts.entries()) {
       if (!plain2(entry)) {
-        findings.push(error("status.accounts", `status.accounts[${index}] must be { alias, state, owner? }`, { path: "fixtures/conformance.json" }));
+        findings.push(error("status.accounts", `status.accounts[${index}] must be { alias, state, owner?, reason? }`, { path: "fixtures/conformance.json" }));
         continue;
       }
       for (const key of Object.keys(entry)) if (!ACCOUNT_KEYS.includes(key)) findings.push(error("status.accounts", `status.accounts[${index}] carries ${key}, which contract \xA711 does not define`, { path: "fixtures/conformance.json" }));
@@ -12111,6 +12166,9 @@ function statusFindings(manifest, version, answer, aliases) {
       else if (seen.has(alias)) findings.push(error("status.accounts", `status lists ${alias} twice`, { path: "fixtures/conformance.json" }));
       else seen.add(alias);
       if (!ACCOUNT_STATES.includes(entry["state"])) findings.push(error("status.accounts", `status.accounts[${index}].state is ${JSON.stringify(entry["state"])}, not ${ACCOUNT_STATES.join(", ")}`, { path: "fixtures/conformance.json" }));
+      if (entry["reason"] !== void 0 && (typeof entry["reason"] !== "string" || entry["reason"].length > REASON_MAX)) {
+        findings.push(error("status.accounts", `status.accounts[${index}].reason must be one string of at most ${REASON_MAX} characters`, { path: "fixtures/conformance.json" }));
+      }
       if (entry["owner"] !== void 0) findings.push(...ownerProblems(entry["owner"], `status.accounts[${index}].owner`).map((problem) => error("status.accounts", problem, { path: "fixtures/conformance.json" })));
     }
     for (const alias of aliases) if (!seen.has(alias)) findings.push(error("status.accounts", `status lists no account ${alias}, and the fixture records it`, { path: "fixtures/conformance.json" }));
@@ -12381,6 +12439,7 @@ async function runConformance(pluginDir, options = {}) {
   }
   const { manifest, package: packageName, version } = installed.value;
   const findings = [];
+  const checks = /* @__PURE__ */ new Set();
   const record = options.record === true;
   findings.push(...declarationFindings(installed.value));
   findings.push(...optionsFindings(manifest));
@@ -12464,12 +12523,13 @@ async function runConformance(pluginDir, options = {}) {
       ...fixture?.rpc?.inputs === void 0 ? {} : { inputs: fixture.rpc.inputs }
     });
     findings.push(...inspection.findings);
+    for (const check of inspection.checks ?? []) checks.add(check);
     if (namespace === void 0 && inspection.run?.namespace !== void 0) namespace = inspection.run.namespace.description;
   }
   if (hosts.length > 0 && !hosts.includes(UNSUPPORTED_HOST)) findings.push(...await hostFindings(directory, manifest, UNSUPPORTED_HOST, aliases.length === 0 ? {} : { accounts: aliases }));
   const recordedNamespace = namespace ?? fixture?.namespace;
   findings.unshift(...staticFindings(directory, manifest, { ...recordedNamespace === void 0 ? {} : { namespace: recordedNamespace }, record }));
-  return { ok: isOk(findings), findings };
+  return { ok: isOk(findings), findings, ...checks.size === 0 ? {} : { checks: [...checks] } };
 }
 
 export {

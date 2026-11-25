@@ -1,4 +1,4 @@
-import { type CallEnvironment } from "./invoke.js";
+import { type BusRef, type CallEnvironment } from "./invoke.js";
 /** The tool context an executor receives, as much of OpenCode's `ToolContext` as this module uses. */
 export interface ToolCallContext {
     readonly sessionID: string;
@@ -63,8 +63,8 @@ export interface ToolContext {
     };
 }
 /** The tool registrations, built once, so a test can inspect them before OpenCode runs them. */
-export declare function toolRegistrations(environment: CallEnvironment, context: ToolContext): readonly ToolRegistration[];
+export declare function toolRegistrations(environment: CallEnvironment, context: ToolContext, bus?: BusRef): readonly ToolRegistration[];
 /** Register every tool in the plugin's namespace, and return the registration to dispose. */
-export declare function installTools(context: ToolContext, environment: CallEnvironment): Promise<{
+export declare function installTools(context: ToolContext, environment: CallEnvironment, bus?: BusRef): Promise<{
     dispose(): Promise<void>;
 }>;

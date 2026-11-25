@@ -11,6 +11,12 @@ import {
 var MANIFEST_VERSION = 1;
 var OPENCODE_RANGE = ">=2.4.1 <2.5.0";
 var TESTED_OPENCODE = "2.4.1";
+function hostInRange(version) {
+  const match = /^(\d+)\.(\d+)\.(\d+)/.exec(String(version));
+  if (match === null) return false;
+  const [major, minor, patch] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  return major === 2 && minor === 4 && patch >= 1;
+}
 var PLUGIN_NAME = /^[a-z0-9]{2,31}$/;
 var EXTENSION_KEY = /^x-[a-z][a-z0-9-]*$/;
 var METHOD_CLASSES = ["read", "write", "send", "share", "delete", "export", "admin"];
@@ -183,6 +189,20 @@ function ownerShapeProblems(owner, what) {
 var REFUSAL_REASONS = ["instruction", "secret", "owner"];
 var REMOVAL_REASONS = ["deleted", "withheld", "expired"];
 var GAP_REASONS = ["expired", "window-truncated"];
+var PAGE_SCHEMA = {
+  type: "object",
+  properties: {
+    source: { type: "string", minLength: 1 },
+    account: { type: "string", minLength: 1 },
+    owner: { type: "object", additionalProperties: true },
+    events: { type: "array", items: { type: "object", additionalProperties: true } },
+    cursor: { type: "string" },
+    more: { type: "boolean" },
+    trust: { type: "string", enum: [TRUST] }
+  },
+  required: ["source", "account", "owner", "events", "cursor", "more", "trust"],
+  additionalProperties: true
+};
 var ERROR_CODES = [
   "NEEDS_SIGN_IN",
   "SCOPE_MISSING",
@@ -445,6 +465,19 @@ function screenEvents(events, options = {}) {
 }
 var PROBE = "probe";
 var PROBE_LIMITS = { scopes: 64, scope: 256 };
+var PROBE_SCHEMA = {
+  type: "object",
+  properties: {
+    source: { type: "string", minLength: 1 },
+    account: { type: "string", minLength: 1 },
+    owner: { type: "object", additionalProperties: true },
+    scopes: { type: "array", items: { type: "string" } },
+    cost: { type: "object", additionalProperties: true },
+    trust: { type: "string", enum: [TRUST] }
+  },
+  required: ["source", "account", "owner", "trust"],
+  additionalProperties: false
+};
 function parseProbeInput(input) {
   const value = input === void 0 || input === null ? {} : input;
   if (!plainObject2(value)) return { ok: false, problems: ["the input must be an object"] };
@@ -865,6 +898,7 @@ export {
   MANIFEST_VERSION,
   OPENCODE_RANGE,
   TESTED_OPENCODE,
+  hostInRange,
   PLUGIN_NAME,
   EXTENSION_KEY,
   METHOD_CLASSES,
@@ -915,6 +949,7 @@ export {
   REFUSAL_REASONS,
   REMOVAL_REASONS,
   GAP_REASONS,
+  PAGE_SCHEMA,
   ERROR_CODES,
   errorCodeOf,
   SourceError,
@@ -934,6 +969,7 @@ export {
   screenEvents,
   PROBE,
   PROBE_LIMITS,
+  PROBE_SCHEMA,
   parseProbeInput,
   probeResult,
   probeResultProblems,

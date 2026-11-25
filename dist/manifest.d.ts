@@ -10,6 +10,7 @@
  */
 export { canonicalJson, manifestHash } from "./manifest/canonical.js";
 export { ownerOrgProblems, ownerProblems, SCHEME_QUALIFIED } from "./manifest/owner.js";
+export { hostInRange } from "./manifest/types.js";
 export { hostMatches, thumbnailUrlProblems } from "./manifest/thumbnail.js";
 export { checkManifest, findAction, findInstalledPackage, findMethod, findSource, manifestProblems, MANIFEST_SCHEMA, maxBytesOf, methodAccounts, readInstalledManifest, } from "./manifest/schema.js";
 export { ACTION_EFFECTS, ACCOUNT_MECHANISMS, BUS_EVENTS, COST_CLASSES, DETAIL_FIELDS, EXTENSION_KEY, MANIFEST_VERSION, MAX_BYTES_DEFAULT, MAX_BYTES_LIMIT, METHOD_ACCOUNTS, METHOD_CLASSES, METHOD_EFFECTS, OPENCODE_RANGE, OWNER_ORGS_LIMIT, PLUGIN_NAME, SERVICE_ID_MAX, SERVICE_LABEL_MAX, SOURCE_KINDS, SOURCE_SIGNALS, TESTED_OPENCODE, THUMBNAIL_URL_MAX, } from "./manifest/types.js";

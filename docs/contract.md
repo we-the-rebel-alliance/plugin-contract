@@ -216,8 +216,10 @@ cursor), `gap`, `removals[]`, `cost`, `asOf`, `trust: "untrusted"`.
 A preview is the action's `plans: true` method: it writes nothing and answers `{ method, output?, reaches?, changes?,
 cost?, trust }`. The register mints the plan's `planId` with 128 random bits and adds it to the public answer
 `{ planId, method, output?, … }`, so a person's consent binds to a value no handler and no caller can guess or choose;
-the handler's full answer reaches the commit as `call.plan`. That commit takes exactly `{ planId }` and runs once per
-plan. **Confirmation** of a non-`local` commit:
+the handler's full answer reaches the commit as `call.plan`, as a copy bounded to 64 KB of JSON. The preview carries
+everything the commit will write in the fields the person sees; private plan data is only for what the preview cannot
+show, and the commit must not trust a value the person could not review. That commit takes exactly `{ planId }` and runs
+once per plan. **Confirmation** of a non-`local` commit:
 - **In an agent session:** an OpenCode permission ask, which any client can answer.
 - **From an app's UI, with no agent:** a host-signed, single-use action grant bound to the commit method and the exact
   `{ planId }` digest, carried in the commit's RPC envelope with the consumer it was issued to, and verified by the
@@ -252,7 +254,7 @@ Nudges carry no content. An app re-reads through door 3.
 
 ## 11. Status and probe
 
-- **`status`** (every plugin): `{ name, version, host: { version, range, tested }, state, accounts: [{ alias, state, owner? }],
+- **`status`** (every plugin): `{ name, version, host: { version, range, tested }, state, accounts: [{ alias, state, owner?, reason? }],
   unguardedAgents, nextStep }`. Failure reasons are cut to one line of 160 characters and redacted.
 - **`probe`** (plugins with accounts): `{ account, owner, scopes?, cost?, trust }`. It reads no content.
 

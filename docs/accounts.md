@@ -231,4 +231,4 @@ decodeBoundCursor({ plugin: "example", source: "messages", account: "personal" }
 | `accountsOf`, `hasAccount`, `localIdentity`, `AccountProfile`, `AccountsPlan` | read the profiles, build the plan, and name the machine's identity |
 | `registerAccounts`, `AccountsContext`, `AccountsRegistration`, `IntegrationEditor`, `IntegrationMethodRegistration`, `MCPEditor`, `MCPServerConfig`, `RegisterAccountsRequest`, `RegisteredAccount` | register one integration or MCP server per alias |
 | `resolveAccount`, `aliasesSentence`, `AccountCode`, `ResolvedAccount` | resolve the `account` of a call, and write its next step |
-| `ACCOUNT_STATES`, `accountStatus`, `accountStatuses`, `NO_ACCOUNTS`, `REASON_MAX`, `redactReason`, `AccountSignal`, `AccountState`, `AccountStatus` | status per alias, with its redacted reason and owner |
+| `ACCOUNT_STATES`, `accountStatus`, `accountStatuses`, `NO_ACCOUNTS`, `REASON_MAX`, `redactReason`, `STATUS_SCHEMA`, `AccountSignal`, `AccountState`, `AccountStatus` | status per alias, with its redacted reason and owner, and the JSON Schema of the `status` answer |

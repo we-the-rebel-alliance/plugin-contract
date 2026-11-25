@@ -3,10 +3,10 @@
 // `index.js` passes this table to `register` once. The vendor's own MCP tools are declared as `mcp:*` in the manifest
 // and have no handler: their server owns them. Every method here is the plugin's own read, and the fake Trellis API is
 // behind `provider.js`.
-import { accountStatuses, accountsOf, redactReason } from "../../dist/accounts.js"
+import { accountStatuses, accountsOf, redactReason, STATUS_SCHEMA } from "../../dist/accounts.js"
 import { unguardedAgents } from "../../dist/access.js"
 import { decodeBoundCursor, encodeBoundCursor } from "../../dist/cursor.js"
-import { makeEvent } from "../../dist/events.js"
+import { makeEvent, PAGE_SCHEMA, PROBE_SCHEMA } from "../../dist/events.js"
 import { refusal, RegisterError } from "../../dist/register.js"
 import { ProviderError } from "./provider.js"
 
@@ -14,63 +14,6 @@ const PACKAGE = "@we-the-rebel-alliance/trellis-plugin"
 const PLUGIN = "trellis"
 const SOURCE = "messages"
 const EMPTY = { type: "object", properties: {}, additionalProperties: false }
-const PAGE = {
-  type: "object",
-  properties: {
-    source: { type: "string" },
-    account: { type: "string" },
-    owner: { type: "object", additionalProperties: true },
-    events: { type: "array", items: { type: "object", additionalProperties: true } },
-    cursor: { type: "string" },
-    more: { type: "boolean" },
-    trust: { type: "string" },
-  },
-  required: ["source", "account", "owner", "events", "cursor", "more", "trust"],
-  additionalProperties: true,
-}
-const STATUS = {
-  type: "object",
-  properties: {
-    name: { type: "string" },
-    version: { type: "string" },
-    host: {
-      type: "object",
-      properties: { version: { type: "string" }, range: { type: "string" }, tested: { type: "array", items: { type: "string" } } },
-      required: ["version", "range", "tested"],
-      additionalProperties: false,
-    },
-    state: { type: "string", enum: ["ready", "needs_sign_in", "error"] },
-    accounts: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          alias: { type: "string" },
-          state: { type: "string", enum: ["ready", "needs_sign_in", "error"] },
-          owner: { type: "object", additionalProperties: true },
-        },
-        required: ["alias", "state"],
-        additionalProperties: false,
-      },
-    },
-    unguardedAgents: { type: "array", items: { type: "string" } },
-    nextStep: {},
-  },
-  required: ["name", "version", "host", "state", "accounts", "unguardedAgents", "nextStep"],
-  additionalProperties: false,
-}
-const PROBE = {
-  type: "object",
-  properties: {
-    source: { type: "string" },
-    account: { type: "string" },
-    owner: { type: "object", additionalProperties: true },
-    scopes: { type: "array", items: { type: "string" } },
-    trust: { type: "string", enum: ["untrusted"] },
-  },
-  required: ["source", "account", "owner", "trust"],
-  additionalProperties: false,
-}
 const OPTIONS = {
   type: "object",
   properties: { options: { type: "array", items: { type: "object", properties: { id: { type: "string" }, label: { type: "string" } }, required: ["id"], additionalProperties: false } } },
@@ -151,7 +94,7 @@ export function createHandlers({ provider, manifest, options = {}, version, stat
     status: {
       description: "Read Trellis's state, its host range and every account alias.",
       input: EMPTY,
-      output: STATUS,
+      output: STATUS_SCHEMA,
       async run() {
         const { profiles, signals } = await ownersByAlias()
         const accounts = profiles.length === 0 ? [] : accountStatuses(profiles, signals)
@@ -159,21 +102,23 @@ export function createHandlers({ provider, manifest, options = {}, version, stat
         const needsSignIn = accounts.some((account) => account.state === "needs_sign_in")
         const pluginState = problems.length > 0 ? "error" : needsSignIn ? "needs_sign_in" : "ready"
         let unguarded = []
+        let agentsError
         if (state.access !== undefined && state.agents !== undefined) {
           try {
             unguarded = [...unguardedAgents(await state.agents(), state.access.rules)]
-          } catch {
-            unguarded = []
+          } catch (error) {
+            // An unreadable agent list is unknown, never zero: status says error, with a redacted next step.
+            agentsError = redactReason(error instanceof Error ? error.message : String(error)).slice(0, 200)
           }
         }
         return {
           name: PLUGIN,
           version,
           host: { version: state.hostVersion ?? tested[0], range: hostRange, tested },
-          state: pluginState,
+          state: agentsError === undefined ? pluginState : "error",
           accounts,
           unguardedAgents: unguarded,
-          nextStep: problems.length > 0 ? redactReason(problems[0]).slice(0, 200) : needsSignIn ? "Sign in to the account that needs it, then read status again." : null,
+          nextStep: agentsError ?? (problems.length > 0 ? redactReason(problems[0]).slice(0, 200) : needsSignIn ? "Sign in to the account that needs it, then read status again." : null),
         }
       },
     },
@@ -181,7 +126,7 @@ export function createHandlers({ provider, manifest, options = {}, version, stat
     probe: {
       description: "Read the signed-in Trellis owner for an account, without reading any message.",
       input: EMPTY,
-      output: PROBE,
+      output: PROBE_SCHEMA,
       async run(_input, call) {
         try {
           const answer = await provider.whoami({ account: call.account })
@@ -205,7 +150,7 @@ export function createHandlers({ provider, manifest, options = {}, version, stat
         },
         additionalProperties: false,
       },
-      output: PAGE,
+      output: PAGE_SCHEMA,
       async run(input, call) {
         if (input.source !== undefined && input.source !== SOURCE) {
           throw new RegisterError(refusal("SOURCE_UNKNOWN", `${PLUGIN} has no source ${String(input.source)}`, `Read the ${SOURCE} source.`))
@@ -251,7 +196,7 @@ export function createHandlers({ provider, manifest, options = {}, version, stat
     read_thread: {
       description: "Read one Trellis thread, taken from the thread of the event that listed it.",
       input: { type: "object", properties: { thread: { type: "string" } }, required: ["thread"], additionalProperties: false },
-      output: PAGE,
+      output: PAGE_SCHEMA,
       async run(input, call) {
         try {
           const answer = await provider.readThread({ account: call.account, thread: input.thread })

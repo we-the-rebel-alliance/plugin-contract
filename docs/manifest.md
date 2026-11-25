@@ -70,7 +70,8 @@ app ignores and no app may require.
 - `vendor`: the provider's stable id, name and main domain. No scheme or path in `domain`.
 - `icons`: at least one; `src` is a path inside the installed package.
 - `host`: `opencode` is exactly `>=2.4.1 <2.5.0` in v0, and `tested` includes `2.4.1` (D7). Outside the range a plugin
-  refuses to start with `HOST_UNTESTED`, unless `allowUntestedHost` is set.
+  refuses to start with `HOST_UNTESTED`, unless `allowUntestedHost` is set. `hostInRange(version)` is the one predicate;
+  `assertHost(ctx, manifest)` in `register` reads it and throws the refusal.
 
 ### `accounts`
 
@@ -352,6 +353,6 @@ that a URL is:
 | Export | Does |
 |---|---|
 | `MANIFEST_SCHEMA`, `MANIFEST_VERSION`, `OPENCODE_RANGE`, `TESTED_OPENCODE`, `checkManifest`, `manifestProblems`, `readInstalledManifest`, `findInstalledPackage`, `canonicalJson`, `manifestHash` | the schema, the validator, the installed read and the canonical hash |
-| `findAction`, `findMethod`, `findSource`, `maxBytesOf`, `methodAccounts`, `MAX_BYTES_DEFAULT`, `MAX_BYTES_LIMIT`, `PLUGIN_NAME`, `SERVICE_ID_MAX`, `SERVICE_LABEL_MAX`, `OWNER_ORGS_LIMIT`, `THUMBNAIL_URL_MAX`, `EXTENSION_KEY` | the lookups and the published limits |
+| `findAction`, `findMethod`, `findSource`, `maxBytesOf`, `methodAccounts`, `hostInRange`, `MAX_BYTES_DEFAULT`, `MAX_BYTES_LIMIT`, `PLUGIN_NAME`, `SERVICE_ID_MAX`, `SERVICE_LABEL_MAX`, `OWNER_ORGS_LIMIT`, `THUMBNAIL_URL_MAX`, `EXTENSION_KEY` | the lookups, the host-range predicate and the published limits |
 | `ACTION_EFFECTS`, `ACCOUNT_MECHANISMS`, `BUS_EVENTS`, `COST_CLASSES`, `DETAIL_FIELDS`, `METHOD_ACCOUNTS`, `METHOD_CLASSES`, `METHOD_EFFECTS`, `SOURCE_KINDS`, `SOURCE_SIGNALS`, `SCHEME_QUALIFIED`, `hostMatches`, `thumbnailUrlProblems`, `ownerProblems`, `ownerOrgProblems` | the closed sets and the checks built on them |
 | `ActionEffect`, `ActionItem`, `AccountMechanism`, `AccountsInfo`, `BusEvent`, `Cadence`, `Cost`, `CostClass`, `Detail`, `DetailField`, `HostRange`, `Icon`, `InstalledManifest`, `JsonSchema`, `Manifest`, `ManifestEvents`, `MethodAccounts`, `MethodClass`, `MethodEffect`, `MethodItem`, `Owner`, `OwnerOrg`, `PluginInfo`, `Price`, `Scope`, `Service`, `SourceEvents`, `SourceItem`, `SourceKind`, `SourceSignal`, `SourceSnapshot`, `Suggest`, `Vendor` | the manifest's types |

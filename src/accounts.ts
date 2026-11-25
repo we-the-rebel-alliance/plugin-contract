@@ -27,5 +27,5 @@ export type {
 } from "./accounts/register.ts"
 export { aliasesSentence, resolveAccount } from "./accounts/resolve.ts"
 export type { AccountCode, ResolvedAccount } from "./accounts/resolve.ts"
-export { ACCOUNT_STATES, accountStatus, accountStatuses, NO_ACCOUNTS, REASON_MAX, redactReason } from "./accounts/status.ts"
+export { ACCOUNT_STATES, accountStatus, accountStatuses, NO_ACCOUNTS, REASON_MAX, redactReason, STATUS_SCHEMA } from "./accounts/status.ts"
 export type { AccountSignal, AccountState, AccountStatus } from "./accounts/status.ts"

@@ -1,9 +1,16 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
-import { mintPlanId, PLAN_ID_BYTES, planStore } from "../src/register/plans.ts"
+import { mintPlanId, PLAN_ID_BYTES, PLAN_MAX_BYTES, planStore, type PlanStore } from "../src/register/plans.ts"
 
 /** A plan handler's answer: the committing method and any private data the commit reads from `call.plan`. */
 const answer = { method: "send_message", note: "one" }
+
+/** Record a plan and return its id; a refusal fails the test. */
+function record(plans: PlanStore, value: unknown, account = "work", method = "send_message"): string {
+  const recorded = plans.record(value, account, method)
+  assert.ok(recorded.ok, recorded.ok ? "" : recorded.problems.join("; "))
+  return recorded.planId
+}
 
 describe("the plan store", () => {
   test("mints an unguessable id from 16 random bytes and keeps the handler's full answer", () => {
@@ -13,8 +20,8 @@ describe("the plan store", () => {
     assert.equal(Buffer.from(id, "base64url").toString("base64url"), id, "the id is canonical base64url")
 
     const plans = planStore()
-    const first = plans.record(answer, "personal", "send_message")
-    const second = plans.record({ method: "send_message", note: "two" }, "work", "send_message")
+    const first = record(plans, answer, "personal")
+    const second = record(plans, { method: "send_message", note: "two" }, "work")
     assert.notEqual(first, second, "every plan gets its own id")
     assert.equal(plans.size, 2)
     const reserved = plans.reserve(first, "send_message")
@@ -29,7 +36,7 @@ describe("the plan store", () => {
   test("reserve, release and consume: a refusal leaves the plan committable, a handler start spends it", () => {
     let now = 1_000
     const plans = planStore({ now: () => now, ttlMs: 50 })
-    const id = plans.record(answer, "personal", "send_message")
+    const id = record(plans, answer, "personal")
     const first = plans.reserve(id, "send_message")
     assert.ok(first.ok)
     const concurrent = plans.reserve(id, "send_message")
@@ -46,7 +53,7 @@ describe("the plan store", () => {
     assert.equal(replay.ok, false)
     if (!replay.ok) assert.equal(replay.code, "PLAN_USED")
     assert.equal(plans.reserve("no-such-plan", "send_message").ok, false)
-    const other = plans.record(answer, "work", "send_message")
+    const other = record(plans, answer, "work")
     assert.equal(plans.reserve(other, "archive_message").ok, false, "another commit method cannot reserve it")
     now = 1_051
     const expired = plans.reserve(other, "send_message")
@@ -58,7 +65,7 @@ describe("the plan store", () => {
   test("consume refuses an expired plan, and a plan id from before a reload is unknown", () => {
     let now = 1_000
     const plans = planStore({ now: () => now, ttlMs: 50 })
-    const id = plans.record(answer, "personal", "send_message")
+    const id = record(plans, answer, "personal")
     const expiring = plans.reserve(id, "send_message")
     assert.ok(expiring.ok)
     now = 1_051
@@ -70,7 +77,7 @@ describe("the plan store", () => {
     }
 
     const before = planStore()
-    const old = before.record(answer, "work", "send_message")
+    const old = record(before, answer, "work")
     // A new plugin instance has a new store: the old id names nothing there.
     const after = planStore()
     const reloaded = after.reserve(old, "send_message")
@@ -82,13 +89,61 @@ describe("the plan store", () => {
     const ids = ["same", "same", "other"]
     let at = 0
     const plans = planStore({ mint: () => ids[at++]! })
-    const first = plans.record({ method: "send_message", note: "first" }, "work", "send_message")
-    const second = plans.record({ method: "send_message", note: "second" }, "personal", "send_message")
+    const first = record(plans, { method: "send_message", note: "first" }, "work")
+    const second = record(plans, { method: "send_message", note: "second" }, "personal")
     assert.equal(first, "same")
     assert.equal(second, "other", "a minted id that is already live is never reused")
     const live = plans.reserve(first, "send_message")
     assert.ok(live.ok)
     assert.deepEqual(live.reservation.answer, { method: "send_message", note: "first" }, "the live plan still holds its own answer")
     assert.deepEqual(plans.consume(live.reservation), { ok: true, account: "work", answer: { method: "send_message", note: "first" } })
+  })
+
+  test("a plan is copied when it is recorded: no later change to the handler's or the public answer reaches it", () => {
+    const plans = planStore()
+    const handlerAnswer = { method: "send_message", output: { text: "hello", to: ["person:ana"] } }
+    const id = record(plans, handlerAnswer, "work")
+    // The public answer the register builds shares the handler's objects; this is the same mutation, one level down.
+    const publicAnswer = { planId: id, method: "send_message", output: handlerAnswer.output }
+    publicAnswer.output.text = "tampered after preview"
+    handlerAnswer.output.to.push("person:mallory")
+    const reserved = plans.reserve(id, "send_message")
+    assert.ok(reserved.ok)
+    const consumed = plans.consume(reserved.reservation)
+    assert.ok(consumed.ok)
+    assert.deepEqual(consumed.answer, { method: "send_message", output: { text: "hello", to: ["person:ana"] } })
+  })
+
+  test("the size boundary: exactly the cap is stored, one byte over is refused", () => {
+    const plans = planStore()
+    const empty = { method: "send_message", note: "" }
+    const emptyBytes = Buffer.byteLength(JSON.stringify(empty))
+    const atCap = { method: "send_message", note: "x".repeat(PLAN_MAX_BYTES - emptyBytes) }
+    assert.equal(Buffer.byteLength(JSON.stringify(atCap)), PLAN_MAX_BYTES)
+    const stored = record(plans, atCap)
+    assert.equal(typeof stored, "string")
+    const reserved = plans.reserve(stored, "send_message")
+    assert.ok(reserved.ok)
+    assert.equal(Buffer.byteLength(JSON.stringify(reserved.reservation.answer)), PLAN_MAX_BYTES, "the cap is 64 KB of JSON")
+
+    const over = { method: "send_message", note: "x".repeat(PLAN_MAX_BYTES - emptyBytes + 1) }
+    const refused = plans.record(over, "work", "send_message")
+    assert.equal(refused.ok, false)
+    if (!refused.ok) {
+      assert.equal(refused.code, "PLAN_INVALID")
+      assert.match(refused.problems.join("; "), new RegExp(`${PLAN_MAX_BYTES}-byte limit`))
+    }
+    assert.equal(plans.size, 1, "an oversized plan is not stored")
+  })
+
+  test("a plan a copy cannot carry is PLAN_INVALID, and nothing is stored", () => {
+    const plans = planStore()
+    const refused = plans.record({ method: "send_message", callback: () => undefined }, "work", "send_message")
+    assert.equal(refused.ok, false)
+    if (!refused.ok) {
+      assert.equal(refused.code, "PLAN_INVALID")
+      assert.match(refused.problems.join("; "), /copy cannot carry|plain JSON/i)
+    }
+    assert.equal(plans.size, 0)
   })
 })

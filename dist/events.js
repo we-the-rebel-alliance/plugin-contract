@@ -21,8 +21,10 @@ import {
   MAX_BYTES,
   MAX_PAGE_BYTES,
   PAGE,
+  PAGE_SCHEMA,
   PROBE,
   PROBE_LIMITS,
+  PROBE_SCHEMA,
   REFUSAL_REASONS,
   REMOVAL_REASONS,
   SCOPE_KEY_PATTERN,
@@ -55,7 +57,7 @@ import {
   sinceTime,
   sourceNamespace,
   startTime
-} from "./chunks/chunk-DKSE7KD4.js";
+} from "./chunks/chunk-2BPMCEJ3.js";
 import {
   secretKinds
 } from "./chunks/chunk-L3NVT2DE.js";
@@ -82,8 +84,10 @@ export {
   MAX_BYTES,
   MAX_PAGE_BYTES,
   PAGE,
+  PAGE_SCHEMA,
   PROBE,
   PROBE_LIMITS,
+  PROBE_SCHEMA,
   REFUSAL_REASONS,
   REMOVAL_REASONS,
   SCOPE_KEY_PATTERN,

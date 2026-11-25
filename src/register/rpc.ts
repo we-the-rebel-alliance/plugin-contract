@@ -14,7 +14,7 @@
  * an answer applies to that one call.
  *
  * The registration carries the bus's events block (`busEvents(name)`); a second registration with the same id would
- * hide it, so the plugin registers once and wraps it with `createBus(name, registration)`.
+ * hide it, so the plugin registers once, and `register(..., { bus: true })` wraps that one registration with `createBus`.
  */
 import { randomUUID } from "node:crypto"
 import type { Plugin } from "@opencode/plugin"
@@ -25,7 +25,7 @@ import type { JsonSchema } from "../manifest.ts"
 import { callEffect, gate } from "./assertions.ts"
 import { permissionRefusal, refusal, refusalOf, RegisterError, type Refusal } from "./errors.ts"
 import type { MethodEntry } from "./handlers.ts"
-import { execute, prepareCall, type CallEnvironment } from "./invoke.ts"
+import { execute, prepareCall, type BusRef, type CallEnvironment } from "./invoke.ts"
 import { validate } from "./validate.ts"
 
 /** The envelope's failure, as the RPC declares it: the code and the next step beside the message. */
@@ -77,6 +77,10 @@ export interface RpcContext {
       name: "evaluate",
       callback: (event: { effect: "allow" | "deny" | "ask"; source?: { readonly id: string } }) => void | Promise<void>,
     ): Promise<{ dispose(): Promise<void> }>
+    /** The session's pending asks, so a cancelled call can reject its own. */
+    list?(input: { readonly sessionID: string }): Promise<readonly { readonly id: string; readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string } | undefined }[]>
+    /** Answer a pending ask; a cancellation answers `reject`. */
+    reply?(input: { readonly sessionID: string; readonly requestID: string; readonly decision: "reject"; readonly message?: string | undefined }): Promise<void>
   }
   readonly rpc: {
     register(definition: unknown, handlers: Readonly<Record<string, (input: unknown, context: RpcCallContext) => Promise<unknown>>>): Promise<RpcRegistration>
@@ -208,6 +212,7 @@ async function invoke(
   raw: unknown,
   rpc: RpcCallContext,
   freshAsks: Set<string>,
+  bus: BusRef | undefined,
 ): Promise<unknown> {
   let prepared: Awaited<ReturnType<typeof prepareCall>> | undefined
   try {
@@ -276,7 +281,7 @@ async function invoke(
     }
     const messageID = "msg_rpc"
     const id = `rpc:${randomUUID()}`
-    const value = await execute(entry, prepared, { sessionID, agent: resolved.agent, messageID, id, signal: rpc.signal, progress: async () => {}, door: "rpc" }, environment.plans)
+    const value = await execute(entry, prepared, { sessionID, agent: resolved.agent, messageID, id, signal: rpc.signal, progress: async () => {}, door: "rpc" }, environment.plans, bus)
     return value === undefined ? null : JSON.parse(JSON.stringify(value))
   } catch (error) {
     // A refusal before the handler releases the plan; after the handler starts, consume already made this a no-op.
@@ -288,12 +293,12 @@ async function invoke(
 }
 
 /** The RPC definition and handlers, and the one registration that carries the bus events. */
-export async function installRpc(context: RpcContext, environment: CallEnvironment, level: AccessLevel, wiring?: GrantWiring): Promise<RpcRegistration> {
+export async function installRpc(context: RpcContext, environment: CallEnvironment, level: AccessLevel, wiring?: GrantWiring, bus?: BusRef): Promise<RpcRegistration> {
   const methods: Record<string, unknown> = {}
   const handlers: Record<string, (input: unknown, call: RpcCallContext) => Promise<unknown>> = {}
   for (const entry of environment.entries) {
     methods[entry.name] = { input: strictEnvelope(entry.input), output: entry.output, errors: { failed: FAILED } }
-    handlers[entry.name] = (raw: unknown, call: RpcCallContext) => invoke(context, environment, level, entry, wiring, raw, call, freshAsks)
+    handlers[entry.name] = (raw: unknown, call: RpcCallContext) => invoke(context, environment, level, entry, wiring, raw, call, freshAsks, bus)
   }
   // Only the events the manifest declares: an undeclared bus event must not be publishable (contract §10 and §16).
   const events = Object.fromEntries(Object.entries(busEvents(environment.name)).filter(([event]) => Object.hasOwn(environment.manifest.events, event)))

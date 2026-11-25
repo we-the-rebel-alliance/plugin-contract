@@ -81,6 +81,8 @@ export interface HostRun {
   call(method: string, input: unknown, options?: { readonly sessionID?: string | undefined; readonly rules?: readonly PermissionRule[] | undefined }): Promise<RpcAnswer>
   /** A session whose rules are exactly `rules`; the plugin's own rules still apply through its agents. */
   session(rules: readonly PermissionRule[]): Promise<string>
+  /** Assert one action through the real `ctx.permission.assert`; a deny rejects, as it does for the plugin's own gate. */
+  assert(input: { readonly sessionID: string; readonly action: string; readonly resources?: readonly string[] | undefined }): Promise<void>
   close(): Promise<void>
 }
 
@@ -191,6 +193,7 @@ export async function createHost(options: HostOptions): Promise<HostRun> {
   const tools: RecordedTool[] = []
   let namespace: { name: string; description: string } | undefined
   let rpc: RecordedRpc | undefined
+  let assertAction: ((input: { sessionID: string; action: string; resources: readonly string[] }) => Promise<void>) | undefined
   const asks: { action: string; resources: readonly string[] }[] = []
   let setupError: string | undefined
   let setupDone = false
@@ -201,7 +204,7 @@ export async function createHost(options: HostOptions): Promise<HostRun> {
     async setup(context) {
       const real = context as Record<string, unknown>
       const toolDomain = real["tool"] as { transform(callback: (editor: unknown) => void): Promise<unknown> }
-      const permissionDomain = real["permission"] as { assert(input: { action: string; resources?: readonly string[] }): Promise<void> }
+      const permission = real["permission"] as { assert(input: { action: string; resources?: readonly string[] }): Promise<void> }
       const rpcDomain = real["rpc"] as { register(registration: Record<string, unknown>, handlers: Record<string, unknown>): Promise<unknown> }
       const toolProxy = new Proxy(toolDomain, {
         get(toolTarget, field) {
@@ -252,7 +255,7 @@ export async function createHost(options: HostOptions): Promise<HostRun> {
           return typeof value === "function" ? value.bind(rpcTarget) : value
         },
       })
-      const permissionProxy = new Proxy(permissionDomain, {
+      const permissionProxy = new Proxy(permission, {
         get(permissionTarget, field) {
           if (field === "assert") {
             return async (input: { action: string; resources?: readonly string[] }) => {
@@ -264,6 +267,7 @@ export async function createHost(options: HostOptions): Promise<HostRun> {
           return typeof value === "function" ? value.bind(permissionTarget) : value
         },
       })
+      assertAction = (input) => (permissionProxy as { assert(value: { sessionID: string; action: string; resources: readonly string[] }): Promise<void> }).assert(input)
       const proxy = new Proxy(real, {
         get(target, property) {
           if (property === "options") return pluginOptions
@@ -357,6 +361,10 @@ export async function createHost(options: HostOptions): Promise<HostRun> {
       const created = await host.sessions.create({ location: { directory: options.directory }, agent: options.agent ?? "build", permissions: rules })
       return created.id
     },
+    async assert(input) {
+      if (assertAction === undefined) throw new HostError("HOST_UNAVAILABLE", "the plugin never reached setup, so this run has no permission domain", "fix the load failure first, then run T1 again")
+      await assertAction({ sessionID: input.sessionID, action: input.action, resources: input.resources ?? ["*"] })
+    },
     async close() {
       if (closed) return
       closed = true
@@ -379,6 +387,9 @@ function emptyRun(options: HostOptions, entry: string | undefined, failure: stri
     },
     async session() {
       return ""
+    },
+    async assert() {
+      throw new HostError("HOST_UNAVAILABLE", failure, "fix the load failure first, then run T1 again")
     },
     async close() {},
   }

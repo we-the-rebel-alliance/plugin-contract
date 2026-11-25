@@ -4,10 +4,13 @@ import { dirname, join } from "node:path"
 import { describe, test } from "node:test"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { evaluate, operationRule, rulesFor, serverOf, sessionRules, toolAction } from "../src/access.ts"
+import { STATUS_SCHEMA } from "../src/accounts.ts"
 import { runConformance, t0, t1 } from "../src/conformance.ts"
-import { hostRuntimeProblem } from "../src/internal/conformance/host.ts"
+import { PAGE_SCHEMA, PROBE_SCHEMA } from "../src/events.ts"
+import { hostRuntimeProblem, inspectHost } from "../src/internal/conformance/host.ts"
 import { readInstalledManifest, type Manifest } from "../src/manifest.ts"
 import { acceptAnswer } from "../src/read.ts"
+import { validate } from "../src/register/validate.ts"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 const nodeMajor = Number(process.versions.node.split(".")[0])
@@ -60,6 +63,7 @@ describe("the examples", () => {
       if (hostRuntimeProblem() === undefined) {
         assert.deepEqual(report.findings.filter((finding) => finding.level === "error"), [], `${name}: ${report.findings.map((finding) => `${finding.id}: ${finding.message}`).join("\n")}`)
         assert.equal(report.ok, true, name)
+        if (name === "mcp") assert.ok(report.checks?.includes("T1.grant-alias"), "the mcp report names the grant-alias check it ran")
       } else {
         assert.equal(report.ok, false, name)
         assert.equal(report.findings.some((finding) => finding.id === "T1.host-unavailable" && finding.level === "error"), true, name)
@@ -91,6 +95,43 @@ describe("the examples", () => {
       }
     }
     assert.ok(accepted > 0)
+  })
+
+  test("the exported status, page and probe schemas accept every recorded answer", () => {
+    let checked = 0
+    for (const name of exampleNames) {
+      const fixture = JSON.parse(readFileSync(join(root, "examples", name, "fixtures", "conformance.json"), "utf8")) as {
+        events?: { status?: unknown }
+        sources?: Record<string, { cases?: { answer?: unknown }[]; details?: { answer?: unknown }[]; probe?: { answer?: unknown } }>
+      }
+      const status = validate(STATUS_SCHEMA, fixture.events?.status)
+      assert.ok(status.ok, `${name} status: ${status.ok ? "" : status.problems.join("; ")}`)
+      checked++
+      for (const source of Object.values(fixture.sources ?? {})) {
+        for (const answer of [...(source.cases ?? []).map((entry) => entry.answer), ...(source.details ?? []).map((entry) => entry.answer)].filter((value) => value !== undefined)) {
+          const page = validate(PAGE_SCHEMA, answer)
+          assert.ok(page.ok, `${name} page: ${page.ok ? "" : page.problems.join("; ")}`)
+          checked++
+        }
+        if (source.probe?.answer !== undefined) {
+          const probe = validate(PROBE_SCHEMA, source.probe.answer)
+          assert.ok(probe.ok, `${name} probe: ${probe.ok ? "" : probe.problems.join("; ")}`)
+          checked++
+        }
+      }
+    }
+    assert.ok(checked >= 3, `${checked} recorded answers were checked`)
+  })
+
+  test("T1 proves on the real host that a grant for one alias cannot reach another alias's tools", { skip: skipHost, timeout: 60_000 }, async () => {
+    const directory = join(root, "examples", "mcp")
+    const inspection = await inspectHost(directory, manifestOf("mcp"), "2.4.1", { accounts: ["work", "personal"] })
+    assert.deepEqual(inspection.findings, [])
+    assert.ok(inspection.checks?.includes("T1.grant-alias"), `the report names the check it ran: ${inspection.checks?.join(", ")}`)
+    const asserted = (inspection.run?.asks ?? []).map((ask) => ask.action)
+    // The check compiles the work account's grant fence into a real session and asserts both aliases' tools on it.
+    assert.ok(asserted.includes("trellis-work_messages_search"), `the work alias's own tool was asserted: ${asserted.join(", ")}`)
+    assert.ok(asserted.includes("trellis-personal_messages_search"), `the personal alias's tool was asserted against work's grant: ${asserted.join(", ")}`)
   })
 
   test("an MCP rule or grant for one alias cannot match another alias's tool", () => {
@@ -139,6 +180,27 @@ describe("the examples", () => {
     assert.equal(evaluate([grant.value], workTool), "allow")
     assert.equal(evaluate([grant.value], personalTool), "ask")
     assert.equal(evaluate([grant.value], "trellis-work_messages_read"), "ask")
+  })
+
+  test("status reports an unreadable agent list as error, never as an empty unguarded list", async () => {
+    const toolsModule = (await import(pathToFileURL(join(root, "examples", "tools", "handlers.js")).href)) as {
+      createHandlers(parts: object): { status: { run(): Promise<{ state: string; unguardedAgents: string[]; nextStep: unknown }> } }
+    }
+    const failing = { access: { rules: [] }, agents: async () => Promise.reject(new Error("the agent list is unavailable")) }
+    const toolsStatus = await toolsModule.createHandlers({ manifest: manifestOf("tools"), version: "0.0.0", state: failing }).status.run()
+    assert.equal(toolsStatus.state, "error")
+    assert.deepEqual(toolsStatus.unguardedAgents, [], "the list is unknown, and the state says so")
+    assert.match(String(toolsStatus.nextStep), /the agent list is unavailable/)
+
+    const providerModule = (await import(pathToFileURL(join(root, "examples", "mcp", "provider.js")).href)) as { createTrellisProvider(): object }
+    const mcpModule = (await import(pathToFileURL(join(root, "examples", "mcp", "handlers.js")).href)) as {
+      createHandlers(parts: object): { status: { run(): Promise<{ state: string; nextStep: unknown }> } }
+    }
+    const mcpStatus = await mcpModule
+      .createHandlers({ provider: providerModule.createTrellisProvider(), manifest: manifestOf("mcp"), options: { accounts: { work: {}, personal: {} } }, version: "0.0.0", state: failing })
+      .status.run()
+    assert.equal(mcpStatus.state, "error")
+    assert.match(String(mcpStatus.nextStep), /the agent list is unavailable/)
   })
 
   test("the fake Harbour provider answers deterministically, carries request ids, and refuses another account's note", async () => {
@@ -212,15 +274,14 @@ describe("the examples", () => {
       createHandlers(parts: object): {
         word_count: { run(input: { text: string }, call: { account: string }): Promise<unknown> }
         read_note: { run(input: { id: string }, call: { account: string }): Promise<unknown> }
-        plan_write_note: { run(input: { id: string; text: string }, call: { account: string }): Promise<{ method: string; id: string; text: string }> }
-        write_note: { run(input: { planId: string }, call: { account: string; plan?: unknown }): Promise<unknown> }
+        plan_write_note: { run(input: { id: string; text: string }, call: { account: string }): Promise<{ method: string; output: { id: string; text: string; characters: number } }> }
+        write_note: { run(input: { planId: string }, call: { account: string; plan?: unknown; bus?: { emit(event: string, data: unknown): Promise<unknown> } }): Promise<unknown> }
       }
     }
     const emitted: unknown[] = []
     const handlers = handlersModule.createHandlers({
       manifest: manifestOf("tools"),
       version: "0.0.0",
-      bus: { emit: async (event: string, data: unknown) => (emitted.push({ event, data }), { ok: true }) },
       state: {},
     })
 
@@ -228,8 +289,11 @@ describe("the examples", () => {
     const plan = await handlers.plan_write_note.run({ id: "welcome", text: "A new note." }, call("default"))
     assert.equal(plan.method, "write_note")
     assert.equal(Object.hasOwn(plan, "planId"), false, "the register mints the planId")
-    // The register keeps the plan handler's full answer and gives it to the commit as call.plan.
-    assert.deepEqual(await handlers.write_note.run({ planId: "minted-by-the-register" }, { ...call("default"), plan }), { id: "welcome", text: "A new note." })
+    assert.deepEqual(plan.output, { id: "welcome", text: "A new note.", characters: 11 }, "the preview carries what the commit writes")
+    // The register keeps the plan handler's full answer and gives it to the commit as call.plan; `register(..., {bus:true})`
+    // puts the bus writer on the call.
+    const bus = { emit: async (event: string, data: unknown) => (emitted.push({ event, data }), { ok: true }) }
+    assert.deepEqual(await handlers.write_note.run({ planId: "minted-by-the-register" }, { ...call("default"), plan, bus }), { id: "welcome", text: "A new note." })
     assert.deepEqual(await handlers.read_note.run({ id: "welcome" }, call("default")), { id: "welcome", text: "A new note." })
     assert.deepEqual(emitted, [{ event: "changed", data: { capability: "glyph.notes", account: "default", reason: "write" } }])
     await assert.rejects(

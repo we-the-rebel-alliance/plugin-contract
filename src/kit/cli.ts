@@ -8,7 +8,7 @@
  *   plugin-kit hosts          the OpenCode release matrix, [2.4.1]
  *   plugin-kit release <v>    checks, changelog, version, one commit, one tag; CI publishes it
  *   plugin-kit supported      this plugin's SUPPORTED.md row
- *   plugin-kit forbidden      app names, main-branch links, secrets
+ *   plugin-kit forbidden      app names, main-branch links, secrets, grant emails
  *
  * Every command runs from a plugin directory, or with --dir. The kit is a devDependency: it is never bundled into a
  * plugin, and it calls `src/conformance.ts` for every check instead of keeping a check of its own.
@@ -63,7 +63,7 @@ Commands:
   hosts                     print the OpenCode release matrix
   release <version>         checks, changelog section, version, one commit and one tag
   supported                 print this plugin's SUPPORTED.md row
-  forbidden                 check app names, main-branch links and secrets
+  forbidden                 check app names, main-branch links, secrets and grant emails
 
 Options:
   --dir <path>              the plugin directory (default: the working directory)

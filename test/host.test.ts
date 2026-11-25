@@ -357,6 +357,43 @@ describe("the review's real-host cases", () => {
     }
   })
 
+  test("a cancelled tool call rejects its pending ask, so the request leaves the person's screen", { timeout: 30000, skip: skipHost }, async () => {
+    const directory = await mkdtemp(join(tmpdir(), "plugin-contract-host-"))
+    let captured: HostContext | undefined
+    const askManifest = writeManifest("askdemo")
+    const opencode = await startHost([hostPlugin({ manifest: askManifest, access: "ask-changes" }, (ctx) => (captured = ctx))], directory, ["askdemo"])
+    try {
+      const session = await opencode.sessions.create({ location: { directory }, agent: "build" })
+      const tool = (await captured!.tool.list()).find((entry) => entry.id === "askdemo_write")
+      assert.ok(tool)
+      const controller = new AbortController()
+      const called = tool!.execute({ text: "hello" }, {
+        sessionID: session.id,
+        agent: "build",
+        messageID: "msg_cancel",
+        id: "call_cancel",
+        signal: controller.signal,
+        progress: () => Effect.void,
+      } as never)
+      const pending = await waitFor(async () => {
+        const requests = await opencode.permission.list({ sessionID: session.id })
+        return requests.find((request: { action: string }) => request.action === "askdemo.write")
+      }, "a permission ask for askdemo.write")
+      assert.equal((pending as { source?: { id?: string } }).source?.id, "call_cancel", "the ask names the call that opened it")
+      controller.abort()
+      // The host interrupts the aborted tool step itself, so the door's own answer is a rejection, not a value. The
+      // focused fake-context test asserts the contract's exact cancellation refusal.
+      await assert.rejects(called)
+      await waitFor(async () => {
+        const requests = await opencode.permission.list({ sessionID: session.id })
+        return requests.some((request: { id: string }) => request.id === (pending as { id: string }).id) ? undefined : true
+      }, "the rejected ask to leave the permission list")
+    } finally {
+      await opencode.close().catch(() => undefined)
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
   test("both MCP rule orders deny a dotted tool under read-only on the real host", { timeout: 30000, skip: skipHost }, async () => {
     const directory = await mkdtemp(join(tmpdir(), "plugin-contract-host-"))
     let captured: HostContext | undefined

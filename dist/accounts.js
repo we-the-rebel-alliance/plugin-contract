@@ -5,6 +5,7 @@ import {
   DEFAULT_ALIAS,
   NO_ACCOUNTS,
   REASON_MAX,
+  STATUS_SCHEMA,
   accountLabel,
   accountName,
   accountStatus,
@@ -18,7 +19,7 @@ import {
   redactReason,
   registerAccounts,
   resolveAccount
-} from "./chunks/chunk-JWZEPM5E.js";
+} from "./chunks/chunk-YJVHB7PG.js";
 import "./chunks/chunk-4YITQAYJ.js";
 import "./chunks/chunk-WLRWVIVP.js";
 export {
@@ -27,6 +28,7 @@ export {
   DEFAULT_ALIAS,
   NO_ACCOUNTS,
   REASON_MAX,
+  STATUS_SCHEMA,
   accountLabel,
   accountName,
   accountStatus,

@@ -4,7 +4,8 @@ import { describe, test } from "node:test"
 import { createBus } from "../src/bus.ts"
 import { signGrant } from "../src/grant.ts"
 import { manifestHash, checkManifest, type Manifest } from "../src/manifest.ts"
-import { register, type HandlerTable, type MethodHandler } from "../src/register.ts"
+import { assertHost, register, type HandlerTable, type MethodHandler } from "../src/register.ts"
+import { PLAN_MAX_BYTES } from "../src/register/plans.ts"
 import { makeRpcHost, RpcDeclaredFailure, RpcFailure } from "./support/rpc-host.ts"
 import { agentRules, makeHarness } from "./support/register-context.ts"
 import { manifest } from "./support/manifest.ts"
@@ -310,7 +311,16 @@ describe("register: the per-alias server rule", () => {
     const h = makeHarness({ options: { accounts: { work: {}, personal: {} } } })
     await register(h.ctx, own, handlers({ sync: handler() }))
     await h.tools.get("demo_sync")!.tool.execute({ account: "work" }, context())
-    assert.deepEqual(h.assertions, [{ sessionID: "s1", agent: "build", action: "demo.sync", resources: ["work:list_files"], save: ["work:*"] }])
+    assert.deepEqual(h.assertions, [
+      {
+        sessionID: "s1",
+        agent: "build",
+        action: "demo.sync",
+        resources: ["work:list_files"],
+        save: ["work:*"],
+        source: { type: "tool", messageID: "msg_1", id: "call_1" },
+      },
+    ])
     assert.ok(agentRules(h).some((rule) => rule.action === "demo-work_*"), "access covers work's MCP server")
     assert.equal(agentRules(h).some((rule) => rule.action === "demo-personal_*"), true, "access covers personal's MCP server")
   })
@@ -698,5 +708,154 @@ describe("register: door 3", () => {
       assert.equal((error.data as { code: string }).code, "UNAVAILABLE")
       return true
     })
+  })
+})
+
+describe("register: the host gate", () => {
+  test("a supported host starts; an unsupported one refuses with HOST_UNTESTED unless allowUntestedHost is set", () => {
+    assert.doesNotThrow(() => assertHost({ app: { version: "2.4.1" }, options: {} }, demo))
+    assert.doesNotThrow(() => assertHost({ app: { version: "2.4.9" } }, demo))
+    assert.throws(
+      () => assertHost({ app: { version: "2.5.0" }, options: {} }, demo),
+      /^Error: HOST_UNTESTED: demo supports >=2\.4\.1 <2\.5\.0, and OpenCode 2\.5\.0 is outside it\. Next step: install OpenCode 2\.4\.1, or set allowUntestedHost\.$/,
+    )
+    assert.throws(() => assertHost({ app: { version: "2.4.0" } }, demo), /HOST_UNTESTED/)
+    assert.doesNotThrow(() => assertHost({ app: { version: "2.5.0" }, options: { allowUntestedHost: true } }, demo))
+  })
+})
+
+describe("register: the one-step bus", () => {
+  test("register with { bus: true } returns the writer and gives it to every handler call", async () => {
+    const h = makeHarness()
+    let seen: unknown
+    const registration = await register(
+      h.ctx,
+      demo,
+      handlers({
+        status: handler({
+          description: "Read the plugin's status.",
+          output: OK,
+          run: async (_input, call) => {
+            seen = call.bus
+            return { ok: true }
+          },
+        }),
+      }),
+      { bus: true },
+    )
+    assert.ok(registration.bus, "the registration carries the bus writer")
+    assert.equal(seen, undefined, "no handler ran yet")
+    assert.deepEqual(await registration.bus.emit("changed", { capability: "demo.messages", account: "default", reason: "write" }), { ok: true })
+    assert.deepEqual(h.rpc.published.map((event) => event.type), ["rpc.demo.changed"])
+
+    await h.tools.get("demo_status")!.tool.execute({}, context())
+    assert.equal(seen, registration.bus, "the tool door attaches the same writer")
+    await h.rpc.call("demo", "status", { sessionID: "s1", input: {} })
+    assert.equal(seen, registration.bus, "the RPC door attaches the same writer")
+  })
+
+  test("without { bus: true } no writer is made, and a handler sees no call.bus", async () => {
+    const h = makeHarness()
+    let seen: unknown = "unset"
+    const registration = await register(
+      h.ctx,
+      demo,
+      handlers({
+        status: handler({
+          description: "Read the plugin's status.",
+          output: OK,
+          run: async (_input, call) => {
+            seen = call.bus
+            return { ok: true }
+          },
+        }),
+      }),
+    )
+    assert.equal(registration.bus, undefined)
+    await h.tools.get("demo_status")!.tool.execute({}, context())
+    assert.equal(seen, undefined)
+  })
+})
+
+describe("register: plan safety", () => {
+  test("a recorded plan is copied: mutating the handler's or the public answer does not change call.plan", async () => {
+    const h = makeHarness()
+    let handled: { method: string; output: { text: string; to: string[] } } | undefined
+    let planned: unknown
+    await register(
+      h.ctx,
+      demo,
+      handlers({
+        plan_send: handler({
+          run: async () => {
+            handled = { method: "send_message", output: { text: "hello", to: ["person:ana"] } }
+            return handled
+          },
+        }),
+        send_message: handler({
+          output: SENT,
+          run: async (_input, call) => {
+            planned = call.plan
+            return { sent: true }
+          },
+        }),
+      }),
+    )
+    const plan = await h.tools.get("demo_plan_send")!.tool.execute({}, context())
+    const output = plan.output as { planId: string; output: { text: string; to: string[] } }
+    output.output.text = "tampered public answer"
+    handled!.output.to.push("person:mallory")
+    assert.deepEqual((await h.tools.get("demo_send_message")!.tool.execute({ planId: output.planId }, context())).output, { sent: true })
+    assert.deepEqual(planned, { method: "send_message", output: { text: "hello", to: ["person:ana"] } })
+  })
+
+  test("a plan over the size cap is PLAN_INVALID and never reaches a commit", async () => {
+    const h = makeHarness()
+    await register(
+      h.ctx,
+      demo,
+      handlers({
+        plan_send: handler({ run: async () => ({ method: "send_message", note: "x".repeat(PLAN_MAX_BYTES) }) }),
+        send_message: handler({ output: SENT, run: async () => ({ sent: true }) }),
+      }),
+    )
+    await assert.rejects(h.tools.get("demo_plan_send")!.tool.execute({}, context()), new RegExp(`PLAN_INVALID: .*over the ${PLAN_MAX_BYTES}-byte limit`))
+  })
+})
+
+describe("register: a cancelled call rejects its ask", () => {
+  test("aborting a tool call rejects the pending request it opened, by its source id", async () => {
+    const h = makeHarness({ holdAsks: true })
+    await register(h.ctx, demo, handlers())
+    h.sessions.get("s1")!.permissions = [{ action: "demo.send_message", resource: "*", effect: "ask" }]
+    const plan = await h.tools.get("demo_plan_send")!.tool.execute({}, context())
+    const planId = (plan.output as { planId: string }).planId
+    const controller = new AbortController()
+    const asked = h.waitForAsk()
+    const abandoned = h.tools.get("demo_send_message")!.tool.execute({ planId }, context({ signal: controller.signal }))
+    await asked
+    const pending = h.pending()
+    assert.equal(pending.length, 1)
+    assert.equal(pending[0]!.source?.id, "call_1", "the ask names the call that opened it")
+    controller.abort()
+    await assert.rejects(abandoned, /UNAVAILABLE: the call was cancelled while its permission ask was pending/)
+    assert.deepEqual(h.pending(), [], "the stale ask was rejected, so nothing stays on the person's screen")
+  })
+
+  test("aborting an RPC call rejects the pending request it opened", async () => {
+    const h = makeHarness({ holdAsks: true })
+    await register(h.ctx, demo, handlers())
+    h.sessions.get("s1")!.permissions = [{ action: "demo.send_message", resource: "*", effect: "ask" }]
+    const input = { planId: await planId(h) }
+    const controller = new AbortController()
+    const asked = h.waitForAsk()
+    const abandoned = h.rpc.call("demo", "send_message", { sessionID: "s1", input }, { signal: controller.signal })
+    await asked
+    const pending = h.pending()
+    assert.equal(pending.length, 1)
+    assert.match(pending[0]!.source?.id ?? "", /^rpc:/)
+    controller.abort()
+    await assert.rejects(abandoned, /the call was cancelled while its permission ask was pending/)
+    assert.deepEqual(h.pending(), [])
   })
 })

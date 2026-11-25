@@ -227,6 +227,42 @@ function accountStatuses(accounts, signals = {}) {
   return accounts.map((account) => accountStatus(account.alias, signals[account.alias]));
 }
 var NO_ACCOUNTS = [];
+var STATUS_SCHEMA = {
+  type: "object",
+  properties: {
+    name: { type: "string", minLength: 1 },
+    version: { type: "string", minLength: 1 },
+    host: {
+      type: "object",
+      properties: {
+        version: { type: "string", minLength: 1 },
+        range: { type: "string", minLength: 1 },
+        tested: { type: "array", minItems: 1, items: { type: "string" } }
+      },
+      required: ["version", "range", "tested"],
+      additionalProperties: false
+    },
+    state: { type: "string", enum: [...ACCOUNT_STATES] },
+    accounts: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          alias: { type: "string", minLength: 1 },
+          state: { type: "string", enum: [...ACCOUNT_STATES] },
+          owner: { type: "object", additionalProperties: true },
+          reason: { type: "string", maxLength: REASON_MAX }
+        },
+        required: ["alias", "state"],
+        additionalProperties: false
+      }
+    },
+    unguardedAgents: { type: "array", items: { type: "string" } },
+    nextStep: {}
+  },
+  required: ["name", "version", "host", "state", "accounts", "unguardedAgents", "nextStep"],
+  additionalProperties: false
+};
 
 export {
   DEFAULT_ALIAS,
@@ -246,5 +282,6 @@ export {
   redactReason,
   accountStatus,
   accountStatuses,
-  NO_ACCOUNTS
+  NO_ACCOUNTS,
+  STATUS_SCHEMA
 };

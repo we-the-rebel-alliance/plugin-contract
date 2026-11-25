@@ -1,8 +1,9 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   assertPluginName,
-  busEvents
-} from "./chunks/chunk-TT6TETU6.js";
+  busEvents,
+  createBus
+} from "./chunks/chunk-JXGABKQH.js";
 import {
   verifyGrant
 } from "./chunks/chunk-ED3MMWUJ.js";
@@ -11,14 +12,16 @@ import {
   effectFor,
   evaluate,
   methodAction
-} from "./chunks/chunk-MIBCHKMR.js";
+} from "./chunks/chunk-ZEP3QZCO.js";
 import {
   manifestHash
-} from "./chunks/chunk-WXKPUWDE.js";
-import "./chunks/chunk-L5LSEI5N.js";
+} from "./chunks/chunk-7Z4DMIE3.js";
+import "./chunks/chunk-OXBQN5YW.js";
 import {
-  errorCodeOf
-} from "./chunks/chunk-DKSE7KD4.js";
+  MAX_BYTES_DEFAULT,
+  errorCodeOf,
+  hostInRange
+} from "./chunks/chunk-2BPMCEJ3.js";
 import {
   problemsOf
 } from "./chunks/chunk-FTEX4OOT.js";
@@ -28,7 +31,7 @@ import {
   accountsOf,
   redactReason,
   resolveAccount
-} from "./chunks/chunk-JWZEPM5E.js";
+} from "./chunks/chunk-YJVHB7PG.js";
 import {
   array,
   fromJSONSchema,
@@ -89,6 +92,17 @@ function reasonOf(error) {
 }
 
 // src/register/assertions.ts
+async function rejectPendingAsk(context, call) {
+  const list = context.permission.list;
+  const reply = context.permission.reply;
+  if (list === void 0 || reply === void 0) return;
+  try {
+    const pending = await list({ sessionID: call.sessionID });
+    const ask = pending.find((request) => request.source?.id === call.id);
+    if (ask !== void 0) await reply({ sessionID: call.sessionID, requestID: ask.id, decision: "reject", message: "The call was cancelled." });
+  } catch {
+  }
+}
 function resourcesFor(entry, account) {
   const operations = entry.item.operations ?? [];
   return operations.length === 0 ? [`${account}:*`] : operations.map((operation) => `${account}:${operation}`);
@@ -130,6 +144,9 @@ async function gate(context, name, entry, call, account, options) {
         signal.addEventListener("abort", onAbort, { once: true });
       })
     ]);
+  } catch (error) {
+    if (signal.aborted) await rejectPendingAsk(context, call);
+    throw error;
   } finally {
     if (onAbort !== void 0) signal.removeEventListener("abort", onAbort);
   }
@@ -139,6 +156,7 @@ async function gate(context, name, entry, call, account, options) {
 import { randomBytes, randomUUID } from "node:crypto";
 var PLAN_TTL_MS = 15 * 6e4;
 var PLAN_ID_BYTES = 16;
+var PLAN_MAX_BYTES = MAX_BYTES_DEFAULT;
 function mintPlanId() {
   return randomBytes(PLAN_ID_BYTES).toString("base64url");
 }
@@ -155,10 +173,23 @@ function planStore(options = {}) {
   return {
     record(answer, account, method) {
       prune();
+      let stored;
+      let text;
+      try {
+        stored = structuredClone(answer);
+        text = JSON.stringify(stored);
+      } catch {
+        return { ok: false, code: "PLAN_INVALID", problems: ["the plan holds a value a copy cannot carry; a plan answer is plain JSON"] };
+      }
+      if (text === void 0) return { ok: false, code: "PLAN_INVALID", problems: ["the plan is not JSON; a plan answer is a JSON object"] };
+      const bytes = Buffer.byteLength(text);
+      if (bytes > PLAN_MAX_BYTES) {
+        return { ok: false, code: "PLAN_INVALID", problems: [`the plan is ${bytes} bytes of JSON, over the ${PLAN_MAX_BYTES}-byte limit`] };
+      }
       let planId = mint();
       while (plans.has(planId)) planId = mint();
-      plans.set(planId, { account, method, answer, expires: now() + ttl, reserved: void 0, used: false });
-      return planId;
+      plans.set(planId, { account, method, answer: stored, expires: now() + ttl, reserved: void 0, used: false });
+      return { ok: true, planId };
     },
     reserve(planId, method) {
       prune();
@@ -405,7 +436,7 @@ function failureOf(entry, error) {
   if (own) return own;
   return refusal("UNAVAILABLE", `${entry.name} failed: ${reasonOf(error)}`, "Try again; if it keeps failing, check the plugin's status.");
 }
-async function execute(entry, prepared, call, plans) {
+async function execute(entry, prepared, call, plans, bus) {
   if (prepared.reservation !== void 0) {
     const taken = plans.consume(prepared.reservation);
     if (!taken.ok) throw new RegisterError(refusal(taken.code, taken.problems.join("; "), "Plan again, then commit with the new planId it answers."));
@@ -413,11 +444,20 @@ async function execute(entry, prepared, call, plans) {
   try {
     const value = checkedOutput(
       entry,
-      await entry.handler.run(prepared.input, { ...call, account: prepared.account, ...prepared.plan === void 0 ? {} : { plan: prepared.plan } })
+      await entry.handler.run(prepared.input, {
+        ...call,
+        account: prepared.account,
+        ...prepared.plan === void 0 ? {} : { plan: prepared.plan },
+        ...bus?.current === void 0 ? {} : { bus: bus.current }
+      })
     );
     if (entry.item.plans === true) {
       const answer = value;
-      return publicPlan(plans.record(answer, prepared.account, entry.commit ?? entry.name), answer);
+      const recorded = plans.record(answer, prepared.account, entry.commit ?? entry.name);
+      if (!recorded.ok) {
+        throw new RegisterError(refusal(recorded.code, recorded.problems.join("; "), "Answer a plan a copy can carry, at most 64 KB of JSON; preview everything the commit writes."));
+      }
+      return publicPlan(recorded.planId, answer);
     }
     return value;
   } catch (error) {
@@ -510,7 +550,7 @@ async function verify(environment, wiring, request, entry, account) {
   });
   return checked.ok ? { ok: true, account: checked.claims.account } : { ok: false, refusal: refusal("GRANT_INVALID", checked.reason, "Ask the host to issue a fresh grant for this action and input."), code: checked.code };
 }
-async function invoke(context, environment, level, entry, wiring, raw, rpc, freshAsks) {
+async function invoke(context, environment, level, entry, wiring, raw, rpc, freshAsks, bus) {
   let prepared;
   try {
     if (!plain4(raw)) throw new RegisterError(refusal("INPUT_INVALID", "the RPC envelope must be an object", `Pass {"sessionID":"<session>","input":<the method's input>}.`));
@@ -570,7 +610,7 @@ async function invoke(context, environment, level, entry, wiring, raw, rpc, fres
     const messageID = "msg_rpc";
     const id = `rpc:${randomUUID2()}`;
     const value = await execute(entry, prepared, { sessionID, agent: resolved.agent, messageID, id, signal: rpc.signal, progress: async () => {
-    }, door: "rpc" }, environment.plans);
+    }, door: "rpc" }, environment.plans, bus);
     return value === void 0 ? null : JSON.parse(JSON.stringify(value));
   } catch (error) {
     if (prepared?.reservation !== void 0) environment.plans.release(prepared.reservation);
@@ -579,12 +619,12 @@ async function invoke(context, environment, level, entry, wiring, raw, rpc, fres
     return rpc.error("failed", failure.message, { code: failure.code, next: failure.next });
   }
 }
-async function installRpc(context, environment, level, wiring) {
+async function installRpc(context, environment, level, wiring, bus) {
   const methods = {};
   const handlers = {};
   for (const entry of environment.entries) {
     methods[entry.name] = { input: strictEnvelope(entry.input), output: entry.output, errors: { failed: FAILED } };
-    handlers[entry.name] = (raw, call) => invoke(context, environment, level, entry, wiring, raw, call, freshAsks);
+    handlers[entry.name] = (raw, call) => invoke(context, environment, level, entry, wiring, raw, call, freshAsks, bus);
   }
   const events = Object.fromEntries(Object.entries(busEvents(environment.name)).filter(([event]) => Object.hasOwn(environment.manifest.events, event)));
   const definition = { id: environment.name, methods, events };
@@ -620,7 +660,7 @@ function textOf(value) {
 function codemodeFor(entry) {
   return entry.item.pinned === true ? { pinned: true } : true;
 }
-function toolRegistrations(environment, context) {
+function toolRegistrations(environment, context, bus) {
   return environment.entries.map((entry) => ({
     name: entry.name,
     description: entry.handler.description,
@@ -635,7 +675,7 @@ function toolRegistrations(environment, context) {
           save: true,
           source: { type: "tool", messageID: callContext.messageID, id: callContext.id }
         });
-        const value = await execute(entry, prepared, toolCall(callContext, callContext.codemode === true ? "codemode" : "tool"), environment.plans);
+        const value = await execute(entry, prepared, toolCall(callContext, callContext.codemode === true ? "codemode" : "tool"), environment.plans, bus);
         return { output: value, content: textOf(value) };
       } catch (error) {
         if (prepared?.reservation !== void 0) environment.plans.release(prepared.reservation);
@@ -644,8 +684,8 @@ function toolRegistrations(environment, context) {
     }
   }));
 }
-async function installTools(context, environment) {
-  const tools = toolRegistrations(environment, context);
+async function installTools(context, environment, bus) {
+  const tools = toolRegistrations(environment, context, bus);
   return await context.tool.transform((raw) => {
     const editor = raw;
     editor.namespace({ name: environment.name, description: environment.manifest.plugin.summary });
@@ -681,13 +721,17 @@ async function register(context, manifest, handlers, wiring = {}) {
   }
   return withCleanup([() => access.dispose()], async () => {
     const environment = prepare(manifest, handlers, accounts);
-    const tools = await installTools(context, environment);
-    return withCleanup([() => tools.dispose()], async () => {
-      const rpc = await installRpc(context, environment, access.level, wiring.grant);
+    const busRef = {};
+    const rpc = await installRpc(context, environment, access.level, wiring.grant, busRef);
+    const bus = wiring.bus === true ? createBus(name, rpc) : void 0;
+    busRef.current = bus;
+    return withCleanup([() => rpc.dispose()], async () => {
+      const tools = await installTools(context, environment, busRef);
       return {
         name,
         access,
         events: rpc.events,
+        ...bus === void 0 ? {} : { bus },
         async dispose() {
           await rpc.dispose().catch(() => void 0);
           await tools.dispose().catch(() => void 0);
@@ -697,10 +741,20 @@ async function register(context, manifest, handlers, wiring = {}) {
     });
   });
 }
+
+// src/register/host.ts
+function assertHost(context, manifest) {
+  if (hostInRange(context.app.version) || context.options?.["allowUntestedHost"] === true) return;
+  throw new Error(
+    `HOST_UNTESTED: ${manifest.plugin.name} supports ${manifest.plugin.host.opencode}, and OpenCode ${context.app.version} is outside it. Next step: install OpenCode 2.4.1, or set allowUntestedHost.`
+  );
+}
 export {
   COMMIT_INPUT,
+  PLAN_MAX_BYTES,
   PLAN_OUTPUT,
   RegisterError,
+  assertHost,
   methodEntries,
   refusal,
   refusalOf,

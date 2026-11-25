@@ -198,8 +198,8 @@ so a credential is `secret`, never `invalid`; the result then carries no part of
 for a bad `options.name`; a payload never throws.
 
 The plugin side is `busEvents(name)`: `register` places it on its one RPC registration, and
-`createBus(name, registration)` emits. An app never calls `busEvents`; it filters with `busEventType` and decodes with
-`readBusEvent`.
+`register(..., { bus: true })` returns the writer as `registration.bus` (or `createBus(name, registration)` wraps the
+registration) to emit. An app never calls `busEvents`; it filters with `busEventType` and decodes with `readBusEvent`.
 
 ## 4. Act: preview, then commit
 
@@ -273,8 +273,8 @@ and single-use; the plugin's `register` records its `jti` in a durable store.
 `commits` method with exactly `{ planId }`, carrying grant and consumer in the RPC envelope
 (`{ sessionID, input: { planId }, grant, consumer }`), in the **commit fence**: deny everything, then allow the commit
 method and its declared operations for the granted account. A handler's inner call outside that grant is denied, as is
-the preview method. The plugin's `register` verifies the grant, reserves the plan, and runs the handler once with the
-plan handler's full answer as `call.plan`.
+the preview method. The plugin's `register` reserves the plan first, then verifies the grant, then runs the handler once
+with the plan handler's copied full answer as `call.plan`.
 
 **One plan, once.** A plan expires after 15 minutes and commits once. A second commit is `PLAN_USED`; a replayed grant is
 `GRANT_INVALID`; an unknown or expired `planId` is `PLAN_INVALID`; a commit through another method is `PLAN_INVALID`. A
