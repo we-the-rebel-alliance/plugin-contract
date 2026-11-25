@@ -15,7 +15,7 @@
  *
  * An unsupported release must refuse with `HOST_UNTESTED` and a next step, unless `allowUntestedHost` is true.
  */
-import { effectFor, evaluate, type AccessLevel, type PermissionRule } from "../../access.ts"
+import { effectFor, evaluate, serverOf, toolAction, type AccessLevel, type PermissionRule } from "../../access.ts"
 import { OPENCODE_RANGE, type Manifest } from "../../manifest.ts"
 import { createHost, type HostRun } from "../host/index.ts"
 import { error, warning, type Finding } from "./report.ts"
@@ -34,8 +34,18 @@ export function hostInRange(host: string): boolean {
   return major === 2 && minor === 4 && patch >= 1
 }
 
-/** The node major a real host needs: `@opencode/sdk` 2.4.1 uses `await using`. */
+/** The Node major a real host needs: `@opencode/sdk` 2.4.1 uses `await using`. */
 const nodeMajor = Number(process.versions.node.split(".")[0])
+
+/** The runtime's real-host problem, or undefined when T1 can run. Bun parses `await using` too. */
+export function hostRuntimeProblem(nodeVersion: string = process.versions.node, bunVersion: string | null = (process.versions as { readonly bun?: string | undefined }).bun ?? null): Finding | undefined {
+  if (bunVersion !== null) return undefined
+  if (Number(nodeVersion.split(".")[0]) >= 24) return undefined
+  return error("T1.host-unavailable", "T1 needs Node 24 or Bun", {
+    path: "package.json",
+    fix: "Run T1 on Node 24 or Bun; Node 22 cannot parse the embedded host's `await using`.",
+  })
+}
 
 /** What a T1 check found and the real run it judged. */
 export interface HostInspection {
@@ -45,16 +55,8 @@ export interface HostInspection {
 
 /** Every T1 finding for one host, and the real run when it happened. */
 export async function inspectHost(directory: string, manifest: Manifest, host: string, options: { readonly accounts?: readonly string[]; readonly realAccounts?: boolean | undefined; readonly accountMethod?: string | undefined; readonly accountCursor?: { readonly method?: unknown; readonly account?: unknown; readonly other?: unknown } | undefined; readonly inputs?: Readonly<Record<string, unknown>> } = {}): Promise<HostInspection> {
-  if (nodeMajor < 24) {
-    return {
-      findings: [
-        warning("T1.node", `the real host needs Node 24, and this is Node ${process.versions.node}`, {
-          path: "package.json",
-          fix: "Run T1 on Node 24, the release this contract's embedded host supports; Node 22 cannot parse `await using`.",
-        }),
-      ],
-    }
-  }
+  const runtime = hostRuntimeProblem()
+  if (runtime !== undefined) return { findings: [runtime] }
   const supported = hostInRange(host)
   const pluginOptions = { access: "all", ...(options.accounts === undefined || options.accounts.length === 0 ? {} : { accounts: Object.fromEntries(options.accounts.map((alias) => [alias, {}])) }) }
 
@@ -109,7 +111,7 @@ export async function inspectHost(directory: string, manifest: Manifest, host: s
     findings.push(...codemodeFindings(manifest, run))
     findings.push(...eventFindings(manifest, run))
     findings.push(...pinnedFindings(manifest, run))
-    findings.push(...(await permissionFindings(directory, manifest, host, run, pluginOptions)))
+    findings.push(...(await permissionFindings(directory, manifest, host, run, pluginOptions, options.accounts ?? [])))
     findings.push(...(await rpcFindings(manifest, run, options.inputs ?? {}, options.accounts ?? [])))
     if (options.realAccounts === true) findings.push(...(await accountFindings(manifest, run, options.accounts ?? [], options.inputs ?? {}, options.accountMethod, options.accountCursor)))
     return { run, findings }
@@ -206,8 +208,17 @@ function pinnedFindings(manifest: Manifest, run: HostRun): Finding[] {
   return findings
 }
 
+/** The dotted MCP action for each alias, as `access.rulesFor` derives it. */
+function mcpActions(name: string, tool: string, aliases: readonly string[]): readonly string[] {
+  const declared = aliases.length === 0 ? ["default"] : aliases
+  return declared.flatMap((alias) => {
+    const server = serverOf(name, alias, declared)
+    return server.ok ? [toolAction(server.value, tool)] : []
+  })
+}
+
 /** The access matrix holds for every real agent at every level, using the one `effectFor`. */
-async function permissionFindings(directory: string, manifest: Manifest, host: string, all: HostRun, options: Readonly<Record<string, unknown>>): Promise<Finding[]> {
+async function permissionFindings(directory: string, manifest: Manifest, host: string, all: HostRun, options: Readonly<Record<string, unknown>>, aliases: readonly string[]): Promise<Finding[]> {
   const findings: Finding[] = []
   if (all.agents.every((agent) => agent.permissions.length === 0)) {
     return [error("T1.permissions", `${manifest.plugin.name} installs no permission rules, so an agent keeps its own defaults`, { path: "src/index.ts", fix: "Generate the access rules into every agent with ctx.agent.transform, as contract §6 requires." })]
@@ -223,9 +234,12 @@ async function permissionFindings(directory: string, manifest: Manifest, host: s
         if (evaluate(agent.permissions, "*", "*") === "deny") continue
         for (const [method, item] of Object.entries(manifest.methods)) {
           const expected = effectFor(item, level as AccessLevel)
-          const actual = evaluate(agent.permissions, `${manifest.plugin.name}.${method}`, "*")
-          if (actual === expected) continue
-          findings.push(error("T1.permissions", `access ${level} gives ${agent.id} ${actual} for ${method}, and the contract gives ${expected}`, { path: `capabilities.methods.${method}`, fix: "Generate the access rules from the access setting and each method's class and effect." }))
+          const actions = method.startsWith("mcp:") ? mcpActions(manifest.plugin.name, method.slice("mcp:".length), aliases) : [`${manifest.plugin.name}.${method}`]
+          for (const action of actions) {
+            const actual = evaluate(agent.permissions, action, "*")
+            if (actual === expected) continue
+            findings.push(error("T1.permissions", `access ${level} gives ${agent.id} ${actual} for ${action}, and the contract gives ${expected}`, { path: `capabilities.methods.${method}`, fix: "Generate the access rules from the access setting and each method's class and effect." }))
+          }
         }
       }
     } finally {

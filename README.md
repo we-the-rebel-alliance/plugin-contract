@@ -90,7 +90,8 @@ npm install github:we-the-rebel-alliance/plugin-contract#<tag>
 ```
 
 The package has no runtime dependencies: `dist/` imports only Node built-ins, and a plugin bundles what it imports into
-its own `dist/`. Node 22 or later runs it; CI checks Node 24.
+its own `dist/`. Node 22 or later runs the package; the conformance host needs Node 24 or Bun, and T1 reports
+`T1.host-unavailable` elsewhere. CI checks Node 24 and Node 22.
 
 ## Docs
 

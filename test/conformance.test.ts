@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url"
 import { runConformance, t0, t1 } from "../src/conformance.ts"
 import { readInstalledManifest, type Manifest } from "../src/manifest.ts"
 import { staticFindings } from "../src/internal/conformance/static.ts"
+import { hostRuntimeProblem } from "../src/internal/conformance/host.ts"
 import { declarationFindings, optionsFindings } from "../src/internal/conformance/declaration.ts"
 import { accountFindings } from "../src/internal/conformance/accounts.ts"
 import { actionFindings } from "../src/internal/conformance/actions.ts"
@@ -74,8 +75,13 @@ export default {
 describe("the fixture plugin, and the real host", () => {
   test("runConformance accepts the fixture", { timeout: 30_000 }, async () => {
     const report = await runConformance(fixtureDirectory)
-    assert.deepEqual(errors(report.findings), [])
-    assert.equal(report.ok, true)
+    if (hostRuntimeProblem() === undefined) {
+      assert.deepEqual(errors(report.findings), [])
+      assert.equal(report.ok, true)
+    } else {
+      assert.equal(report.ok, false)
+      assert.equal(report.findings.some((finding) => finding.id === "T1.host-unavailable" && finding.level === "error"), true)
+    }
   })
 
   test("T1 loads it on 2.4.1 and it refuses 2.5.0", { skip: skipHost, timeout: 30_000 }, async () => {
@@ -102,6 +108,13 @@ describe("the fixture plugin, and the real host", () => {
     const directory = copy()
     writeCustom(directory, { unchecked: true })
     assert.ok(ids(await t1(directory, "2.4.1")).includes("T1.rpc-confirmation"))
+  })
+
+  test("LD-5 direct: an allow rule is not a confirmation even when the handler asks", { skip: skipHost, timeout: 30_000 }, async () => {
+    const directory = copy()
+    writeCustom(directory, { rules: true, unchecked: false })
+    const found = await t1(directory, "2.4.1")
+    assert.ok(ids(found).includes("T1.rpc-confirmation"))
   })
 
   test("a tool outside Code Mode is refused", { skip: skipHost, timeout: 30_000 }, async () => {

@@ -4,6 +4,7 @@ import { dirname, join } from "node:path"
 import { describe, test } from "node:test"
 import { fileURLToPath } from "node:url"
 import { runConformance, t0, t1 } from "../src/conformance.ts"
+import { hostRuntimeProblem } from "../src/internal/conformance/host.ts"
 import { readInstalledManifest } from "../src/manifest.ts"
 import { acceptAnswer } from "../src/read.ts"
 
@@ -41,8 +42,13 @@ describe("the examples", () => {
   test("the manifest and the kit accept every example", { timeout: 60_000 }, async () => {
     for (const name of examples) {
       const report = await runConformance(join(root, "examples", name))
-      assert.deepEqual(report.findings.filter((finding) => finding.level === "error"), [], `${name}: ${report.findings.map((finding) => `${finding.id}: ${finding.message}`).join("\n")}`)
-      assert.equal(report.ok, true, name)
+      if (hostRuntimeProblem() === undefined) {
+        assert.deepEqual(report.findings.filter((finding) => finding.level === "error"), [], `${name}: ${report.findings.map((finding) => `${finding.id}: ${finding.message}`).join("\n")}`)
+        assert.equal(report.ok, true, name)
+      } else {
+        assert.equal(report.ok, false, name)
+        assert.equal(report.findings.some((finding) => finding.id === "T1.host-unavailable" && finding.level === "error"), true, name)
+      }
     }
   })
 

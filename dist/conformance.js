@@ -11,7 +11,8 @@ import "./chunks/chunk-SQQJ24OZ.js";
 import {
   effectFor,
   evaluate,
-  serverOf
+  serverOf,
+  toolAction
 } from "./chunks/chunk-PRLLFQV2.js";
 import {
   maxBytesOf,
@@ -11355,17 +11356,17 @@ function hostInRange(host) {
   return major === 2 && minor === 4 && patch >= 1;
 }
 var nodeMajor = Number(process.versions.node.split(".")[0]);
+function hostRuntimeProblem(nodeVersion = process.versions.node, bunVersion = process.versions.bun ?? null) {
+  if (bunVersion !== null) return void 0;
+  if (Number(nodeVersion.split(".")[0]) >= 24) return void 0;
+  return error("T1.host-unavailable", "T1 needs Node 24 or Bun", {
+    path: "package.json",
+    fix: "Run T1 on Node 24 or Bun; Node 22 cannot parse the embedded host's `await using`."
+  });
+}
 async function inspectHost(directory, manifest, host, options = {}) {
-  if (nodeMajor < 24) {
-    return {
-      findings: [
-        warning("T1.node", `the real host needs Node 24, and this is Node ${process.versions.node}`, {
-          path: "package.json",
-          fix: "Run T1 on Node 24, the release this contract's embedded host supports; Node 22 cannot parse `await using`."
-        })
-      ]
-    };
-  }
+  const runtime = hostRuntimeProblem();
+  if (runtime !== void 0) return { findings: [runtime] };
   const supported = hostInRange(host);
   const pluginOptions = { access: "all", ...options.accounts === void 0 || options.accounts.length === 0 ? {} : { accounts: Object.fromEntries(options.accounts.map((alias) => [alias, {}])) } };
   if (!supported) {
@@ -11415,7 +11416,7 @@ async function inspectHost(directory, manifest, host, options = {}) {
     findings.push(...codemodeFindings(manifest, run));
     findings.push(...eventFindings(manifest, run));
     findings.push(...pinnedFindings(manifest, run));
-    findings.push(...await permissionFindings(directory, manifest, host, run, pluginOptions));
+    findings.push(...await permissionFindings(directory, manifest, host, run, pluginOptions, options.accounts ?? []));
     findings.push(...await rpcFindings(manifest, run, options.inputs ?? {}, options.accounts ?? []));
     if (options.realAccounts === true) findings.push(...await accountFindings2(manifest, run, options.accounts ?? [], options.inputs ?? {}, options.accountMethod, options.accountCursor));
     return { run, findings };
@@ -11486,7 +11487,14 @@ function pinnedFindings(manifest, run) {
   }
   return findings;
 }
-async function permissionFindings(directory, manifest, host, all, options) {
+function mcpActions(name, tool, aliases) {
+  const declared = aliases.length === 0 ? ["default"] : aliases;
+  return declared.flatMap((alias) => {
+    const server = serverOf(name, alias, declared);
+    return server.ok ? [toolAction(server.value, tool)] : [];
+  });
+}
+async function permissionFindings(directory, manifest, host, all, options, aliases) {
   const findings = [];
   if (all.agents.every((agent) => agent.permissions.length === 0)) {
     return [error("T1.permissions", `${manifest.plugin.name} installs no permission rules, so an agent keeps its own defaults`, { path: "src/index.ts", fix: "Generate the access rules into every agent with ctx.agent.transform, as contract \xA76 requires." })];
@@ -11500,9 +11508,12 @@ async function permissionFindings(directory, manifest, host, all, options) {
         if (evaluate(agent.permissions, "*", "*") === "deny") continue;
         for (const [method, item] of Object.entries(manifest.methods)) {
           const expected = effectFor(item, level);
-          const actual = evaluate(agent.permissions, `${manifest.plugin.name}.${method}`, "*");
-          if (actual === expected) continue;
-          findings.push(error("T1.permissions", `access ${level} gives ${agent.id} ${actual} for ${method}, and the contract gives ${expected}`, { path: `capabilities.methods.${method}`, fix: "Generate the access rules from the access setting and each method's class and effect." }));
+          const actions = method.startsWith("mcp:") ? mcpActions(manifest.plugin.name, method.slice("mcp:".length), aliases) : [`${manifest.plugin.name}.${method}`];
+          for (const action of actions) {
+            const actual = evaluate(agent.permissions, action, "*");
+            if (actual === expected) continue;
+            findings.push(error("T1.permissions", `access ${level} gives ${agent.id} ${actual} for ${action}, and the contract gives ${expected}`, { path: `capabilities.methods.${method}`, fix: "Generate the access rules from the access setting and each method's class and effect." }));
+          }
         }
       }
     } finally {

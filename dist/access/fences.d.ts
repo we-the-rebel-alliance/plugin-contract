@@ -105,7 +105,7 @@ export declare function detailRules(source: SourceItem, detailId: string, grant:
 export declare function probeRules(source: SourceItem, account: string, identityOperations: readonly string[], probeAction?: string, aliases?: readonly string[]): Checked<readonly PermissionRule[]>;
 /**
  * How OpenCode decides an action on a resource under `rules`: the last rule whose action and resource match wins (`*`
- * matches any run of characters and `?` one), and no match asks. The same evaluation the register and the tools RPC run.
+ * matches any run of characters and `?` one), and no match asks. The same evaluation the register and the RPC door run.
  */
 export declare function evaluate(rules: readonly PermissionRule[], action: string, resource?: string): PermissionRule["effect"];
 /** True when `pattern` matches `value` with OpenCode's `*` and `?` wildcards. */
