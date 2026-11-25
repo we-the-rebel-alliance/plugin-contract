@@ -10,6 +10,7 @@
  */
 export { canonicalJson, manifestHash } from "./manifest/canonical.ts"
 export { ownerOrgProblems, ownerProblems, SCHEME_QUALIFIED } from "./manifest/owner.ts"
+export { hostInRange } from "./manifest/types.ts"
 export { hostMatches, thumbnailUrlProblems } from "./manifest/thumbnail.ts"
 export {
   checkManifest,

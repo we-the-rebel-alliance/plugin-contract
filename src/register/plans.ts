@@ -4,10 +4,11 @@
  * A plan is a dry-run; its `planId` is minted here with 16 random bytes, never by the handler, and carried to exactly
  * one commit. The account is part of the plan's meaning: a personal plan must not be committed as work just because
  * work is the first declared alias. The committing method is part of it too: a planId for one commit method is refused
- * by another. The store keeps the handler's full answer, so the commit handler receives the plan as `call.plan`. The
- * store is scoped to one plugin instance and kept in memory; a plan expires after {@link PLAN_TTL_MS}, and a planId
- * from before a reload is unknown to the new instance. Unknown and expired ids are `PLAN_INVALID`; a second commit with
- * a reserved or used id is `PLAN_USED`.
+ * by another. The store keeps the handler's full answer, copied with `structuredClone` so it shares nothing with the
+ * handler's object or the public answer, and bounded to {@link PLAN_MAX_BYTES} of JSON; the commit handler receives the
+ * copy as `call.plan`. The store is scoped to one plugin instance and kept in memory; a plan expires after
+ * {@link PLAN_TTL_MS}, and a planId from before a reload is unknown to the new instance. Unknown and expired ids are
+ * `PLAN_INVALID`; a second commit with a reserved or used id is `PLAN_USED`.
  *
  * A commit **reserves** the plan synchronously before any permission ask or grant check, so two concurrent commits
  * cannot both run. A refusal before the handler releases the reservation and leaves the plan committable; the handler's
@@ -15,12 +16,16 @@
  * happened. A reservation handle carries its own token, so releasing one call can never release another call's work.
  */
 import { randomBytes, randomUUID } from "node:crypto"
+import { MAX_BYTES_DEFAULT } from "../manifest/types.ts"
 
 /** How long a plan may be committed after it was made (15 minutes). */
 export const PLAN_TTL_MS = 15 * 60_000
 
 /** The bytes in every minted plan id: 128 random bits, so a person's consent binds to a value nobody can guess. */
 export const PLAN_ID_BYTES = 16
+
+/** The most bytes of JSON one stored plan may take: 64 KB, the manifest's default `maxBytes` and the host's RPC cap. */
+export const PLAN_MAX_BYTES = MAX_BYTES_DEFAULT
 
 /** A fresh plan id: 16 random bytes as base64url, the value a commit and its grant are bound to. */
 export function mintPlanId(): string {
@@ -54,6 +59,9 @@ export interface PlanReservation {
   readonly token: string
 }
 
+/** A recorded plan's minted id, or why the handler's answer cannot be stored. */
+export type PlanRecord = { readonly ok: true; readonly planId: string } | PlanRefusal
+
 /** A live, available plan reserved for one call, or why the id cannot commit. */
 export type PlanReserve = { readonly ok: true; readonly reservation: PlanReservation } | PlanRefusal
 
@@ -63,10 +71,11 @@ export type PlanConsume = { readonly ok: true; readonly account: string; readonl
 /** The per-instance plan ledger. */
 export interface PlanStore {
   /**
-   * Keep the handler's full answer for a new plan and return the unguessable id the register mints for it. A minted id
-   * that is already live is never reused: the store mints again.
+   * Keep a copy of the handler's full answer for a new plan and return the unguessable id the register mints for it. A
+   * minted id that is already live is never reused: the store mints again. An answer that cannot be copied, or whose
+   * JSON is over {@link PLAN_MAX_BYTES}, is refused with `PLAN_INVALID` and nothing is stored.
    */
-  record(answer: unknown, account: string, method: string): string
+  record(answer: unknown, account: string, method: string): PlanRecord
   /** Reserve a live, available plan for `method`. A reserved or used plan is refused; the reservation is synchronous. */
   reserve(planId: string, method: string): PlanReserve
   /** Release a reservation after a refusal before the handler runs. Another call's handle is ignored. */
@@ -91,11 +100,24 @@ export function planStore(options: { readonly now?: () => number; readonly ttlMs
   return {
     record(answer, account, method) {
       prune()
+      let stored: unknown
+      let text: string | undefined
+      try {
+        stored = structuredClone(answer)
+        text = JSON.stringify(stored)
+      } catch {
+        return { ok: false, code: "PLAN_INVALID", problems: ["the plan holds a value a copy cannot carry; a plan answer is plain JSON"] }
+      }
+      if (text === undefined) return { ok: false, code: "PLAN_INVALID", problems: ["the plan is not JSON; a plan answer is a JSON object"] }
+      const bytes = Buffer.byteLength(text)
+      if (bytes > PLAN_MAX_BYTES) {
+        return { ok: false, code: "PLAN_INVALID", problems: [`the plan is ${bytes} bytes of JSON, over the ${PLAN_MAX_BYTES}-byte limit`] }
+      }
       let planId = mint()
       // 128 random bits never collide in practice; a store whose minter repeats itself must not replace a live plan.
       while (plans.has(planId)) planId = mint()
-      plans.set(planId, { account, method, answer, expires: now() + ttl, reserved: undefined, used: false })
-      return planId
+      plans.set(planId, { account, method, answer: stored, expires: now() + ttl, reserved: undefined, used: false })
+      return { ok: true, planId }
     },
     reserve(planId, method) {
       prune()

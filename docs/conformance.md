@@ -22,15 +22,16 @@ runConformance(pluginDir: string, options?: { hosts?: string[]; record?: boolean
 t0(pluginDir: string): Promise<Finding[]>
 t1(pluginDir: string, host: string): Promise<Finding[]>
 
-interface ConformanceReport { ok: boolean; findings: Finding[] }
+interface ConformanceReport { ok: boolean; findings: Finding[]; checks?: string[] }
 interface Finding { id: string; level: "error" | "warning"; message: string; path?: string; fix?: string }
 ```
 
 `id` is stable (`T0.namespace-length`, `T1.permissions`, `accounts.required`), so CI and a reviewer can tell one finding
-from another across releases. `ok` is false when any finding is an error. A warning names something the kit could not
-prove. `record: true` turns a missing recording into a warning while a fixture is being written. `hosts` defaults to the
-manifest's `plugin.host.tested`; when any host is requested, the first unsupported release (`2.5.0`) is run as well,
-for the clean refusal.
+from another across releases. `checks` names the T1 checks the run actually performed, such as `T1.grant-alias`, so a
+report shows what was proven and not only what failed. `ok` is false when any finding is an error. A warning names
+something the kit could not prove. `record: true` turns a missing recording into a warning while a fixture is being
+written. `hosts` defaults to the manifest's `plugin.host.tested`; when any host is requested, the first unsupported
+release (`2.5.0`) is run as well, for the clean refusal.
 
 `t0` is static: it reads the namespace text recorded in `fixtures/conformance.json`. `runConformance` measures it live
 from T1 instead, so the CI gate always uses the registered text. `t1` loads the plugin on one OpenCode release. `runConformance` runs T0, the declaration and its recordings, and
@@ -64,6 +65,7 @@ is not a T0 finding: the file set belongs to the kit's `docs` and `forbidden` ch
 | `T1.events` | the one RPC registration carries exactly the manifest's bus events |
 | `T1.pinned-budget` | a pinned tool's signature is within about 1,000 tokens |
 | `T1.rpc-confirmation` | a non-`read` method over RPC with an allow rule and no grant is refused (LD-5); a commit is planned first, and an unplannable commit is a warning |
+| `T1.grant-alias` | a grant for one account alias allows that alias's MCP tool and the real host denies every other alias's, when the manifest declares `mcp:*` or `mcp:<tool>`, the fixture records two aliases, and a source declares a bare tool operation |
 | `T1.accounts` | with two aliases and `accounts.real`, a missing account is `ACCOUNT_REQUIRED`, an unknown one is `ACCOUNT_UNKNOWN`, and a cursor does not cross accounts |
 | `T1.unsupported-host` | a release outside `>=2.4.1 <2.5.0` is refused with `HOST_UNTESTED` and a next step |
 

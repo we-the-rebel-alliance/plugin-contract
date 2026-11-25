@@ -86,6 +86,12 @@ export interface HostRun {
     }): Promise<RpcAnswer>;
     /** A session whose rules are exactly `rules`; the plugin's own rules still apply through its agents. */
     session(rules: readonly PermissionRule[]): Promise<string>;
+    /** Assert one action through the real `ctx.permission.assert`; a deny rejects, as it does for the plugin's own gate. */
+    assert(input: {
+        readonly sessionID: string;
+        readonly action: string;
+        readonly resources?: readonly string[] | undefined;
+    }): Promise<void>;
     close(): Promise<void>;
 }
 /** One RPC answer or refusal, with the contract code the host reported. */

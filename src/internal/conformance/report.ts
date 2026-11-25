@@ -23,6 +23,8 @@ export interface Finding {
 export interface ConformanceReport {
   readonly ok: boolean
   readonly findings: Finding[]
+  /** The T1 check ids the run actually performed, such as `T1.grant-alias`. */
+  readonly checks?: readonly string[] | undefined
 }
 
 /** One finding, with the optional fields left out when they are not given. */

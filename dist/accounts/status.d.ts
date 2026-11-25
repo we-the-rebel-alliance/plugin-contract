@@ -5,7 +5,7 @@
  * answered. A failure reason is one line of at most 160 characters, redacted: no URL query string, no bearer token, no
  * token-shaped text, no control character. The library never echoes what a provider said.
  */
-import type { Owner } from "../manifest/types.js";
+import type { JsonSchema, Owner } from "../manifest/types.js";
 import type { AccountProfile } from "./profiles.js";
 /** What an account can be. */
 export declare const ACCOUNT_STATES: readonly ["ready", "needs_sign_in", "error"];
@@ -37,3 +37,9 @@ export declare function accountStatus(alias: string, signal: AccountSignal | und
 export declare function accountStatuses(accounts: readonly AccountProfile[], signals?: Readonly<Record<string, AccountSignal | undefined>>): readonly AccountStatus[];
 /** The status of a plugin with no accounts: an empty list, never a `default` the person cannot sign in to. */
 export declare const NO_ACCOUNTS: readonly AccountStatus[];
+/**
+ * The JSON Schema of `status` (contract §11): the plugin's identity, the host range it runs on, its state, every alias's
+ * state and owner, the agents that lack the generated access rules, and a redacted next step. A plugin reuses this
+ * constant for its `status` handler's output instead of copying the shape; `status` is required on every plugin.
+ */
+export declare const STATUS_SCHEMA: JsonSchema;

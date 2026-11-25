@@ -11,6 +11,12 @@ export declare const MANIFEST_VERSION: 1;
 export declare const OPENCODE_RANGE: ">=2.4.1 <2.5.0";
 /** The release the v0 contract is built and tested against (D7). */
 export declare const TESTED_OPENCODE: "2.4.1";
+/**
+ * True when `version` is inside the v0 OpenCode range (`>=2.4.1 <2.5.0`). A plugin refuses to start outside it with
+ * `HOST_UNTESTED`, unless `allowUntestedHost` is set. The conformance kit's unsupported-host check and `register`'s
+ * `assertHost` both read this one predicate.
+ */
+export declare function hostInRange(version: string): boolean;
 /** A plugin's name: 2–31 lowercase letters or digits, no hyphen, which separates an account alias (§3). */
 export declare const PLUGIN_NAME: RegExp;
 /** An app-only key: `x-<app>`, lowercase, ignored by every other app. */

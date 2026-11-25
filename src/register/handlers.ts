@@ -6,6 +6,7 @@
  * checks that every declared method has a handler and every handler is declared, so a manifest and its code cannot
  * drift apart.
  */
+import type { Bus } from "../bus.ts"
 import type { JsonSchema, Manifest, MethodItem } from "../manifest.ts"
 import { refuse } from "./errors.ts"
 import { inputSchemaProblems, outputSchemaProblems, PLAN_OUTPUT, toolInputSchema } from "./validate.ts"
@@ -29,6 +30,8 @@ export interface MethodCall {
    * never part of it; the register mints the id the commit was called with.
    */
   readonly plan?: unknown
+  /** The bus writer, when `register` was wired with `{ bus: true }`; a handler emits its nudges here. */
+  readonly bus?: Bus | undefined
   readonly door: Door
 }
 

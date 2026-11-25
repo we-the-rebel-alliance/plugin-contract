@@ -6,6 +6,7 @@
  * checks that every declared method has a handler and every handler is declared, so a manifest and its code cannot
  * drift apart.
  */
+import type { Bus } from "../bus.js";
 import type { JsonSchema, Manifest, MethodItem } from "../manifest.js";
 /** Which door a call came through. */
 export type Door = "tool" | "codemode" | "rpc";
@@ -25,6 +26,8 @@ export interface MethodCall {
      * never part of it; the register mints the id the commit was called with.
      */
     readonly plan?: unknown;
+    /** The bus writer, when `register` was wired with `{ bus: true }`; a handler emits its nudges here. */
+    readonly bus?: Bus | undefined;
     readonly door: Door;
 }
 /** One method's handler: its shapes, its description and its work. */

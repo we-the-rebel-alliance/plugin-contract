@@ -49,6 +49,20 @@ silent, they decide.
 9. **One provider endpoint**, named once in `src/provider/`.
 10. **Public OpenCode API only** (`@opencode/plugin` 2.4.1); the kit's forbidden list is final.
 
+## Contract wiring
+
+- **Gate the host first.** Call `assertHost(ctx, manifest)` at the top of `setup`. It reads `ctx.app.version` against
+  `capabilities.plugin.host.opencode` and refuses an untested release with `HOST_UNTESTED`, unless
+  `options.allowUntestedHost` is true.
+- **Ask `register` for the bus.** Pass `{ bus: true }` to `register` when the plugin emits; the registration carries
+  `registration.bus` and each handler call carries `call.bus`. Do not keep a mutable placeholder or call `createBus`
+  around it.
+- **Reuse the output schemas.** `STATUS_SCHEMA` from `accounts` is the `status` answer; `PAGE_SCHEMA` and `PROBE_SCHEMA`
+  from `events` are an events source's `events_list` and `probe` answers. Copying those shapes into the plugin is drift.
+- **Preview what the commit writes.** Put everything the commit will write into `output`, `reaches`, `changes`, `cost`
+  and `trust`; private plan data is only for what the preview cannot show, and the commit must not trust a value the
+  person did not see.
+
 ## Adding a capability
 
 1. Declare it in `capabilities` (method, source or action) with its class, operations, accounts and cost.

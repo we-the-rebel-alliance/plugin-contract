@@ -28,7 +28,7 @@ command exits `0` when it passes, `1` when a finding is an error, and `2` for a 
 | `hosts` | the OpenCode release matrix: `[2.4.1]` | `--json` |
 | `release <version>` | checks, then a local 0.0.x tag; CI publishes the GitHub release | `--dry-run`, `--json` |
 | `supported` | this plugin's row for `SUPPORTED.md` | `--wave <name>`, `--status <state>`, `--json` |
-| `forbidden` | app identifiers, `main`-branch links and secrets | `--json` |
+| `forbidden` | app identifiers, `main`-branch links, secrets and real emails in verified grant cases | `--json` |
 
 `check` does not typecheck, build or run the plugin's unit tests: those are the plugin's own commands, and its CI runs
 them beside the kit. T0 and T1 are hard gates (plugin standard §0.2 rule 8); a conformance call that throws becomes a
@@ -95,14 +95,16 @@ The scan reads text files outside `node_modules`, `dist` and the other generated
 |---|---|
 | `FORBIDDEN.app-name` | an app identifier in code, manifest or docs. An `x-<app>` key is allowed: the prefix is the one place a name belongs. |
 | `FORBIDDEN.main-branch` | a GitHub `blob/main`, `tree/main`, `raw/main` or `raw.githubusercontent.com/…/main` link. Every repository in the org uses `master`. |
-| `FORBIDDEN.secret` | a credential the contract's own detector (`secretKinds`) recognises. A conformance fixture's `grants.publicKey` and a `grants.cases[].token` that key verifies are public test data, not credentials, and are not reported. |
+| `FORBIDDEN.secret` | a credential the contract's own detector (`secretKinds`) recognises. A conformance fixture's `grants.publicKey` and a `grants.cases[].token` that key verifies are public test data, not credentials, and are not reported. The token's payload is still decoded and screened: a secret inside a signed claim is reported, because the signature makes the claim authentic, not secret. |
+| `FORBIDDEN.grant-email` | a real person's email in a verified grant case (`expect.ok: true`). The decoded claims, its plain `input` and its plain `request` are scanned; an address must be on `example.test` or `example.com`. The finding names the case, never the address or its domain. |
 
 The app list is `src/kit/forbidden-apps.ts`, the kit's one denylist. It targets the app's own identifiers and
 repository prefixes, not ordinary words that happen to be product names.
 
 A real site that must name an app is allowed in `.plugin-kit/forbidden-allow`, one `<path>:<pattern-id> <reason>` per
-line, such as `docs/quote.md:app-name This page documents the product itself.` A used allowance removes that finding and
-is reported as a `FORBIDDEN.suppressed` warning with its reason; a line with no reason is not an allowance.
+line, such as `docs/quote.md:app-name This page documents the product itself.` The pattern id is the finding id without
+`FORBIDDEN.`, so a fixture that must name a real address uses `grant-email`. A used allowance removes that finding and is
+reported as a `FORBIDDEN.suppressed` warning with its reason; a line with no reason is not an allowance.
 
 ### `release`
 

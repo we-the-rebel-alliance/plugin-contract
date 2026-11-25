@@ -1,4 +1,5 @@
 import { type AccountProfile } from "../accounts.js";
+import type { Bus } from "../bus.js";
 import { type Manifest } from "../manifest.js";
 import { type PlanReservation, type PlanStore } from "./plans.js";
 import { type Door, type HandlerTable, type MethodCall, type MethodEntry } from "./handlers.js";
@@ -12,6 +13,10 @@ export interface CallEnvironment {
     readonly accounts: readonly AccountProfile[];
     /** The plans this plugin instance made: a commit runs as the account its plan recorded. */
     readonly plans: PlanStore;
+}
+/** The bus writer `register` fills in after its RPC registration exists, so every door reads the same one. */
+export interface BusRef {
+    current?: Bus | undefined;
 }
 /** The handler table and account set, validated once at setup. */
 export declare function prepare(manifest: Manifest, handlers: HandlerTable, accounts: readonly AccountProfile[]): CallEnvironment;
@@ -32,7 +37,7 @@ export declare function prepareCall(entry: MethodEntry, raw: unknown, accounts: 
 /** The answer, checked; a plan must name the method that commits it, and must not mint its own id. */
 export declare function checkedOutput(entry: MethodEntry, value: unknown): unknown;
 /** Run a prepared call's handler, checking its answer and mapping its failure. */
-export declare function execute(entry: MethodEntry, prepared: PreparedCall, call: Omit<MethodCall, "account" | "plan">, plans: PlanStore): Promise<unknown>;
+export declare function execute(entry: MethodEntry, prepared: PreparedCall, call: Omit<MethodCall, "account" | "plan" | "bus">, plans: PlanStore, bus?: BusRef): Promise<unknown>;
 /** The door's call context from an OpenCode tool context. */
 export declare function toolCall(context: {
     readonly sessionID: string;

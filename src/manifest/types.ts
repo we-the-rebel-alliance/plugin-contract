@@ -15,6 +15,18 @@ export const OPENCODE_RANGE = ">=2.4.1 <2.5.0" as const
 /** The release the v0 contract is built and tested against (D7). */
 export const TESTED_OPENCODE = "2.4.1" as const
 
+/**
+ * True when `version` is inside the v0 OpenCode range (`>=2.4.1 <2.5.0`). A plugin refuses to start outside it with
+ * `HOST_UNTESTED`, unless `allowUntestedHost` is set. The conformance kit's unsupported-host check and `register`'s
+ * `assertHost` both read this one predicate.
+ */
+export function hostInRange(version: string): boolean {
+  const match = /^(\d+)\.(\d+)\.(\d+)/.exec(String(version))
+  if (match === null) return false
+  const [major, minor, patch] = [Number(match[1]), Number(match[2]), Number(match[3])]
+  return major === 2 && minor === 4 && patch >= 1
+}
+
 /** A plugin's name: 2–31 lowercase letters or digits, no hyphen, which separates an account alias (§3). */
 export const PLUGIN_NAME = /^[a-z0-9]{2,31}$/
 

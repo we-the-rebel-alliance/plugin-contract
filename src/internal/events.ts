@@ -37,7 +37,7 @@
 import { createHash } from "node:crypto"
 import { canonicalScope, MAX_CURSOR_LENGTH, type Scope } from "../cursor.ts"
 import { ownerProblems } from "../manifest/owner.ts"
-import { THUMBNAIL_URL_MAX, type Owner } from "../manifest/types.ts"
+import { THUMBNAIL_URL_MAX, type JsonSchema, type Owner } from "../manifest/types.ts"
 import { thumbnailUrlProblems } from "../manifest/thumbnail.ts"
 import { secretKinds } from "./secrets.ts"
 
@@ -383,6 +383,27 @@ export interface EventsListInput {
   readonly account?: string
   readonly source?: string
   readonly scope?: Scope
+}
+
+/**
+ * The JSON Schema of an events page (contract §7 and §11): whose page it is, its events oldest first, the cursor and
+ * `more`, and the untrusted trust marker. `additionalProperties: true` lets the optional parts the page defines
+ * (`refused`, `failed`, `removals`, `gap`, `cost`, `plugin`, `asOf`, `scope`) pass. A source reuses this constant for
+ * its `events_list` handler's output instead of copying the shape.
+ */
+export const PAGE_SCHEMA: JsonSchema = {
+  type: "object",
+  properties: {
+    source: { type: "string", minLength: 1 },
+    account: { type: "string", minLength: 1 },
+    owner: { type: "object", additionalProperties: true },
+    events: { type: "array", items: { type: "object", additionalProperties: true } },
+    cursor: { type: "string" },
+    more: { type: "boolean" },
+    trust: { type: "string", enum: [TRUST] },
+  },
+  required: ["source", "account", "owner", "events", "cursor", "more", "trust"],
+  additionalProperties: true,
 }
 
 export interface EventsListResult {
@@ -846,6 +867,25 @@ export interface ProbeResult {
   readonly scopes?: string[]
   readonly cost?: EventsCost
   readonly trust: typeof TRUST
+}
+
+/**
+ * The JSON Schema of a probe answer (contract §11): whose the source is, the sign-in's scopes, what the probe cost, and
+ * the untrusted marker. It has no field for content, so a probe that returned an event or its text fails. A source
+ * reuses this constant for its `probe` handler's output instead of copying the shape.
+ */
+export const PROBE_SCHEMA: JsonSchema = {
+  type: "object",
+  properties: {
+    source: { type: "string", minLength: 1 },
+    account: { type: "string", minLength: 1 },
+    owner: { type: "object", additionalProperties: true },
+    scopes: { type: "array", items: { type: "string" } },
+    cost: { type: "object", additionalProperties: true },
+    trust: { type: "string", enum: [TRUST] },
+  },
+  required: ["source", "account", "owner", "trust"],
+  additionalProperties: false,
 }
 
 /** `probe`'s input checked, or its problems, naming fields and never values. Anything but source and account is refused. */

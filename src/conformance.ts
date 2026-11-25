@@ -87,6 +87,7 @@ export async function runConformance(pluginDir: string, options: ConformanceOpti
   }
   const { manifest, package: packageName, version } = installed.value
   const findings: Finding[] = []
+  const checks = new Set<string>()
   const record = options.record === true
 
   findings.push(...declarationFindings(installed.value))
@@ -180,11 +181,12 @@ export async function runConformance(pluginDir: string, options: ConformanceOpti
       ...(fixture?.rpc?.inputs === undefined ? {} : { inputs: fixture.rpc.inputs }),
     })
     findings.push(...inspection.findings)
+    for (const check of inspection.checks ?? []) checks.add(check)
     if (namespace === undefined && inspection.run?.namespace !== undefined) namespace = inspection.run.namespace.description
   }
   if (hosts.length > 0 && !hosts.includes(UNSUPPORTED_HOST)) findings.push(...(await hostFindings(directory, manifest, UNSUPPORTED_HOST, aliases.length === 0 ? {} : { accounts: aliases })))
   const recordedNamespace = namespace ?? fixture?.namespace
   findings.unshift(...staticFindings(directory, manifest, { ...(recordedNamespace === undefined ? {} : { namespace: recordedNamespace }), record }))
 
-  return { ok: isOk(findings), findings }
+  return { ok: isOk(findings), findings, ...(checks.size === 0 ? {} : { checks: [...checks] }) }
 }

@@ -18,7 +18,7 @@ import { evaluate, methodAction, type PermissionRule } from "../access.ts"
 import type { MethodEntry } from "./handlers.ts"
 import { refusal, RegisterError } from "./errors.ts"
 
-/** The part of the plugin context the gate asserts through. */
+/** The part of the plugin context the gate asserts through, and the pending asks it can reject on cancellation. */
 export interface GateContext {
   readonly permission: {
     assert(input: {
@@ -29,6 +29,28 @@ export interface GateContext {
       readonly save?: readonly string[]
       readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
     }): Promise<void>
+    /** The pending asks of a session; OpenCode 2.4.1's `PermissionDomain.list`. */
+    list?(input: { readonly sessionID: string }): Promise<readonly { readonly id: string; readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string } | undefined }[]>
+    /** Answer a pending ask; a cancellation answers `reject`. OpenCode 2.4.1's `PermissionDomain.reply`. */
+    reply?(input: { readonly sessionID: string; readonly requestID: string; readonly decision: "reject"; readonly message?: string | undefined }): Promise<void>
+  }
+}
+
+/**
+ * Reject the ask this call left pending, found by its source id, so a cancelled call leaves nothing on the person's
+ * screen. A host without `list` and `reply`, or a transport failure, changes nothing: the cancellation refusal below is
+ * still the answer.
+ */
+async function rejectPendingAsk(context: GateContext, call: { readonly sessionID: string; readonly id: string }): Promise<void> {
+  const list = context.permission.list
+  const reply = context.permission.reply
+  if (list === undefined || reply === undefined) return
+  try {
+    const pending = await list({ sessionID: call.sessionID })
+    const ask = pending.find((request) => request.source?.id === call.id)
+    if (ask !== undefined) await reply({ sessionID: call.sessionID, requestID: ask.id, decision: "reject", message: "The call was cancelled." })
+  } catch {
+    // The host may have removed the ask already, or may not offer the domain. The call's refusal is unchanged.
   }
 }
 
@@ -93,6 +115,10 @@ export async function gate(
         signal.addEventListener("abort", onAbort, { once: true })
       }),
     ])
+  } catch (error) {
+    // The person's screen still shows the ask: reject it before the abandoned call reports its cancellation.
+    if (signal.aborted) await rejectPendingAsk(context, call)
+    throw error
   } finally {
     if (onAbort !== undefined) signal.removeEventListener("abort", onAbort)
   }

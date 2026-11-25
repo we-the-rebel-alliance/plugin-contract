@@ -46,20 +46,15 @@ last one, so a second registration with id `<name>` would hide the plugin's meth
 `POST /api/rpc/<name>/<method>` would answer `rpc.method_not_found`.
 
 ```ts
-import { busEvents, createBus } from "@we-the-rebel-alliance/plugin-contract/bus"
+import { register } from "@we-the-rebel-alliance/plugin-contract/register"
 
-const name = "slack" as const
-const registration = await ctx.rpc.register(
-  { id: name, methods, events: busEvents(name) },
-  handlers,
-)
-const bus = createBus(name, registration)
+const registration = await register(ctx, manifest, handlers, { bus: true })
 
 // After the plugin has written through the provider.
-await bus.emit("changed", { capability: "slack.mentions", account: "work", reason: "write" })
+await registration.bus?.emit("changed", { capability: "slack.mentions", account: "work", reason: "write" })
 
 // When an account needs attention.
-await bus.emit("account", { account: "personal", state: "needs_sign_in" })
+await registration.bus?.emit("account", { account: "personal", state: "needs_sign_in" })
 ```
 
 `busEvents(name)` validates the name and returns `changed`, `status` and `account` for the registration's `events`.
@@ -67,6 +62,22 @@ await bus.emit("account", { account: "personal", state: "needs_sign_in" })
 itself. Both throw at setup for a name that breaks contract §3: lowercase letters and digits, 2 to 31 characters, no
 hyphen. A plugin name is a bug in the plugin, not data from a provider. Everything after setup is returned, never
 thrown.
+
+### One step from `register`
+
+`register` builds the writer with `createBus` after its one RPC registration, returns it as `registration.bus`, and puts
+it on every handler call as `call.bus`, so a handler emits without a mutable placeholder:
+
+```ts
+async run(input, call) {
+  await provider.write(input)
+  await call.bus?.emit("changed", { capability: "slack.mentions", account: call.account, reason: "write" })
+  return { written: true }
+}
+```
+
+`createBus(name, registration)` stays available for a plugin that does not use `register`; both forms wrap the one RPC
+registration and register nothing themselves.
 
 `emit` answers with a result:
 
@@ -154,6 +165,6 @@ finds. The event itself said only that the source changed.
 |---|---|
 | `BUS_EVENTS`, `BUS_STATES`, `BusEventName`, `BusState`, `BusSchema`, `BusEvents`, `BusEventData`, `ChangedData`, `StatusData`, `AccountData` | the three events, their data, and the schemas the registration carries |
 | `assertPluginName`, `isPluginName`, `capabilityPattern`, `REASON_MAX` | the contract §3 name rule and the reason's bound |
-| `createBus`, `Bus`, `BusEmitResult`, `BusRegistration` | the writer: wrap the one RPC registration and emit a typed nudge |
+| `createBus`, `Bus`, `BusEmitResult`, `BusRegistration` | the writer: wrap the one RPC registration and emit a typed nudge; `register(..., { bus: true })` uses it for `registration.bus` and `call.bus` |
 | `busEvents` | the `events` block a plugin merges into that registration |
 | `readBusEvent`, `busEventType`, `BusEvent`, `BusReadReason`, `BusReadResult`, `ReadBusOptions` | the reader: one `/api/event` payload, its reason, and the type filter |

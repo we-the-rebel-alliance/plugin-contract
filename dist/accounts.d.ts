@@ -18,5 +18,5 @@ export { registerAccounts } from "./accounts/register.js";
 export type { AccountsContext, AccountsRegistration, IntegrationEditor, IntegrationMethodRegistration, MCPEditor, MCPServerConfig, RegisterAccountsRequest, RegisteredAccount, } from "./accounts/register.js";
 export { aliasesSentence, resolveAccount } from "./accounts/resolve.js";
 export type { AccountCode, ResolvedAccount } from "./accounts/resolve.js";
-export { ACCOUNT_STATES, accountStatus, accountStatuses, NO_ACCOUNTS, REASON_MAX, redactReason } from "./accounts/status.js";
+export { ACCOUNT_STATES, accountStatus, accountStatuses, NO_ACCOUNTS, REASON_MAX, redactReason, STATUS_SCHEMA } from "./accounts/status.js";
 export type { AccountSignal, AccountState, AccountStatus } from "./accounts/status.js";

@@ -12,25 +12,25 @@ import {
   mcpAddress,
   renderGeneratedDocs,
   waitForActivation
-} from "./chunks/chunk-2LYQB6UV.js";
+} from "./chunks/chunk-J7CGDDBB.js";
 import "./chunks/chunk-ED3MMWUJ.js";
-import "./chunks/chunk-3OFJLXBK.js";
+import "./chunks/chunk-LRXS6ETF.js";
 import "./chunks/chunk-6WEY3U6L.js";
-import "./chunks/chunk-JMBXK6YH.js";
-import "./chunks/chunk-MIBCHKMR.js";
+import "./chunks/chunk-7ZDUK6SV.js";
+import "./chunks/chunk-ZEP3QZCO.js";
 import {
   checkManifest
-} from "./chunks/chunk-WXKPUWDE.js";
-import "./chunks/chunk-L5LSEI5N.js";
+} from "./chunks/chunk-7Z4DMIE3.js";
+import "./chunks/chunk-OXBQN5YW.js";
 import {
   TESTED_OPENCODE,
   eventHash
-} from "./chunks/chunk-DKSE7KD4.js";
+} from "./chunks/chunk-2BPMCEJ3.js";
 import "./chunks/chunk-FTEX4OOT.js";
 import {
   secretKinds
 } from "./chunks/chunk-L3NVT2DE.js";
-import "./chunks/chunk-JWZEPM5E.js";
+import "./chunks/chunk-YJVHB7PG.js";
 import "./chunks/chunk-4YITQAYJ.js";
 import "./chunks/chunk-7KJXMIQH.js";
 import "./chunks/chunk-WLRWVIVP.js";
@@ -477,7 +477,7 @@ var MAIN_LINK = /\bhttps?:\/\/[^\s)"'<>]*\/(?:blob|tree|raw)\/main(?:[/#?]|\b)/g
 var RAW_MAIN_LINK = /\bhttps?:\/\/raw\.githubusercontent\.com\/[^\s)"'<>]+\/main(?:[/#?]|\b)/gi;
 var SHORT_MAIN_LINK = /\bgithub\.com\/[^\s)"'<>]+\/(?:blob|tree|raw)\/main(?:[/#?]|\b)/gi;
 var ALLOW_FILE = ".plugin-kit/forbidden-allow";
-var PATTERNS = ["app-name", "main-branch", "secret"];
+var PATTERNS = ["app-name", "main-branch", "secret", "grant-email"];
 function allowances(dir) {
   const text = readText(join5(dir, ALLOW_FILE));
   if (text === void 0) return [];
@@ -485,7 +485,7 @@ function allowances(dir) {
   for (const line of text.split(/\r?\n/)) {
     const trimmed = line.trim();
     if (trimmed === "" || trimmed.startsWith("#")) continue;
-    const match = /^(.*):(app-name|main-branch|secret|FORBIDDEN\.(?:app-name|main-branch|secret))\s+(.+)$/.exec(trimmed);
+    const match = /^(.*):(app-name|main-branch|secret|grant-email|FORBIDDEN\.(?:app-name|main-branch|secret|grant-email))\s+(.+)$/.exec(trimmed);
     if (match === null) continue;
     const reason = match[3].trim();
     if (reason === "") continue;
@@ -510,6 +510,71 @@ function grantTokens(text) {
     return [];
   }
 }
+var EMAIL = /[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@([A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+)/g;
+function exampleDomain(domain) {
+  const lower = domain.toLowerCase();
+  return lower === "example.test" || lower === "example.com" || lower.endsWith(".example.test") || lower.endsWith(".example.com");
+}
+function grantClaimText(token) {
+  if (typeof token !== "string") return void 0;
+  const parts = token.split(".");
+  if (parts.length !== 3) return void 0;
+  const payload = parts[1];
+  if (payload === void 0 || payload === "") return void 0;
+  try {
+    return Buffer.from(payload, "base64url").toString("utf8");
+  } catch {
+    return void 0;
+  }
+}
+function grantClaimFindings(relative2, text) {
+  let value;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return [];
+  }
+  const grants = typeof value === "object" && value !== null ? value["grants"] : void 0;
+  if (typeof grants !== "object" || grants === null) return [];
+  const cases = grants["cases"];
+  if (!Array.isArray(cases)) return [];
+  const findings = [];
+  for (const [index, entry] of cases.entries()) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const record = entry;
+    const where = typeof record["name"] === "string" ? record["name"] : `case ${index + 1}`;
+    const claims = grantClaimText(record["token"]);
+    if (claims !== void 0) {
+      for (const kind of secretKinds(claims)) {
+        findings.push({
+          id: "FORBIDDEN.secret",
+          level: "error",
+          path: relative2,
+          message: `the signed grant claim in ${where} holds a credential (${kind}); a committed fixture never carries one`,
+          fix: "remove it, rotate it with the provider, and record the fixture again through plugin-kit record"
+        });
+      }
+    }
+    const expect = typeof record["expect"] === "object" && record["expect"] !== null ? record["expect"] : {};
+    if (expect["ok"] !== true) continue;
+    const scanned = [claims ?? "", JSON.stringify(record["input"] ?? ""), JSON.stringify(record["request"] ?? "")];
+    let outside = false;
+    for (const candidate of scanned) {
+      for (const match of candidate.matchAll(new RegExp(EMAIL.source, EMAIL.flags))) if (!exampleDomain(match[1])) outside = true;
+    }
+    if (outside) {
+      findings.push({
+        id: "FORBIDDEN.grant-email",
+        level: "error",
+        path: relative2,
+        // The address is personal data: name the case, never the mailbox or its domain.
+        message: `verified grant case ${where} carries an address outside example.test and example.com; a fixture uses invented addresses only`,
+        fix: "replace the address with one on example.test or example.com, and record the fixture again"
+      });
+    }
+  }
+  return findings;
+}
 function forbiddenFindings(dir, options = {}) {
   const apps = options.apps ?? FORBIDDEN_APPS;
   const findings = [];
@@ -524,6 +589,7 @@ function forbiddenFindings(dir, options = {}) {
     if (text === void 0) continue;
     const exempt = relative2.endsWith("fixtures/conformance.json") ? grantTokens(text) : [];
     const withoutGrants = exempt.reduce((value, token) => value.split(token).join("<grant-token>"), text);
+    if (relative2.endsWith("fixtures/conformance.json")) for (const finding of grantClaimFindings(relative2, text)) add(findings, used, allowed, finding);
     const lines = text.split(/\r?\n/);
     const scanLines = withoutGrants.split(/\r?\n/);
     const seen = /* @__PURE__ */ new Set();
@@ -1002,7 +1068,7 @@ Commands:
   hosts                     print the OpenCode release matrix
   release <version>         checks, changelog section, version, one commit and one tag
   supported                 print this plugin's SUPPORTED.md row
-  forbidden                 check app names, main-branch links and secrets
+  forbidden                 check app names, main-branch links, secrets and grant emails
 
 Options:
   --dir <path>              the plugin directory (default: the working directory)

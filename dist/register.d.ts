@@ -1,8 +1,9 @@
 /**
  * `register`: doors 1–3 from one handler table (contract §9).
  *
- *   const registration = await register(ctx, manifest, handlers)
- *   const bus = createBus(manifest.plugin.name, registration)
+ *   assertHost(ctx, manifest)
+ *   const registration = await register(ctx, manifest, handlers, { bus: true })
+ *   await registration.bus?.emit("changed", { … })
  *
  * Every method is written once and reached as an agent tool in the `<name>` namespace, as `tools.<name>.<method>` in
  * Code Mode and automations, and as `POST /api/rpc/<name>/<method>` with `{ sessionID, input }` under the session's
@@ -14,9 +15,12 @@
  */
 export { register } from "./register/register.js";
 export type { RegisterContext, RegisterWiring, Registration } from "./register/register.js";
+export { assertHost } from "./register/host.js";
+export type { HostContext } from "./register/host.js";
 export { methodEntries } from "./register/handlers.js";
 export type { Door, HandlerTable, MethodCall, MethodEntry, MethodHandler } from "./register/handlers.js";
 export { COMMIT_INPUT, PLAN_OUTPUT } from "./register/validate.js";
+export { PLAN_MAX_BYTES } from "./register/plans.js";
 export { refusal, refusalOf, RegisterError } from "./register/errors.js";
 export type { Refusal } from "./register/errors.js";
 export type { GrantWiring } from "./register/rpc.js";

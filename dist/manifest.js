@@ -12,8 +12,8 @@ import {
   maxBytesOf,
   methodAccounts,
   readInstalledManifest
-} from "./chunks/chunk-WXKPUWDE.js";
-import "./chunks/chunk-L5LSEI5N.js";
+} from "./chunks/chunk-7Z4DMIE3.js";
+import "./chunks/chunk-OXBQN5YW.js";
 import {
   ACCOUNT_MECHANISMS,
   ACTION_EFFECTS,
@@ -37,11 +37,12 @@ import {
   SOURCE_SIGNALS,
   TESTED_OPENCODE,
   THUMBNAIL_URL_MAX,
+  hostInRange,
   hostMatches,
   ownerOrgProblems,
   ownerProblems,
   thumbnailUrlProblems
-} from "./chunks/chunk-DKSE7KD4.js";
+} from "./chunks/chunk-2BPMCEJ3.js";
 import "./chunks/chunk-FTEX4OOT.js";
 import "./chunks/chunk-L3NVT2DE.js";
 import "./chunks/chunk-4YITQAYJ.js";
@@ -77,6 +78,7 @@ export {
   findInstalledPackage,
   findMethod,
   findSource,
+  hostInRange,
   hostMatches,
   manifestHash,
   manifestProblems,

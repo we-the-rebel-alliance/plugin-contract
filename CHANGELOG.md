@@ -57,6 +57,21 @@ The first release in `we-the-rebel-alliance`: the contract at wire version 1, gr
 - **The examples** under `examples/`: `integration` (accounts through the integration mechanism, with a fake provider),
   `mcp` (two aliases, `accounts.real: true`), and `tools` (methods only). Each is an installed package as an app finds
   it on disk, with a manifest, a server entry, a skill, generated docs and a recorded fixture, run through the kit by
-  `npm run conformance:self-test`.
+  `npm run conformance:self-test`. All three call `assertHost`, reuse the exported output schemas, and the tools example
+  takes its bus from `register` in one step.
+- **Ergonomics at setup:** `manifest` exports `hostInRange`; `register` exports `assertHost`, so a plugin refuses an
+  untested release with `HOST_UNTESTED` in one call; `register(..., { bus: true })` returns `registration.bus` and gives
+  every handler `call.bus`, with no mutable placeholder; `accounts` exports `STATUS_SCHEMA`, and `events` exports
+  `PAGE_SCHEMA` and `PROBE_SCHEMA`, so a plugin reuses the answer shapes instead of copying them.
+- **Plan safety:** the register copies each recorded plan with `structuredClone`, so nothing the handler or the public
+  answer holds can change `call.plan` later, and refuses a plan over `PLAN_MAX_BYTES` (64 KB of JSON) or one a copy
+  cannot carry with `PLAN_INVALID`.
+- **Cancellation:** a cancelled call rejects the permission ask it opened (found by its source id), so a stale request
+  does not stay on the person's screen, and still answers the contract's cancellation refusal.
+- **`forbidden`:** a conformance fixture's signed grant claims are decoded and screened, so a secret inside a signed
+  claim is `FORBIDDEN.secret`; a verified grant case with an address outside `example.test` and `example.com` is
+  `FORBIDDEN.grant-email`.
+- **Conformance:** T1 proves on the real 2.4.1 host that a grant for one account alias cannot reach another alias's MCP
+  tools (`T1.grant-alias`), using the mcp example's two aliases and a real session fence.
 - **The docs check:** `test/docs.test.ts` compares every module page's `## Exports` table with the module's real export
   declarations, both directions, and fails if a name is missing or does not exist.

@@ -5,7 +5,7 @@
  * answered. A failure reason is one line of at most 160 characters, redacted: no URL query string, no bearer token, no
  * token-shaped text, no control character. The library never echoes what a provider said.
  */
-import type { Owner } from "../manifest/types.ts"
+import type { JsonSchema, Owner } from "../manifest/types.ts"
 import type { AccountProfile } from "./profiles.ts"
 
 /** What an account can be. */
@@ -78,3 +78,45 @@ export function accountStatuses(accounts: readonly AccountProfile[], signals: Re
 
 /** The status of a plugin with no accounts: an empty list, never a `default` the person cannot sign in to. */
 export const NO_ACCOUNTS: readonly AccountStatus[] = []
+
+/**
+ * The JSON Schema of `status` (contract §11): the plugin's identity, the host range it runs on, its state, every alias's
+ * state and owner, the agents that lack the generated access rules, and a redacted next step. A plugin reuses this
+ * constant for its `status` handler's output instead of copying the shape; `status` is required on every plugin.
+ */
+export const STATUS_SCHEMA: JsonSchema = {
+  type: "object",
+  properties: {
+    name: { type: "string", minLength: 1 },
+    version: { type: "string", minLength: 1 },
+    host: {
+      type: "object",
+      properties: {
+        version: { type: "string", minLength: 1 },
+        range: { type: "string", minLength: 1 },
+        tested: { type: "array", minItems: 1, items: { type: "string" } },
+      },
+      required: ["version", "range", "tested"],
+      additionalProperties: false,
+    },
+    state: { type: "string", enum: [...ACCOUNT_STATES] },
+    accounts: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          alias: { type: "string", minLength: 1 },
+          state: { type: "string", enum: [...ACCOUNT_STATES] },
+          owner: { type: "object", additionalProperties: true },
+          reason: { type: "string", maxLength: REASON_MAX },
+        },
+        required: ["alias", "state"],
+        additionalProperties: false,
+      },
+    },
+    unguardedAgents: { type: "array", items: { type: "string" } },
+    nextStep: {},
+  },
+  required: ["name", "version", "host", "state", "accounts", "unguardedAgents", "nextStep"],
+  additionalProperties: false,
+}

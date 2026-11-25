@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { generateKeyPairSync, sign } from "node:crypto"
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
@@ -96,6 +97,62 @@ describe("plugin-kit forbidden", () => {
       write(file, JSON.stringify(source, null, 2))
       const findings = forbiddenFindings(local.dir).filter((finding) => finding.id === "FORBIDDEN.secret")
       assert.ok(findings.length >= 2)
+    } finally {
+      local.cleanup()
+    }
+  })
+
+  test("a secret inside a signed grant claim is found even though the raw token text is exempt", () => {
+    const local = temp()
+    try {
+      const base64 = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url")
+      // A generated test key signs the token, so the raw token text is exempt and only the decoded claim is new.
+      const { publicKey, privateKey } = generateKeyPairSync("ed25519")
+      const header = base64({ alg: "Ed25519", kid: "test" })
+      const payload = base64({ to: "person@example.test", api_key: `sk-${"A1b2C3d4E5f6G7h8I9j0"}` })
+      const token = `${header}.${payload}.${sign(null, Buffer.from(`${header}.${payload}`), privateKey).toString("base64url")}`
+      const pem = publicKey.export({ type: "spki", format: "pem" }).toString()
+      write(
+        join(local.dir, "fixtures", "conformance.json"),
+        JSON.stringify({ grants: { publicKey: pem, cases: [{ name: "leak", token, input: { to: "person@example.test" }, request: {}, expect: { ok: true } }] } }, null, 2),
+      )
+      const findings = forbiddenFindings(local.dir).filter((finding) => finding.id === "FORBIDDEN.secret" && /signed grant claim/.test(finding.message))
+      assert.equal(findings.length, 1)
+      assert.equal(findings[0]?.path, "fixtures/conformance.json")
+      assert.match(findings[0]?.message ?? "", /signed grant claim in leak holds a credential \(api key\)/)
+    } finally {
+      local.cleanup()
+    }
+  })
+
+  test("a verified grant case's email must be on example.test or example.com; a negative case is not scanned", () => {
+    const local = temp()
+    try {
+      const base64 = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url")
+      const token = (claims: unknown) => `${base64({ alg: "Ed25519" })}.${base64(claims)}.c2lnbmF0dXJl`
+      write(
+        join(local.dir, "fixtures", "conformance.json"),
+        JSON.stringify(
+          {
+            grants: {
+              publicKey: "not-a-key",
+              cases: [
+                { name: "real", token: token({ to: "person@real.example" }), input: { to: "person@real.example" }, request: { consumer: "person@real.example" }, expect: { ok: true } },
+                { name: "allowed", token: token({ to: "person@example.test" }), input: { to: "person@example.com" }, request: {}, expect: { ok: true } },
+                { name: "refused", token: token({ to: "person@real.example" }), input: { to: "person@real.example" }, request: {}, expect: { ok: false, code: "GRANT_EXPIRED" } },
+              ],
+            },
+          },
+          null,
+          2,
+        ),
+      )
+      const findings = forbiddenFindings(local.dir).filter((finding) => finding.id === "FORBIDDEN.grant-email")
+      assert.equal(findings.length, 1, "only the verified case with a real address is reported")
+      assert.equal(findings[0]?.path, "fixtures/conformance.json")
+      assert.match(findings[0]?.message ?? "", /verified grant case real carries an address outside/)
+      assert.equal((findings[0]?.message ?? "").includes("person@real.example"), false, "the address itself is personal data")
+      assert.equal((findings[0]?.message ?? "").includes("real.example"), false, "even the domain is not printed")
     } finally {
       local.cleanup()
     }

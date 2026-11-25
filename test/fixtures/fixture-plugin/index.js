@@ -3,7 +3,7 @@
 // pinned tool. The kit's tests load this into the real @opencode/sdk host and run every hard check against it.
 import { readFileSync } from "node:fs"
 import { makeEvent } from "../../../dist/events.js"
-import { register } from "../../../dist/register.js"
+import { assertHost, register } from "../../../dist/register.js"
 
 const manifest = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")).capabilities
 const OBJECT = { type: "object", additionalProperties: true }
@@ -99,17 +99,10 @@ const handlers = {
   pinned_status: { description: "Read the pinned status.", input: EMPTY, output: OK, run: async () => ({ ok: true }) },
 }
 
-function inRange(version) {
-  const match = /^(\d+)\.(\d+)\.(\d+)/.exec(String(version))
-  return match !== null && Number(match[1]) === 2 && Number(match[2]) === 4 && Number(match[3]) >= 1
-}
-
 export default {
   id: manifest.plugin.name,
   async setup(context) {
-    if (!inRange(context.app.version) && context.options?.allowUntestedHost !== true) {
-      throw new Error(`HOST_UNTESTED: fixture supports >=2.4.1 <2.5.0, and OpenCode ${context.app.version} is outside it. Next step: install OpenCode 2.4.1.`)
-    }
+    assertHost(context, manifest)
     const registration = await register(context, manifest, handlers)
     return () => registration.dispose()
   },

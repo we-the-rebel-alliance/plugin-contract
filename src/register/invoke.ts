@@ -8,6 +8,7 @@
  */
 import { DEFAULT_ALIAS } from "../accounts/alias.ts"
 import { resolveAccount, type AccountProfile } from "../accounts.ts"
+import type { Bus } from "../bus.ts"
 import { manifestHash, type Manifest } from "../manifest.ts"
 import { planStore, type PlanReservation, type PlanStore } from "./plans.ts"
 import { refusal, refusalOf, refuse, RegisterError, reasonOf, type Refusal } from "./errors.ts"
@@ -26,6 +27,11 @@ export interface CallEnvironment {
   readonly accounts: readonly AccountProfile[]
   /** The plans this plugin instance made: a commit runs as the account its plan recorded. */
   readonly plans: PlanStore
+}
+
+/** The bus writer `register` fills in after its RPC registration exists, so every door reads the same one. */
+export interface BusRef {
+  current?: Bus | undefined
 }
 
 /** The handler table and account set, validated once at setup. */
@@ -133,7 +139,7 @@ function failureOf(entry: MethodEntry, error: unknown): Refusal {
 }
 
 /** Run a prepared call's handler, checking its answer and mapping its failure. */
-export async function execute(entry: MethodEntry, prepared: PreparedCall, call: Omit<MethodCall, "account" | "plan">, plans: PlanStore): Promise<unknown> {
+export async function execute(entry: MethodEntry, prepared: PreparedCall, call: Omit<MethodCall, "account" | "plan" | "bus">, plans: PlanStore, bus?: BusRef): Promise<unknown> {
   if (prepared.reservation !== undefined) {
     const taken = plans.consume(prepared.reservation)
     if (!taken.ok) throw new RegisterError(refusal(taken.code, taken.problems.join("; "), "Plan again, then commit with the new planId it answers."))
@@ -141,11 +147,20 @@ export async function execute(entry: MethodEntry, prepared: PreparedCall, call: 
   try {
     const value = checkedOutput(
       entry,
-      await entry.handler.run(prepared.input, { ...call, account: prepared.account, ...(prepared.plan === undefined ? {} : { plan: prepared.plan }) }),
+      await entry.handler.run(prepared.input, {
+        ...call,
+        account: prepared.account,
+        ...(prepared.plan === undefined ? {} : { plan: prepared.plan }),
+        ...(bus?.current === undefined ? {} : { bus: bus.current }),
+      }),
     )
     if (entry.item.plans === true) {
       const answer = value as Record<string, unknown>
-      return publicPlan(plans.record(answer, prepared.account, entry.commit ?? entry.name), answer)
+      const recorded = plans.record(answer, prepared.account, entry.commit ?? entry.name)
+      if (!recorded.ok) {
+        throw new RegisterError(refusal(recorded.code, recorded.problems.join("; "), "Answer a plan a copy can carry, at most 64 KB of JSON; preview everything the commit writes."))
+      }
+      return publicPlan(recorded.planId, answer)
     }
     return value
   } catch (error) {
