@@ -73,12 +73,12 @@ export async function createAutomation(host: AutomationHost, api: AutomationApi,
 export function automationApi(client: AutomationClient): AutomationApi {
   const api = client.experimental?.automation
   if (api === undefined || typeof api.create !== "function") {
-    throw new HostError("HOST_API_GONE", "this host has no experimental.automation API", "use OpenCode 2.4.1 or later; automations are created through /api/experimental/automation")
+    const legacy = client.experimental?.schedule !== undefined
+    throw new HostError(
+      "HOST_API_GONE",
+      legacy ? "experimental.schedule is gone from OpenCode 2.4" : "this host has no experimental.automation API",
+      "create the automation with ctx.experimental.automation.create, which posts to /api/experimental/automation",
+    )
   }
   return api
-}
-
-/** The removed 2.4 client method: calling it is refused, with the replacement in the message. */
-export function legacySchedule(_client?: AutomationClient): never {
-  throw new HostError("HOST_API_GONE", "experimental.schedule is gone from OpenCode 2.4", "create the automation with ctx.experimental.automation.create, which posts to /api/experimental/automation")
 }

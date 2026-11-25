@@ -83,6 +83,19 @@ describe("plugin-kit forbidden", () => {
     }
   })
 
+  test("a signed test grant in a conformance fixture is test data, not a leaked credential", () => {
+    const local = temp()
+    try {
+      const token = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.c2lnbmF0dXJl"
+      write(join(local.dir, "fixtures", "conformance.json"), JSON.stringify({ grants: { cases: [{ token }] } }))
+      assert.equal(forbiddenFindings(local.dir).filter((finding) => finding.id === "FORBIDDEN.secret").length, 0)
+      write(join(local.dir, "fixtures", "conformance.json"), JSON.stringify({ token }))
+      assert.equal(forbiddenFindings(local.dir).filter((finding) => finding.id === "FORBIDDEN.secret").length, 1)
+    } finally {
+      local.cleanup()
+    }
+  })
+
   test("finds a credential in a line, and does not scan a lockfile or a binary", () => {
     const local = temp()
     try {

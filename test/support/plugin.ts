@@ -8,7 +8,9 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import type { Manifest } from "../../src/manifest.ts"
-import { applySection, generatedSections } from "../../src/kit/docs.ts"
+import { renderGeneratedDocs } from "../../src/conformance.ts"
+import { DOC_FILES } from "../../src/internal/conformance/docs.ts"
+import { applies, generatedMarkers } from "../../src/kit/docs.ts"
 
 /** A complete, valid manifest a case can copy and change. */
 export function manifest(over: Partial<Manifest> = {}): Manifest {
@@ -74,15 +76,15 @@ export function pluginDir(name = "acme", over: Partial<Manifest> = {}): PluginDi
 
 /** Write the docs with current generated sections, and an AGENTS.md with every required heading. */
 export function writeDocs(dir: string, value: Manifest): void {
-  const byFile = new Map<string, { section: string; body: string }[]>()
-  for (const section of generatedSections(value)) byFile.set(section.file, [...(byFile.get(section.file) ?? []), section])
-  for (const [file, sections] of byFile) {
-    let text = `# ${file === "README.md" ? "Acme" : file}\n\nHand-written text stays outside the markers.\n`
-    for (const section of sections) {
-      text += `\n<!-- kit:start:${section.section} -->\n<!-- kit:end:${section.section} -->\n`
-      text = applySection(text, section.section, section.body).text
+  const rendered = renderGeneratedDocs(value)
+  for (const doc of DOC_FILES) {
+    let text = `# ${doc.file === "README.md" ? "Acme" : doc.file}\n\nHand-written text stays outside the markers.\n`
+    for (const section of doc.sections) {
+      if (!applies(value, section)) continue
+      const { start, end } = generatedMarkers(section)
+      text += `\n${start}\n${rendered[section]}\n${end}\n`
     }
-    write(join(dir, file), text)
+    write(join(dir, doc.file), text)
   }
   write(
     join(dir, "AGENTS.md"),

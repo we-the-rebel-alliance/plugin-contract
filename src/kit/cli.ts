@@ -72,7 +72,7 @@ Options:
   --host <release>          a host for check or conformance (repeatable)
   --check                   report drift only (docs, record)
   --account <alias>         the account a recording belongs to
-  --fixtures <path>         the fixture directory (default: test/conformance)
+  --fixtures <path>         the fixture file (default: fixtures/conformance.json)
   --record                  record while running conformance
   --dry-run                 write nothing (release)
   --wave <name>             the SUPPORTED.md wave cell

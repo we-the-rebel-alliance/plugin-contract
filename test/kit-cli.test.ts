@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { execFileSync } from "node:child_process"
-import { readFileSync, statSync } from "node:fs"
+import { readFileSync, rmSync, statSync } from "node:fs"
 import { join } from "node:path"
 import { describe, test } from "node:test"
 import { main } from "../src/kit.ts"
@@ -103,58 +103,58 @@ describe("plugin-kit's command line", () => {
     assert.equal(accountsCell(manifest({ accounts: { via: "local", owner: "machine" } })), "local")
   })
 
-  test("check runs T0 once and T1 on every tested host the manifest names", async () => {
+  test("check runs one runConformance report, not separate T0 and T1 calls", async () => {
     const plugin = fullPlugin()
     try {
-      const runner = fakeConformance({ t0: [finding({ id: "T0.pinned", level: "warning", message: "no pinned method" })] })
+      const runner = fakeConformance({ report: { ok: true, findings: [finding({ id: "T0.pinned", level: "warning", message: "no pinned method" })] } })
       const answer = await run(["check", "--dir", plugin.dir], { conformance: async () => runner })
       assert.equal(answer.code, 0)
-      assert.deepEqual(runner.calls.t0, [plugin.dir])
-      assert.deepEqual(runner.calls.t1, [{ dir: plugin.dir, host: "2.4.1" }])
+      assert.deepEqual(runner.calls.run, [{ dir: plugin.dir, options: {} }])
+      assert.deepEqual(runner.calls.t0, [])
+      assert.deepEqual(runner.calls.t1, [])
       assert.match(answer.out, /check: ok \(0 errors, 1 warning\)/)
     } finally {
       plugin.cleanup()
     }
   })
 
-  test("check fails on an error, and --host replaces the manifest's matrix", async () => {
+  test("check passes --host to the one report, and fails its error", async () => {
     const plugin = fullPlugin()
     try {
-      const runner = fakeConformance({ t0: [finding({ id: "T0.namespace-length", message: "the namespace line is 401 characters" })] })
+      const runner = fakeConformance({ report: { ok: false, findings: [finding({ id: "T0.namespace-length", message: "the namespace line is 401 characters" })] } })
       const answer = await run(["check", "--dir", plugin.dir, "--host", "2.4.0"], { conformance: async () => runner })
       assert.equal(answer.code, 1)
-      assert.deepEqual(runner.calls.t1, [{ dir: plugin.dir, host: "2.4.0" }])
+      assert.deepEqual(runner.calls.run, [{ dir: plugin.dir, options: { hosts: ["2.4.0"] } }])
       assert.match(answer.err, /ERROR T0\.namespace-length/)
     } finally {
       plugin.cleanup()
     }
   })
 
-  test("check fails when a conformance gate throws, instead of skipping it", async () => {
+  test("check fails when runConformance throws, instead of skipping the gate", async () => {
     const plugin = fullPlugin()
     try {
       const runner = fakeConformance()
-      runner.t1 = async () => {
+      runner.runConformance = async () => {
         throw new Error("no host available")
       }
       const answer = await run(["check", "--dir", plugin.dir], { conformance: async () => runner })
       assert.equal(answer.code, 1)
-      assert.match(answer.err, /KIT_CONFORMANCE: T1 2\.4\.1 did not run: no host available/)
+      assert.match(answer.err, /KIT_CONFORMANCE: conformance did not run: no host available/)
     } finally {
       plugin.cleanup()
     }
   })
 
-  test("check finds stale docs and a forbidden pattern", async () => {
+  test("check keeps the kit docs file set and the forbidden scan around the report", async () => {
     const plugin = fullPlugin()
     try {
-      const changed = manifest({ methods: { ...manifest().methods, delete_item: { class: "delete" } } })
-      write(join(plugin.dir, "package.json"), `${JSON.stringify({ name: "@we-the-rebel-alliance/acme-plugin", version: "0.0.0", capabilities: changed }, null, 2)}\n`)
+      rmSync(join(plugin.dir, "docs", "automations.md"))
       write(join(plugin.dir, "README.md"), `${readFileSync(join(plugin.dir, "README.md"), "utf8")}\nSee https://github.com/we-the-rebel-alliance/acme-plugin/blob/main/docs/guide.md\n`)
       const runner = fakeConformance()
       const answer = await run(["check", "--dir", plugin.dir], { conformance: async () => runner })
       assert.equal(answer.code, 1)
-      assert.match(answer.err, /DOCS\.stale/)
+      assert.match(answer.err, /DOCS\.missing-file/)
       assert.match(answer.err, /FORBIDDEN\.main-branch/)
     } finally {
       plugin.cleanup()
@@ -171,7 +171,7 @@ describe("plugin-kit's command line", () => {
       write(join(plugin.dir, "package.json"), `${JSON.stringify({ name: "@we-the-rebel-alliance/acme-plugin", version: "0.0.0", capabilities: changed }, null, 2)}\n`)
       const drift = await run(["docs", "--check", "--dir", plugin.dir])
       assert.equal(drift.code, 1)
-      assert.match(drift.err, /DOCS\.stale/)
+      assert.match(drift.err, /T0\.docs-capabilities/)
       const written = await run(["docs", "--dir", plugin.dir])
       assert.equal(written.code, 0)
       assert.match(written.out, /docs: 2 files updated/)
@@ -179,7 +179,7 @@ describe("plugin-kit's command line", () => {
       write(join(plugin.dir, "docs", "capabilities.md"), "# capabilities\n\nNo markers here.\n")
       const missing = await run(["docs", "--check", "--dir", plugin.dir])
       assert.equal(missing.code, 1)
-      assert.match(missing.err, /DOCS\.missing-marker/)
+      assert.match(missing.err, /T0\.docs-capabilities/)
     } finally {
       plugin.cleanup()
     }

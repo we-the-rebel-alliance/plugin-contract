@@ -9,11 +9,6 @@ The kit calls the conformance module for every conformance check (`runConformanc
 repository rather than a plugin's runtime: generated documentation, the forbidden patterns, fixture redaction, the
 release guards and the host harness.
 
-> **Pre-#59 state.** This head predates the #59 conformance rebase. `check` still calls `t0` and `t1` separately, `docs`
-> still uses this kit's renderer, `record` still reads `test/conformance/`, and the harness is still under
-> `src/kit/host/`. The #59 pass replaces those with the shared conformance functions, `fixtures/conformance.json` and
-> `src/internal/host/`; the follow-ups are listed in the pull request.
-
 ```sh
 npx plugin-kit <command> [options]
 ```
@@ -26,9 +21,9 @@ command exits `0` when it passes, `1` when a finding is an error, and `2` for a 
 
 | Command | What it does | Options |
 |---|---|---|
-| `check` | everything a pull request needs from the kit: T0, T1 on every tested host, generated docs, forbidden patterns, no bundled kit | `--host <release>` (repeatable), `--json` |
-| `docs` | writes each manifest-driven section between its markers | `--check`, `--json` |
-| `record` | runs the recorder, then redacts every JSON fixture under `test/conformance/` | `--account <alias>`, `--fixtures <path>`, `--check`, `--json` |
+| `check` | everything a pull request needs: the conformance report (T0/T1, accounts, grants, events, unsupported host), the doc file set, forbidden patterns, no bundled kit | `--host <release>` (repeatable), `--json` |
+| `docs` | writes each conformance-rendered section between its generated block | `--check`, `--json` |
+| `record` | runs the conformance record pass, then redacts `fixtures/conformance.json` | `--account <alias>`, `--fixtures <path>`, `--check`, `--json` |
 | `conformance` | the whole conformance report | `--host <release>`, `--record`, `--json` |
 | `hosts` | the OpenCode release matrix: `[2.4.1]` | `--json` |
 | `release <version>` | checks, then a local 0.0.x tag; CI publishes the GitHub release | `--dry-run`, `--json` |
@@ -42,52 +37,41 @@ contains the kit: the kit is a devDependency, never part of a plugin's server bu
 
 ### `check` and `conformance`
 
-`check` calls `t0(pluginDir)` once and `t1(pluginDir, host)` for each release the manifest lists in
-`capabilities.plugin.host.tested`. `--host` replaces that list, so a lane can try one release without editing the
-manifest. `conformance` calls `runConformance(pluginDir, { hosts?, record? })` and prints its report; `--host` and
-`--record` are passed through unchanged.
+`check` makes one `runConformance(pluginDir, { hosts? })` call. It covers T0, the declaration and options, the recorded
+sources and accounts, the bus and status, actions, grants, the RPC confirmation, T1 on every release in
+`capabilities.plugin.host.tested`, and the first unsupported host's clean `HOST_UNTESTED` refusal. `--host` replaces the
+tested list. `conformance` prints the same report with `--host` and `--record` passed through. The kit adds only the
+required doc-file set, the forbidden scan and `KIT_BUNDLED` around it.
 
 The finding ids are the conformance module's, such as `T0.namespace-length` and `T1.host`. The kit's own ids are stable
 and start with `KIT.`, `DOCS.`, `FORBIDDEN.` or `RECORD.`.
 
 ### `docs`
 
-The generated sections and the files they belong in are fixed by the plugin standard (§6):
+The sections and their files are the conformance module's (`src/internal/conformance/docs.ts`): `capabilities` and
+`errors` in `README.md`, `capabilities` in `docs/capabilities.md`, `configuration` in `docs/configuration.md`,
+`accounts` in `docs/accounts.md`, and `automations` in `docs/automations.md`. `plugin-kit docs` calls
+`renderGeneratedDocs(manifest)` from `src/conformance.ts`; it never renders a section itself.
 
-| Section | File | What it lists |
-|---|---|---|
-| `readme.capabilities` | `README.md` | every method, with its class, accounts, operations and plans/commits |
-| `readme.errors` | `README.md` | the contract's error table (contract §12) |
-| `capabilities.methods` | `docs/capabilities.md` | the same methods table |
-| `capabilities.sources` | `docs/capabilities.md` | every source, its kind, read or output, method, service, signals, cadence, cost, scope and details |
-| `capabilities.actions` | `docs/capabilities.md` | every action, its effect and its preview and commit methods |
-| `capabilities.events` | `docs/capabilities.md` | the bus events the plugin emits |
-| `accounts.profile` | `docs/accounts.md` | the profile fields every alias is checked against |
-| `configuration.options` | `docs/configuration.md` | every option, its type, default and description |
-| `automations.events` | `docs/automations.md` | one timer recipe per events source, with the cursor in state |
-
-A section sits between its markers, and the text outside them is hand-written and never touched:
+A section sits between its generated markers, and the text outside them is hand-written:
 
 ```md
-<!-- kit:start:capabilities.methods -->
-| Method | Class | … |
-<!-- kit:end:capabilities.methods -->
+<!-- generated:capabilities -->
+…the table…
+<!-- /generated:capabilities -->
 ```
 
-`plugin-kit docs` replaces what is between a pair. `plugin-kit docs --check` reports a section that differs
-(`DOCS.stale`), a missing pair (`DOCS.missing-marker`) or a missing file (`DOCS.missing-file`); `plugin-kit check` runs
-the same check. It also reports a missing heading in `AGENTS.md` (`DOCS.agents-section`), because the standard requires
-the template's sections.
-
-A generated section is deterministic: the same manifest makes the same bytes, so a diff in a generated section is a
-manifest change. Edit the manifest, never the section.
+`plugin-kit docs` replaces what is between a pair. `plugin-kit docs --check` reports drift with conformance's
+`T0.docs-<section>` findings, a missing pair with the same id, and a missing file with `DOCS.missing-file`;
+`plugin-kit check` gets the drift findings from `runConformance` and adds only the missing-file check. Generated text is
+deterministic: the same manifest makes the same bytes, so edit the manifest, never the section.
 
 ### `record`
 
-`record` first runs `runConformance(pluginDir, { record: true })`, which writes the provider answers through the
-plugin's own recorded calls, and then redacts every JSON file under `test/conformance/`. The default can be replaced
-with `--fixtures <path>`. With `--account <alias>`, a recorder that writes one directory per alias is redacted for that
-alias only: `test/conformance/work/` rather than the whole directory.
+`record` runs `runConformance(pluginDir, { record: true })`, then reads the plugin's one fixture at
+`fixtures/conformance.json` (`readFixture`'s location), redacts it, and writes it back. `--fixtures <path>` names another
+fixture file. `--account <alias>` must name an alias in the fixture's `accounts.aliases`; an unknown alias is a
+`KIT_ACCOUNT_UNKNOWN` refusal, never a fallback to another file.
 
 Redaction replaces:
 
@@ -99,8 +83,8 @@ Redaction replaces:
   `full_name` with `<redacted:personal>`;
 - a sensitive URL query value (`token`, `key`, `signature`, `password`, `email`, `code`) with `<redacted>`.
 
-The pass is deterministic and idempotent: keys keep their order, a placeholder carries no pattern, and a second run
-changes nothing. `record --check` records nothing and fails (`RECORD.unredacted`) when a committed fixture still needs a
+A conformance fixture's `grants` section is signed test data; `record` leaves it unchanged. The pass is deterministic
+and idempotent: keys keep their order, a placeholder carries no pattern, and a second run changes nothing. `record --check` records nothing and fails (`RECORD.unredacted`) when a committed fixture still needs a
 redaction, so CI can run it on every pull request.
 
 ### `forbidden`
@@ -111,7 +95,7 @@ The scan reads text files outside `node_modules`, `dist` and the other generated
 |---|---|
 | `FORBIDDEN.app-name` | an app identifier in code, manifest or docs. An `x-<app>` key is allowed: the prefix is the one place a name belongs. |
 | `FORBIDDEN.main-branch` | a GitHub `blob/main`, `tree/main`, `raw/main` or `raw.githubusercontent.com/…/main` link. Every repository in the org uses `master`. |
-| `FORBIDDEN.secret` | a credential the contract's own detector (`secretKinds`) recognises. |
+| `FORBIDDEN.secret` | a credential the contract's own detector (`secretKinds`) recognises. A conformance fixture's signed test-grant tokens are public test data, not credentials, and are not reported. |
 
 The app list is `src/kit/forbidden-apps.ts`, the kit's one denylist. It targets the app's own identifiers and
 repository prefixes, not ordinary words that happen to be product names.
@@ -141,22 +125,23 @@ so they are flags; the defaults are `—` and `supported`.
 
 ## The host harness
 
-A plugin's host test imports the harness from the same dev export:
+The harness lives in `src/internal/host/`, beside conformance's real T1 host. The kit re-exports it from the same dev
+export, so a plugin's host test imports the same functions and there is one implementation:
 
 ```ts
 import { connectMcpServer, createAutomation, createCodeMode, createHost, TurnLog } from "@we-the-rebel-alliance/plugin-contract/kit"
 ```
 
-The harness handles the six OpenCode 2.4 behaviours in plugin standard §8. Each has a test in `test/kit-host.test.ts`:
+The harness handles the six OpenCode 2.4 behaviours in plugin standard §8. Each has a test in `test/host-harness.test.ts`:
 
-1. **Background activation.** `createHost({ kind, plugin, isActive })` exposes `activate()`, which waits with a bound,
-   and `call(name, fn)`, which waits for activation before the first RPC. A timeout is `KIT_TIMEOUT`, with the bound and
-   a next step, instead of a hang.
+1. **Background activation.** `createHost({ directory, version, pluginId })` loads the plugin into the real embedded
+   `@opencode/sdk` host, prompts a session so the plugin activates, and waits with a bound before the first RPC. A
+   timeout is `HOST_TIMEOUT`, with the bound and a next step, instead of a hang.
 2. **The embedded `@opencode/sdk` host never runs automations.** `createAutomation({ kind: "sdk" }, api, spec)` answers
    `{ status: "skipped" }` and does not call the API; `{ kind: "server" }` creates one, and a test on the embedded host
    that supplies its own scheduler passes `{ allowScheduler: true }`.
 3. **`experimental.schedule` is gone.** `automationApi(client)` returns the 2.4 `experimental.automation` API; a client
-   that still offers only `experimental.schedule` is a `KIT_API_GONE` refusal that names
+   that still offers only `experimental.schedule` is a `HOST_API_GONE` refusal that names
    `/api/experimental/automation`. The harness never calls the removed method.
 4. **MCP `server/discover` first.** `connectMcpServer(config, transport)` probes a server with no `protocol`; a 2xx is
    the connection, a 401 or 403 ends the attempt with no `initialize`, and another failure falls back to `initialize`. An
@@ -181,8 +166,11 @@ is how this package's tests run every command without a network or a repository.
 
 ## Package shape
 
-- `src/kit.ts` is the entry; `src/kit/**` is the implementation; `bin/plugin-kit.js` is the executable shim.
+- `src/kit.ts` is the entry; `src/kit/**` is the command implementation; `src/internal/host/**` is the shared harness;
+  `bin/plugin-kit.js` is the executable shim.
 - `dist/` and the shim are committed, so a tag installs and runs with no build.
 - The kit has no runtime dependency: `dist/kit.js` imports Node built-ins and the package's own chunks.
 - The conformance module is imported lazily, and structurally, by `loadConformance`: the kit keeps no copy of a check,
   and a module without `runConformance`, `t0` and `t1` is a clear `KIT_CONFORMANCE` error rather than a missing gate.
+- `src/internal/host/` is the one host harness; `src/kit.ts` re-exports it, and a kit test proves the exports are the
+  same function objects.

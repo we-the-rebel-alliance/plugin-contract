@@ -1,10 +1,12 @@
 import assert from "node:assert/strict"
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { describe, test } from "node:test"
-import { redactDirectory, redactText, redactValue, runRecord } from "../src/kit/record.ts"
+import { runConformance } from "../src/conformance.ts"
+import { FIXTURE_FILE, fixtureAliases, redactText, redactValue, runRecord } from "../src/kit/record.ts"
 import type { CommandContext, ConformanceReport, ConformanceRunner } from "../src/kit/types.ts"
+import { KitError } from "../src/kit/types.ts"
 
 const write = (path: string, text: string): void => {
   mkdirSync(dirname(path), { recursive: true })
@@ -31,9 +33,8 @@ const context = (dir: string, runner: ConformanceRunner, json = false): CommandC
   }
 }
 
-const runnerThatWrites = (file: string, report: ConformanceReport = { ok: true, findings: [] }): ConformanceRunner => ({
+const okRunner = (report: ConformanceReport = { ok: true, findings: [] }): ConformanceRunner => ({
   async runConformance() {
-    write(file, JSON.stringify({ account: "ana@example.com", owner: { token: "ghp_aaaaaaaaaaaaaaaaaaaa" }, text: "call +33 6 12 34 56 78", home: "/home/ana/notes" }))
     return report
   },
   async t0() {
@@ -54,7 +55,6 @@ describe("redaction", () => {
     assert.equal(redactText("?token=abc123&page=2"), "?token=<redacted>&page=2")
     assert.equal(redactText("nothing personal"), "nothing personal")
     assert.equal(redactText("version 1.2.3, 2026-11-24"), "version 1.2.3, 2026-11-24")
-    // A timestamp and a plain account id are not phone numbers.
     assert.equal(redactText("at 2026-11-24 12:30"), "at 2026-11-24 12:30")
     assert.equal(redactText("id 1234567890"), "id 1234567890")
     assert.equal(redactText("reach +14155550123"), "reach <redacted:phone>")
@@ -106,96 +106,88 @@ describe("redaction", () => {
     assert.equal(value.phone, "<redacted:personal>")
     assert.equal(value.profile.name, "<redacted:personal>")
   })
-
-  test("a directory is checked without a write, and rewritten with one", () => {
-    const local = temp()
-    try {
-      const file = join(local.dir, "default.json")
-      write(file, JSON.stringify({ email: "ana@example.com" }, null, 2) + "\n")
-      const check = redactDirectory(local.dir, { write: false })
-      assert.deepEqual(check.findings.map((finding) => finding.id), ["RECORD.unredacted"])
-      assert.match(readFileSync(file, "utf8"), /ana@example\.com/)
-      const written = redactDirectory(local.dir, { write: true })
-      assert.deepEqual(written.findings, [])
-      assert.equal(written.files[0]?.changed, true)
-      assert.doesNotMatch(readFileSync(file, "utf8"), /ana@example\.com/)
-      assert.equal(redactDirectory(local.dir, { write: true }).files[0]?.changed, false)
-    } finally {
-      local.cleanup()
-    }
-  })
-
-  test("invalid JSON and a missing directory are findings, not crashes", () => {
-    const local = temp()
-    try {
-      write(join(local.dir, "bad.json"), "{")
-      assert.deepEqual(redactDirectory(local.dir, { write: false }).findings.map((finding) => finding.id), ["RECORD.invalid-json"])
-      assert.deepEqual(redactDirectory(join(local.dir, "missing"), { write: false }).findings.map((finding) => finding.id), ["RECORD.missing-directory"])
-    } finally {
-      local.cleanup()
-    }
-  })
 })
 
 describe("plugin-kit record", () => {
-  test("runs the recorder, redacts a fixture, and fails a check that still finds one", async () => {
+  const fixture = (aliases = ["work", "personal"]): Record<string, unknown> => ({
+    plugin: "@we-the-rebel-alliance/fixture-plugin",
+    accounts: { aliases },
+    sources: { "fixture.messages": { cases: [{ input: { account: "work" }, answer: { account: "work" } }] } },
+    grants: { cases: [{ name: "valid", token: "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.c2lnbmF0dXJl" }] },
+    events: { status: { name: "fixture", version: "1.0.0", accounts: aliases.map((alias) => ({ alias, state: "ready" })) } },
+  })
+
+  test("writes and redacts exactly fixtures/conformance.json, keeping the accounts section", async () => {
     const local = temp()
     try {
-      const file = join(local.dir, "test", "conformance", "default.json")
-      const runner = runnerThatWrites(file)
-      const recorded = context(local.dir, runner)
-      assert.equal(await runRecord(recorded, { fixtures: undefined, check: false }), 0)
-      assert.match(recorded.out(), /record: 1 fixture under test\/conformance, 1 redacted; conformance ok/)
-      assert.doesNotMatch(readFileSync(file, "utf8"), /ana@example\.com|ghp_/)
-      assert.equal(await runRecord(context(local.dir, runner), { fixtures: undefined, check: true }), 0)
-      write(file, JSON.stringify({ email: "ana@example.com" }))
-      const check = context(local.dir, runner)
-      assert.equal(await runRecord(check, { fixtures: undefined, check: true }), 1)
-      assert.match(check.err(), /RECORD\.unredacted/)
+      write(join(local.dir, FIXTURE_FILE), `${JSON.stringify(fixture(), null, 2)}\n`)
+      const path = join(local.dir, FIXTURE_FILE)
+      const value = JSON.parse(readFileSync(path, "utf8")) as Record<string, any>
+      value.sources["fixture.messages"].cases[0].answer.owner = { email: "ana@example.com", name: "Ana" }
+      value.token = "ghp_aaaaaaaaaaaaaaaaaaaa"
+      writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`)
+      const run = context(local.dir, okRunner())
+      assert.equal(await runRecord(run, { fixtures: undefined, check: false }), 0)
+      const result = JSON.parse(readFileSync(path, "utf8")) as Record<string, any>
+      assert.deepEqual(fixtureAliases(result), ["work", "personal"])
+      assert.equal(result.sources["fixture.messages"].cases[0].answer.owner.email, "<redacted:personal>")
+      assert.equal(result.sources["fixture.messages"].cases[0].answer.owner.name, "<redacted:personal>")
+      assert.equal(result.token, "<redacted:secret>")
+      assert.equal(result.grants.cases[0].token, "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.c2lnbmF0dXJl")
+      assert.match(run.out(), /fixtures\/conformance\.json written, redacted; conformance ok/)
     } finally {
       local.cleanup()
     }
   })
 
-  test("--account narrows to that account's directory when the recorder writes one per alias", async () => {
+  test("--check reports an unredacted fixture without writing it", async () => {
     const local = temp()
     try {
-      const work = join(local.dir, "test", "conformance", "work", "feed.json")
-      const personal = join(local.dir, "test", "conformance", "personal", "feed.json")
-      write(work, JSON.stringify({ email: "work@example.com" }))
-      write(personal, JSON.stringify({ email: "personal@example.com" }))
-      const runner: ConformanceRunner = { runConformance: async () => ({ ok: true, findings: [] }), t0: async () => [], t1: async () => [] }
-      assert.equal(await runRecord(context(local.dir, runner), { account: "work", fixtures: undefined, check: false }), 0)
-      assert.doesNotMatch(readFileSync(work, "utf8"), /work@example\.com/)
-      assert.match(readFileSync(personal, "utf8"), /personal@example\.com/)
+      write(join(local.dir, FIXTURE_FILE), `${JSON.stringify({ ...fixture(), email: "ana@example.com" }, null, 2)}\n`)
+      const run = context(local.dir, okRunner())
+      assert.equal(await runRecord(run, { fixtures: undefined, check: true }), 1)
+      assert.match(run.err(), /RECORD\.unredacted/)
+      assert.match(readFileSync(join(local.dir, FIXTURE_FILE), "utf8"), /ana@example\.com/)
     } finally {
       local.cleanup()
     }
   })
 
-  test("a failed conformance report is reported and fails, after the fixtures are redacted", async () => {
+  test("an unknown --account is a KitError, never a fallback", async () => {
     const local = temp()
     try {
-      const file = join(local.dir, "test", "conformance", "default.json")
-      const runner = runnerThatWrites(file, { ok: false, findings: [{ id: "T1.host", level: "error", message: "the plugin refused" }] })
-      const run = context(local.dir, runner)
-      assert.equal(await runRecord(run, { fixtures: undefined, check: false }), 1)
-      assert.match(run.err(), /T1\.host/)
-      assert.doesNotMatch(readFileSync(file, "utf8"), /ana@example\.com/)
+      write(join(local.dir, FIXTURE_FILE), `${JSON.stringify(fixture(), null, 2)}\n`)
+      await assert.rejects(runRecord(context(local.dir, okRunner()), { account: "nobody", fixtures: undefined, check: true }), (error: unknown) => error instanceof KitError && error.code === "KIT_ACCOUNT_UNKNOWN")
     } finally {
       local.cleanup()
     }
   })
 
-  test("a default fixture directory the recorder did not create is a finding", async () => {
+  test("a missing fixture is a finding, not a directory walk", async () => {
     const local = temp()
     try {
-      const runner: ConformanceRunner = { runConformance: async () => ({ ok: true, findings: [] }), t0: async () => [], t1: async () => [] }
-      const run = context(local.dir, runner)
-      assert.equal(await runRecord(run, { fixtures: undefined, check: false }), 1)
-      assert.match(run.err(), /RECORD\.missing-directory/)
+      const run = context(local.dir, okRunner())
+      assert.equal(await runRecord(run, { fixtures: undefined, check: true }), 1)
+      assert.match(run.err(), /RECORD\.missing-file/)
     } finally {
       local.cleanup()
+    }
+  })
+
+  test("runs end to end against #59's fixture plugin, with two aliases", { timeout: 60000 }, async () => {
+    const root = mkdtempSync(join(process.cwd(), "test", ".tmp-record-"))
+    const directory = join(root, "fixture-plugin")
+    try {
+      cpSync(join(process.cwd(), "test", "fixtures", "fixture-plugin"), directory, { recursive: true })
+      const run = context(directory, { runConformance, t0: async () => [], t1: async () => [] })
+      assert.equal(await runRecord(run, { account: "work", fixtures: undefined, check: false }), 0)
+      const value = JSON.parse(readFileSync(join(directory, FIXTURE_FILE), "utf8")) as Record<string, unknown>
+      assert.deepEqual(fixtureAliases(value), ["work", "personal"])
+      assert.match(readFileSync(join(directory, FIXTURE_FILE), "utf8"), /<redacted:personal>/)
+      const report = await runConformance(directory, { hosts: [] })
+      assert.equal(report.ok, true, report.findings.map((finding) => finding.id).join(", "))
+    } finally {
+      rmSync(root, { recursive: true, force: true })
     }
   })
 })

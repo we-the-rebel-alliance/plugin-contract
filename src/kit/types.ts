@@ -8,7 +8,7 @@
 
 /** One problem the kit reports, at one path, with the next step. */
 export interface Finding {
-  /** A stable dotted id, such as `T0.namespace-length`, `DOCS.stale` or `FORBIDDEN.secret`. */
+  /** A stable dotted id, such as `T0.namespace-length`, `T0.docs-capabilities` or `FORBIDDEN.secret`. */
   readonly id: string
   readonly level: "error" | "warning"
   /** What happened, one sentence. */

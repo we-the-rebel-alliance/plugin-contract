@@ -8,9 +8,15 @@
  */
 import type { Manifest } from "../manifest.ts"
 import { cadence, list } from "./format.ts"
-import { writeClasses } from "./docs.ts"
 import { readPlugin, requireManifest } from "./plugin.ts"
 import type { CommandContext } from "./types.ts"
+
+/** The write classes a SUPPORTED.md row names, in the contract's order. */
+export function writeClasses(manifest: Manifest): string[] {
+  const order = ["write", "send", "share", "delete", "export", "admin"]
+  const found = new Set<string>(Object.values(manifest.methods).map((method) => method.class))
+  return order.filter((value) => found.has(value))
+}
 
 /** The columns of the data-source table in SUPPORTED.md, in its order. */
 export const SUPPORTED_HEADERS: readonly string[] = ["Plugin", "Repository", "Accounts (today → target)", "Sources (kind: reads/output)", "Write classes", "Signals", "Suggested cadence", "Wave", "Status"]

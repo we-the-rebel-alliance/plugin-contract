@@ -8,13 +8,12 @@
  * Redaction is deterministic and idempotent: a placeholder contains no pattern, so a second run changes nothing. It never
  * reorders keys, so a diff shows only the values that were replaced.
  */
-import { statSync } from "node:fs"
-import { existsSync } from "node:fs"
 import { join, resolve } from "node:path"
+import { eventHash } from "../events.ts"
 import { secretKinds } from "../internal/secrets.ts"
-import { readText, relativePath, walkFiles, writeJsonIfChanged } from "./files.ts"
+import { readText, relativePath, writeJsonIfChanged } from "./files.ts"
 import type { CommandContext, Finding } from "./types.ts"
-import { hasError, sortFindings } from "./types.ts"
+import { hasError, KitError, sortFindings } from "./types.ts"
 import { printFinding } from "./output.ts"
 
 const PLACEHOLDER = {
@@ -51,8 +50,26 @@ export function redactText(text: string): string {
   return result
 }
 
+/** Recompute an event's hash after redaction, so a redacted fixture still satisfies the page check. */
+function rehash(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(rehash)
+  if (typeof value !== "object" || value === null) return value
+  const result: Record<string, unknown> = {}
+  for (const [key, item] of Object.entries(value)) result[key] = rehash(item)
+  if (typeof result["external_id"] === "string" && typeof result["hash"] === "string" && Array.isArray(result["actors"])) {
+    try {
+      result["hash"] = eventHash(result as never)
+    } catch {
+      // A malformed event is the conformance check's finding, not a reason to make record throw.
+    }
+  }
+  return result
+}
+
 /** Replace credentials and personal data in a JSON value, preserving its keys and their order. */
 export function redactValue(value: unknown, path: readonly string[] = []): unknown {
+  // A conformance fixture's `grants` are signed test cases: their names, inputs and tokens are fixture data, not secrets.
+  if (path[0] === "grants") return value
   if (typeof value === "string") return redactText(value)
   if (Array.isArray(value)) return value.map((item) => redactValue(item, path))
   if (typeof value !== "object" || value === null) return value
@@ -74,76 +91,73 @@ export function redactValue(value: unknown, path: readonly string[] = []): unkno
   return result
 }
 
-/** One file's redaction, as `record` reports it. */
-export interface RedactedFile {
-  readonly path: string
-  readonly changed: boolean
+/** The fixture file a plugin records, beside its package. */
+export const FIXTURE_FILE = "fixtures/conformance.json"
+
+/** One parsed fixture, or undefined for a missing or malformed file (the finding names which). */
+function fixtureAt(path: string, display: string): { readonly text: string; readonly value: Record<string, unknown> } | { readonly finding: Finding } {
+  const text = readText(path)
+  if (text === undefined) {
+    return { finding: { id: "RECORD.missing-file", level: "error", path: display, message: `${display} is missing`, fix: "the plugin's recorder must write fixtures/conformance.json before record can redact it" } }
+  }
+  try {
+    const value = JSON.parse(text) as unknown
+    if (typeof value === "object" && value !== null && !Array.isArray(value)) return { text, value: value as Record<string, unknown> }
+  } catch {
+    // The finding below names the file and the next step.
+  }
+  return { finding: { id: "RECORD.invalid-json", level: "error", path: display, message: `${display} is not a JSON object`, fix: "record the fixture again; a recording writes a JSON object" } }
 }
 
-/** Redact every JSON file under `dir`; with `write`, rewrite the files that changed. */
-export function redactDirectory(dir: string, options: { readonly write: boolean }): { readonly files: RedactedFile[]; readonly findings: Finding[] } {
-  const files: RedactedFile[] = []
-  const findings: Finding[] = []
-  if (!existsSync(dir) || !isDirectory(dir)) {
-    return { files, findings: [{ id: "RECORD.missing-directory", level: "error", message: `the fixture directory ${dir} does not exist`, fix: "record the fixtures first, or pass --fixtures <path>" }] }
-  }
-  for (const path of walkFiles(dir)) {
-    if (!path.toLowerCase().endsWith(".json")) continue
-    const relative = relativePath(dir, path)
-    const text = readText(path)
-    if (text === undefined) {
-      findings.push({ id: "RECORD.unreadable", level: "error", path: relative, message: "the fixture cannot be read", fix: "check the file and run plugin-kit record again" })
-      continue
-    }
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(text)
-    } catch {
-      findings.push({ id: "RECORD.invalid-json", level: "error", path: relative, message: "the fixture is not JSON, so it cannot be redacted", fix: "record the fixture again; a recording writes JSON" })
-      continue
-    }
-    const redacted = redactValue(parsed)
-    const output = `${JSON.stringify(redacted, null, 2)}\n`
-    const changed = output !== text
-    if (changed && options.write) writeJsonIfChanged(path, redacted)
-    if (changed) {
-      files.push({ path: relative, changed })
-      if (!options.write) {
-        findings.push({ id: "RECORD.unredacted", level: "error", path: relative, message: "the fixture still holds a secret or personal data", fix: "run plugin-kit record without --check and commit the redacted fixture" })
-      }
-    } else {
-      files.push({ path: relative, changed: false })
-    }
-  }
-  return { files, findings: sortFindings(findings) }
+/** The aliases a fixture records, or none when it records no accounts section. */
+export function fixtureAliases(value: Record<string, unknown>): string[] {
+  const accounts = value["accounts"]
+  if (typeof accounts !== "object" || accounts === null) return []
+  const aliases = (accounts as Record<string, unknown>)["aliases"]
+  return Array.isArray(aliases) ? aliases.filter((alias): alias is string => typeof alias === "string") : []
 }
 
-/** `plugin-kit record`: run the recorder, redact every fixture, and fail when a check still finds one. */
+/** `plugin-kit record`: run the recorder, then redact and write the one fixture #59 reads. */
 export async function runRecord(
   context: CommandContext,
   options: { readonly account?: string | undefined; readonly fixtures: string | undefined; readonly check: boolean },
 ): Promise<number> {
+  const file = options.fixtures === undefined ? join(context.dir, "fixtures", "conformance.json") : resolve(context.dir, options.fixtures)
   const report = options.check ? { ok: true, findings: [] } : await (await context.conformance()).runConformance(context.dir, { record: true })
-  const root = options.fixtures === undefined ? join(context.dir, "test", "conformance") : resolve(context.dir, options.fixtures)
-  const scoped = options.account !== undefined && isDirectory(join(root, options.account)) ? join(root, options.account) : root
-  const redaction = redactDirectory(scoped, { write: !options.check })
-  const findings = [...report.findings, ...redaction.findings]
-  const changed = redaction.files.filter((file) => file.changed).length
-  if (context.json) {
-    context.io.stdout(`${JSON.stringify({ command: "record", ok: report.ok && !hasError(redaction.findings), account: options.account, fixtures: relativePath(context.dir, scoped), recorded: redaction.files.length, changed, report, findings }, null, 2)}\n`)
-  } else {
-    for (const finding of sortFindings(findings)) printFinding(context, finding)
-    context.io.stdout(
-      `record: ${redaction.files.length} fixture${redaction.files.length === 1 ? "" : "s"} under ${relativePath(context.dir, scoped)}${options.check ? " checked" : ""}, ${changed} ${options.check ? "need redaction" : "redacted"}; conformance ${options.check ? "not run (--check)" : report.ok ? "ok" : "failed"}\n`,
-    )
+  const display = relativePath(context.dir, file)
+  const read = fixtureAt(file, display)
+  if ("finding" in read) {
+    const findings = [...report.findings, read.finding]
+    printResult(context, findings, options, file, 0, report, "missing")
+    return 1
   }
-  return report.ok && !hasError(redaction.findings) ? 0 : 1
+  const aliases = fixtureAliases(read.value)
+  if (options.account !== undefined && !aliases.includes(options.account)) {
+    throw new KitError("KIT_ACCOUNT_UNKNOWN", `the fixture records no account alias ${JSON.stringify(options.account)}`, `record one of ${aliases.length === 0 ? "the fixture's aliases" : aliases.join(", ")}, or pass --account with one of them`)
+  }
+  const redacted = rehash(redactValue(read.value))
+  const output = `${JSON.stringify(redacted, null, 2)}\n`
+  const changed = output !== read.text
+  if (changed && !options.check) writeJsonIfChanged(file, redacted)
+  const findings = [...report.findings, ...(changed && options.check ? [{ id: "RECORD.unredacted", level: "error" as const, path: display, message: "the fixture still holds a secret or personal data", fix: "run plugin-kit record without --check and commit the redacted fixture" }] : [])]
+  printResult(context, findings, options, file, changed ? 1 : 0, report, changed ? (options.check ? "needs redaction" : "redacted") : "unchanged")
+  return report.ok && !hasError(findings) ? 0 : 1
 }
 
-function isDirectory(path: string): boolean {
-  try {
-    return statSync(path).isDirectory()
-  } catch {
-    return false
+/** Print the record result, in text or JSON. */
+function printResult(
+  context: CommandContext,
+  findings: readonly Finding[],
+  options: { readonly account?: string | undefined; readonly check: boolean },
+  file: string,
+  changed: number,
+  report: { readonly ok: boolean; readonly findings: readonly Finding[] },
+  state: string,
+): void {
+  if (context.json) {
+    context.io.stdout(`${JSON.stringify({ command: "record", ok: report.ok && !hasError(findings), account: options.account, fixture: relativePath(context.dir, file), changed, state, report, findings }, null, 2)}\n`)
+    return
   }
+  for (const finding of sortFindings(findings)) printFinding(context, finding)
+  context.io.stdout(`record: ${relativePath(context.dir, file)} ${options.check ? "checked" : "written"}, ${state}; conformance ${options.check ? "not run (--check)" : report.ok ? "ok" : "failed"}\n`)
 }

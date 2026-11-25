@@ -80,6 +80,16 @@ function add(findings: Finding[], used: Map<Allowance, number>, allowances: read
   findings.push(finding)
 }
 
+/** The signed test-grant tokens a conformance fixture records; they are public test data, not credentials. */
+function grantTokens(text: string): string[] {
+  try {
+    const value = JSON.parse(text) as { grants?: { cases?: readonly { token?: unknown }[] } }
+    return (value.grants?.cases ?? []).flatMap((entry) => (typeof entry.token === "string" ? [entry.token] : []))
+  } catch {
+    return []
+  }
+}
+
 /** Every forbidden pattern under `dir`, with the line each was found on. */
 export function forbiddenFindings(dir: string, options: ForbiddenOptions = {}): Finding[] {
   const apps = options.apps ?? FORBIDDEN_APPS
@@ -93,7 +103,11 @@ export function forbiddenFindings(dir: string, options: ForbiddenOptions = {}): 
     if (relative === ALLOW_FILE) continue
     const text = readText(path)
     if (text === undefined) continue
+    // A conformance fixture records signed test grants; those tokens are public test data, not secrets.
+    const exempt = relative.endsWith("fixtures/conformance.json") ? grantTokens(text) : []
+    const withoutGrants = exempt.reduce((value, token) => value.split(token).join("<grant-token>"), text)
     const lines = text.split(/\r?\n/)
+    const scanLines = withoutGrants.split(/\r?\n/)
     const seen = new Set<string>()
     const reportedKinds = new Set<string>()
     for (const [index, line] of lines.entries()) {
@@ -130,7 +144,7 @@ export function forbiddenFindings(dir: string, options: ForbiddenOptions = {}): 
           })
         }
       }
-      const kinds = secretKinds(line)
+      const kinds = secretKinds(scanLines[index] ?? line)
       for (const kind of kinds) {
         reportedKinds.add(kind)
         const key = `secret:${lineNumber}:${kind}`
@@ -146,7 +160,7 @@ export function forbiddenFindings(dir: string, options: ForbiddenOptions = {}): 
       }
     }
     // A private key block can span lines, so one line at a time would miss the header without its body.
-    for (const kind of secretKinds(text)) {
+    for (const kind of secretKinds(withoutGrants)) {
       const key = `whole:${kind}`
       if (seen.has(key) || reportedKinds.has(kind)) continue
       seen.add(key)

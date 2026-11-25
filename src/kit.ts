@@ -1,12 +1,12 @@
 /**
- * `kit`: the `plugin-kit` binary and the host harness, for a plugin's development and CI.
+ * `kit`: the `plugin-kit` binary and the conformance host harness, for a plugin's development and CI.
  *
  * This is a dev export. A plugin installs plugin-contract as a devDependency and runs the binary from
  * `node_modules/.bin/plugin-kit`; it never bundles the kit into its own `dist/`. The runtime modules a plugin imports
  * come from their own entries (`./manifest`, `./events`, `./register`, …).
  *
- * The binary's commands are documented in `docs/kit.md`. The host harness handles the six OpenCode 2.4 behaviour changes
- * of plugin standard §8; each has a test beside it.
+ * The host harness lives in `src/internal/host/`, beside the conformance host that uses it. The kit re-exports it with
+ * the same public names and keeps no second implementation. The binary's commands are documented in `docs/kit.md`.
  */
 export { COMMANDS, HELP, main } from "./kit/cli.ts"
 export { KIT_BUNDLE_MARKER } from "./kit/bundled.ts"
@@ -27,7 +27,7 @@ export {
   mcpAddress,
   TurnLog,
   waitForActivation,
-} from "./kit/host.ts"
+} from "./internal/host/index.ts"
 export type {
   ActivationOptions,
   AutomationAction,
@@ -39,9 +39,9 @@ export type {
   AutomationTrigger,
   CodeModeHarness,
   CodeModeSession,
-  HostHarness,
   HostKind,
   HostOptions,
+  HostRun,
   McpConnection,
   McpProtocol,
   McpServerConfig,
@@ -50,4 +50,4 @@ export type {
   ToolCallInput,
   ToolCallLike,
   TurnEvent,
-} from "./kit/host.ts"
+} from "./internal/host/index.ts"
