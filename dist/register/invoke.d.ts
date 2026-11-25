@@ -21,16 +21,18 @@ export interface PreparedCall {
     readonly account: string;
     /** A commit's reservation, released on a refusal before the handler or consumed as it starts. */
     readonly reservation?: PlanReservation;
+    /** A commit's plan: the plan handler's full answer, which the commit handler receives as `call.plan`. */
+    readonly plan?: unknown;
 }
 /**
  * The input checked and the account resolved, or a contract refusal. A commit takes no account: its account is the one
  * a verified grant names, or the plugin's only account, or `default` for the handler to read from the plan.
  */
 export declare function prepareCall(entry: MethodEntry, raw: unknown, accounts: readonly AccountProfile[], plans: PlanStore): PreparedCall;
-/** The answer, checked; a plan must name the method that commits it. */
+/** The answer, checked; a plan must name the method that commits it, and must not mint its own id. */
 export declare function checkedOutput(entry: MethodEntry, value: unknown): unknown;
 /** Run a prepared call's handler, checking its answer and mapping its failure. */
-export declare function execute(entry: MethodEntry, prepared: PreparedCall, call: Omit<MethodCall, "account">, plans: PlanStore): Promise<unknown>;
+export declare function execute(entry: MethodEntry, prepared: PreparedCall, call: Omit<MethodCall, "account" | "plan">, plans: PlanStore): Promise<unknown>;
 /** The door's call context from an OpenCode tool context. */
 export declare function toolCall(context: {
     readonly sessionID: string;

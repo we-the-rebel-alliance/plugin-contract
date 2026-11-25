@@ -212,8 +212,8 @@ describe("the examples", () => {
       createHandlers(parts: object): {
         word_count: { run(input: { text: string }, call: { account: string }): Promise<unknown> }
         read_note: { run(input: { id: string }, call: { account: string }): Promise<unknown> }
-        plan_write_note: { run(input: { id: string; text: string }, call: { account: string }): Promise<{ planId: string; method: string }> }
-        write_note: { run(input: { planId: string }, call: { account: string }): Promise<unknown> }
+        plan_write_note: { run(input: { id: string; text: string }, call: { account: string }): Promise<{ method: string; id: string; text: string }> }
+        write_note: { run(input: { planId: string }, call: { account: string; plan?: unknown }): Promise<unknown> }
       }
     }
     const emitted: unknown[] = []
@@ -227,7 +227,9 @@ describe("the examples", () => {
     assert.deepEqual(await handlers.word_count.run({ text: "One two three." }, call("default")), { words: 3, characters: 14 })
     const plan = await handlers.plan_write_note.run({ id: "welcome", text: "A new note." }, call("default"))
     assert.equal(plan.method, "write_note")
-    assert.deepEqual(await handlers.write_note.run({ planId: plan.planId }, call("default")), { id: "welcome", text: "A new note." })
+    assert.equal(Object.hasOwn(plan, "planId"), false, "the register mints the planId")
+    // The register keeps the plan handler's full answer and gives it to the commit as call.plan.
+    assert.deepEqual(await handlers.write_note.run({ planId: "minted-by-the-register" }, { ...call("default"), plan }), { id: "welcome", text: "A new note." })
     assert.deepEqual(await handlers.read_note.run({ id: "welcome" }, call("default")), { id: "welcome", text: "A new note." })
     assert.deepEqual(emitted, [{ event: "changed", data: { capability: "glyph.notes", account: "default", reason: "write" } }])
     await assert.rejects(

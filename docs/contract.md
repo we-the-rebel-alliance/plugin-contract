@@ -159,7 +159,7 @@ One table covers every callable, including pass-through MCP tools, so a consumer
 | `class` | `read`, `write`, `send` (reaches someone), `share` (widens access), `delete`, `export` (leaves the provider), `admin` |
 | `accounts` | `optional` (takes `account`), `none` |
 | `operations` | the provider operations it may assert, for grants and session rules |
-| `plans: true` | dry-runs a change and answers `{ planId, method }`; a commit reserves it before confirmation, consumes it at handler start, and only that method may commit it |
+| `plans: true` | dry-runs a change; the register mints its `planId` and the method answers `{ method, … }`; a commit reserves it before confirmation, consumes it at handler start, and only that method may commit it |
 | `commits: "<method>"` | takes only `{ planId }` from that planning method; a consumer refuses any other input |
 | `effect` | optional narrowing of access: `ask` or `deny`; never `allow` |
 | `pinned` | `true` for a method whose signature Code Mode sends on every turn. None by default; at most one per plugin, only when session data shows most of the plugin's sessions call it, within about 1,000 tokens |
@@ -213,11 +213,16 @@ cursor), `gap`, `removals[]`, `cost`, `asOf`, `trust: "untrusted"`.
 | `preview`, `commit` | two different methods; the preview writes nothing |
 | `input`, `output` | JSON Schema 2020-12 |
 
-A preview answers `{ output, reaches?, changes?, cost?, trust }`. **Confirmation** of a non-`local` commit:
+A preview is the action's `plans: true` method: it writes nothing and answers `{ method, output?, reaches?, changes?,
+cost?, trust }`. The register mints the plan's `planId` with 128 random bits and adds it to the public answer
+`{ planId, method, output?, … }`, so a person's consent binds to a value no handler and no caller can guess or choose;
+the handler's full answer reaches the commit as `call.plan`. That commit takes exactly `{ planId }` and runs once per
+plan. **Confirmation** of a non-`local` commit:
 - **In an agent session:** an OpenCode permission ask, which any client can answer.
-- **From an app's UI, with no agent:** a host-signed, single-use action grant bound to the action and its exact input digest,
-  verified by the contract's `grant` module (#40). The module does no I/O and returns codes. Single use is recorded through a store
-  interface that the plugin backs with durable storage.
+- **From an app's UI, with no agent:** a host-signed, single-use action grant bound to the commit method and the exact
+  `{ planId }` digest, carried in the commit's RPC envelope with the consumer it was issued to, and verified by the
+  plugin's `register` (the `grant` module, #40). The module does no I/O and returns codes. Single use is recorded
+  through a store interface that the plugin backs with durable storage; the plan itself commits once.
 
 Over RPC (door 3), every non-`read` method runs only with one of these two confirmations; without one it is refused.
 Write and export methods may therefore be RPC methods.

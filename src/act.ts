@@ -3,16 +3,19 @@
  *
  * 1. the manifest comes from the installed package, and the grant must be for the same manifest hash, consumer,
  *    act and account;
- * 2. the caller's input is checked against the act's input schema before anything is called;
- * 3. the call runs in a session fenced by exactly that phase's rules (`actSessionRules`);
- * 4. a commit whose effect is not `local` is refused unless the caller passes a confirmation the host issued.
- *    This package does not issue a token and does not draw a confirm. A host with no issuer cannot confirm one.
+ * 2. a preview checks the caller's input against the act's input schema, reads the plugin's status for the aliases a
+ *    fence may name, and calls the action's preview method (the one declared `plans: true`) in the preview's fence. The
+ *    answer carries the register-minted plan's id and the method that commits it;
+ * 3. the person confirms. The host signs an action grant for the commit method and the exact `{ planId }`;
+ * 4. a commit calls the action's commit method (declared `commits: "<preview>"`) with exactly `{ planId }` in the
+ *    commit's own fence, carrying that grant and its consumer in the RPC envelope. The plugin's `register` verifies the
+ *    grant and runs the commit, so `act` never verifies it: the grant is the confirmation, and the fence is the access.
  *
- * Preview writes nothing: its session allows the preview action and not the commit action. The answer may carry
- * `reaches`, `changes` and `cost`, so a host can render one confirm for every act.
+ * Preview writes nothing. The answer may carry `reaches`, `changes` and `cost`, so a host can render one confirm for
+ * every act. A commit without a plan id and a grant is refused before any call.
  */
 import * as z from "zod"
-import { MAX_BYTES_DEFAULT, findAction, type ActionEffect, type ActionItem, type InstalledManifest } from "./manifest.ts"
+import { MAX_BYTES_DEFAULT, findAction, findMethod, type ActionItem, type InstalledManifest } from "./manifest.ts"
 import type { Checked } from "./internal/checked.ts"
 import { failure, failureFromError, type ReadFailure } from "./internal/failure.ts"
 import { problemsOf } from "./internal/validator.ts"
@@ -22,20 +25,8 @@ import { statusAliases, type ReadHost } from "./read.ts"
 export type { ReadFailure } from "./internal/failure.ts"
 export type { ActGrant, ActPhase } from "./access.ts"
 
-/** What a project's host does for `act`: a read host, plus a confirmation check when it can issue one. */
-export interface ActHost extends ReadHost {
-  /**
-   * True when `token` is a confirmation this host issued for this act, account and consumer. Absent when the host
-   * has no issuer: a non-local commit is then refused. The contract never issues a token.
-   */
-  issuedConfirmation?(check: {
-    readonly token: string
-    readonly action: string
-    readonly effect: ActionEffect
-    readonly account: string
-    readonly consumer: string
-  }): boolean | Promise<boolean>
-}
+/** What a project's host does for `act`: the same host as `read`, whose call may carry a commit's grant. */
+export type ActHost = ReadHost
 
 /** One preview or commit of an act. */
 export interface ActRequest {
@@ -44,13 +35,12 @@ export interface ActRequest {
   readonly grant: ActGrant
   readonly consumer: string
   readonly phase: ActPhase
-  /** The caller's input, checked against the act's input schema. The library adds `account`. */
+  /** Preview only: the caller's input, checked against the act's input schema. A commit with an input is refused. */
   readonly input?: Readonly<Record<string, unknown>>
-  /**
-   * A confirmation the host issued. Required to commit an act whose effect is not `local`. Ignored for a preview
-   * and for a local commit. An empty token is not a confirmation.
-   */
-  readonly confirmation?: string
+  /** Commit only: the `planId` the preview answered. */
+  readonly planId?: string
+  /** Commit only: the host-signed action grant `register` verifies. */
+  readonly grantToken?: string
   readonly signal?: AbortSignal
 }
 
@@ -73,8 +63,15 @@ export interface ActAnswer {
   readonly account?: string
 }
 
+/** A preview's answer: the confirm fields, and the plan the commit carries. */
+export interface ActPreview extends ActAnswer {
+  readonly planId: string
+  /** The act's commit method, as the preview named it. */
+  readonly method: string
+}
+
 export type ActOutcome =
-  | { readonly ok: true; readonly phase: "preview"; readonly preview: ActAnswer }
+  | { readonly ok: true; readonly phase: "preview"; readonly preview: ActPreview }
   | { readonly ok: true; readonly phase: "commit"; readonly result: ActAnswer }
   | { readonly ok: false; readonly failure: ReadFailure }
 
@@ -141,7 +138,24 @@ function checkAnswer(act: ActionItem, account: string, answer: unknown): ReadFai
   const output = schemaProblems(act.output, answer["output"])
   if (output.length > 0) return failure("SCHEMA_VIOLATION", `${act.id}'s output breaks its schema: ${output.join("; ")}`, "Report it to the plugin's maintainers.")
   const confirm = confirmProblems(answer)
-  if (confirm.length > 0) return failure("SCHEMA_VIOLATION", `${act.id}'s preview cannot be shown: ${confirm.join("; ")}`, "Report it to the plugin's maintainers.")
+  if (confirm.length > 0) return failure("SCHEMA_VIOLATION", `${act.id}'s answer cannot be shown: ${confirm.join("; ")}`, "Report it to the plugin's maintainers.")
+  return undefined
+}
+
+/** The plan a preview answered, as the host carries it to the commit; undefined when the answer is not that plan. */
+function planProblems(act: ActionItem, answer: Record<string, unknown>): ReadFailure | undefined {
+  const planId = answer["planId"]
+  if (typeof planId !== "string" || planId.length === 0) {
+    return failure("SCHEMA_VIOLATION", `${act.id}'s preview answered no planId`, "Report it to the plugin's maintainers.")
+  }
+  const method = answer["method"]
+  if (method !== act.commit) {
+    return failure(
+      "SCHEMA_VIOLATION",
+      `${act.id}'s preview names ${typeof method === "string" ? `"${method}"` : "no method"} as the method that commits it, and ${act.commit} does`,
+      "Report it to the plugin's maintainers.",
+    )
+  }
   return undefined
 }
 
@@ -171,40 +185,25 @@ async function fencedCall(host: ActHost, rules: Checked<readonly PermissionRule[
   }
 }
 
-/**
- * Refuses a non-local commit that has no confirmation the host issued. A preview is not a commit, and a local commit
- * needs no confirmation. A token the host cannot verify is not a confirmation: this package does not issue one.
- */
-async function confirmationProblem(host: ActHost, act: ActionItem, request: ActRequest): Promise<ActOutcome | undefined> {
-  if (request.phase !== "commit" || act.effect === "local") return undefined
-  const token = request.confirmation?.trim() ?? ""
-  if (token.length === 0) {
-    return refused(
-      "PERMISSION_DENIED",
-      `committing ${act.id} (${act.effect}) needs a confirmation the host issued`,
-      "Preview the act, ask the person, and pass the confirmation the host issued. The contract does not issue one.",
-    )
+/** The commit's plan id and grant, or the refusal that comes before any call. */
+function commitValues(act: ActionItem, request: ActRequest): { readonly planId: string; readonly grantToken: string } | { readonly failure: ReadFailure } {
+  if (request.input !== undefined) {
+    return { failure: failure("SCHEMA_VIOLATION", `a commit of ${act.id} takes only { planId }, and this request carries input`, "Pass the planId the preview answered; the grant names the input.") }
   }
-  if (host.issuedConfirmation === undefined) {
-    return refused(
-      "PERMISSION_DENIED",
-      `the host has no confirmation issuer, so ${act.id} (${act.effect}) cannot be committed`,
-      "The host must issue the confirmation. The contract does not issue one, and a caller-supplied token is not enough.",
-    )
+  const { planId, grantToken } = request
+  if (typeof planId !== "string" || planId.length === 0 || typeof grantToken !== "string" || grantToken.length === 0) {
+    return {
+      failure: failure(
+        "PERMISSION_DENIED",
+        `committing ${act.id} needs the planId its preview answered and a host-signed action grant`,
+        "Preview the act, ask the person, then commit with the planId the preview answered and the host-signed action grant for this act.",
+      ),
+    }
   }
-  let issued = false
-  try {
-    issued = (await host.issuedConfirmation({ token, action: act.id, effect: act.effect, account: request.grant.account, consumer: request.consumer })) === true
-  } catch {
-    issued = false
-  }
-  if (!issued) {
-    return refused("PERMISSION_DENIED", `the confirmation was not issued for ${act.id}`, "Ask the person again, and pass the confirmation the host issued for this act.")
-  }
-  return undefined
+  return { planId, grantToken }
 }
 
-/** Previews or commits an act under a grant, in a session fenced by that phase's rules. Never throws for a refusal. */
+/** Previews or commits an act under a grant. Never throws for a refusal. */
 export async function act(host: ActHost, request: ActRequest): Promise<ActOutcome> {
   const { installed, grant } = request
   const declared = findAction(installed.manifest, request.action)
@@ -218,8 +217,39 @@ export async function act(host: ActHost, request: ActRequest): Promise<ActOutcom
   if (grant.manifestHash !== installed.hash) {
     return refused("PERMISSION_DENIED", `${declared.id}'s manifest changed since the person consented`, "Ask the person to review the action and consent again.")
   }
-  const confirmed = await confirmationProblem(host, declared, request)
-  if (confirmed) return confirmed
+  const preview = findMethod(installed.manifest, declared.preview)
+  const commit = findMethod(installed.manifest, declared.commit)
+  if (preview === undefined || commit === undefined) {
+    const missing = preview === undefined ? declared.preview : declared.commit
+    return refused("UNAVAILABLE", `${installed.package} ${installed.version} declares no method ${missing} for ${declared.id}`, "Check the act's declaration against the installed plugin's manifest.")
+  }
+  if (request.phase === "preview" && preview.plans !== true) {
+    return refused("PLAN_INVALID", `${declared.id}'s preview method ${declared.preview} is not declared plans: true`, `Declare ${declared.preview} with plans: true so it answers the planId that commits the act.`)
+  }
+  if (request.phase === "commit") {
+    // The commit's own checks come before any host call: a plan id and a grant, and no input.
+    const values = commitValues(declared, request)
+    if ("failure" in values) return { ok: false, failure: values.failure }
+    const accounts = await statusAliases(host, installed)
+    if (!accounts.ok) return { ok: false, failure: accounts.failure }
+    const called = await fencedCall(
+      host,
+      actSessionRules(installed.manifest, declared, grant, "commit", accounts.value),
+      {
+        package: installed.package,
+        method: declared.commit,
+        input: { planId: values.planId },
+        grant: values.grantToken,
+        consumer: request.consumer,
+        ...(request.signal ? { signal: request.signal } : {}),
+      },
+      `${request.consumer} commits ${declared.id}`,
+    )
+    if (!called.ok) return { ok: false, failure: called.failure }
+    const problem = checkAnswer(declared, grant.account, called.answer)
+    if (problem) return { ok: false, failure: problem }
+    return { ok: true, phase: "commit", result: answerOf(called.answer as Record<string, unknown>) }
+  }
   if (request.input !== undefined && !plain(request.input)) {
     return refused("SCHEMA_VIOLATION", "an act's input must be an object", "Pass the input the act's schema describes.")
   }
@@ -229,18 +259,20 @@ export async function act(host: ActHost, request: ActRequest): Promise<ActOutcom
   if (!accounts.ok) return { ok: false, failure: accounts.failure }
   const called = await fencedCall(
     host,
-    actSessionRules(installed.manifest, declared, grant, request.phase, accounts.value),
+    actSessionRules(installed.manifest, declared, grant, "preview", accounts.value),
     {
       package: installed.package,
-      method: request.phase === "preview" ? declared.preview : declared.commit,
-      input: { ...(request.input ?? {}), account: grant.account },
+      method: declared.preview,
+      input: { ...(request.input ?? {}), ...(preview.accounts === "optional" ? { account: grant.account } : {}) },
       ...(request.signal ? { signal: request.signal } : {}),
     },
-    `${request.consumer} ${request.phase === "preview" ? "previews" : "commits"} ${declared.id}`,
+    `${request.consumer} previews ${declared.id}`,
   )
   if (!called.ok) return { ok: false, failure: called.failure }
   const problem = checkAnswer(declared, grant.account, called.answer)
   if (problem) return { ok: false, failure: problem }
-  const answer = answerOf(called.answer as Record<string, unknown>)
-  return request.phase === "preview" ? { ok: true, phase: "preview", preview: answer } : { ok: true, phase: "commit", result: answer }
+  const answer = called.answer as Record<string, unknown>
+  const plan = planProblems(declared, answer)
+  if (plan) return { ok: false, failure: plan }
+  return { ok: true, phase: "preview", preview: { ...answerOf(answer), planId: answer["planId"] as string, method: answer["method"] as string } }
 }

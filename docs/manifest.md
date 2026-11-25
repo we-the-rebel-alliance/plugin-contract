@@ -128,7 +128,7 @@ One table covers every callable, so a consumer knows how risky a call is before 
 | `class` | `read`, `write`, `send`, `share`, `delete`, `export` or `admin`. Required. |
 | `accounts` | `optional` when the method takes an `account`, `none` when it does not. Defaults to `none`. |
 | `operations` | The provider operations the method may assert, for grants and session rules. |
-| `plans` | `true` for a method that dry-runs a change and answers `{ planId, method }`; the planId commits once, only through that method. |
+| `plans` | `true` for a method that dry-runs a change; the register mints its `planId`, and the plan commits once, only through that method. |
 | `commits` | The planning method this method commits. It then takes only `{ planId }`. |
 | `effect` | A narrowing of `access`: `ask` or `deny`, never `allow`. |
 | `pinned` | `true` for the one method Code Mode sends on every turn. |

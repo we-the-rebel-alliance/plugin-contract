@@ -37,14 +37,19 @@ export interface ReadHost {
         readonly package: string;
     }): Promise<unknown>;
     /**
-     * Calls a plugin's method in that session: `POST /api/rpc/<plugin id>/<method>` with `{ sessionID, input }`. The
-     * host maps the package to its plugin id, from its own record of installed plugins.
+     * Calls a plugin's method in that session: `POST /api/rpc/<plugin id>/<method>` with `{ sessionID, input }`, and for
+     * a commit `{ sessionID, input, grant, consumer }` beside them. The host maps the package to its plugin id, from its
+     * own record of installed plugins.
      */
     call(request: {
         readonly package: string;
         readonly method: string;
         readonly sessionID: string;
         readonly input: Readonly<Record<string, unknown>>;
+        /** A host-signed action grant, in the envelope's `grant`: a commit's confirmation. `read` never sets it. */
+        readonly grant?: string;
+        /** The consumer the grant was issued to, in the envelope's `consumer`, beside `grant`. */
+        readonly consumer?: string;
         readonly signal?: AbortSignal;
     }): Promise<unknown>;
 }

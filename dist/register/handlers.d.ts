@@ -20,6 +20,11 @@ export interface MethodCall {
     progress(update?: Readonly<Record<string, unknown>>): Promise<void>;
     /** The account alias resolved through `accounts`, always one the plugin declares. */
     readonly account: string;
+    /**
+     * A commit's plan: the plan handler's full answer, as the register kept it. Absent on every other call. A planId is
+     * never part of it; the register mints the id the commit was called with.
+     */
+    readonly plan?: unknown;
     readonly door: Door;
 }
 /** One method's handler: its shapes, its description and its work. */
@@ -28,7 +33,7 @@ export interface MethodHandler {
     readonly description: string;
     /** The method's own input schema, without `account`; the register adds the account selector. */
     readonly input: JsonSchema;
-    /** The answer's schema. For `plans`, the register checks the contract's `{ planId, method }` instead. */
+    /** The answer's schema. For `plans`, the register checks the answer's method and mints the planId for `PLAN_OUTPUT`. */
     readonly output: JsonSchema;
     run(input: Readonly<Record<string, unknown>>, call: MethodCall): Promise<unknown>;
 }

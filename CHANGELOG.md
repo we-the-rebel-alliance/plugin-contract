@@ -14,6 +14,11 @@ The first release in `we-the-rebel-alliance`: the contract at wire version 1, gr
 - **The modules:** `manifest`, `accounts`, `access`, `register`, `events` (event model, hash, screening, page checks),
   `cursor` (a bound cursor codec), `outputs` (the snapshot shape registry), `params` and `pick`, `read` and `act`, `bus`,
   `grant`, `catalog`, `hints`, `schemas` and `conformance`.
+- **`act` on a plan:** a preview calls the action's `plans: true` method and answers the `planId` the register minted
+  for it; the commit calls the action's `commits` method with exactly `{ planId }` and the host-signed action grant that
+  `register` verifies, each phase in its own fence, so an app's write works against every plugin built on `register`.
+- **Minted plan ids:** the register mints every `planId` from 128 random bits, keeps the plan handler's full answer for
+  the commit's `call.plan`, and never reuses a live id; a handler that answers its own `planId` is `PLAN_INVALID`.
 - **One error table** (contract §12): `ERROR_CODES`, `SourceError` and `parseSourceError`. There are no aliases;
   `AUTH_REQUIRED` is not a contract code.
 - **Hints, without routines** (decision D10): a plugin may ship a hint file per source for any model-based consumer;

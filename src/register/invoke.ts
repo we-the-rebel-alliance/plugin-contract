@@ -2,8 +2,9 @@
  * One call through one handler, with the contract's checks around it (contract §6, §9 and §12).
  *
  * The register resolves the account, validates the input, refuses a commit that carries anything but a `planId`, runs
- * the handler, checks the answer (a plan's shape included), and maps a refusal. The same path runs behind every door,
- * so an agent tool, Code Mode and RPC cannot disagree about what a method accepts or answers.
+ * the handler, checks the answer (a plan's answer included, and the register mints the plan's id), and maps a refusal.
+ * The same path runs behind every door, so an agent tool, Code Mode and RPC cannot disagree about what a method
+ * accepts or answers.
  */
 import { DEFAULT_ALIAS } from "../accounts/alias.ts"
 import { resolveAccount, type AccountProfile } from "../accounts.ts"
@@ -11,7 +12,7 @@ import { manifestHash, type Manifest } from "../manifest.ts"
 import { planStore, type PlanReservation, type PlanStore } from "./plans.ts"
 import { refusal, refusalOf, refuse, RegisterError, reasonOf, type Refusal } from "./errors.ts"
 import { methodEntries, type Door, type HandlerTable, type MethodCall, type MethodEntry } from "./handlers.ts"
-import { validate, validateCommitInput, validatePlan } from "./validate.ts"
+import { validate, validateCommitInput, validatePlanAnswer } from "./validate.ts"
 
 const plain = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
 
@@ -63,6 +64,8 @@ export interface PreparedCall {
   readonly account: string
   /** A commit's reservation, released on a refusal before the handler or consumed as it starts. */
   readonly reservation?: PlanReservation
+  /** A commit's plan: the plan handler's full answer, which the commit handler receives as `call.plan`. */
+  readonly plan?: unknown
 }
 
 /**
@@ -78,7 +81,7 @@ export function prepareCall(entry: MethodEntry, raw: unknown, accounts: readonly
     try {
       const resolved = accounts.length === 0 ? { ok: true as const, alias: plan.reservation.account } : resolveAccount(accounts, { account: plan.reservation.account })
       if (!resolved.ok) throw new RegisterError(refusal("ACCOUNT_UNKNOWN", resolved.what, resolved.next))
-      return { input, account: resolved.alias, reservation: plan.reservation }
+      return { input, account: resolved.alias, reservation: plan.reservation, plan: plan.reservation.answer }
     } catch (error) {
       // A bad account is a refusal before the handler; the plan stays committable.
       plans.release(plan.reservation)
@@ -92,19 +95,34 @@ export function prepareCall(entry: MethodEntry, raw: unknown, accounts: readonly
   return { input, account: resolved.alias }
 }
 
-/** The answer, checked; a plan must name the method that commits it. */
+/** The answer, checked; a plan must name the method that commits it, and must not mint its own id. */
 export function checkedOutput(entry: MethodEntry, value: unknown): unknown {
   if (entry.item.plans === true) {
-    const plan = validatePlan(value)
-    if (!plan.ok) throw new RegisterError(refusal("PLAN_INVALID", `${entry.name} must answer { planId, method }: ${plan.problems.join("; ")}`, "Answer the plan's id and the method that commits it."))
-    if (entry.commit !== undefined && plan.value.method !== entry.commit) {
-      throw new RegisterError(refusal("PLAN_INVALID", `${entry.name} answers ${plan.value.method} as the method that commits it, but ${entry.commit} does`, `Answer method: "${entry.commit}".`))
+    const plan = validatePlanAnswer(value)
+    if (!plan.ok) {
+      throw new RegisterError(
+        refusal("PLAN_INVALID", `${entry.name} must answer { method, output?, … } without a planId: ${plan.problems.join("; ")}`, "Answer the method that commits the plan and §8's preview fields; the register mints the planId."),
+      )
+    }
+    const method = plan.value["method"] as string
+    if (entry.commit !== undefined && method !== entry.commit) {
+      throw new RegisterError(refusal("PLAN_INVALID", `${entry.name} answers ${method} as the method that commits it, but ${entry.commit} does`, `Answer method: "${entry.commit}".`))
     }
     return plan.value
   }
   const checked = validate(entry.output, value)
   if (!checked.ok) throw new RegisterError(refusal("SCHEMA_VIOLATION", `${entry.name} answered something its schema does not describe: ${checked.problems.join("; ")}`, "Report it to the plugin's maintainers."))
   return checked.value
+}
+
+/** The plan fields the contract publishes, beside the minted `planId`; private plan data stays in `call.plan`. */
+const PLAN_FIELDS = ["output", "reaches", "changes", "cost", "trust"] as const
+
+/** The public plan answer: the minted id, the committing method, and the preview fields the handler carried. */
+function publicPlan(planId: string, answer: Readonly<Record<string, unknown>>): Record<string, unknown> {
+  const value: Record<string, unknown> = { planId, method: answer["method"] }
+  for (const field of PLAN_FIELDS) if (Object.hasOwn(answer, field)) value[field] = answer[field]
+  return value
 }
 
 /** The failure a handler's error maps to: its contract refusal, or `UNAVAILABLE` with a redacted line. */
@@ -115,14 +133,20 @@ function failureOf(entry: MethodEntry, error: unknown): Refusal {
 }
 
 /** Run a prepared call's handler, checking its answer and mapping its failure. */
-export async function execute(entry: MethodEntry, prepared: PreparedCall, call: Omit<MethodCall, "account">, plans: PlanStore): Promise<unknown> {
+export async function execute(entry: MethodEntry, prepared: PreparedCall, call: Omit<MethodCall, "account" | "plan">, plans: PlanStore): Promise<unknown> {
   if (prepared.reservation !== undefined) {
     const taken = plans.consume(prepared.reservation)
     if (!taken.ok) throw new RegisterError(refusal(taken.code, taken.problems.join("; "), "Plan again, then commit with the new planId it answers."))
   }
   try {
-    const value = checkedOutput(entry, await entry.handler.run(prepared.input, { ...call, account: prepared.account }))
-    if (entry.item.plans === true) plans.record((value as { planId: string }).planId, prepared.account, entry.commit ?? entry.name)
+    const value = checkedOutput(
+      entry,
+      await entry.handler.run(prepared.input, { ...call, account: prepared.account, ...(prepared.plan === undefined ? {} : { plan: prepared.plan }) }),
+    )
+    if (entry.item.plans === true) {
+      const answer = value as Record<string, unknown>
+      return publicPlan(plans.record(answer, prepared.account, entry.commit ?? entry.name), answer)
+    }
     return value
   } catch (error) {
     if (error instanceof RegisterError) throw error

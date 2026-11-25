@@ -10,7 +10,8 @@ import {
   actSessionRules
 } from "./chunks/chunk-MIBCHKMR.js";
 import {
-  findAction
+  findAction,
+  findMethod
 } from "./chunks/chunk-WXKPUWDE.js";
 import "./chunks/chunk-L5LSEI5N.js";
 import {
@@ -83,7 +84,22 @@ function checkAnswer(act2, account, answer) {
   const output = schemaProblems(act2.output, answer["output"]);
   if (output.length > 0) return failure("SCHEMA_VIOLATION", `${act2.id}'s output breaks its schema: ${output.join("; ")}`, "Report it to the plugin's maintainers.");
   const confirm = confirmProblems(answer);
-  if (confirm.length > 0) return failure("SCHEMA_VIOLATION", `${act2.id}'s preview cannot be shown: ${confirm.join("; ")}`, "Report it to the plugin's maintainers.");
+  if (confirm.length > 0) return failure("SCHEMA_VIOLATION", `${act2.id}'s answer cannot be shown: ${confirm.join("; ")}`, "Report it to the plugin's maintainers.");
+  return void 0;
+}
+function planProblems(act2, answer) {
+  const planId = answer["planId"];
+  if (typeof planId !== "string" || planId.length === 0) {
+    return failure("SCHEMA_VIOLATION", `${act2.id}'s preview answered no planId`, "Report it to the plugin's maintainers.");
+  }
+  const method = answer["method"];
+  if (method !== act2.commit) {
+    return failure(
+      "SCHEMA_VIOLATION",
+      `${act2.id}'s preview names ${typeof method === "string" ? `"${method}"` : "no method"} as the method that commits it, and ${act2.commit} does`,
+      "Report it to the plugin's maintainers."
+    );
+  }
   return void 0;
 }
 function answerOf(value) {
@@ -108,33 +124,21 @@ async function fencedCall(host, rules, call, title) {
     await session?.close().catch(() => void 0);
   }
 }
-async function confirmationProblem(host, act2, request) {
-  if (request.phase !== "commit" || act2.effect === "local") return void 0;
-  const token = request.confirmation?.trim() ?? "";
-  if (token.length === 0) {
-    return refused(
-      "PERMISSION_DENIED",
-      `committing ${act2.id} (${act2.effect}) needs a confirmation the host issued`,
-      "Preview the act, ask the person, and pass the confirmation the host issued. The contract does not issue one."
-    );
+function commitValues(act2, request) {
+  if (request.input !== void 0) {
+    return { failure: failure("SCHEMA_VIOLATION", `a commit of ${act2.id} takes only { planId }, and this request carries input`, "Pass the planId the preview answered; the grant names the input.") };
   }
-  if (host.issuedConfirmation === void 0) {
-    return refused(
-      "PERMISSION_DENIED",
-      `the host has no confirmation issuer, so ${act2.id} (${act2.effect}) cannot be committed`,
-      "The host must issue the confirmation. The contract does not issue one, and a caller-supplied token is not enough."
-    );
+  const { planId, grantToken } = request;
+  if (typeof planId !== "string" || planId.length === 0 || typeof grantToken !== "string" || grantToken.length === 0) {
+    return {
+      failure: failure(
+        "PERMISSION_DENIED",
+        `committing ${act2.id} needs the planId its preview answered and a host-signed action grant`,
+        "Preview the act, ask the person, then commit with the planId the preview answered and the host-signed action grant for this act."
+      )
+    };
   }
-  let issued = false;
-  try {
-    issued = await host.issuedConfirmation({ token, action: act2.id, effect: act2.effect, account: request.grant.account, consumer: request.consumer }) === true;
-  } catch {
-    issued = false;
-  }
-  if (!issued) {
-    return refused("PERMISSION_DENIED", `the confirmation was not issued for ${act2.id}`, "Ask the person again, and pass the confirmation the host issued for this act.");
-  }
-  return void 0;
+  return { planId, grantToken };
 }
 async function act(host, request) {
   const { installed, grant } = request;
@@ -149,8 +153,38 @@ async function act(host, request) {
   if (grant.manifestHash !== installed.hash) {
     return refused("PERMISSION_DENIED", `${declared.id}'s manifest changed since the person consented`, "Ask the person to review the action and consent again.");
   }
-  const confirmed = await confirmationProblem(host, declared, request);
-  if (confirmed) return confirmed;
+  const preview = findMethod(installed.manifest, declared.preview);
+  const commit = findMethod(installed.manifest, declared.commit);
+  if (preview === void 0 || commit === void 0) {
+    const missing = preview === void 0 ? declared.preview : declared.commit;
+    return refused("UNAVAILABLE", `${installed.package} ${installed.version} declares no method ${missing} for ${declared.id}`, "Check the act's declaration against the installed plugin's manifest.");
+  }
+  if (request.phase === "preview" && preview.plans !== true) {
+    return refused("PLAN_INVALID", `${declared.id}'s preview method ${declared.preview} is not declared plans: true`, `Declare ${declared.preview} with plans: true so it answers the planId that commits the act.`);
+  }
+  if (request.phase === "commit") {
+    const values = commitValues(declared, request);
+    if ("failure" in values) return { ok: false, failure: values.failure };
+    const accounts2 = await statusAliases(host, installed);
+    if (!accounts2.ok) return { ok: false, failure: accounts2.failure };
+    const called2 = await fencedCall(
+      host,
+      actSessionRules(installed.manifest, declared, grant, "commit", accounts2.value),
+      {
+        package: installed.package,
+        method: declared.commit,
+        input: { planId: values.planId },
+        grant: values.grantToken,
+        consumer: request.consumer,
+        ...request.signal ? { signal: request.signal } : {}
+      },
+      `${request.consumer} commits ${declared.id}`
+    );
+    if (!called2.ok) return { ok: false, failure: called2.failure };
+    const problem2 = checkAnswer(declared, grant.account, called2.answer);
+    if (problem2) return { ok: false, failure: problem2 };
+    return { ok: true, phase: "commit", result: answerOf(called2.answer) };
+  }
   if (request.input !== void 0 && !plain(request.input)) {
     return refused("SCHEMA_VIOLATION", "an act's input must be an object", "Pass the input the act's schema describes.");
   }
@@ -160,20 +194,22 @@ async function act(host, request) {
   if (!accounts.ok) return { ok: false, failure: accounts.failure };
   const called = await fencedCall(
     host,
-    actSessionRules(installed.manifest, declared, grant, request.phase, accounts.value),
+    actSessionRules(installed.manifest, declared, grant, "preview", accounts.value),
     {
       package: installed.package,
-      method: request.phase === "preview" ? declared.preview : declared.commit,
-      input: { ...request.input ?? {}, account: grant.account },
+      method: declared.preview,
+      input: { ...request.input ?? {}, ...preview.accounts === "optional" ? { account: grant.account } : {} },
       ...request.signal ? { signal: request.signal } : {}
     },
-    `${request.consumer} ${request.phase === "preview" ? "previews" : "commits"} ${declared.id}`
+    `${request.consumer} previews ${declared.id}`
   );
   if (!called.ok) return { ok: false, failure: called.failure };
   const problem = checkAnswer(declared, grant.account, called.answer);
   if (problem) return { ok: false, failure: problem };
-  const answer = answerOf(called.answer);
-  return request.phase === "preview" ? { ok: true, phase: "preview", preview: answer } : { ok: true, phase: "commit", result: answer };
+  const answer = called.answer;
+  const plan = planProblems(declared, answer);
+  if (plan) return { ok: false, failure: plan };
+  return { ok: true, phase: "preview", preview: { ...answerOf(answer), planId: answer["planId"], method: answer["method"] } };
 }
 export {
   act

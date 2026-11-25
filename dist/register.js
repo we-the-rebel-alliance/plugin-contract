@@ -33,6 +33,7 @@ import {
   array,
   fromJSONSchema,
   literal,
+  looseObject,
   strictObject,
   string,
   unknown
@@ -135,52 +136,60 @@ async function gate(context, name, entry, call, account, options) {
 }
 
 // src/register/plans.ts
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 var PLAN_TTL_MS = 15 * 6e4;
+var PLAN_ID_BYTES = 16;
+function mintPlanId() {
+  return randomBytes(PLAN_ID_BYTES).toString("base64url");
+}
 function planStore(options = {}) {
   const now = options.now ?? Date.now;
   const ttl = options.ttlMs ?? PLAN_TTL_MS;
+  const mint = options.mint ?? mintPlanId;
   const plans = /* @__PURE__ */ new Map();
   const prune = () => {
     const at = now();
-    for (const [id, plan2] of plans) if (plan2.expires <= at) plans.delete(id);
+    for (const [id, plan] of plans) if (plan.expires <= at) plans.delete(id);
   };
-  const same = (plan2, reservation) => plan2.reserved === reservation.token && !plan2.used;
+  const same = (plan, reservation) => plan.reserved === reservation.token && !plan.used;
   return {
-    record(planId, account, method) {
+    record(answer, account, method) {
       prune();
-      plans.set(planId, { account, method, expires: now() + ttl, reserved: void 0, used: false });
+      let planId = mint();
+      while (plans.has(planId)) planId = mint();
+      plans.set(planId, { account, method, answer, expires: now() + ttl, reserved: void 0, used: false });
+      return planId;
     },
     reserve(planId, method) {
       prune();
-      const plan2 = plans.get(planId);
-      if (plan2 === void 0) return { ok: false, code: "PLAN_INVALID", problems: [`there is no plan '${planId}'; plan again and commit with the planId it answers`] };
-      if (plan2.used || plan2.reserved !== void 0) return { ok: false, code: "PLAN_USED", problems: [`the plan '${planId}' is already reserved or used; plan again to make a new one`] };
-      if (plan2.method !== method) return { ok: false, code: "PLAN_INVALID", problems: [`the plan '${planId}' commits ${plan2.method}, not ${method}`] };
-      const reservation = { planId, method, account: plan2.account, token: randomUUID() };
-      plan2.reserved = reservation.token;
+      const plan = plans.get(planId);
+      if (plan === void 0) return { ok: false, code: "PLAN_INVALID", problems: [`there is no plan '${planId}'; plan again and commit with the planId it answers`] };
+      if (plan.used || plan.reserved !== void 0) return { ok: false, code: "PLAN_USED", problems: [`the plan '${planId}' is already reserved or used; plan again to make a new one`] };
+      if (plan.method !== method) return { ok: false, code: "PLAN_INVALID", problems: [`the plan '${planId}' commits ${plan.method}, not ${method}`] };
+      const reservation = { planId, method, account: plan.account, answer: plan.answer, token: randomUUID() };
+      plan.reserved = reservation.token;
       return { ok: true, reservation };
     },
     release(reservation) {
-      const plan2 = plans.get(reservation.planId);
-      if (plan2 !== void 0 && same(plan2, reservation)) plan2.reserved = void 0;
+      const plan = plans.get(reservation.planId);
+      if (plan !== void 0 && same(plan, reservation)) plan.reserved = void 0;
     },
     consume(reservation) {
-      const plan2 = plans.get(reservation.planId);
-      if (plan2 === void 0) {
+      const plan = plans.get(reservation.planId);
+      if (plan === void 0) {
         prune();
         return { ok: false, code: "PLAN_INVALID", problems: [`there is no plan '${reservation.planId}'; plan again and commit with the new planId`] };
       }
-      if (plan2.expires <= now()) {
+      if (plan.expires <= now()) {
         plans.delete(reservation.planId);
         return { ok: false, code: "PLAN_INVALID", problems: [`the plan '${reservation.planId}' expired before its handler started; plan again`] };
       }
       prune();
-      if (plan2.used) return { ok: false, code: "PLAN_USED", problems: [`the plan '${reservation.planId}' was already used; plan again`] };
-      if (plan2.reserved !== reservation.token) return { ok: false, code: "PLAN_USED", problems: [`the plan '${reservation.planId}' was re-recorded or reserved by another call; plan again`] };
-      plan2.used = true;
-      plan2.reserved = void 0;
-      return { ok: true, account: plan2.account };
+      if (plan.used) return { ok: false, code: "PLAN_USED", problems: [`the plan '${reservation.planId}' was already used; plan again`] };
+      if (plan.reserved !== reservation.token) return { ok: false, code: "PLAN_USED", problems: [`the plan '${reservation.planId}' is no longer reserved by this call; plan again`] };
+      plan.used = true;
+      plan.reserved = void 0;
+      return { ok: true, account: plan.account, answer: plan.answer };
     },
     get size() {
       prune();
@@ -220,8 +229,7 @@ var COMMIT_INPUT = {
   additionalProperties: false
 };
 var reach = strictObject({ id: string().min(1).max(320), label: string().max(200).optional() });
-var plan = strictObject({
-  planId: string().min(1),
+var planAnswer = looseObject({
   method: string().min(1),
   output: unknown().optional(),
   reaches: array(reach).max(20).optional(),
@@ -255,8 +263,11 @@ function validate(schema, value) {
   const result = codec.codec.safeParse(value);
   return result.success ? { ok: true, value: result.data } : { ok: false, problems: problemsOf(result.error) };
 }
-function validatePlan(value) {
-  const result = plan.safeParse(value);
+function validatePlanAnswer(value) {
+  if (plain2(value) && Object.hasOwn(value, "planId")) {
+    return { ok: false, problems: ["a plan handler must not answer a planId; the register mints it and adds it to the plan"] };
+  }
+  const result = planAnswer.safeParse(value);
   return result.success ? { ok: true, value: result.data } : { ok: false, problems: problemsOf(result.error) };
 }
 function validateCommitInput(value) {
@@ -350,14 +361,14 @@ function prepareCall(entry, raw, accounts, plans) {
   const { input, account } = checkedInput(entry, raw);
   if (entry.item.commits !== void 0) {
     const planId = typeof input["planId"] === "string" ? input["planId"] : "";
-    const plan2 = plans.reserve(planId, entry.name);
-    if (!plan2.ok) throw new RegisterError(refusal(plan2.code, plan2.problems.join("; "), "Plan again, then commit with the planId it answers."));
+    const plan = plans.reserve(planId, entry.name);
+    if (!plan.ok) throw new RegisterError(refusal(plan.code, plan.problems.join("; "), "Plan again, then commit with the planId it answers."));
     try {
-      const resolved2 = accounts.length === 0 ? { ok: true, alias: plan2.reservation.account } : resolveAccount(accounts, { account: plan2.reservation.account });
+      const resolved2 = accounts.length === 0 ? { ok: true, alias: plan.reservation.account } : resolveAccount(accounts, { account: plan.reservation.account });
       if (!resolved2.ok) throw new RegisterError(refusal("ACCOUNT_UNKNOWN", resolved2.what, resolved2.next));
-      return { input, account: resolved2.alias, reservation: plan2.reservation };
+      return { input, account: resolved2.alias, reservation: plan.reservation, plan: plan.reservation.answer };
     } catch (error) {
-      plans.release(plan2.reservation);
+      plans.release(plan.reservation);
       throw error;
     }
   }
@@ -367,16 +378,27 @@ function prepareCall(entry, raw, accounts, plans) {
 }
 function checkedOutput(entry, value) {
   if (entry.item.plans === true) {
-    const plan2 = validatePlan(value);
-    if (!plan2.ok) throw new RegisterError(refusal("PLAN_INVALID", `${entry.name} must answer { planId, method }: ${plan2.problems.join("; ")}`, "Answer the plan's id and the method that commits it."));
-    if (entry.commit !== void 0 && plan2.value.method !== entry.commit) {
-      throw new RegisterError(refusal("PLAN_INVALID", `${entry.name} answers ${plan2.value.method} as the method that commits it, but ${entry.commit} does`, `Answer method: "${entry.commit}".`));
+    const plan = validatePlanAnswer(value);
+    if (!plan.ok) {
+      throw new RegisterError(
+        refusal("PLAN_INVALID", `${entry.name} must answer { method, output?, \u2026 } without a planId: ${plan.problems.join("; ")}`, "Answer the method that commits the plan and \xA78's preview fields; the register mints the planId.")
+      );
     }
-    return plan2.value;
+    const method = plan.value["method"];
+    if (entry.commit !== void 0 && method !== entry.commit) {
+      throw new RegisterError(refusal("PLAN_INVALID", `${entry.name} answers ${method} as the method that commits it, but ${entry.commit} does`, `Answer method: "${entry.commit}".`));
+    }
+    return plan.value;
   }
   const checked = validate(entry.output, value);
   if (!checked.ok) throw new RegisterError(refusal("SCHEMA_VIOLATION", `${entry.name} answered something its schema does not describe: ${checked.problems.join("; ")}`, "Report it to the plugin's maintainers."));
   return checked.value;
+}
+var PLAN_FIELDS = ["output", "reaches", "changes", "cost", "trust"];
+function publicPlan(planId, answer) {
+  const value = { planId, method: answer["method"] };
+  for (const field of PLAN_FIELDS) if (Object.hasOwn(answer, field)) value[field] = answer[field];
+  return value;
 }
 function failureOf(entry, error) {
   const own = refusalOf(error);
@@ -389,8 +411,14 @@ async function execute(entry, prepared, call, plans) {
     if (!taken.ok) throw new RegisterError(refusal(taken.code, taken.problems.join("; "), "Plan again, then commit with the new planId it answers."));
   }
   try {
-    const value = checkedOutput(entry, await entry.handler.run(prepared.input, { ...call, account: prepared.account }));
-    if (entry.item.plans === true) plans.record(value.planId, prepared.account, entry.commit ?? entry.name);
+    const value = checkedOutput(
+      entry,
+      await entry.handler.run(prepared.input, { ...call, account: prepared.account, ...prepared.plan === void 0 ? {} : { plan: prepared.plan } })
+    );
+    if (entry.item.plans === true) {
+      const answer = value;
+      return publicPlan(plans.record(answer, prepared.account, entry.commit ?? entry.name), answer);
+    }
     return value;
   } catch (error) {
     if (error instanceof RegisterError) throw error;
@@ -627,11 +655,11 @@ async function installTools(context, environment) {
 
 // src/register/register.ts
 function accountsFor(manifest, options) {
-  const plan2 = accountsOf(manifest, options);
-  if (!plan2.ok) {
-    throw new Error(`OPTIONS_INVALID: ${plan2.problems.join("; ")}. Next step: fix the plugin's accounts option.`);
+  const plan = accountsOf(manifest, options);
+  if (!plan.ok) {
+    throw new Error(`OPTIONS_INVALID: ${plan.problems.join("; ")}. Next step: fix the plugin's accounts option.`);
   }
-  return plan2.value.accounts;
+  return plan.value.accounts;
 }
 async function withCleanup(cleanup, action) {
   try {

@@ -43,7 +43,7 @@ const handlers = {
 |---|---|
 | `description` | The agent tool's description. |
 | `input` | The method's own JSON Schema object, without `account`. The register adds the account selector. |
-| `output` | The answer's JSON Schema. A `plans` method is checked against `{ planId, method }` plus the optional §8 preview fields instead. |
+| `output` | The answer's JSON Schema. A `plans` method answers `{ method, … }`; the register mints the `planId` and the door publishes `PLAN_OUTPUT`. |
 | `run(input, call)` | The work. `call` carries the session, agent, message id, call id, signal, progress, resolved `account` and door. |
 
 `register` refuses a declared method with no handler, a handler the manifest does not declare, and a handler for a
@@ -114,6 +114,10 @@ register(ctx, manifest, handlers, {
 })
 ```
 
+An app's commit carries that grant: `act` previews with the action's `plans: true` method and commits with exactly
+`{ planId }` plus the host-signed token for the commit method and that input. A plugin never calls `verifyGrant` itself;
+`register` verifies the envelope's grant whenever the fourth argument wires the keys, the audience and the store.
+
 ## Input, account and output
 
 The register resolves the account through the `accounts` module before the handler runs:
@@ -126,17 +130,21 @@ The register resolves the account through the `accounts` module before the handl
 The input is checked against the handler's schema (`INPUT_INVALID`), the answer against its output schema
 (`SCHEMA_VIOLATION`). A schema with `additionalProperties: false` also refuses an unknown key.
 
-A `plans: true` method answers `{ planId, method }` and may carry §8's preview fields (`output`, `reaches`, `changes`,
-`cost`, `trust`); `method` must be the one declared method whose `commits` names the plan (`PLAN_INVALID` otherwise).
-A `commits: "<plan>"` method accepts exactly `{ planId }` from that plan, with no `account`. The register stores each
+A `plans: true` method answers the committing `method` and §8's preview fields it carries (`output`, `reaches`,
+`changes`, `cost`, `trust`), and any private plan data; it must not answer a `planId` (`PLAN_INVALID`). The register
+mints the `planId` itself with 128 random bits as base64url, keeps the handler's full answer, and publishes only
+`{ planId, method, output?, reaches?, changes?, cost?, trust? }`. It never reuses a live id.
+A `commits: "<plan>"` method accepts exactly `{ planId }` from that plan, with no `account`, and receives the plan
+handler's full answer as `call.plan`; its answer is checked against the handler's own output schema, and an app's `act`
+expects `{ output, trust }` and checks `output` against the action's `output`. The register stores each
 plan's account (and expiry, 15 minutes) in the plugin instance: a commit runs as that account, and its permission gate
 names that account. A `planId` commits once, only through the method its plan named; a second commit is `PLAN_USED` and
 another method is `PLAN_INVALID`. A commit reserves the plan before its permission ask or grant check; a refusal
 releases it, and the handler's start consumes it, so a failed handler still uses the plan. A handler starts only when
-its reservation still holds a live, unreplaced plan; an expired plan or a planId recorded again while the ask waits
-refuses the call (`PLAN_INVALID` or `PLAN_USED`) and the handler does not run. An unknown or expired `planId` is
-`PLAN_INVALID`. A grant for a commit must name the plan's account; another account is
-`ACCOUNT_MISMATCH`. The handler's own input schema is not used for a commit.
+its reservation still holds a live plan; an expired plan refuses the call (`PLAN_INVALID`) and the handler does not run.
+An unknown or expired `planId` is `PLAN_INVALID`, and a `planId` from before a reload is unknown to the new plugin
+instance. A grant for a commit must name the plan's account; another account is `ACCOUNT_MISMATCH`. The handler's own
+input schema is not used for a commit.
 
 ## Permissions on operations
 

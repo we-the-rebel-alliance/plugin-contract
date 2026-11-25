@@ -50,7 +50,7 @@ const handlers: HandlerTable = {
   events_list: handler({ description: "List events." }),
   events_detail: handler({ description: "Read one event's detail." }),
   list_channels: handler({ description: "List channels." }),
-  plan_send: handler({ description: "Dry-run a send.", run: async () => ({ planId: "p1", method: "send_message" }) }),
+  plan_send: handler({ description: "Dry-run a send.", run: async () => ({ method: "send_message" }) }),
   send_message: handler({ description: "Send a message.", output: SENT, run: async () => ({ sent: true }) }),
 }
 

@@ -91,7 +91,7 @@ const handlers = {
     output: OBJECT,
     run: async () => ({ options: [{ id: "C1", label: "general" }] }),
   },
-  plan_send: { description: "Plan a message.", input: EMPTY, output: OBJECT, run: async () => ({ planId: "plan-1", method: "send_message" }) },
+  plan_send: { description: "Plan a message.", input: EMPTY, output: OBJECT, run: async () => ({ method: "send_message" }) },
   send_message: { description: "Send a planned message.", input: EMPTY, output: OK, run: async () => ({ ok: true }) },
   write_note: { description: "Write a note.", input: EMPTY, output: OK, run: async () => ({ ok: true }) },
   delete_note: { description: "Delete a note.", input: EMPTY, output: OK, run: async () => ({ ok: true }) },
