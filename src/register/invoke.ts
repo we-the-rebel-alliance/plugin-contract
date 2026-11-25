@@ -116,7 +116,10 @@ function failureOf(entry: MethodEntry, error: unknown): Refusal {
 
 /** Run a prepared call's handler, checking its answer and mapping its failure. */
 export async function execute(entry: MethodEntry, prepared: PreparedCall, call: Omit<MethodCall, "account">, plans: PlanStore): Promise<unknown> {
-  if (prepared.reservation !== undefined) plans.consume(prepared.reservation)
+  if (prepared.reservation !== undefined) {
+    const taken = plans.consume(prepared.reservation)
+    if (!taken.ok) throw new RegisterError(refusal(taken.code, taken.problems.join("; "), "Plan again, then commit with the new planId it answers."))
+  }
   try {
     const value = checkedOutput(entry, await entry.handler.run(prepared.input, { ...call, account: prepared.account }))
     if (entry.item.plans === true) plans.record((value as { planId: string }).planId, prepared.account, entry.commit ?? entry.name)

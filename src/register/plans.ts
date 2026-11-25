@@ -44,6 +44,9 @@ export interface PlanReservation {
 /** A live, available plan reserved for one call, or why the id cannot commit. */
 export type PlanReserve = { readonly ok: true; readonly reservation: PlanReservation } | PlanRefusal
 
+/** A reservation consumed at handler start, or why it no longer holds the plan. */
+export type PlanConsume = { readonly ok: true; readonly account: string } | PlanRefusal
+
 /** The per-instance plan ledger. */
 export interface PlanStore {
   /** Record the account and committing method a plan was made for, pruning expired plans first. A repeated id replaces the earlier plan. */
@@ -52,8 +55,8 @@ export interface PlanStore {
   reserve(planId: string, method: string): PlanReserve
   /** Release a reservation after a refusal before the handler runs. Another call's handle is ignored. */
   release(reservation: PlanReservation): void
-  /** Mark a reservation used immediately before its handler runs. Another call's handle is ignored. */
-  consume(reservation: PlanReservation): void
+  /** Mark a reservation used immediately before its handler runs. A missing/expired plan is PLAN_INVALID; a re-recorded or used one is PLAN_USED. */
+  consume(reservation: PlanReservation): PlanConsume
   /** The number of live plans, for tests and diagnostics. */
   readonly size: number
 }
@@ -89,10 +92,20 @@ export function planStore(options: { readonly now?: () => number; readonly ttlMs
     },
     consume(reservation) {
       const plan = plans.get(reservation.planId)
-      if (plan !== undefined && same(plan, reservation)) {
-        plan.used = true
-        plan.reserved = undefined
+      if (plan === undefined) {
+        prune()
+        return { ok: false, code: "PLAN_INVALID", problems: [`there is no plan '${reservation.planId}'; plan again and commit with the new planId`] }
       }
+      if (plan.expires <= now()) {
+        plans.delete(reservation.planId)
+        return { ok: false, code: "PLAN_INVALID", problems: [`the plan '${reservation.planId}' expired before its handler started; plan again`] }
+      }
+      prune()
+      if (plan.used) return { ok: false, code: "PLAN_USED", problems: [`the plan '${reservation.planId}' was already used; plan again`] }
+      if (plan.reserved !== reservation.token) return { ok: false, code: "PLAN_USED", problems: [`the plan '${reservation.planId}' was re-recorded or reserved by another call; plan again`] }
+      plan.used = true
+      plan.reserved = undefined
+      return { ok: true, account: plan.account }
     },
     get size() {
       prune()

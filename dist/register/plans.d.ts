@@ -18,6 +18,11 @@ export type PlanReserve = {
     readonly ok: true;
     readonly reservation: PlanReservation;
 } | PlanRefusal;
+/** A reservation consumed at handler start, or why it no longer holds the plan. */
+export type PlanConsume = {
+    readonly ok: true;
+    readonly account: string;
+} | PlanRefusal;
 /** The per-instance plan ledger. */
 export interface PlanStore {
     /** Record the account and committing method a plan was made for, pruning expired plans first. A repeated id replaces the earlier plan. */
@@ -26,8 +31,8 @@ export interface PlanStore {
     reserve(planId: string, method: string): PlanReserve;
     /** Release a reservation after a refusal before the handler runs. Another call's handle is ignored. */
     release(reservation: PlanReservation): void;
-    /** Mark a reservation used immediately before its handler runs. Another call's handle is ignored. */
-    consume(reservation: PlanReservation): void;
+    /** Mark a reservation used immediately before its handler runs. A missing/expired plan is PLAN_INVALID; a re-recorded or used one is PLAN_USED. */
+    consume(reservation: PlanReservation): PlanConsume;
     /** The number of live plans, for tests and diagnostics. */
     readonly size: number;
 }

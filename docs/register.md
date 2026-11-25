@@ -80,7 +80,8 @@ Every call passes one gate, `ctx.permission.assert`, once (OpenCode 2.4.1 `Permi
 `tool.add` adds no ask, so the register calls the gate itself for every door. A **read** runs when the rules allow it, or asks when they
 say `ask`; a `deny` refuses it. The plugin's own `access` level is final: under `read-only` a non-read RPC call is
 refused even with a grant; under `ask-changes` or `all` it needs an ask or a valid grant. An `allow` rule is not a
-confirmation. RPC asks never save: an answer applies to that one call.
+confirmation. RPC asks never save: an answer applies to that one call. A call's `signal` cancels a pending ask: the
+gate refuses at once, so a commit releases its plan instead of holding it until expiry.
 
 A **non-read** method over RPC needs one of contract §8's two confirmations (LD-5):
 
@@ -131,8 +132,10 @@ A `commits: "<plan>"` method accepts exactly `{ planId }` from that plan, with n
 plan's account (and expiry, 15 minutes) in the plugin instance: a commit runs as that account, and its permission gate
 names that account. A `planId` commits once, only through the method its plan named; a second commit is `PLAN_USED` and
 another method is `PLAN_INVALID`. A commit reserves the plan before its permission ask or grant check; a refusal
-releases it, and the handler's start consumes it, so a failed handler still uses the plan. An unknown or expired
-`planId` is `PLAN_INVALID`. A grant for a commit must name the plan's account; another account is
+releases it, and the handler's start consumes it, so a failed handler still uses the plan. A handler starts only when
+its reservation still holds a live, unreplaced plan; an expired plan or a planId recorded again while the ask waits
+refuses the call (`PLAN_INVALID` or `PLAN_USED`) and the handler does not run. An unknown or expired `planId` is
+`PLAN_INVALID`. A grant for a commit must name the plan's account; another account is
 `ACCOUNT_MISMATCH`. The handler's own input schema is not used for a commit.
 
 ## Permissions on operations

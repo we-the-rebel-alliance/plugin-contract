@@ -43,33 +43,6 @@ import "./chunks/chunk-WLRWVIVP.js";
 // src/register/rpc.ts
 import { randomUUID as randomUUID2 } from "node:crypto";
 
-// src/register/assertions.ts
-function resourcesFor(entry, account) {
-  const operations = entry.item.operations ?? [];
-  return operations.length === 0 ? [`${account}:*`] : operations.map((operation) => `${account}:${operation}`);
-}
-function callEffect(name, entry, account, rules) {
-  const action = methodAction(name, entry.name);
-  let effect = evaluate(rules, action, "*");
-  for (const resource of resourcesFor(entry, account)) {
-    const found = evaluate(rules, action, resource);
-    if (found === "deny") return "deny";
-    if (found === "ask") effect = "ask";
-  }
-  return effect;
-}
-async function gate(context, name, entry, call, account, options) {
-  await context.permission.assert({
-    sessionID: call.sessionID,
-    ...call.agent === void 0 ? {} : { agent: call.agent },
-    action: methodAction(name, entry.name),
-    resources: resourcesFor(entry, account),
-    // Save only this method's own action for this account. Never `*`, which would be a project-wide allow.
-    ...options.save ? { save: [`${account}:*`] } : {},
-    ...options.source === void 0 ? {} : { source: options.source }
-  });
-}
-
 // src/register/errors.ts
 var RegisterError = class extends Error {
   refusal;
@@ -114,6 +87,53 @@ function reasonOf(error) {
   return redactReason(error instanceof Error ? error.message : String(error));
 }
 
+// src/register/assertions.ts
+function resourcesFor(entry, account) {
+  const operations = entry.item.operations ?? [];
+  return operations.length === 0 ? [`${account}:*`] : operations.map((operation) => `${account}:${operation}`);
+}
+function callEffect(name, entry, account, rules) {
+  const action = methodAction(name, entry.name);
+  let effect = evaluate(rules, action, "*");
+  for (const resource of resourcesFor(entry, account)) {
+    const found = evaluate(rules, action, resource);
+    if (found === "deny") return "deny";
+    if (found === "ask") effect = "ask";
+  }
+  return effect;
+}
+async function gate(context, name, entry, call, account, options) {
+  const cancelled = () => new RegisterError(refusal("UNAVAILABLE", "the call was cancelled while its permission ask was pending", "Retry the call."));
+  const signal = call.signal;
+  if (signal?.aborted) throw cancelled();
+  const pending = context.permission.assert({
+    sessionID: call.sessionID,
+    ...call.agent === void 0 ? {} : { agent: call.agent },
+    action: methodAction(name, entry.name),
+    resources: resourcesFor(entry, account),
+    // Save only this method's own action for this account. Never `*`, which would be a project-wide allow.
+    ...options.save ? { save: [`${account}:*`] } : {},
+    ...options.source === void 0 ? {} : { source: options.source }
+  });
+  pending.catch(() => void 0);
+  if (signal === void 0) {
+    await pending;
+    return;
+  }
+  let onAbort;
+  try {
+    await Promise.race([
+      pending,
+      new Promise((_, reject) => {
+        onAbort = () => reject(cancelled());
+        signal.addEventListener("abort", onAbort, { once: true });
+      })
+    ]);
+  } finally {
+    if (onAbort !== void 0) signal.removeEventListener("abort", onAbort);
+  }
+}
+
 // src/register/plans.ts
 import { randomUUID } from "node:crypto";
 var PLAN_TTL_MS = 15 * 6e4;
@@ -147,10 +167,20 @@ function planStore(options = {}) {
     },
     consume(reservation) {
       const plan2 = plans.get(reservation.planId);
-      if (plan2 !== void 0 && same(plan2, reservation)) {
-        plan2.used = true;
-        plan2.reserved = void 0;
+      if (plan2 === void 0) {
+        prune();
+        return { ok: false, code: "PLAN_INVALID", problems: [`there is no plan '${reservation.planId}'; plan again and commit with the new planId`] };
       }
+      if (plan2.expires <= now()) {
+        plans.delete(reservation.planId);
+        return { ok: false, code: "PLAN_INVALID", problems: [`the plan '${reservation.planId}' expired before its handler started; plan again`] };
+      }
+      prune();
+      if (plan2.used) return { ok: false, code: "PLAN_USED", problems: [`the plan '${reservation.planId}' was already used; plan again`] };
+      if (plan2.reserved !== reservation.token) return { ok: false, code: "PLAN_USED", problems: [`the plan '${reservation.planId}' was re-recorded or reserved by another call; plan again`] };
+      plan2.used = true;
+      plan2.reserved = void 0;
+      return { ok: true, account: plan2.account };
     },
     get size() {
       prune();
@@ -354,7 +384,10 @@ function failureOf(entry, error) {
   return refusal("UNAVAILABLE", `${entry.name} failed: ${reasonOf(error)}`, "Try again; if it keeps failing, check the plugin's status.");
 }
 async function execute(entry, prepared, call, plans) {
-  if (prepared.reservation !== void 0) plans.consume(prepared.reservation);
+  if (prepared.reservation !== void 0) {
+    const taken = plans.consume(prepared.reservation);
+    if (!taken.ok) throw new RegisterError(refusal(taken.code, taken.problems.join("; "), "Plan again, then commit with the new planId it answers."));
+  }
   try {
     const value = checkedOutput(entry, await entry.handler.run(prepared.input, { ...call, account: prepared.account }));
     if (entry.item.plans === true) plans.record(value.planId, prepared.account, entry.commit ?? entry.name);
@@ -485,7 +518,7 @@ async function invoke(context, environment, level, entry, wiring, raw, rpc, fres
         prepared = prepareCall(entry, input, environment.accounts, environment.plans);
         const effect = callEffect(environment.name, entry, prepared.account, resolved.rules);
         if (effect === "allow") {
-          await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: callID }, prepared.account, { save: false });
+          await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: callID, signal: rpc.signal }, prepared.account, { save: false });
           gated = true;
           throw new RegisterError(refusal("PERMISSION_DENIED", `${environment.name}.${entry.name} is a ${entry.item.class} and an allow rule is not a confirmation for RPC`, "A non-read method over RPC needs a permission ask or a host-signed action grant."));
         }
@@ -499,7 +532,7 @@ async function invoke(context, environment, level, entry, wiring, raw, rpc, fres
       const source = { type: "tool", messageID: "msg_rpc", id: callID };
       if (fresh) freshAsks.add(callID);
       try {
-        await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: callID }, prepared.account, { save: false, ...fresh ? { source } : {} });
+        await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: callID, signal: rpc.signal }, prepared.account, { save: false, ...fresh ? { source } : {} });
       } catch (error) {
         throw new RegisterError(permissionRefusal(error, `${environment.name}.${entry.name}`));
       } finally {

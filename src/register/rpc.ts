@@ -252,7 +252,7 @@ async function invoke(
         const effect = callEffect(environment.name, entry, prepared.account, resolved.rules)
         if (effect === "allow") {
           // An allow rule is not a confirmation. Run the gate first so it is the one permission evaluation, then refuse.
-          await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: callID }, prepared.account, { save: false })
+          await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: callID, signal: rpc.signal }, prepared.account, { save: false })
           gated = true
           throw new RegisterError(refusal("PERMISSION_DENIED", `${environment.name}.${entry.name} is a ${entry.item.class} and an allow rule is not a confirmation for RPC`, "A non-read method over RPC needs a permission ask or a host-signed action grant."))
         }
@@ -267,7 +267,7 @@ async function invoke(
       if (fresh) freshAsks.add(callID)
       try {
         // A fresh one-call ask: the evaluate hook turns an allow that came only from a saved approval back into ask.
-        await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: callID }, prepared.account, { save: false, ...(fresh ? { source } : {}) })
+        await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: callID, signal: rpc.signal }, prepared.account, { save: false, ...(fresh ? { source } : {}) })
       } catch (error) {
         throw new RegisterError(permissionRefusal(error, `${environment.name}.${entry.name}`))
       } finally {

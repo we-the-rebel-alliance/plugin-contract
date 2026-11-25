@@ -16,6 +16,7 @@
  */
 import { evaluate, methodAction, type PermissionRule } from "../access.ts"
 import type { MethodEntry } from "./handlers.ts"
+import { refusal, RegisterError } from "./errors.ts"
 
 /** The part of the plugin context the gate asserts through. */
 export interface GateContext {
@@ -61,11 +62,14 @@ export async function gate(
   context: GateContext,
   name: string,
   entry: MethodEntry,
-  call: { readonly sessionID: string; readonly agent?: string; readonly messageID: string; readonly id: string },
+  call: { readonly sessionID: string; readonly agent?: string; readonly messageID: string; readonly id: string; readonly signal?: AbortSignal },
   account: string,
   options: { readonly save: boolean; readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string } },
 ): Promise<void> {
-  await context.permission.assert({
+  const cancelled = () => new RegisterError(refusal("UNAVAILABLE", "the call was cancelled while its permission ask was pending", "Retry the call."))
+  const signal = call.signal
+  if (signal?.aborted) throw cancelled()
+  const pending = context.permission.assert({
     sessionID: call.sessionID,
     ...(call.agent === undefined ? {} : { agent: call.agent }),
     action: methodAction(name, entry.name),
@@ -74,4 +78,22 @@ export async function gate(
     ...(options.save ? { save: [`${account}:*`] } : {}),
     ...(options.source === undefined ? {} : { source: options.source }),
   })
+  // A late rejection after an abort is not the caller's answer: the abandoned call already lost its race.
+  pending.catch(() => undefined)
+  if (signal === undefined) {
+    await pending
+    return
+  }
+  let onAbort: (() => void) | undefined
+  try {
+    await Promise.race([
+      pending,
+      new Promise<never>((_, reject) => {
+        onAbort = () => reject(cancelled())
+        signal.addEventListener("abort", onAbort, { once: true })
+      }),
+    ])
+  } finally {
+    if (onAbort !== undefined) signal.removeEventListener("abort", onAbort)
+  }
 }

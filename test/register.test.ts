@@ -471,6 +471,111 @@ describe("register: door 3", () => {
     await assert.rejects(h.tools.get("demo_send_message")!.tool.execute({ planId }, context()), /PLAN_USED/)
   })
 
+  test("an aborted tool ask releases the plan and the abandoned call never runs the handler", async () => {
+    const h = makeHarness({ holdAsks: true })
+    let sent = 0
+    await register(
+      h.ctx,
+      demo,
+      handlers({
+        send_message: handler({
+          output: SENT,
+          run: async () => {
+            sent += 1
+            return { sent: true }
+          },
+        }),
+      }),
+    )
+    h.sessions.get("s1")!.permissions = [{ action: "demo.send_message", resource: "*", effect: "ask" }]
+    const plan = await h.tools.get("demo_plan_send")!.tool.execute({}, context())
+    const planId = (plan.output as { planId: string }).planId
+    const controller = new AbortController()
+    const asked = h.waitForAsk()
+    const abandoned = h.tools.get("demo_send_message")!.tool.execute({ planId }, context({ signal: controller.signal }))
+    await asked
+    controller.abort()
+    await assert.rejects(abandoned, /UNAVAILABLE/)
+    assert.equal(sent, 0, "the abandoned call never ran the handler")
+    h.releaseAsks()
+    h.setHoldAsks(false)
+    assert.deepEqual((await h.tools.get("demo_send_message")!.tool.execute({ planId }, context())).output, { sent: true })
+    assert.equal(sent, 1)
+  })
+
+  test("a plan re-recorded while its ask waits refuses the old commit and never runs the handler", async () => {
+    const h = makeHarness({ holdAsks: true })
+    let sent = 0
+    await register(
+      h.ctx,
+      demo,
+      handlers({
+        send_message: handler({
+          output: SENT,
+          run: async () => {
+            sent += 1
+            return { sent: true }
+          },
+        }),
+      }),
+    )
+    h.sessions.get("s1")!.permissions = [{ action: "demo.send_message", resource: "*", effect: "ask" }]
+    const input = { planId: await planId(h) }
+    const asked = h.waitForAsk()
+    const pending = h.rpc.call("demo", "send_message", { sessionID: "s1", input })
+    await asked
+    // The planning tool records the same id again while the commit waits: the old reservation no longer holds it.
+    assert.equal(await planId(h), input.planId)
+    h.releaseAsks()
+    await assert.rejects(pending, (error: unknown) => {
+      assert.ok(error instanceof RpcDeclaredFailure)
+      assert.equal((error.data as { code: string }).code, "PLAN_USED")
+      return true
+    })
+    assert.equal(sent, 0, "the refused call never ran the handler")
+    // The re-recorded plan is the live one, and it commits exactly once.
+    h.setHoldAsks(false)
+    assert.deepEqual(await h.rpc.call("demo", "send_message", { sessionID: "s1", input }), { sent: true })
+    assert.equal(sent, 1)
+    await assert.rejects(h.rpc.call("demo", "send_message", { sessionID: "s1", input }), /PLAN_USED/)
+  })
+
+  test("an aborted ask releases the plan and the abandoned call never runs the handler", async () => {
+    const h = makeHarness({ holdAsks: true })
+    let sent = 0
+    await register(
+      h.ctx,
+      demo,
+      handlers({
+        send_message: handler({
+          output: SENT,
+          run: async () => {
+            sent += 1
+            return { sent: true }
+          },
+        }),
+      }),
+    )
+    h.sessions.get("s1")!.permissions = [{ action: "demo.send_message", resource: "*", effect: "ask" }]
+    const input = { planId: await planId(h) }
+    const controller = new AbortController()
+    const asked = h.waitForAsk()
+    const abandoned = h.rpc.call("demo", "send_message", { sessionID: "s1", input }, { signal: controller.signal })
+    await asked
+    controller.abort()
+    await assert.rejects(abandoned, (error: unknown) => {
+      assert.ok(error instanceof RpcDeclaredFailure)
+      assert.equal((error.data as { code: string }).code, "UNAVAILABLE")
+      return true
+    })
+    assert.equal(sent, 0, "the abandoned call never ran the handler")
+    h.releaseAsks()
+    h.setHoldAsks(false)
+    // The abort released the reservation, so the same plan commits once its ask is answered.
+    assert.deepEqual(await h.rpc.call("demo", "send_message", { sessionID: "s1", input }), { sent: true })
+    assert.equal(sent, 1)
+  })
+
   test("a non-read with a permission ask runs when the ask is answered, and is refused when it is not", async () => {
     const answered = makeHarness()
     await register(answered.ctx, demo, handlers())
