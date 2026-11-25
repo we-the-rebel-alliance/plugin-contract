@@ -11,7 +11,7 @@ MCP tools, and they have signed in to a `trellis` account.
 
 Pass `account` as the alias the person configured. This example's fixture uses `work` and `personal`; never assume an
 alias is present. With two aliases and no account, the call is refused with `ACCOUNT_REQUIRED`; an alias the plugin
-does not serve is `ACCOUNT_UNKNOWN`. `tools.trellis.status` reports every alias; name one to read it.
+does not serve is `ACCOUNT_UNKNOWN`. `tools.trellis.status` reports every alias and takes no account.
 `tools.trellis.probe` reads the signed-in owner and no content.
 
 The vendor's MCP tools are per alias too: `trellis-work_messages_search` is the `work` server's tool and

@@ -40,7 +40,7 @@
       "additionalProperties": false
     },
     "methods": {
-      "status": { "class": "read", "accounts": "optional" },
+      "status": { "class": "read", "accounts": "none" },
       "probe": { "class": "read", "accounts": "optional", "operations": ["trellis.users.get"] },
       "events_list": { "class": "read", "accounts": "optional", "operations": ["trellis.users.get", "messages_search", "messages_read"] },
       "read_thread": { "class": "read", "accounts": "optional", "operations": ["trellis.users.get", "messages_read"] },
@@ -62,7 +62,6 @@
           "suggest": { "method": "list_channels", "operations": ["trellis.channels.list"] }
         },
         "cadence": { "suggestMinutes": 2 },
-        "signals": ["bus"],
         "private": true,
         "cost": { "class": "free" },
         "maxBytes": 262144,

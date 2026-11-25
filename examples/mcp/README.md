@@ -31,8 +31,7 @@ MCP tools.
 `trellis-work_*` for `work` and `trellis-personal_*` for `personal`. A rule or grant for `work` can never match a tool
 registered for `personal`.
 
-`status` reports the plugin and every alias. With several aliases the register resolves an account before the handler
-runs, so name one when you call it.
+`status` reports the plugin and every alias. It takes no account.
 
 ## Capabilities
 
@@ -41,7 +40,7 @@ runs, so name one when you call it.
 
 | Method | Class | Accounts | Operations |
 |---|---|---|---|
-| `status` | read | optional | — |
+| `status` | read | none | — |
 | `probe` | read | optional | `trellis.users.get` |
 | `events_list` | read | optional | `trellis.users.get`, `messages_search`, `messages_read` |
 | `read_thread` | read | optional | `trellis.users.get`, `messages_read` |

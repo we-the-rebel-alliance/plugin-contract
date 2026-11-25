@@ -28,8 +28,7 @@ Add one OpenCode integration per alias. The alias `work` is the integration `har
 `access` is `all`, `ask-changes` or `read-only`. Every method is a read, so all three levels run the same way. A method
 an app or person narrows with `effect` asks or is off without changing anyone else's level.
 
-`status` reports the plugin and every alias. With several aliases the register resolves an account before the handler
-runs, so name one when you call it.
+`status` reports the plugin and every alias. It takes no account.
 
 ## Capabilities
 
@@ -38,7 +37,7 @@ runs, so name one when you call it.
 
 | Method | Class | Accounts | Operations |
 |---|---|---|---|
-| `status` | read | optional | — |
+| `status` | read | none | — |
 | `probe` | read | optional | `harbour.users.get` |
 | `events_list` | read | optional | `harbour.users.get`, `harbour.notes.list`, `harbour.notes.get` |
 | `read_note` | read | optional | `harbour.notes.get` |

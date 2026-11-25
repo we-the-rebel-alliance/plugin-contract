@@ -40,7 +40,7 @@
       "additionalProperties": false
     },
     "methods": {
-      "status": { "class": "read", "accounts": "optional" },
+      "status": { "class": "read", "accounts": "none" },
       "probe": { "class": "read", "accounts": "optional", "operations": ["harbour.users.get"] },
       "events_list": { "class": "read", "accounts": "optional", "operations": ["harbour.users.get", "harbour.notes.list", "harbour.notes.get"] },
       "read_note": { "class": "read", "accounts": "optional", "operations": ["harbour.notes.get"] },
@@ -61,7 +61,6 @@
           "suggest": { "method": "list_spaces", "operations": ["harbour.spaces.list"] }
         },
         "cadence": { "suggestMinutes": 5 },
-        "signals": ["bus"],
         "private": true,
         "cost": { "class": "free" },
         "maxBytes": 262144,

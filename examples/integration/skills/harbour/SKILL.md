@@ -11,7 +11,7 @@ Use Harbour when the person asks what changed in their notes, or wants one note 
 
 Pass `account` as the alias the person configured. This example's fixture uses `work` and `personal`; never assume an
 alias is present. With two aliases and no account, the call is refused with `ACCOUNT_REQUIRED`; an alias the plugin
-does not serve is `ACCOUNT_UNKNOWN`. `tools.harbour.status` reports every alias; name one to read it.
+does not serve is `ACCOUNT_UNKNOWN`. `tools.harbour.status` reports every alias and takes no account.
 `tools.harbour.probe` reads the signed-in owner and no content.
 
 ## Reading

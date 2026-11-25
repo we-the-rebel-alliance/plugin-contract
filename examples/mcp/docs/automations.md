@@ -6,7 +6,7 @@ automation, not a schedule the plugin sets.
 <!-- generated:automations -->
 | Source | Method | Provider floor | Suggested | Signals |
 |---|---|---|---|---|
-| `trellis.messages` | `tools.trellis.events_list` | — | 2 min | `bus` |
+| `trellis.messages` | `tools.trellis.events_list` | — | 2 min | — |
 <!-- /generated:automations -->
 
 ## Reading with a cursor

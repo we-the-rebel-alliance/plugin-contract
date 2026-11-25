@@ -7,7 +7,7 @@ Every method, source, action and bus event the manifest declares.
 
 | Method | Class | Accounts | Operations |
 |---|---|---|---|
-| `status` | read | optional | — |
+| `status` | read | none | — |
 | `probe` | read | optional | `harbour.users.get` |
 | `events_list` | read | optional | `harbour.users.get`, `harbour.notes.list`, `harbour.notes.get` |
 | `read_note` | read | optional | `harbour.notes.get` |

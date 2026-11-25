@@ -7,7 +7,7 @@ Every method, source, action and bus event the manifest declares.
 
 | Method | Class | Accounts | Operations |
 |---|---|---|---|
-| `status` | read | optional | — |
+| `status` | read | none | — |
 | `probe` | read | optional | `trellis.users.get` |
 | `events_list` | read | optional | `trellis.users.get`, `messages_search`, `messages_read` |
 | `read_thread` | read | optional | `trellis.users.get`, `messages_read` |

@@ -6,7 +6,7 @@ automation, not a schedule the plugin sets.
 <!-- generated:automations -->
 | Source | Method | Provider floor | Suggested | Signals |
 |---|---|---|---|---|
-| `harbour.notes` | `tools.harbour.events_list` | — | 5 min | `bus` |
+| `harbour.notes` | `tools.harbour.events_list` | — | 5 min | — |
 <!-- /generated:automations -->
 
 ## Reading with a cursor
