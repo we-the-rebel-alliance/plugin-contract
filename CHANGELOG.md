@@ -8,16 +8,16 @@ as it applies before 1.0: while `0.x`, a minor release may break, so plugins and
 
 Detector fixes, with no wire change: the surface stays at v1. They ship with the next contract release.
 
-- **`secretKinds`:** an assignment value is a credential only when it is a credential literal. A TypeScript type
-  annotation (`token: unknown`, `password: string`, `token: ParsedToken`, `Parser<Item>`, `Token[]`), an identifier, a
-  member access or an environment read is code, not a secret, quoted or bare; a quoted credential such as
-  `token: "lin_api_…"` and every existing shaped detection are still refused.
+- **`secretKinds`:** an assignment value is a credential only when it is a credential literal. An unquoted TypeScript
+  type annotation in a parameter or declaration position (`token: unknown`, `password: string`, `ParsedToken`), a bare
+  identifier, an expression or an environment read is code; a quoted literal is always a value, so
+  `token: "lin_api_…"`, `password: "Summer2024"` and every existing shaped detection are still refused.
 - **`FORBIDDEN.main-branch`:** only a `main` link under the plugin's own GitHub owner is a finding, read from
   `package.json` `repository`. A third-party repository's `main` branch is legitimate, and a package with no repository
   has no owner to flag.
-- **`FORBIDDEN.secret` and the allowance file:** every secret finding, per line, whole file or decoded signed claim,
-  now goes through `.plugin-kit/forbidden-allow`; a reasoned `secret` entry suppresses it and reports
-  `FORBIDDEN.suppressed`, and an entry without a reason still does not.
+- **`FORBIDDEN.secret` and the allowance file:** a per-line credential is never allowable, as in v0.0.0; a whole-file
+  or decoded signed-claim finding can be suppressed by a reasoned `secret` entry, which reports `FORBIDDEN.suppressed`.
+  An entry without a reason still suppresses nothing.
 - **`plugin-kit release` outside a plugin:** it reads the package before the check and refuses a `package.json` with no
   `capabilities` with one `KIT_NOT_A_PLUGIN` error naming `scripts/release.mjs`; no conformance or check runs.
 

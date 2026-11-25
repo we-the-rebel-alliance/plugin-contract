@@ -1,22 +1,22 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   HINT_SCHEMA
-} from "./chunks/chunk-OFIYWOCE.js";
+} from "./chunks/chunk-A6NGU22P.js";
 import {
   MANIFEST_SCHEMA
-} from "./chunks/chunk-X6AQ6GTL.js";
+} from "./chunks/chunk-ZNPWY4NB.js";
 import {
   OUTPUTS
-} from "./chunks/chunk-CTRCLT4L.js";
+} from "./chunks/chunk-7VAE22I3.js";
 import {
   ATTENDANCE_RESPONSES,
   COMMITMENT_STATES,
   EVENT_LIMITS
-} from "./chunks/chunk-PD6KYUCK.js";
+} from "./chunks/chunk-A3YXXURB.js";
 import {
   validator
 } from "./chunks/chunk-FTEX4OOT.js";
-import "./chunks/chunk-LPBGK56A.js";
+import "./chunks/chunk-GSMTLBA2.js";
 import {
   _enum,
   boolean,

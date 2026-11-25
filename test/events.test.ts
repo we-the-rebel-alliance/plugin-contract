@@ -341,8 +341,21 @@ describe("the secret-pattern refusal", () => {
       "token: Record<string, Token[]>",
       "token: Token[]",
       "token: string[]",
+      "const token = ++renderToken",
+      "const token = pageToken",
     ]) expect(secretKinds(clean), clean).toEqual([])
     expect(secretKinds('token: "lin_api_abcdefghijklmnopqrstuvwxyz0123456789"')).toEqual(["token"])
+  })
+
+  test("a quoted literal or an environment value still flags even when it looks like a type or an expression", () => {
+    for (const secret of [
+      'token: "Xk9fJ2mQ7vL1pR8sT3wY6zA4bC5dE0gH"',
+      'api_key: "AbCdEf1234567890XyZ"',
+      'password: "Summer2024"',
+      "DB_PASSWORD=Summer2024",
+      "access_token=ZyX987abcDEF654",
+      'password: "hunter.two"',
+    ]) expect(secretKinds(secret), secret).not.toEqual([])
   })
 
   test("screenEvents refuses an event that is not the owner's, holds a secret, or is instruction-shaped, never echoing it", () => {

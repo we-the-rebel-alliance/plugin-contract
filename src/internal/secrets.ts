@@ -81,6 +81,9 @@ function codeValue(value: unknown): boolean {
   return (
     // `session.accessToken`, `config.secretKey`: identifiers, not a random token with digits in it.
     (/^[A-Za-z_$][\w$]*(?:\??\.[A-Za-z_$][\w$]*)+;?$/.test(v) && (v.match(/\d/g) ?? []).length <= 2) ||
+    // A bare identifier (`pageToken`) or an expression (`++renderToken`, `getToken()`) is code, not a literal.
+    /^[A-Za-z_$][A-Za-z_$]*$/.test(v) ||
+    /^(?:\+\+|--|[!~])/.test(v) ||
     /^(?:await\s+)?[A-Za-z_$][\w$.]*\(/.test(v) ||
     /^(?:~|\.{1,2})?\/[\w./-]*$/.test(v) ||
     /^(?:process\.env|os\.environ|import\.meta\.env)\b/.test(v)
@@ -93,9 +96,22 @@ function codeValue(value: unknown): boolean {
  * The bare capture keeps the punctuation after the value (`unknown):`), so trailing
  * delimiters are part of the type position.
  */
-function typeExpression(value: unknown): boolean {
+function typeExpression(value: unknown, typePosition: boolean): boolean {
+  if (!typePosition) return false
   const v = String(value ?? "").trim()
   return /^(?:unknown|any|never|void|undefined|null|string|number|boolean|bigint|symbol|object|[A-Z][A-Za-z0-9_]*)(?:<(?:[^<>]|<[^<>]*>)*>)?(?:\[\])*(?:[)\]}>,;:=]+)?$/.test(v)
+}
+
+/**
+ * Whether a bare value sits where a type annotation does: after a `:` and before one of `, ) ; = >`
+ * (the delimiter may be inside the captured value, as in `unknown):`).
+ */
+function typePosition(text: string, match: RegExpExecArray, bare: string): boolean {
+  if (!/[:]/.test(match[3] ?? "")) return false
+  const after = text.slice(match.index + match[0].length)
+  if (/^[\s]*[,);=>]/.test(after)) return true
+  const trailing = /[)\]}>,;:=]+$/.exec(bare)?.[0]
+  return trailing !== undefined && /[),;=>]/.test(trailing)
 }
 
 /** Shannon entropy of a string, in bits per character. */
@@ -137,13 +153,19 @@ function passphrase(rest: unknown): boolean {
  * does not have. A value in a URL query (`?token=…&`) needs 16 characters and
  * the entropy of a random token.
  */
-function credentialValue(value: unknown, quoted: boolean, key: string, query: boolean): boolean {
+function credentialValue(value: unknown, quote: "double" | "single" | "backtick" | undefined, key: string, query: boolean, inType: boolean): boolean {
   const v = String(value ?? "").trim()
   if (!v || documentation(v)) return false
   if (query) return tokenShaped(v, 16)
-  if (typeExpression(v) || codeValue(v)) return false
   const loose = /^(?:token|secret)$/i.test(key)
-  if (quoted) return v.length >= (loose ? 8 : 4) && !/^\d+(?:\.\d+)?$/.test(v) && !/^[A-Za-z_$][\w$.]*\(|^\$\{/.test(v)
+  if (quote !== undefined) {
+    // A double or single quoted literal is a value, never a type. A backtick may hold a member-access
+    // example (`header.payload.signature`); an environment read is code in either form.
+    if (/^(?:process\.env|os\.environ|import\.meta\.env)\b/.test(v)) return false
+    if (quote === "backtick" && codeValue(v)) return false
+    return v.length >= (loose ? 8 : 4) && !/^\d+(?:\.\d+)?$/.test(v) && !/^[A-Za-z_$][\w$.]*\(|^\$\{/.test(v)
+  }
+  if (typeExpression(v, inType) || codeValue(v)) return false
   if (!TOKENISH.test(v) || /^\d+(?:\.\d+)?$/.test(v)) return false
   if (v.length < (loose ? 8 : 6)) return false
   return /\d/.test(v) || /[^A-Za-z0-9]/.test(v) || /.[A-Z]/.test(v)
@@ -165,7 +187,8 @@ export function secretKinds(text: unknown): string[] {
   for (const match of value.matchAll(CONNECTION)) if (match[2]!.length >= 3 && !documentation(match[2])) kinds.add("connection string")
   for (const match of value.matchAll(ASSIGNMENT)) {
     const key = match[2]!
-    const quoted = match[4] ?? match[5] ?? match[6]
+    const quote = match[4] !== undefined ? "double" : match[5] !== undefined ? "single" : match[6] !== undefined ? "backtick" : undefined
+    const quotedValue = match[4] ?? match[5] ?? match[6]
     const bare = match[7]
     const crossed = /\n/.test(match[3]!)
     // A value on the next line that is itself a key ("DB_HOST=x", "host:") is not this key's value.
@@ -173,8 +196,9 @@ export function secretKinds(text: unknown): string[] {
     // In a URL query (`?token=…&page=2`) the value must look random.
     const query = /[?&]/.test(value[match.index - 1] ?? "")
     const password = /pass|pwd/i.test(key)
-    let found = credentialValue(quoted ?? bare, quoted !== undefined, key, query)
-    if (!found && password && quoted === undefined && !query) {
+    const inType = bare !== undefined && typePosition(value, match, bare)
+    let found = credentialValue(quote === undefined ? bare : quotedValue, quote, key, query, inType)
+    if (!found && password && quote === undefined && !query) {
       const start = match.index + match[0].length - (bare ?? "").length
       const end = value.indexOf("\n", start)
       found = passphrase(value.slice(start, end === -1 ? value.length : end))

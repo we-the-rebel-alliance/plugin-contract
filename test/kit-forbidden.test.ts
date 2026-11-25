@@ -248,20 +248,25 @@ describe("plugin-kit forbidden", () => {
     }
   })
 
-  test("a reasoned secret allowance suppresses a per-line finding and reports it; an entry with no reason does not", () => {
+  test("a reasoned secret allowance never suppresses a per-line finding, even with a reason", () => {
     const local = temp()
     try {
       write(join(local.dir, "docs", "leak.md"), 'token: "lin_api_abcdefghijklmnopqrstuvwxyz0123456789"\n')
       assert.equal(forbiddenFindings(local.dir).filter((finding) => finding.id === "FORBIDDEN.secret").length, 1)
-      write(join(local.dir, ALLOW_FILE), "docs/leak.md:secret \n")
-      assert.equal(forbiddenFindings(local.dir).filter((finding) => finding.id === "FORBIDDEN.secret").length, 1)
       write(join(local.dir, ALLOW_FILE), "docs/leak.md:secret This page quotes the shape as documentation.\n")
       const findings = forbiddenFindings(local.dir)
-      assert.equal(findings.filter((finding) => finding.id === "FORBIDDEN.secret").length, 0)
-      const suppressed = findings.filter((finding) => finding.id === "FORBIDDEN.suppressed")
-      assert.equal(suppressed.length, 1)
-      assert.equal(suppressed[0]?.level, "warning")
-      assert.match(suppressed[0]?.message ?? "", /This page quotes the shape as documentation\./)
+      assert.equal(findings.filter((finding) => finding.id === "FORBIDDEN.secret").length, 1, "a per-line credential is never allowable")
+      assert.equal(findings.filter((finding) => finding.id === "FORBIDDEN.suppressed").length, 0)
+    } finally {
+      local.cleanup()
+    }
+  })
+
+  test("an assignment from an expression or an identifier is not a secret through the forbidden scan", () => {
+    const local = temp()
+    try {
+      write(join(local.dir, "src", "tokens.ts"), ["const token = ++renderToken", "const token = pageToken", ""].join("\n"))
+      assert.deepEqual(forbiddenFindings(local.dir).filter((finding) => finding.id === "FORBIDDEN.secret"), [])
     } finally {
       local.cleanup()
     }

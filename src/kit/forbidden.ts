@@ -246,7 +246,9 @@ export function forbiddenFindings(dir: string, options: ForbiddenOptions = {}): 
         const key = `secret:${lineNumber}:${kind}`
         if (seen.has(key)) continue
         seen.add(key)
-        add(findings, used, allowed, {
+        // A per-line credential is never allowable: an allowance with a reason may suppress a whole-file or
+        // signed-claim finding, but not one that points at the exact line that holds it.
+        findings.push({
           id: "FORBIDDEN.secret",
           level: "error",
           path: relative,
