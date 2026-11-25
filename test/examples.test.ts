@@ -176,7 +176,10 @@ describe("the examples", () => {
   test("the Harbour handlers map a provider refusal to the contract's message, with a next step", async () => {
     const providerModule = (await import(pathToFileURL(join(root, "examples", "integration", "provider.js")).href)) as { createHarbourProvider(): object }
     const handlersModule = (await import(pathToFileURL(join(root, "examples", "integration", "handlers.js")).href)) as {
-      createHandlers(parts: object): { read_note: { run(input: { external_id: string }, call: { account: string }): Promise<unknown> } }
+      createHandlers(parts: object): {
+        read_note: { run(input: { external_id: string }, call: { account: string }): Promise<unknown> }
+        events_list: { run(input: Record<string, unknown>, call: { account: string }): Promise<unknown> }
+      }
     }
     const manifest = manifestOf("integration")
     const handlers = handlersModule.createHandlers({
@@ -186,6 +189,15 @@ describe("the examples", () => {
       version: "0.0.0",
       state: {},
     })
+
+    // The committed page is what this handler answers today, not a hand-written shape.
+    const fixture = JSON.parse(readFileSync(join(root, "examples", "integration", "fixtures", "conformance.json"), "utf8")) as {
+      sources: Record<string, { cases: { input: Record<string, unknown>; answer: unknown }[] }>
+    }
+    const first = fixture.sources["harbour.notes"]?.cases[0]
+    assert.ok(first)
+    assert.deepEqual(await handlers.events_list.run(first.input, call("work")), first.answer)
+
     await assert.rejects(
       () => handlers.read_note.run({ external_id: "note-personal-1" }, call("work")),
       (error: unknown) => {
