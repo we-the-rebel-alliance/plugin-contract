@@ -6,7 +6,7 @@
  * its host range against the manifest, one entry per alias, and no secret in any reason. A probe is checked per source
  * by the source checks; status is one answer per plugin.
  */
-import { ACCOUNT_STATES } from "../../accounts.ts"
+import { ACCOUNT_STATES, REASON_MAX } from "../../accounts.ts"
 import { BUS_EVENTS, OPENCODE_RANGE, ownerProblems, type Manifest } from "../../manifest.ts"
 import { secretKinds } from "../events.ts"
 import { error, warning, type Finding } from "./report.ts"
@@ -49,7 +49,7 @@ export function busFindings(manifest: Manifest, recorded: RecordedEvents | undef
 
 /** The status answer's keys. */
 const STATUS_KEYS: readonly string[] = ["name", "version", "host", "state", "accounts", "unguardedAgents", "nextStep"]
-const ACCOUNT_KEYS: readonly string[] = ["alias", "state", "owner"]
+const ACCOUNT_KEYS: readonly string[] = ["alias", "state", "owner", "reason"]
 const HOST_KEYS: readonly string[] = ["version", "range", "tested"]
 
 /** The status answer: its shape, its host and aliases, and no secret. */
@@ -80,7 +80,7 @@ export function statusFindings(manifest: Manifest, version: string, answer: unkn
     const seen = new Set<string>()
     for (const [index, entry] of accounts.entries()) {
       if (!plain(entry)) {
-        findings.push(error("status.accounts", `status.accounts[${index}] must be { alias, state, owner? }`, { path: "fixtures/conformance.json" }))
+        findings.push(error("status.accounts", `status.accounts[${index}] must be { alias, state, owner?, reason? }`, { path: "fixtures/conformance.json" }))
         continue
       }
       for (const key of Object.keys(entry)) if (!ACCOUNT_KEYS.includes(key)) findings.push(error("status.accounts", `status.accounts[${index}] carries ${key}, which contract §11 does not define`, { path: "fixtures/conformance.json" }))
@@ -89,6 +89,9 @@ export function statusFindings(manifest: Manifest, version: string, answer: unkn
       else if (seen.has(alias)) findings.push(error("status.accounts", `status lists ${alias} twice`, { path: "fixtures/conformance.json" }))
       else seen.add(alias)
       if (!(ACCOUNT_STATES as readonly unknown[]).includes(entry["state"])) findings.push(error("status.accounts", `status.accounts[${index}].state is ${JSON.stringify(entry["state"])}, not ${ACCOUNT_STATES.join(", ")}`, { path: "fixtures/conformance.json" }))
+      if (entry["reason"] !== undefined && (typeof entry["reason"] !== "string" || entry["reason"].length > REASON_MAX)) {
+        findings.push(error("status.accounts", `status.accounts[${index}].reason must be one string of at most ${REASON_MAX} characters`, { path: "fixtures/conformance.json" }))
+      }
       if (entry["owner"] !== undefined) findings.push(...ownerProblems(entry["owner"], `status.accounts[${index}].owner`).map((problem) => error("status.accounts", problem, { path: "fixtures/conformance.json" })))
     }
     for (const alias of aliases) if (!seen.has(alias)) findings.push(error("status.accounts", `status lists no account ${alias}, and the fixture records it`, { path: "fixtures/conformance.json" }))

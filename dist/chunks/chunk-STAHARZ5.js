@@ -41,6 +41,7 @@ import {
 } from "./chunk-L3NVT2DE.js";
 import {
   ACCOUNT_STATES,
+  REASON_MAX,
   aliasProblem,
   isAlias
 } from "./chunk-YJVHB7PG.js";
@@ -12127,7 +12128,7 @@ function busFindings(manifest, recorded, options = {}) {
   return findings;
 }
 var STATUS_KEYS = ["name", "version", "host", "state", "accounts", "unguardedAgents", "nextStep"];
-var ACCOUNT_KEYS = ["alias", "state", "owner"];
+var ACCOUNT_KEYS = ["alias", "state", "owner", "reason"];
 var HOST_KEYS = ["version", "range", "tested"];
 function statusFindings(manifest, version, answer, aliases) {
   if (!plain2(answer)) return [error("status.shape", "the fixture records no status answer", { path: "fixtures/conformance.json" })];
@@ -12156,7 +12157,7 @@ function statusFindings(manifest, version, answer, aliases) {
     const seen = /* @__PURE__ */ new Set();
     for (const [index, entry] of accounts.entries()) {
       if (!plain2(entry)) {
-        findings.push(error("status.accounts", `status.accounts[${index}] must be { alias, state, owner? }`, { path: "fixtures/conformance.json" }));
+        findings.push(error("status.accounts", `status.accounts[${index}] must be { alias, state, owner?, reason? }`, { path: "fixtures/conformance.json" }));
         continue;
       }
       for (const key of Object.keys(entry)) if (!ACCOUNT_KEYS.includes(key)) findings.push(error("status.accounts", `status.accounts[${index}] carries ${key}, which contract \xA711 does not define`, { path: "fixtures/conformance.json" }));
@@ -12165,6 +12166,9 @@ function statusFindings(manifest, version, answer, aliases) {
       else if (seen.has(alias)) findings.push(error("status.accounts", `status lists ${alias} twice`, { path: "fixtures/conformance.json" }));
       else seen.add(alias);
       if (!ACCOUNT_STATES.includes(entry["state"])) findings.push(error("status.accounts", `status.accounts[${index}].state is ${JSON.stringify(entry["state"])}, not ${ACCOUNT_STATES.join(", ")}`, { path: "fixtures/conformance.json" }));
+      if (entry["reason"] !== void 0 && (typeof entry["reason"] !== "string" || entry["reason"].length > REASON_MAX)) {
+        findings.push(error("status.accounts", `status.accounts[${index}].reason must be one string of at most ${REASON_MAX} characters`, { path: "fixtures/conformance.json" }));
+      }
       if (entry["owner"] !== void 0) findings.push(...ownerProblems(entry["owner"], `status.accounts[${index}].owner`).map((problem) => error("status.accounts", problem, { path: "fixtures/conformance.json" })));
     }
     for (const alias of aliases) if (!seen.has(alias)) findings.push(error("status.accounts", `status lists no account ${alias}, and the fixture records it`, { path: "fixtures/conformance.json" }));

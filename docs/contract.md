@@ -254,7 +254,7 @@ Nudges carry no content. An app re-reads through door 3.
 
 ## 11. Status and probe
 
-- **`status`** (every plugin): `{ name, version, host: { version, range, tested }, state, accounts: [{ alias, state, owner? }],
+- **`status`** (every plugin): `{ name, version, host: { version, range, tested }, state, accounts: [{ alias, state, owner?, reason? }],
   unguardedAgents, nextStep }`. Failure reasons are cut to one line of 160 characters and redacted.
 - **`probe`** (plugins with accounts): `{ account, owner, scopes?, cost?, trust }`. It reads no content.
 

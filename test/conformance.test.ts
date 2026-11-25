@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { after, describe, test } from "node:test"
 import { fileURLToPath } from "node:url"
+import { REASON_MAX } from "../src/accounts.ts"
 import { runConformance, t0, t1 } from "../src/conformance.ts"
 import { readInstalledManifest, type Manifest } from "../src/manifest.ts"
 import { staticFindings } from "../src/internal/conformance/static.ts"
@@ -350,6 +351,28 @@ describe("recorded sources, accounts, status, actions and grants", () => {
     const action = clone(recorded.actions)
     action[0].preview = undefined
     assert.ok(ids(actionFindings(manifest, action)).includes("actions.recorded"))
+  })
+
+  test("a redacted reason on a not-ready account is accepted; an oversized, non-string or unknown field is refused", () => {
+    const { manifest, recorded } = fixture()
+    const status = clone(recorded.events.status)
+    const account = status.accounts.find((entry: { alias: string }) => entry.alias === "work")
+    assert.ok(account, "the fixture records the work account")
+    account.state = "needs_sign_in"
+    account.reason = "The sign-in expired; sign in again."
+    assert.deepEqual(statusFindings(manifest, "1.0.0", status, ["work", "personal"]), [])
+
+    const long = clone(status)
+    long.accounts.find((entry: { alias: string }) => entry.alias === "work").reason = "x".repeat(REASON_MAX + 1)
+    assert.ok(ids(statusFindings(manifest, "1.0.0", long, ["work", "personal"])).includes("status.accounts"))
+
+    const notString = clone(status)
+    notString.accounts.find((entry: { alias: string }) => entry.alias === "work").reason = 42
+    assert.ok(ids(statusFindings(manifest, "1.0.0", notString, ["work", "personal"])).includes("status.accounts"))
+
+    const unknown = clone(status)
+    unknown.accounts.find((entry: { alias: string }) => entry.alias === "work").extra = "x"
+    assert.ok(ids(statusFindings(manifest, "1.0.0", unknown, ["work", "personal"])).includes("status.accounts"))
   })
 
   test("the grant recording verifies, and a missing negative case is refused", async () => {
