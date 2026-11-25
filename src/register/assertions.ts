@@ -34,7 +34,8 @@ export interface GateContext {
 /** The resources a method's gate names: its operations on the account, or `*` when it declares none. */
 export function resourcesFor(entry: MethodEntry, account: string): readonly string[] {
   const operations = entry.item.operations ?? []
-  return operations.length === 0 ? ["*"] : operations.map((operation) => `${account}:${operation}`)
+  // A method with no operations asks for the account's own wildcard, the same pattern a tool-door "Always" saves.
+  return operations.length === 0 ? [`${account}:*`] : operations.map((operation) => `${account}:${operation}`)
 }
 
 /**

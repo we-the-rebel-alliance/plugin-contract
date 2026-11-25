@@ -11,14 +11,14 @@ import {
   effectFor,
   evaluate,
   methodAction
-} from "./chunks/chunk-PRLLFQV2.js";
+} from "./chunks/chunk-P5R5UOSZ.js";
 import {
   manifestHash
-} from "./chunks/chunk-RIPYHT4Z.js";
-import "./chunks/chunk-SBSFNGFN.js";
+} from "./chunks/chunk-WXKPUWDE.js";
+import "./chunks/chunk-L5LSEI5N.js";
 import {
   errorCodeOf
-} from "./chunks/chunk-4TUKQJKX.js";
+} from "./chunks/chunk-DKSE7KD4.js";
 import {
   problemsOf
 } from "./chunks/chunk-FTEX4OOT.js";
@@ -46,7 +46,7 @@ import { randomUUID } from "node:crypto";
 // src/register/assertions.ts
 function resourcesFor(entry, account) {
   const operations = entry.item.operations ?? [];
-  return operations.length === 0 ? ["*"] : operations.map((operation) => `${account}:${operation}`);
+  return operations.length === 0 ? [`${account}:*`] : operations.map((operation) => `${account}:${operation}`);
 }
 function callEffect(name, entry, account, rules) {
   const action = methodAction(name, entry.name);
@@ -120,18 +120,29 @@ function planStore(options = {}) {
   const now = options.now ?? Date.now;
   const ttl = options.ttlMs ?? PLAN_TTL_MS;
   const plans = /* @__PURE__ */ new Map();
+  const prune = () => {
+    const at = now();
+    for (const [id, plan2] of plans) if (plan2.expires <= at) plans.delete(id);
+  };
   return {
-    record(planId, account) {
-      plans.set(planId, { account, expires: now() + ttl });
+    record(planId, account, method) {
+      prune();
+      plans.set(planId, { account, method, expires: now() + ttl, used: false });
     },
-    accountOf(planId) {
+    take(planId, method) {
+      prune();
       const plan2 = plans.get(planId);
-      if (plan2 === void 0) return { ok: false, problems: [`there is no plan '${planId}'; plan again and commit with the planId it answers`] };
-      if (plan2.expires <= now()) {
-        plans.delete(planId);
-        return { ok: false, problems: [`the plan '${planId}' has expired; plan again and commit with the new planId`] };
+      if (plan2 === void 0) return { ok: false, code: "PLAN_INVALID", problems: [`there is no plan '${planId}'; plan again and commit with the planId it answers`] };
+      if (plan2.used) return { ok: false, code: "PLAN_USED", problems: [`the plan '${planId}' was already used; plan again to make a new one`] };
+      if (plan2.method !== method) {
+        return { ok: false, code: "PLAN_INVALID", problems: [`the plan '${planId}' commits ${plan2.method}, not ${method}`] };
       }
+      plan2.used = true;
       return { ok: true, value: plan2.account };
+    },
+    get size() {
+      prune();
+      return plans.size;
     }
   };
 }
@@ -297,8 +308,8 @@ function prepareCall(entry, raw, accounts, plans) {
   const { input, account } = checkedInput(entry, raw);
   if (entry.item.commits !== void 0) {
     const planId = typeof input["planId"] === "string" ? input["planId"] : "";
-    const plan2 = plans.accountOf(planId);
-    if (!plan2.ok) throw new RegisterError(refusal("PLAN_INVALID", plan2.problems.join("; "), "Plan again, then commit with the planId it answers."));
+    const plan2 = plans.take(planId, entry.name);
+    if (!plan2.ok) throw new RegisterError(refusal(plan2.code, plan2.problems.join("; "), "Plan again, then commit with the planId it answers."));
     const resolved2 = accounts.length === 0 ? { ok: true, alias: plan2.value } : resolveAccount(accounts, { account: plan2.value });
     if (!resolved2.ok) throw new RegisterError(refusal("ACCOUNT_UNKNOWN", resolved2.what, resolved2.next));
     return { input, account: resolved2.alias };
@@ -328,7 +339,7 @@ function failureOf(entry, error) {
 async function execute(entry, prepared, call, plans) {
   try {
     const value = checkedOutput(entry, await entry.handler.run(prepared.input, { ...call, account: prepared.account }));
-    if (entry.item.plans === true) plans.record(value.planId, prepared.account);
+    if (entry.item.plans === true) plans.record(value.planId, prepared.account, entry.commit ?? entry.name);
     return value;
   } catch (error) {
     if (error instanceof RegisterError) throw error;

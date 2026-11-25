@@ -1,7 +1,7 @@
 import { type ActionEffect, type InstalledManifest } from "./manifest.js";
 import { type ReadFailure } from "./internal/failure.js";
 import { type ActGrant, type ActPhase } from "./access.js";
-import type { ReadHost } from "./read.js";
+import { type ReadHost } from "./read.js";
 export type { ReadFailure } from "./internal/failure.js";
 export type { ActGrant, ActPhase } from "./access.js";
 /** What a project's host does for `act`: a read host, plus a confirmation check when it can issue one. */
@@ -32,8 +32,6 @@ export interface ActRequest {
      * and for a local commit. An empty token is not a confirmation.
      */
     readonly confirmation?: string;
-    /** The plugin's declared account aliases, from its manifest options. */
-    readonly aliases: readonly string[];
     readonly signal?: AbortSignal;
 }
 /** Who a commit would reach, as the preview names them. A host shows this on the one confirm. */

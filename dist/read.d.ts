@@ -8,9 +8,9 @@
  * 4. the answer is checked: its account, `trust: "untrusted"`, its size against `maxBytes`, and a snapshot's `data`
  *    against its output schema; then `pick` keeps only the picked paths.
  *
- * The host is two calls: open a session with given rules, and call a plugin's RPC method in it. Each app
- * implements them over its own OpenCode server. An app keeps its own cursor: `read` returns the page and never stores
- * anything.
+ * The host reads the plugin's status for its account aliases, then opens a session with given rules and calls the
+ * plugin's RPC method in it. Each app implements them over its own OpenCode server. An app keeps its own cursor:
+ * `read` returns the page and never stores anything.
  */
 import { type InstalledManifest, type OwnerOrg, type SourceItem } from "./manifest.js";
 import type { Checked } from "./internal/checked.js";
@@ -28,6 +28,14 @@ export interface ReadHost {
         readonly sessionID: string;
         close(): Promise<void>;
     }>;
+    /**
+     * Reads the installed plugin's `status` answer (contract §11). Its `accounts` supply the aliases a fence may name;
+     * the host calls the plugin's status method, never a caller-supplied list. Absent: a fenced call refuses rather than
+     * guess the accounts.
+     */
+    status?(request: {
+        readonly package: string;
+    }): Promise<unknown>;
     /**
      * Calls a plugin's method in that session: `POST /api/rpc/<plugin id>/<method>` with `{ sessionID, input }`. The
      * host maps the package to its plugin id, from its own record of installed plugins.
@@ -58,8 +66,6 @@ export interface ReadRequest {
     /** A snapshot read. */
     readonly pick?: readonly string[];
     readonly context: ParamsContext;
-    /** The plugin's declared account aliases, from its manifest options. Fences refuse an undeclared alias. */
-    readonly aliases: readonly string[];
     readonly signal?: AbortSignal;
 }
 /** An events page, as the plugin answered it (design §2.1). */
@@ -111,6 +117,18 @@ export declare function checkReadRequest(request: ReadRequest): {
     readonly source: SourceItem;
     readonly scope?: Readonly<Record<string, readonly string[]>>;
 } | ReadOutcome;
+/**
+ * The aliases a fence may name, from the installed plugin's own `status.accounts` (contract §11). The host reads the
+ * status; a caller cannot invent the list. A host without a status reader, or a status without an accounts list, is
+ * refused rather than defaulted. A plugin with no accounts has one implicit `default` account.
+ */
+export declare function statusAliases(host: ReadHost, installed: InstalledManifest): Promise<{
+    readonly ok: true;
+    readonly value: readonly string[];
+} | {
+    readonly ok: false;
+    readonly failure: ReadFailure;
+}>;
 /** Reads a source under a grant, in a session fenced by the grant's rules. Never throws for a refused or failed read. */
 export declare function read(host: ReadHost, request: ReadRequest): Promise<ReadOutcome>;
 /**
@@ -132,8 +150,6 @@ export interface DetailRequest {
     readonly consumer: string;
     /** The event the detail is read for, as the source listed it. Inputs come only from its API fields. */
     readonly event: Readonly<Record<string, unknown>>;
-    /** The plugin's declared account aliases. */
-    readonly aliases: readonly string[];
     readonly signal?: AbortSignal;
 }
 /**
@@ -180,7 +196,6 @@ export declare function probe(host: ReadHost, request: {
     readonly source: string;
     readonly account: string;
     readonly identityOperations?: readonly string[];
-    readonly aliases: readonly string[];
     readonly signal?: AbortSignal;
 }): Promise<{
     readonly ok: true;

@@ -24,6 +24,9 @@ function fakeHost(answer: (method: string, input: Readonly<Record<string, unknow
       sessions.set(sessionID, rules)
       return { sessionID, close: async () => void closed++ }
     },
+    async status() {
+      return { name: "demo", accounts: [{ alias: ana }] }
+    },
     async call({ method, sessionID, input }) {
       const rules = sessions.get(sessionID)!
       calls.push({ method, input, rules })
@@ -53,7 +56,6 @@ const todayRequest = (extra: Partial<ReadRequest> = {}): ReadRequest => ({
   consumer: "notes.home",
   grant: grantFor("demo.channels"),
   context,
-  aliases: [ana],
   ...extra,
 })
 
@@ -135,12 +137,25 @@ describe("read a snapshot", () => {
   })
 })
 
+  test("refuses when the plugin's status is unavailable or has no accounts", async () => {
+    const fake = fakeHost(() => snapshot)
+    const noStatus = { ...fake.host }
+    delete noStatus.status
+    const missing = await read(noStatus, todayRequest())
+    assert.equal(missing.ok, false)
+    if (!missing.ok) assert.equal(missing.failure.code, "UNAVAILABLE")
+    const noAccounts = { ...fake.host, status: async () => ({ name: "demo" }) }
+    const empty = await read(noAccounts, todayRequest())
+    assert.equal(empty.ok, false)
+    if (!empty.ok) assert.equal(empty.failure.code, "UNAVAILABLE")
+  })
+
 describe("read events", () => {
   const page = { source: "messages", account: ana, owner: { id: `mailto:${ana}`, label: ana }, events: [], cursor: "c1", more: false, trust: "untrusted" }
 
   test("passes a resolved since, the cursor and the granted scope, and returns the page for the consumer to keep", async () => {
     const fake = fakeHost(() => page)
-    const outcome = await read(fake.host, { aliases: [ana], installed: demo, source: "demo.messages", consumer: "notes", grant: { ...grantFor("demo.messages"), consumer: "notes", scope: { channels: ["C01"] } }, since: "-1d", limit: 50, context })
+    const outcome = await read(fake.host, { installed: demo, source: "demo.messages", consumer: "notes", grant: { ...grantFor("demo.messages"), consumer: "notes", scope: { channels: ["C01"] } }, since: "-1d", limit: 50, context })
     assert.equal(outcome.ok, true)
     assert.deepEqual(fake.calls[0]!.input, { source: "messages", account: ana, scope: { channels: ["C01"] }, since: "2026-11-12T09:41:00.000Z", limit: 50 })
     assert.equal(fake.calls[0]!.method, "events_list")
@@ -149,23 +164,23 @@ describe("read events", () => {
   test("sends the scope in one canonical form, so a cursor's binding and a cache key agree", async () => {
     const fake = fakeHost(() => page)
     const grant = { ...grantFor("demo.messages"), consumer: "notes", scope: { channels: ["C02", "C01", "C01"], labels: ["b", "a"] } }
-    await read(fake.host, { aliases: [ana], installed: demo, source: "demo.messages", consumer: "notes", grant, context })
+    await read(fake.host, { installed: demo, source: "demo.messages", consumer: "notes", grant, context })
     assert.equal(JSON.stringify(fake.calls[0]!.input["scope"]), JSON.stringify({ channels: ["C01", "C02"], labels: ["a", "b"] }))
   })
 
   test("refuses a scope wider than the grant, and pick on an events source", async () => {
     const fake = fakeHost(() => page)
     const grant = { ...grantFor("demo.messages"), consumer: "notes", scope: { channels: ["C01"] } }
-    const wider = await read(fake.host, { aliases: [ana], installed: demo, source: "demo.messages", consumer: "notes", grant, scope: { channels: ["C01", "C02"] }, context })
+    const wider = await read(fake.host, { installed: demo, source: "demo.messages", consumer: "notes", grant, scope: { channels: ["C01", "C02"] }, context })
     assert.equal(wider.ok ? "ok" : wider.failure.code, "PERMISSION_DENIED")
-    const pick = await read(fake.host, { aliases: [ana], installed: demo, source: "demo.messages", consumer: "notes", grant, pick: ["x"], context })
+    const pick = await read(fake.host, { installed: demo, source: "demo.messages", consumer: "notes", grant, pick: ["x"], context })
     assert.equal(pick.ok ? "ok" : pick.failure.code, "SCHEMA_VIOLATION")
     assert.equal(fake.calls.length, 0)
   })
 
   test("checks the page against the events contract: refinements pass, a broken one is SCHEMA_VIOLATION", async () => {
     const grant = { ...grantFor("demo.messages"), consumer: "notes" }
-    const request = { aliases: [ana], installed: demo, source: "demo.messages", consumer: "notes", grant, context }
+    const request = { installed: demo, source: "demo.messages", consumer: "notes", grant, context }
     const extended = { ...page, refused: [{ external_id: "m-9", reason: "secret" }], gap: { reason: "expired", since: "2026-11-01T00:00:00.000Z" } }
     assert.equal((await read(fakeHost(() => extended).host, request)).ok, true)
     for (const broken of [
@@ -202,7 +217,7 @@ describe("read events", () => {
       return { ...page, events: [{ ...value, hash: eventHash(value as never) }] }
     }
     const grant = { ...grantFor("demo.messages"), consumer: "notes" }
-    const request = { aliases: [ana], installed: demo, source: "demo.messages", consumer: "notes", grant, context }
+    const request = { installed: demo, source: "demo.messages", consumer: "notes", grant, context }
     const asked = await read(fakeHost(() => pageWith("https://files.example/a.png")).host, { ...request, thumbnails: true })
     assert.equal(asked.ok, true, asked.ok ? "" : asked.failure.message)
     const notAsked = await read(fakeHost(() => pageWith("https://files.example/a.png")).host, request)
@@ -231,12 +246,12 @@ describe("detail reads", () => {
 
   test("call the plugin as { account, scope, fields }, under the detail's rules", async () => {
     const fake = fakeHost(() => ({ messages: [], trust: "untrusted" }), () => [["demo.events_detail", "*"]])
-    const outcome = await readDetail(fake.host, { aliases: [ana], installed: demo, source: "demo.messages", detail: "demo.messages.thread", consumer: "notes", grant, event })
+    const outcome = await readDetail(fake.host, { installed: demo, source: "demo.messages", detail: "demo.messages.thread", consumer: "notes", grant, event })
     assert.equal(outcome.ok, true, outcome.ok ? "" : outcome.failure.message)
     assert.equal(fake.calls[0]!.method, "events_detail")
     assert.deepEqual(fake.calls[0]!.input, { account: ana, scope: { channels: ["C0123456789"] }, fields: { thread: "thread:1" } })
     assert.ok(!JSON.stringify(fake.calls[0]!.input).includes("ignore previous"))
-    const other = await readDetail(fake.host, { aliases: [ana], installed: demo, source: "demo.messages", detail: "demo.messages.thread", consumer: "notes", grant, event: { ...event, account: "T9999" } })
+    const other = await readDetail(fake.host, { installed: demo, source: "demo.messages", detail: "demo.messages.thread", consumer: "notes", grant, event: { ...event, account: "T9999" } })
     assert.equal(other.ok ? "ok" : other.failure.code, "ACCOUNT_MISMATCH")
   })
 })
@@ -246,11 +261,11 @@ describe("probe", () => {
 
   test("runs fenced to the probe method and the identity operations, and checks the account it answers", async () => {
     const fake = fakeHost(() => good, () => [["demo.probe", "*"], ["demo.probe", `${ana}:demo.users.get`]])
-    const answer = await probe(fake.host, { aliases: [ana], installed: demo, source: "demo.messages", account: ana, identityOperations: ["demo.users.get"] })
+    const answer = await probe(fake.host, { installed: demo, source: "demo.messages", account: ana, identityOperations: ["demo.users.get"] })
     assert.equal(answer.ok, true, answer.ok ? "" : answer.failure.message)
-    const content = await probe(fakeHost(() => good, () => [["demo.events_list", "*"]]).host, { aliases: [ana], installed: demo, source: "demo.messages", account: ana, identityOperations: ["demo.users.get"] })
+    const content = await probe(fakeHost(() => good, () => [["demo.events_list", "*"]]).host, { installed: demo, source: "demo.messages", account: ana, identityOperations: ["demo.users.get"] })
     assert.equal(content.ok ? "ok" : content.failure.code, "PERMISSION_DENIED")
-    const wrong = await probe(fakeHost(() => ({ account: "ben@example.com", owner: { id: "mailto:ben@example.com", label: "Ben" }, trust: "untrusted" })).host, { aliases: [ana], installed: demo, source: "demo.messages", account: ana, identityOperations: [] })
+    const wrong = await probe(fakeHost(() => ({ account: "ben@example.com", owner: { id: "mailto:ben@example.com", label: "Ben" }, trust: "untrusted" })).host, { installed: demo, source: "demo.messages", account: ana, identityOperations: [] })
     assert.equal(wrong.ok ? "ok" : wrong.failure.code, "ACCOUNT_MISMATCH")
   })
 
@@ -261,13 +276,13 @@ describe("probe", () => {
       owner: { id: `mailto:${ana}`, label: "Ana", orgs: [{ id: "domain:example.com", label: "example.com" }] },
       trust: "untrusted",
     }
-    const replied = await probe(fakeHost(() => answer).host, { aliases: [ana], installed: demo, source: "demo.messages", account: ana, identityOperations: [] })
+    const replied = await probe(fakeHost(() => answer).host, { installed: demo, source: "demo.messages", account: ana, identityOperations: [] })
     assert.equal(replied.ok, true, replied.ok ? "" : replied.failure.message)
     if (replied.ok) assert.deepEqual(replied.answer.owner.orgs, [{ id: "domain:example.com", label: "example.com" }])
   })
 
   test("a source that is not signed in is NEEDS_SIGN_IN to a consumer, never an owner: null", async () => {
-    const outcome = await probe(fakeHost(() => ({ ...good, owner: null })).host, { aliases: [ana], installed: demo, source: "demo.messages", account: ana, identityOperations: [] })
+    const outcome = await probe(fakeHost(() => ({ ...good, owner: null })).host, { installed: demo, source: "demo.messages", account: ana, identityOperations: [] })
     assert.equal(outcome.ok ? "ok" : outcome.failure.code, "NEEDS_SIGN_IN")
   })
 
@@ -286,7 +301,7 @@ describe("probe", () => {
   ]
   for (const [name, answer, ok] of answers) {
     test(`one probe check: ${name} ${ok ? "passes" : "fails"} (#8, D230)`, async () => {
-      const viaRead = await probe(fakeHost(() => answer).host, { aliases: [ana], installed: demo, source: "demo.messages", account: ana, identityOperations: [] })
+      const viaRead = await probe(fakeHost(() => answer).host, { installed: demo, source: "demo.messages", account: ana, identityOperations: [] })
       const viaEvents = probeResultProblems(answer, { source: "messages", account: ana })
       assert.equal(viaRead.ok, ok, viaRead.ok ? "" : viaRead.failure.message)
       assert.equal(viaEvents.length === 0, ok, viaEvents.join("; "))

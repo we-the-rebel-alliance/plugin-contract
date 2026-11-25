@@ -65,6 +65,9 @@ function fakeHost(issued?: (token: string) => boolean) {
       sessions.set(sessionID, rules)
       return { sessionID, close: async () => undefined }
     },
+    async status() {
+      return { name: "demo", accounts: [{ alias: account }] }
+    },
     async call({ method, sessionID }) {
       calls.push({ method, rules: sessions.get(sessionID)! })
       return answer
@@ -88,7 +91,6 @@ const requestFor = (actionId: string, extra: Partial<ActRequest> = {}): ActReque
   grant: grantFor(actionId),
   consumer: "notes.home",
   phase: "commit",
-  aliases: [account],
   input: { text: "hello" },
   ...extra,
 })

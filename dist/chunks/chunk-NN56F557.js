@@ -5,35 +5,62 @@ import {
 import {
   pick,
   pickProblemsForOutput
-} from "./chunk-D545RHPD.js";
-import {
-  failure,
-  failureFromError
-} from "./chunk-SQQJ24OZ.js";
+} from "./chunk-JMBXK6YH.js";
 import {
   detailRules,
   grantCovers,
   namespaceOf,
   probeRules,
   sessionRules
-} from "./chunk-PRLLFQV2.js";
+} from "./chunk-P5R5UOSZ.js";
 import {
   findMethod,
   findSource,
   maxBytesOf
-} from "./chunk-RIPYHT4Z.js";
+} from "./chunk-WXKPUWDE.js";
 import {
   checkOutput,
   isOutputName
-} from "./chunk-SBSFNGFN.js";
+} from "./chunk-L5LSEI5N.js";
 import {
+  ERROR_CODES,
   PAGE,
+  errorCodeOf,
   probeResultProblems,
   resultProblems
-} from "./chunk-4TUKQJKX.js";
+} from "./chunk-DKSE7KD4.js";
+import {
+  DEFAULT_ALIAS
+} from "./chunk-JWZEPM5E.js";
 import {
   canonicalScope
 } from "./chunk-7KJXMIQH.js";
+
+// src/internal/failure.ts
+var FAILURE_CODES = ERROR_CODES;
+function failure(code, what, next, retryAfterSec) {
+  return {
+    code,
+    message: `${code}: ${what.replace(/[.\s]+$/, "")}. Next step: ${next}`,
+    next,
+    ...retryAfterSec === void 0 ? {} : { retryAfterSec }
+  };
+}
+function failureFromError(error) {
+  const record = typeof error === "object" && error !== null ? error : {};
+  const data = typeof record["data"] === "object" && record["data"] !== null ? record["data"] : {};
+  const message = typeof record["message"] === "string" ? record["message"] : String(error);
+  const raw = [record["code"], data["code"], /^([A-Z][A-Z_]+):/.exec(message)?.[1]].find((code2) => typeof code2 === "string");
+  const canonical = raw === void 0 ? void 0 : errorCodeOf(raw);
+  const refusedInput = canonical === "INPUT_INVALID" || canonical === "SOURCE_UNKNOWN";
+  const code = canonical !== void 0 && FAILURE_CODES.includes(canonical) ? canonical : void 0;
+  const first = message.split(/\r?\n/, 1)[0].slice(0, 300);
+  const fallback = refusedInput ? "Check the installed plugin against its manifest; if they match, report it to the plugin's maintainers." : "Try again later; if it keeps failing, check the plugin's status.";
+  const next = typeof data["next"] === "string" ? data["next"] : /Next step: (.*)$/.exec(first)?.[1] ?? fallback;
+  const what = first.replace(/^[A-Z][A-Z_]+:\s*/, "").replace(/\s*Next step:.*$/, "");
+  const retry = typeof record["retryAfterSec"] === "number" ? record["retryAfterSec"] : typeof data["retryAfterSec"] === "number" ? data["retryAfterSec"] : void 0;
+  return failure(code ?? "UNAVAILABLE", what || "the read failed", next, retry);
+}
 
 // src/read.ts
 var plain = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -98,6 +125,29 @@ function checkAnswer(source, account, answer) {
   }
   return void 0;
 }
+async function statusAliases(host, installed) {
+  if (host.status === void 0) {
+    return { ok: false, failure: failure("UNAVAILABLE", `${installed.package} does not expose its status`, "The host must read the plugin's status before it can fence an account.") };
+  }
+  let answer;
+  try {
+    answer = await host.status({ package: installed.package });
+  } catch (error) {
+    return { ok: false, failure: failureFromError(error) };
+  }
+  if (!plain(answer) || !Array.isArray(answer["accounts"])) {
+    return { ok: false, failure: failure("UNAVAILABLE", `${installed.package}'s status does not list its accounts`, "The host must read the plugin's status before it can fence an account.") };
+  }
+  const aliases = [];
+  for (const account of answer["accounts"]) {
+    if (!plain(account) || typeof account["alias"] !== "string" || account["alias"] === "") {
+      return { ok: false, failure: failure("UNAVAILABLE", `${installed.package}'s status has an account without an alias`, "The host must read the plugin's status before it can fence an account.") };
+    }
+    aliases.push(account["alias"]);
+  }
+  const unique = [...new Set(aliases)];
+  return { ok: true, value: unique.length === 0 ? [DEFAULT_ALIAS] : unique };
+}
 async function fencedCall(host, rules, call, title) {
   if (!rules.ok) return { ok: false, failure: failure("PERMISSION_DENIED", rules.problems.join("; "), "Fix the source's declaration or the grant.") };
   let session;
@@ -114,9 +164,11 @@ async function read(host, request) {
   const prepared = prepare(request);
   if ("ok" in prepared) return prepared;
   const { source, input } = prepared;
+  const accounts = await statusAliases(host, request.installed);
+  if (!accounts.ok) return { ok: false, failure: accounts.failure };
   const called = await fencedCall(
     host,
-    sessionRules(source, request.grant, request.aliases),
+    sessionRules(source, request.grant, accounts.value),
     { package: request.installed.package, method: source.method, input, ...request.signal ? { signal: request.signal } : {} },
     `${request.consumer} reads ${source.id}`
   );
@@ -184,10 +236,12 @@ async function readDetail(host, request) {
   const fields = detailFields(source, request.detail, request.event);
   if (!fields.ok) return { ok: false, failure: failure("SCHEMA_VIOLATION", fields.problems.join("; "), "Read details only for events the source listed.") };
   const detail = source.details.find((entry) => entry.id === request.detail);
+  const accounts = await statusAliases(host, installed);
+  if (!accounts.ok) return { ok: false, failure: accounts.failure };
   const scope = grant.scope === void 0 ? {} : canonicalScope(grant.scope);
   const called = await fencedCall(
     host,
-    detailRules(source, request.detail, grant, request.aliases),
+    detailRules(source, request.detail, grant, accounts.value),
     { package: installed.package, method: detail.method, input: { account: grant.account, scope, fields: fields.value }, ...request.signal ? { signal: request.signal } : {} },
     `${request.consumer} reads ${request.detail}`
   );
@@ -202,9 +256,11 @@ async function probe(host, request) {
   if (method === void 0) return { ok: false, failure: failure("PERMISSION_DENIED", `${request.installed.package} declares no probe method`, "Declare probe in the manifest's methods.") };
   const identity = request.identityOperations ?? method.operations ?? [];
   const name = typeof source.input?.["source"] === "string" ? { source: source.input["source"] } : {};
+  const accounts = await statusAliases(host, request.installed);
+  if (!accounts.ok) return { ok: false, failure: accounts.failure };
   const called = await fencedCall(
     host,
-    probeRules(source, request.account, identity, `${namespaceOf(source)}.probe`, request.aliases),
+    probeRules(source, request.account, identity, `${namespaceOf(source)}.probe`, accounts.value),
     { package: request.installed.package, method: "probe", input: { ...name, account: request.account }, ...request.signal ? { signal: request.signal } : {} },
     `probe ${source.id}`
   );
@@ -222,7 +278,10 @@ async function probe(host, request) {
 }
 
 export {
+  failure,
+  failureFromError,
   checkReadRequest,
+  statusAliases,
   read,
   acceptAnswer,
   detailFields,

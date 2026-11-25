@@ -129,8 +129,9 @@ A `plans: true` method answers `{ planId, method }` and may carry §8's preview 
 `cost`, `trust`); `method` must be the one declared method whose `commits` names the plan (`PLAN_INVALID` otherwise).
 A `commits: "<plan>"` method accepts exactly `{ planId }` from that plan, with no `account`. The register stores each
 plan's account (and expiry, 15 minutes) in the plugin instance: a commit runs as that account, and its permission gate
-names that account. An unknown or expired `planId` is `PLAN_INVALID`. A grant for a commit must name the plan's
-account; another account is `ACCOUNT_MISMATCH`. The handler's own input schema is not used for a commit.
+names that account. A `planId` commits once, only through the method its plan named; a second commit is `PLAN_USED` and
+another method is `PLAN_INVALID`. An unknown or expired `planId` is `PLAN_INVALID`. A grant for a commit must name the
+plan's account; another account is `ACCOUNT_MISMATCH`. The handler's own input schema is not used for a commit.
 
 ## Permissions on operations
 
@@ -150,7 +151,8 @@ Every failure reads `CODE: What happened. Next step: What to do.` (contract §12
 |---|---|
 | `INPUT_INVALID` | The input is not an object, breaks the handler's schema, or names an account a `none` method cannot take. |
 | `SCHEMA_VIOLATION` | The answer breaks the handler's output schema. |
-| `PLAN_INVALID` | A plan or commit does not carry the contract's shape, or names the wrong committing method. |
+| `PLAN_INVALID` | A plan or commit does not carry the contract's shape, names the wrong committing method, or is unknown/expired. |
+| `PLAN_USED` | The plan was already committed once. |
 | `ACCOUNT_REQUIRED`, `ACCOUNT_UNKNOWN` | The account cannot be resolved through `accounts`. |
 | `PERMISSION_DENIED` | A rule denies the call, an ask is rejected, or a non-read RPC call has no ask or grant. |
 | `GRANT_INVALID` | A grant did not verify, for any reason the verifier publishes. |

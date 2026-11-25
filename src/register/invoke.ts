@@ -71,8 +71,8 @@ export function prepareCall(entry: MethodEntry, raw: unknown, accounts: readonly
   const { input, account } = checkedInput(entry, raw)
   if (entry.item.commits !== undefined) {
     const planId = typeof input["planId"] === "string" ? input["planId"] : ""
-    const plan = plans.accountOf(planId)
-    if (!plan.ok) throw new RegisterError(refusal("PLAN_INVALID", plan.problems.join("; "), "Plan again, then commit with the planId it answers."))
+    const plan = plans.take(planId, entry.name)
+    if (!plan.ok) throw new RegisterError(refusal(plan.code, plan.problems.join("; "), "Plan again, then commit with the planId it answers."))
     const resolved = accounts.length === 0 ? { ok: true as const, alias: plan.value } : resolveAccount(accounts, { account: plan.value })
     if (!resolved.ok) throw new RegisterError(refusal("ACCOUNT_UNKNOWN", resolved.what, resolved.next))
     return { input, account: resolved.alias }
@@ -110,7 +110,7 @@ function failureOf(entry: MethodEntry, error: unknown): Refusal {
 export async function execute(entry: MethodEntry, prepared: PreparedCall, call: Omit<MethodCall, "account">, plans: PlanStore): Promise<unknown> {
   try {
     const value = checkedOutput(entry, await entry.handler.run(prepared.input, { ...call, account: prepared.account }))
-    if (entry.item.plans === true) plans.record((value as { planId: string }).planId, prepared.account)
+    if (entry.item.plans === true) plans.record((value as { planId: string }).planId, prepared.account, entry.commit ?? entry.name)
     return value
   } catch (error) {
     if (error instanceof RegisterError) throw error

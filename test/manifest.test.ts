@@ -103,6 +103,18 @@ describe("the manifest", () => {
     has(manifest((m) => (m.methods["other:tool"] = { class: "read" })), "capabilities.methods.other:tool")
   })
 
+  test("refuses MCP tool names that collide after OpenCode's rewrite", () => {
+    const both = problems(manifest((m) => {
+      m.methods["mcp:files.delete"] = { class: "delete" }
+      m.methods["mcp:files_delete"] = { class: "delete" }
+    }))
+    assert.ok(both.some((problem) => problem.startsWith("capabilities.methods.mcp:files.delete")), both.join("\n"))
+    assert.ok(both.some((problem) => problem.startsWith("capabilities.methods.mcp:files_delete")), both.join("\n"))
+    assert.deepEqual(problems(manifest((m) => (m.methods["mcp:files.delete"] = { class: "delete" }))), [])
+    assert.deepEqual(problems(manifest((m) => (m.methods["mcp:files_delete"] = { class: "delete" }))), [])
+    assert.deepEqual(problems(manifest((m) => (m.methods["mcp:*"] = { class: "read" }))), [])
+  })
+
   test("allows none or one pinned method, and none by default", () => {
     assert.deepEqual(problems(manifest()), [])
     has(manifest((m) => (m.methods.probe.pinned = true) && (m.methods.status.pinned = true)), "at most one method may be pinned")

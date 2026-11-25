@@ -145,7 +145,7 @@ describe("the gate on the embedded OpenCode 2.4.1 host", () => {
 const writeManifest = (name: string): Manifest =>
   value((m) => {
     m.plugin.name = name
-    m.methods = { status: { class: "read", accounts: "none" }, write: { class: "write", accounts: "none", operations: ["notes.create"] } }
+    m.methods = { status: { class: "read", accounts: "none" }, write: { class: "write", accounts: "none" } }
     m.sources = []
     m.actions = []
     m.events = { changed: {} }
@@ -311,6 +311,19 @@ describe("the review's real-host cases", () => {
       assert.deepEqual(saved.save, ["default:*"], "a tool-door Always saves only the account pattern")
       assert.deepEqual(await called, { output: { ok: true }, content: '{"ok":true}' })
 
+      // A no-operation method asks the same account pattern it saved, so "Always" sticks.
+      const second = tool!.execute({ text: "again" }, {
+        sessionID: session.id,
+        agent: "build",
+        messageID: "msg_saved_2",
+        id: "call_saved_2",
+        signal: new AbortController().signal,
+        progress: () => Effect.void,
+      } as never)
+      const raced = await Promise.race([second, new Promise((resolve) => setTimeout(() => resolve("asked again"), 1000))])
+      assert.notEqual(raced, "asked again", "a second no-operation tool call must not ask")
+      assert.deepEqual(raced, { output: { ok: true }, content: '{"ok":true}' })
+
       const refused = writeRpc(opencode, "askdemo", directory).write({ sessionID: session.id, input: { text: "hello" } }, { location: { directory } })
       await ask(opencode, session.id, "askdemo.write", "reject")
       assert.equal((await failureOf(refused)).code, "PERMISSION_DENIED", "a saved allow does not confirm an RPC write")
@@ -318,6 +331,26 @@ describe("the review's real-host cases", () => {
       const fresh = writeRpc(opencode, "askdemo", directory).write({ sessionID: session.id, input: { text: "hello" } }, { location: { directory } })
       await ask(opencode, session.id, "askdemo.write", "once")
       assert.deepEqual(await fresh, { ok: true })
+    } finally {
+      await opencode.close().catch(() => undefined)
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test("ask-changes alone generates the ask; an allow-only session is not a confirmation", { timeout: 30000, skip: skipHost }, async () => {
+    const directory = await mkdtemp(join(tmpdir(), "plugin-contract-host-"))
+    const askManifest = writeManifest("askdemo")
+    const opencode = await startHost([hostPlugin({ manifest: askManifest, access: "ask-changes" })], directory, ["askdemo"])
+    try {
+      const generated = await opencode.sessions.create({ location: { directory }, agent: "build" })
+      const call = writeRpc(opencode, "askdemo", directory).write({ sessionID: generated.id, input: { text: "hello" } }, { location: { directory } })
+      await ask(opencode, generated.id, "askdemo.write", "once")
+      assert.deepEqual(await call, { ok: true })
+
+      const allowed = await opencode.sessions.create({ location: { directory }, agent: "build", permissions: [{ action: "*", resource: "*", effect: "allow" }] })
+      const refused = await failureOf(writeRpc(opencode, "askdemo", directory).write({ sessionID: allowed.id, input: { text: "hello" } }, { location: { directory } }))
+      assert.equal(refused.code, "PERMISSION_DENIED", "an allow-only session is not a confirmation")
+      assert.deepEqual(await opencode.permission.list({ sessionID: allowed.id }), [], "the allow-only refusal does not ask")
     } finally {
       await opencode.close().catch(() => undefined)
       await rm(directory, { recursive: true, force: true })

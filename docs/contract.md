@@ -159,7 +159,7 @@ One table covers every callable, including pass-through MCP tools, so a consumer
 | `class` | `read`, `write`, `send` (reaches someone), `share` (widens access), `delete`, `export` (leaves the provider), `admin` |
 | `accounts` | `optional` (takes `account`), `none` |
 | `operations` | the provider operations it may assert, for grants and session rules |
-| `plans: true` | dry-runs a change and answers `{ planId, method }` naming the method that commits it |
+| `plans: true` | dry-runs a change and answers `{ planId, method }`; the planId commits once, only through that method |
 | `commits: "<method>"` | takes only `{ planId }` from that planning method; a consumer refuses any other input |
 | `effect` | optional narrowing of access: `ask` or `deny`; never `allow` |
 | `pinned` | `true` for a method whose signature Code Mode sends on every turn. None by default; at most one per plugin, only when session data shows most of the plugin's sessions call it, within about 1,000 tokens |
@@ -257,7 +257,7 @@ Every failure reads `CODE: What happened. Next step: What to do.` One table:
 
 `NEEDS_SIGN_IN`, `SCOPE_MISSING`, `ACCOUNT_REQUIRED`, `ACCOUNT_UNKNOWN`, `ACCOUNT_MISMATCH`, `CURSOR_INVALID`,
 `CURSOR_EXPIRED`, `RATE_LIMITED`, `BUDGET_EXCEEDED`, `SOURCE_DISABLED`, `TOO_LARGE`, `INPUT_INVALID`, `SOURCE_UNKNOWN`,
-`SCHEMA_VIOLATION`, `PERMISSION_DENIED`, `PLAN_INVALID`, `GRANT_INVALID`, `HOST_UNTESTED`, `OPTIONS_INVALID`, `UNAVAILABLE`.
+`SCHEMA_VIOLATION`, `PERMISSION_DENIED`, `PLAN_INVALID`, `PLAN_USED`, `GRANT_INVALID`, `HOST_UNTESTED`, `OPTIONS_INVALID`, `UNAVAILABLE`.
 
 A plugin may add codes; it declares them in its manifest, and the kit checks that the README table matches.
 

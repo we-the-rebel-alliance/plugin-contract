@@ -273,7 +273,7 @@ describe("errors", () => {
     expect(parseSourceError(new Error("EVENTS_CURSOR_INVALID: no. Next step: x."))?.canonical).toBeUndefined()
     expect(parseSourceError(new Error("GWS_VALIDATION_ERROR: Limit: Too big. Next step: x."))).toEqual({ code: "GWS_VALIDATION_ERROR", what: "Limit: Too big", next: "x." })
     expect(parseSourceError(new Error("The cursor is invalid or has expired."))).toBeUndefined()
-    for (const code of ["SCOPE_MISSING", "BUDGET_EXCEEDED", "SOURCE_DISABLED", "INPUT_INVALID", "SOURCE_UNKNOWN", "ACCOUNT_UNKNOWN", "ACCOUNT_REQUIRED", "PLAN_INVALID", "GRANT_INVALID", "HOST_UNTESTED", "OPTIONS_INVALID"]) expect(errorCodeOf(code)).toBe(code)
+    for (const code of ["SCOPE_MISSING", "BUDGET_EXCEEDED", "SOURCE_DISABLED", "INPUT_INVALID", "SOURCE_UNKNOWN", "ACCOUNT_UNKNOWN", "ACCOUNT_REQUIRED", "PLAN_INVALID", "PLAN_USED", "GRANT_INVALID", "HOST_UNTESTED", "OPTIONS_INVALID"]) expect(errorCodeOf(code)).toBe(code)
     expect(errorCodeOf("AUTH_REQUIRED")).toBeUndefined()
     expect(parseSourceError(new Error("ACCOUNT_UNKNOWN: there is no account 'work'. Next step: Pass a known account."))?.canonical).toBe("ACCOUNT_UNKNOWN")
     expect(new SourceError({ code: "RATE_LIMITED", what: "x", next: "Wait.", retryAfterSec: 60 }).retryAfterSec).toBe(60)

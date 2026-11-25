@@ -1,18 +1,21 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   failure,
-  failureFromError
-} from "./chunks/chunk-SQQJ24OZ.js";
+  failureFromError,
+  statusAliases
+} from "./chunks/chunk-NN56F557.js";
+import "./chunks/chunk-6WEY3U6L.js";
+import "./chunks/chunk-JMBXK6YH.js";
 import {
   actSessionRules
-} from "./chunks/chunk-PRLLFQV2.js";
+} from "./chunks/chunk-P5R5UOSZ.js";
 import {
   findAction
-} from "./chunks/chunk-RIPYHT4Z.js";
-import "./chunks/chunk-SBSFNGFN.js";
+} from "./chunks/chunk-WXKPUWDE.js";
+import "./chunks/chunk-L5LSEI5N.js";
 import {
   MAX_BYTES_DEFAULT
-} from "./chunks/chunk-4TUKQJKX.js";
+} from "./chunks/chunk-DKSE7KD4.js";
 import {
   problemsOf
 } from "./chunks/chunk-FTEX4OOT.js";
@@ -153,9 +156,11 @@ async function act(host, request) {
   }
   const inputProblems = schemaProblems(declared.input, request.input ?? {});
   if (inputProblems.length > 0) return refused("SCHEMA_VIOLATION", inputProblems.join("; "), "Pass only the input the act's schema describes.");
+  const accounts = await statusAliases(host, installed);
+  if (!accounts.ok) return { ok: false, failure: accounts.failure };
   const called = await fencedCall(
     host,
-    actSessionRules(installed.manifest, declared, grant, request.phase, request.aliases),
+    actSessionRules(installed.manifest, declared, grant, request.phase, accounts.value),
     {
       package: installed.package,
       method: request.phase === "preview" ? declared.preview : declared.commit,

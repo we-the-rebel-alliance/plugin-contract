@@ -296,7 +296,37 @@ function optionProblems(schema: unknown): { path: string[]; message: string }[] 
 
 const versionField = z.literal(MANIFEST_VERSION)
 const optionsField = z.record(z.string(), z.unknown()).describe("JSON Schema 2020-12 of the plugin's options. It must include access.")
-const methodsField = z.record(methodName, methodItem).describe("Every callable, including pass-through MCP tools.")
+/**
+ * OpenCode 2.4.1's tool-name normalisation (`core/src/tool/runtime.ts:300`): every character outside letters, digits,
+ * `_` and `-` becomes `_`. Two MCP tool names that normalise to the same effective action would collide on the host, so
+ * a manifest refuses both, at both declared names. `mcp:*` is a wildcard, not a tool name, and is excluded.
+ */
+const normalizedMCPTool = (tool: string): string => tool.replace(/[^A-Za-z0-9_-]/g, "_")
+
+const methodsField = z
+  .record(methodName, methodItem)
+  .superRefine((methods, context) => {
+    const groups = new Map<string, string[]>()
+    for (const name of Object.keys(methods)) {
+      if (!name.startsWith("mcp:") || name === "mcp:*") continue
+      const tool = name.slice("mcp:".length)
+      const effective = normalizedMCPTool(tool)
+      const group = groups.get(effective)
+      if (group === undefined) groups.set(effective, [name])
+      else group.push(name)
+    }
+    for (const [effective, names] of groups) {
+      if (names.length < 2) continue
+      for (const name of names) {
+        context.addIssue({
+          code: "custom",
+          path: [name],
+          message: `collides with ${names.filter((other) => other !== name).join(", ")} after OpenCode rewrites both MCP tool names to ${effective}`,
+        })
+      }
+    }
+  })
+  .describe("Every callable, including pass-through MCP tools.")
 const sourcesField = z.array(source)
 const actionsField = z.array(action)
 const eventsField = events
