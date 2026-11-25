@@ -216,7 +216,7 @@ registration follows `ToolEditor.add` and `Tool.Options.codemode` (`dist/promise
 |---|---|
 | `register` | doors 1–3 from one handler table, a manifest and the optional grant wiring; the registration carries the bus writer |
 | `assertHost`, `HostContext` | the host gate: `ctx.app.version` against the manifest's range, refusing `HOST_UNTESTED` |
-| `RegisterContext`, `RegisterWiring`, `Registration`, `GrantWiring` | the context it takes, the grant wiring, and what it returns (its `access`, its `bus` and its disposer) |
+| `RegisterContext`, `RegisterWiring`, `Registration`, `GrantWiring` | the context it takes, the grant wiring, and what it returns (its `bus` and its disposer) |
 | `methodEntries`, `Door`, `HandlerTable`, `MethodCall`, `MethodEntry`, `MethodHandler` | the handler table and one call's context: `account`, `bus` and `unguardedAgents()` |
 | `COMMIT_INPUT`, `PLAN_OUTPUT`, `PLAN_MAX_BYTES` | the shapes a planning method answers and a commit takes, and the most bytes of JSON a stored plan may take |
 | `refusal`, `refusalOf`, `RegisterError`, `Refusal` | a handler's own refusal, in the contract's form |

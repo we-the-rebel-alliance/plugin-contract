@@ -1,5 +1,5 @@
 import type { Manifest } from "../manifest.js";
-import { type AccessContext, type AccessRegistration, type AgentLike } from "../access/agents.js";
+import { type AccessContext, type AgentLike } from "../access/agents.js";
 import { type GrantWiring, type RpcContext } from "./rpc.js";
 import { type ToolContext } from "./tools.js";
 import type { HandlerTable } from "./handlers.js";
@@ -25,7 +25,6 @@ export interface RegisterWiring {
 /** The live registration: the bus over it, and disposing it removes the tools, the RPC id and the rules. */
 export interface Registration {
     readonly name: string;
-    readonly access: AccessRegistration;
     /** The typed bus writer, built from the one RPC registration; every handler call reads the same writer as `call.bus`. */
     readonly bus: Bus;
     dispose(): Promise<void>;

@@ -20,7 +20,7 @@
 import type { Plugin } from "@opencode/plugin"
 import { accountsOf, type AccountProfile } from "../accounts.ts"
 import type { Manifest } from "../manifest.ts"
-import { applyAccess, type AccessContext, type AccessRegistration, type AgentLike } from "../access/agents.ts"
+import { applyAccess, type AccessContext, type AgentLike } from "../access/agents.ts"
 import { installRpc, type GrantWiring, type RpcContext } from "./rpc.ts"
 import { installTools, type ToolContext } from "./tools.ts"
 import { prepare, type BusReader, type CallEnvironment } from "./invoke.ts"
@@ -47,7 +47,6 @@ export interface RegisterWiring {
 /** The live registration: the bus over it, and disposing it removes the tools, the RPC id and the rules. */
 export interface Registration {
   readonly name: string
-  readonly access: AccessRegistration
   /** The typed bus writer, built from the one RPC registration; every handler call reads the same writer as `call.bus`. */
   readonly bus: Bus
   dispose(): Promise<void>
@@ -108,7 +107,6 @@ export async function register(context: RegisterContext, manifest: Manifest, han
       const tools = await installTools(context, environment, writer)
       return {
         name,
-        access,
         bus,
         async dispose() {
           await rpc.dispose().catch(() => undefined)

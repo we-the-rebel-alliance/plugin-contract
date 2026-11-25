@@ -16,16 +16,16 @@ import {
   evaluate,
   methodAction,
   unguardedAgents
-} from "./chunks/chunk-HSYZDBOW.js";
+} from "./chunks/chunk-LJBRNDIR.js";
 import {
   manifestHash
-} from "./chunks/chunk-WUXTQJJP.js";
-import "./chunks/chunk-KDEHNYY7.js";
+} from "./chunks/chunk-QO4BENAJ.js";
+import "./chunks/chunk-SWSUBLXW.js";
 import {
   MAX_BYTES_DEFAULT,
   errorCodeOf,
   hostInRange
-} from "./chunks/chunk-YTAZMRBO.js";
+} from "./chunks/chunk-CQOJNZW4.js";
 import {
   problemsOf
 } from "./chunks/chunk-FTEX4OOT.js";
@@ -764,7 +764,6 @@ async function register(context, manifest, handlers, wiring = {}) {
       const tools = await installTools(context, environment, writer);
       return {
         name,
-        access,
         bus,
         async dispose() {
           await rpc.dispose().catch(() => void 0);

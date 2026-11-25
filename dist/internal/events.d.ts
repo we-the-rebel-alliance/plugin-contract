@@ -303,6 +303,12 @@ export interface EventsListInput {
  * its `events_list` handler's output instead of copying the shape.
  */
 export declare const PAGE_SCHEMA: JsonSchema;
+/**
+ * The base input schema of `events_list`: `source`, `cursor`, `since`, `limit` and `scope`, each optional, and nothing
+ * else at the top level. A source plugin reuses it as its handler's `input`; `parseEventsListInput`, with the source's
+ * scope keys, is still what checks the values and refuses a scope key the source does not declare.
+ */
+export declare const EVENTS_LIST_INPUT_SCHEMA: JsonSchema;
 export interface EventsListResult {
     /** The source every event names, also on an empty page. */
     readonly source: string;

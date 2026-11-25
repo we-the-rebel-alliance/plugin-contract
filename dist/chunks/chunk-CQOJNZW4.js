@@ -203,6 +203,17 @@ var PAGE_SCHEMA = {
   required: ["source", "account", "owner", "events", "cursor", "more", "trust"],
   additionalProperties: true
 };
+var EVENTS_LIST_INPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    source: { type: "string" },
+    cursor: { type: "string" },
+    since: { type: "string" },
+    limit: { type: "integer", minimum: PAGE.min, maximum: PAGE.max },
+    scope: { type: "object" }
+  },
+  additionalProperties: false
+};
 var ERROR_CODES = [
   "NEEDS_SIGN_IN",
   "SCOPE_MISSING",
@@ -965,6 +976,7 @@ export {
   REMOVAL_REASONS,
   GAP_REASONS,
   PAGE_SCHEMA,
+  EVENTS_LIST_INPUT_SCHEMA,
   ERROR_CODES,
   errorCodeOf,
   SourceError,
