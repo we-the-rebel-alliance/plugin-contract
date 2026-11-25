@@ -257,6 +257,19 @@ describe("plugin-kit forbidden", () => {
     }
   })
 
+  test("the corpus keeps all 44 reviewed rows, with the reviewed labels", () => {
+    assert.equal(corpus.length, 44)
+    const counts = corpus.reduce<Record<string, number>>((all, row) => {
+      all[row.expected] = (all[row.expected] ?? 0) + 1
+      return all
+    }, {})
+    assert.deepEqual(counts, {
+      flagged: 37,
+      "not flagged (known false negative on master)": 1,
+      "not flagged (known false positive on master)": 6,
+    })
+  })
+
   test("the reviewer's corpus is flagged by the unchanged v0.0.0 detector through forbidden, with the known false positives pinned to #71", () => {
     const local = temp()
     try {
@@ -271,7 +284,8 @@ describe("plugin-kit forbidden", () => {
         const label = `${row.kind} | ${row.line}`
         if (row.expected === "flagged") assert.ok(flagged.has(row.path), `the v0.0.0 detector must flag: ${label}`)
         else if (row.expected === "not flagged (known false negative on master)") assert.equal(flagged.has(row.path), false, `the v0.0.0 detector does not flag: ${label}`)
-        else assert.ok(flagged.has(row.path), `known false positive (#71), pinned until the redesign: ${label}`)
+        else if (row.expected === "not flagged (known false positive on master)") assert.ok(flagged.has(row.path), `known false positive (#71), pinned until the redesign: ${label}`)
+        else throw new Error(`unknown corpus expectation "${row.expected}" for: ${label}`)
       }
     } finally {
       local.cleanup()
