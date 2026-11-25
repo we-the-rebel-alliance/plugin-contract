@@ -42,7 +42,7 @@ function handlers(over: Partial<Record<string, MethodHandler>> = {}): HandlerTab
     }),
     events_detail: handler({ description: "Read one event's detail." }),
     list_channels: handler({ description: "List channels." }),
-    plan_send: handler({ description: "Dry-run a send.", run: async () => ({ planId: "p1", method: "send_message" }) }),
+    plan_send: handler({ description: "Dry-run a send.", run: async () => ({ method: "send_message" }) }),
     send_message: handler({ description: "Send a message.", output: SENT, run: async () => ({ sent: true }) }),
     ...over,
   }
@@ -147,20 +147,23 @@ describe("register: input, account and output", () => {
     await assert.rejects(h.tools.get("demo_broken")!.tool.execute({}, context()), /SCHEMA_VIOLATION: .*ok/)
   })
 
-  test("a plan answers { planId, method } with the preview fields; a commit takes only the planId and no account", async () => {
+  test("a plan answer carries the register-minted planId and the preview fields; a commit takes only the planId and no account", async () => {
     const h = makeHarness()
     await register(
       h.ctx,
       demo,
       handlers({
         plan_send: handler({
-          run: async () => ({ planId: "p1", method: "send_message", output: { text: "hi" }, reaches: [{ id: "person:ana", label: "Ana" }], changes: ["sends one message"], cost: { usd: 0 }, trust: "untrusted" }),
+          run: async () => ({ method: "send_message", output: { text: "hi" }, reaches: [{ id: "person:ana", label: "Ana" }], changes: ["sends one message"], cost: { usd: 0 }, trust: "untrusted" }),
         }),
       }),
     )
     const plan = await h.tools.get("demo_plan_send")!.tool.execute({}, context())
-    assert.deepEqual(plan.output, {
-      planId: "p1",
+    const output = plan.output as Record<string, unknown>
+    assert.match(output["planId"] as string, /^[A-Za-z0-9_-]+$/)
+    assert.ok(Buffer.from(output["planId"] as string, "base64url").length >= 16, "the register mints at least 128 random bits")
+    assert.deepEqual(output, {
+      planId: output["planId"],
       method: "send_message",
       output: { text: "hi" },
       reaches: [{ id: "person:ana", label: "Ana" }],
@@ -168,11 +171,34 @@ describe("register: input, account and output", () => {
       cost: { usd: 0 },
       trust: "untrusted",
     })
-    const sent = await h.tools.get("demo_send_message")!.tool.execute({ planId: "p1" }, context())
+    const minted = output["planId"] as string
+    const sent = await h.tools.get("demo_send_message")!.tool.execute({ planId: minted }, context())
     assert.deepEqual(sent.output, { sent: true })
-    await assert.rejects(h.tools.get("demo_send_message")!.tool.execute({ planId: "p1", text: "x" }, context()), /PLAN_INVALID: .*only \{ planId \}/)
-    await assert.rejects(h.tools.get("demo_send_message")!.tool.execute({ planId: "p1", account: "work" }, context()), /PLAN_INVALID: .*takes only \{ planId \}; the grant names the account/)
+    await assert.rejects(h.tools.get("demo_send_message")!.tool.execute({ planId: minted, text: "x" }, context()), /PLAN_INVALID: .*only \{ planId \}/)
+    await assert.rejects(h.tools.get("demo_send_message")!.tool.execute({ planId: minted, account: "work" }, context()), /PLAN_INVALID: .*takes only \{ planId \}; the grant names the account/)
     await assert.rejects(h.tools.get("demo_send_message")!.tool.execute({ text: "x" }, context()), /PLAN_INVALID: .*only \{ planId \}/)
+  })
+
+  test("a handler may not mint its own planId; the register mints it and keeps the full answer for call.plan", async () => {
+    const h = makeHarness()
+    await register(h.ctx, demo, handlers({ plan_send: handler({ run: async () => ({ planId: "plan-1", method: "send_message" }) }) }))
+    await assert.rejects(h.tools.get("demo_plan_send")!.tool.execute({}, context()), /PLAN_INVALID: .*must not answer a planId.*mints it/)
+
+    let planned: unknown
+    const record = makeHarness()
+    await register(
+      record.ctx,
+      demo,
+      handlers({
+        plan_send: handler({ run: async () => ({ method: "send_message", note: "private" }) }),
+        send_message: handler({ output: SENT, run: async (_input, call) => { planned = call.plan; return { sent: true } } }),
+      }),
+    )
+    const plan = await record.tools.get("demo_plan_send")!.tool.execute({}, context())
+    const minted = (plan.output as { planId: string }).planId
+    assert.equal(Object.hasOwn(plan.output as object, "note"), false, "private plan data is not published")
+    assert.deepEqual((await record.tools.get("demo_send_message")!.tool.execute({ planId: minted }, context())).output, { sent: true })
+    assert.deepEqual(planned, { method: "send_message", note: "private" }, "the commit receives the plan handler's full answer as call.plan")
   })
 
   test("a commit's own input schema is not used: the contract's { planId } is", async () => {
@@ -191,20 +217,21 @@ describe("register: input, account and output", () => {
       h.ctx,
       demo,
       handlers({
-        plan_send: handler({ run: async (_input, call) => ({ planId: `plan-${call.account}`, method: "send_message" }) }),
+        plan_send: handler({ run: async () => ({ method: "send_message" }) }),
         send_message: handler({ output: SENT, run: async () => { sent += 1; return { sent: true } } }),
       }),
     )
     h.sessions.get("s1")!.permissions = [{ action: "demo.send_message", resource: "personal:*", effect: "deny" }]
     const plan = await h.tools.get("demo_plan_send")!.tool.execute({ account: "personal" }, context())
-    assert.deepEqual(plan.output, { planId: "plan-personal", method: "send_message" })
-    await assert.rejects(h.tools.get("demo_send_message")!.tool.execute({ planId: "plan-personal" }, context()), /PERMISSION_DENIED/)
+    const planId = (plan.output as { planId: string }).planId
+    assert.equal((plan.output as { method: string }).method, "send_message")
+    await assert.rejects(h.tools.get("demo_send_message")!.tool.execute({ planId }, context()), /PERMISSION_DENIED/)
     assert.equal(sent, 0, "the commit ran as work and skipped the personal deny")
     // The same plan's account is the account named in the gate, not the first declared alias.
     assert.equal(h.assertions.at(-1)!.resources.join(","), "personal:demo.messages.create")
     // A refusal before the handler releases the reservation, so the same plan can be committed once it is allowed.
     h.sessions.get("s1")!.permissions = []
-    assert.deepEqual((await h.tools.get("demo_send_message")!.tool.execute({ planId: "plan-personal" }, context())).output, { sent: true })
+    assert.deepEqual((await h.tools.get("demo_send_message")!.tool.execute({ planId }, context())).output, { sent: true })
     assert.equal(sent, 1)
   })
 
@@ -221,8 +248,8 @@ describe("register: input, account and output", () => {
     })
     const h = makeHarness()
     await register(h.ctx, own, handlers({
-      plan_send: handler({ run: async () => ({ planId: "plan-send", method: "send_message" }) }),
-      plan_archive: handler({ run: async () => ({ planId: "plan-archive", method: "archive_message" }) }),
+      plan_send: handler({ run: async () => ({ method: "send_message" }) }),
+      plan_archive: handler({ run: async () => ({ method: "archive_message" }) }),
       send_message: handler({ output: SENT, run: async () => ({ sent: true }) }),
       archive_message: handler({ input: EMPTY, output: OBJECT, run: async () => ({ archived: true }) }),
     }))
@@ -235,7 +262,7 @@ describe("register: input, account and output", () => {
 
   test("a plan is refused when it names a method that does not commit it", async () => {
     const h = makeHarness()
-    await register(h.ctx, demo, handlers({ plan_send: handler({ run: async () => ({ planId: "p1", method: "status" }) }) }))
+    await register(h.ctx, demo, handlers({ plan_send: handler({ run: async () => ({ method: "status" }) }) }))
     await assert.rejects(h.tools.get("demo_plan_send")!.tool.execute({}, context()), /PLAN_INVALID: .*status.*send_message/)
   })
 })
@@ -503,7 +530,7 @@ describe("register: door 3", () => {
     assert.equal(sent, 1)
   })
 
-  test("a plan re-recorded while its ask waits refuses the old commit and never runs the handler", async () => {
+  test("a second plan while an ask waits mints another id, and each plan commits once", async () => {
     const h = makeHarness({ holdAsks: true })
     let sent = 0
     await register(
@@ -520,24 +547,20 @@ describe("register: door 3", () => {
       }),
     )
     h.sessions.get("s1")!.permissions = [{ action: "demo.send_message", resource: "*", effect: "ask" }]
-    const input = { planId: await planId(h) }
+    const first = { planId: await planId(h) }
     const asked = h.waitForAsk()
-    const pending = h.rpc.call("demo", "send_message", { sessionID: "s1", input })
+    const pending = h.rpc.call("demo", "send_message", { sessionID: "s1", input: first })
     await asked
-    // The planning tool records the same id again while the commit waits: the old reservation no longer holds it.
-    assert.equal(await planId(h), input.planId)
+    // Another plan while the first commit's ask waits gets its own unguessable id, and does not disturb it.
+    const second = { planId: await planId(h) }
+    assert.notEqual(second.planId, first.planId, "the register never reuses a live plan id")
     h.releaseAsks()
-    await assert.rejects(pending, (error: unknown) => {
-      assert.ok(error instanceof RpcDeclaredFailure)
-      assert.equal((error.data as { code: string }).code, "PLAN_USED")
-      return true
-    })
-    assert.equal(sent, 0, "the refused call never ran the handler")
-    // The re-recorded plan is the live one, and it commits exactly once.
+    assert.deepEqual(await pending, { sent: true })
+    assert.equal(sent, 1, "the waiting commit ran its handler once")
     h.setHoldAsks(false)
-    assert.deepEqual(await h.rpc.call("demo", "send_message", { sessionID: "s1", input }), { sent: true })
-    assert.equal(sent, 1)
-    await assert.rejects(h.rpc.call("demo", "send_message", { sessionID: "s1", input }), /PLAN_USED/)
+    assert.deepEqual(await h.rpc.call("demo", "send_message", { sessionID: "s1", input: second }), { sent: true })
+    assert.equal(sent, 2)
+    await assert.rejects(h.rpc.call("demo", "send_message", { sessionID: "s1", input: first }), /PLAN_USED/)
   })
 
   test("an aborted ask releases the plan and the abandoned call never runs the handler", async () => {

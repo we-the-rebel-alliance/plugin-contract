@@ -2,8 +2,9 @@
  * Input and output validation for the register (contract §6 and §12).
  *
  * A method's handler declares the JSON Schema of its input and answer; the register checks them against that schema
- * before the handler runs and after it answers. `plans` and `commits` add the contract's two shapes: a plan answers
- * exactly `{ planId, method }`, and a commit takes exactly `{ planId }` from its planning method.
+ * before the handler runs and after it answers. `plans` and `commits` add the contract's two shapes: a plan handler
+ * answers `{ method, output?, … }` and the register mints the `planId`; a commit takes exactly `{ planId }` from its
+ * planning method.
  *
  * The schemas stay plain JSON: a consumer reads them over RPC and a plugin's own docs generate from them. zod is used
  * inside only, through `z.fromJSONSchema`, so no public type names it.
@@ -14,8 +15,8 @@ import type { JsonSchema } from "../manifest.ts"
 import { problemsOf } from "../internal/validator.ts"
 
 /**
- * The plan's answer (contract §6 and §8): the id of the dry-run, the method that commits it, and the preview fields a
- * person sees before confirming: output, reaches, changes, cost and trust.
+ * The public plan answer (contract §6 and §8): the `planId` the register minted, the method that commits it, and the
+ * preview fields a person sees before confirming: output, reaches, changes, cost and trust.
  */
 export const PLAN_OUTPUT: JsonSchema = {
   type: "object",
@@ -50,8 +51,11 @@ export const COMMIT_INPUT: JsonSchema = {
 }
 
 const reach = z.strictObject({ id: z.string().min(1).max(320), label: z.string().max(200).optional() })
-const plan = z.strictObject({
-  planId: z.string().min(1),
+/**
+ * A plan handler's answer: the committing method, §8's preview fields when it carries them, and any private plan data
+ * the commit reads from `call.plan`. It must not carry a `planId`: the register mints that.
+ */
+const planAnswer = z.looseObject({
   method: z.string().min(1),
   output: z.unknown().optional(),
   reaches: z.array(reach).max(20).optional(),
@@ -98,10 +102,16 @@ export function validate(schema: JsonSchema, value: unknown): Checked<unknown> {
   return result.success ? { ok: true, value: result.data } : { ok: false, problems: problemsOf(result.error) }
 }
 
-/** The plan's answer, checked: exactly the id and the method that commits it. */
-export function validatePlan(value: unknown): Checked<{ planId: string; method: string }> {
-  const result = plan.safeParse(value)
-  return result.success ? { ok: true, value: result.data } : { ok: false, problems: problemsOf(result.error) }
+/**
+ * The plan handler's answer, checked: a committing method, the preview fields it carries, and no `planId`. Private
+ * plan data is kept, because the commit handler receives the whole answer as `call.plan`.
+ */
+export function validatePlanAnswer(value: unknown): Checked<Record<string, unknown>> {
+  if (plain(value) && Object.hasOwn(value, "planId")) {
+    return { ok: false, problems: ["a plan handler must not answer a planId; the register mints it and adds it to the plan"] }
+  }
+  const result = planAnswer.safeParse(value)
+  return result.success ? { ok: true, value: result.data as Record<string, unknown> } : { ok: false, problems: problemsOf(result.error) }
 }
 
 /** A commit's input, checked: exactly `{ planId }`. */

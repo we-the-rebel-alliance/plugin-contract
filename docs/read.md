@@ -49,5 +49,6 @@ if (!outcome.ok) console.log(outcome.failure.message) // CODE: what happened. Ne
 else if (outcome.kind === "events") console.log(outcome.page.events.length)
 ```
 
-`host` supplies two calls: `openSession({ rules, title })` and `call({ package, method, sessionID, input })`. Each app
-implements them over its own OpenCode server.
+`host` supplies three calls: `openSession({ rules, title })`, `status({ package })`, and
+`call({ package, method, sessionID, input })`. Each app implements them over its own OpenCode server. `call` also
+accepts `grant` and `consumer`, which an `act` commit sends in the RPC envelope; `read` never sets either.

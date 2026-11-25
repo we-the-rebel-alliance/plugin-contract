@@ -1,23 +1,11 @@
-import { type ActionEffect, type InstalledManifest } from "./manifest.js";
+import { type InstalledManifest } from "./manifest.js";
 import { type ReadFailure } from "./internal/failure.js";
 import { type ActGrant, type ActPhase } from "./access.js";
 import { type ReadHost } from "./read.js";
 export type { ReadFailure } from "./internal/failure.js";
 export type { ActGrant, ActPhase } from "./access.js";
-/** What a project's host does for `act`: a read host, plus a confirmation check when it can issue one. */
-export interface ActHost extends ReadHost {
-    /**
-     * True when `token` is a confirmation this host issued for this act, account and consumer. Absent when the host
-     * has no issuer: a non-local commit is then refused. The contract never issues a token.
-     */
-    issuedConfirmation?(check: {
-        readonly token: string;
-        readonly action: string;
-        readonly effect: ActionEffect;
-        readonly account: string;
-        readonly consumer: string;
-    }): boolean | Promise<boolean>;
-}
+/** What a project's host does for `act`: the same host as `read`, whose call may carry a commit's grant. */
+export type ActHost = ReadHost;
 /** One preview or commit of an act. */
 export interface ActRequest {
     readonly installed: InstalledManifest;
@@ -25,13 +13,12 @@ export interface ActRequest {
     readonly grant: ActGrant;
     readonly consumer: string;
     readonly phase: ActPhase;
-    /** The caller's input, checked against the act's input schema. The library adds `account`. */
+    /** Preview only: the caller's input, checked against the act's input schema. A commit with an input is refused. */
     readonly input?: Readonly<Record<string, unknown>>;
-    /**
-     * A confirmation the host issued. Required to commit an act whose effect is not `local`. Ignored for a preview
-     * and for a local commit. An empty token is not a confirmation.
-     */
-    readonly confirmation?: string;
+    /** Commit only: the `planId` the preview answered. */
+    readonly planId?: string;
+    /** Commit only: the host-signed action grant `register` verifies. */
+    readonly grantToken?: string;
     readonly signal?: AbortSignal;
 }
 /** Who a commit would reach, as the preview names them. A host shows this on the one confirm. */
@@ -51,10 +38,16 @@ export interface ActAnswer {
     readonly cost?: unknown;
     readonly account?: string;
 }
+/** A preview's answer: the confirm fields, and the plan the commit carries. */
+export interface ActPreview extends ActAnswer {
+    readonly planId: string;
+    /** The act's commit method, as the preview named it. */
+    readonly method: string;
+}
 export type ActOutcome = {
     readonly ok: true;
     readonly phase: "preview";
-    readonly preview: ActAnswer;
+    readonly preview: ActPreview;
 } | {
     readonly ok: true;
     readonly phase: "commit";
@@ -63,5 +56,5 @@ export type ActOutcome = {
     readonly ok: false;
     readonly failure: ReadFailure;
 };
-/** Previews or commits an act under a grant, in a session fenced by that phase's rules. Never throws for a refusal. */
+/** Previews or commits an act under a grant. Never throws for a refusal. */
 export declare function act(host: ActHost, request: ActRequest): Promise<ActOutcome>;

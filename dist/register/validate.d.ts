@@ -1,8 +1,8 @@
 import type { Checked } from "../internal/checked.js";
 import type { JsonSchema } from "../manifest.js";
 /**
- * The plan's answer (contract §6 and §8): the id of the dry-run, the method that commits it, and the preview fields a
- * person sees before confirming: output, reaches, changes, cost and trust.
+ * The public plan answer (contract §6 and §8): the `planId` the register minted, the method that commits it, and the
+ * preview fields a person sees before confirming: output, reaches, changes, cost and trust.
  */
 export declare const PLAN_OUTPUT: JsonSchema;
 /** What a commit accepts from its planning method: the plan id, and nothing else. The grant names the account. */
@@ -16,11 +16,11 @@ export declare function inputSchemaProblems(schema: unknown): string[];
 export declare function outputSchemaProblems(schema: unknown): string[];
 /** The value checked against one JSON Schema, or every problem named by its path. */
 export declare function validate(schema: JsonSchema, value: unknown): Checked<unknown>;
-/** The plan's answer, checked: exactly the id and the method that commits it. */
-export declare function validatePlan(value: unknown): Checked<{
-    planId: string;
-    method: string;
-}>;
+/**
+ * The plan handler's answer, checked: a committing method, the preview fields it carries, and no `planId`. Private
+ * plan data is kept, because the commit handler receives the whole answer as `call.plan`.
+ */
+export declare function validatePlanAnswer(value: unknown): Checked<Record<string, unknown>>;
 /** A commit's input, checked: exactly `{ planId }`. */
 export declare function validateCommitInput(value: unknown): Checked<{
     planId: string;

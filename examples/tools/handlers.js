@@ -54,8 +54,6 @@ export function createHandlers({ manifest, version, bus, state = {} }) {
   const hostRange = manifest.plugin.host.opencode
   const tested = manifest.plugin.host.tested
   const notes = new Map([["welcome", "Glyph keeps short notes in memory."]])
-  const plans = new Map()
-  let nextPlan = 1
 
   return {
     status: {
@@ -116,11 +114,11 @@ export function createHandlers({ manifest, version, bus, state = {} }) {
       },
       output: OBJECT,
       async run(input) {
-        const planId = `plan-${nextPlan++}`
-        plans.set(planId, { id: input.id, text: input.text })
+        // The register mints the planId; the planned note travels to the commit as call.plan.
         return {
-          planId,
           method: "write_note",
+          id: input.id,
+          text: input.text,
           output: { id: input.id, characters: input.text.length },
           changes: [`Replace the text of ${input.id}.`],
           trust: "untrusted",
@@ -133,11 +131,10 @@ export function createHandlers({ manifest, version, bus, state = {} }) {
       input: EMPTY,
       output: NOTE,
       async run(input, call) {
-        const planned = plans.get(input.planId)
-        if (planned === undefined) {
-          throw new RegisterError(refusal("PLAN_INVALID", `Glyph holds no plan ${JSON.stringify(input.planId)}`, "Plan the write again, then commit the new planId."))
+        const planned = call.plan
+        if (planned === undefined || typeof planned !== "object" || typeof planned.id !== "string" || typeof planned.text !== "string") {
+          throw new RegisterError(refusal("PLAN_INVALID", "Glyph holds no plan for this commit", "Plan the write again, then commit the new planId."))
         }
-        plans.delete(input.planId)
         notes.set(planned.id, planned.text)
         await bus.emit("changed", { capability: "glyph.notes", account: call.account, reason: "write" })
         return { id: planned.id, text: planned.text }

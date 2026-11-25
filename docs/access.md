@@ -68,7 +68,8 @@ const outcome = await read(host, { installed, source: source.id, grant, consumer
   `<account>:<operation>`; a bare operation, an MCP tool, as `<server>_<operation>` on `*`.
 - `detailRules(source, detailId, grant)` — the source's rules plus the detail's declared method.
 - `probeRules(source, account, identityOperations, probeAction?)` — the probe action and its identity operations.
-- `actSessionRules(manifest, act, grant, phase)` — a preview session cannot run the commit action.
+- `actSessionRules(manifest, act, grant, phase)` — deny everything, then allow that phase's method and its operations;
+  a preview session cannot run the commit, and a commit runs in its own grant fence.
 - `grantCovers(grant, request)` — the grant's source, account and scope cover a read.
 
 `operationRule` returns `Checked<PermissionRule>` and refuses an undeclared alias instead of throwing; its last

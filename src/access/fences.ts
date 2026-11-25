@@ -155,9 +155,10 @@ export function sessionRules(source: SourceItem, grant: Pick<Grant, "source" | "
 }
 
 /**
- * The session rules for one phase of `act` under `grant`: deny everything, then allow that phase's action and each
- * declared operation for the granted account. A preview session allows the preview action and not the commit action,
- * so the commit method cannot run while previewing. Operations are derived like a source's (`operationRule`).
+ * The session rules for one phase of `act` under `grant`: deny everything, then allow that phase's method and each
+ * declared operation for the granted account. A preview session allows only the preview method, and a commit session
+ * only the commit method, so neither phase can call the other's method. Operations are derived like a source's
+ * (`operationRule`).
  */
 export function actSessionRules(manifest: Manifest, act: Pick<ActionItem, "id" | "preview" | "commit">, grant: Pick<ActGrant, "action" | "account">, phase: ActPhase, aliases: readonly string[] = []): Checked<readonly PermissionRule[]> {
   if (grant.action !== act.id) return { ok: false, problems: [`the grant is for ${grant.action}, not ${act.id}`] }
