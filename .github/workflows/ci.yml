@@ -55,6 +55,12 @@ jobs:
         run: |
           git diff --exit-code -- dist
           test -z "$(git status --porcelain -- dist)"
+      - name: plugin-kit check on every example
+        run: |
+          set -euo pipefail
+          for example in integration mcp tools; do
+            node bin/plugin-kit.js check --dir "examples/$example"
+          done
       - run: npm run test:bun
       - name: Release files (dry run)
         run: node scripts/release.mjs --dry-run

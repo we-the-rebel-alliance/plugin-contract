@@ -1,0 +1,288 @@
+// The Harbour plugin's one handler table.
+//
+// `index.js` passes this table to `register` once. Every method is written here as a schema pair and a `run`; the
+// register owns the tool, Code Mode, RPC and permission doors, and the provider module owns the fake Harbour API.
+import { accountStatuses, accountsOf, redactReason } from "../../dist/accounts.js"
+import { unguardedAgents } from "../../dist/access.js"
+import { decodeBoundCursor, encodeBoundCursor } from "../../dist/cursor.js"
+import { makeEvent } from "../../dist/events.js"
+import { refusal, RegisterError } from "../../dist/register.js"
+import { ProviderError } from "./provider.js"
+
+const PACKAGE = "@we-the-rebel-alliance/harbour-plugin"
+const PLUGIN = "harbour"
+const SOURCE = "notes"
+const EMPTY = { type: "object", properties: {}, additionalProperties: false }
+const PAGE = {
+  type: "object",
+  properties: {
+    source: { type: "string" },
+    account: { type: "string" },
+    owner: { type: "object", additionalProperties: true },
+    events: { type: "array", items: { type: "object", additionalProperties: true } },
+    cursor: { type: "string" },
+    more: { type: "boolean" },
+    trust: { type: "string" },
+  },
+  required: ["source", "account", "owner", "events", "cursor", "more", "trust"],
+  additionalProperties: true,
+}
+const STATUS = {
+  type: "object",
+  properties: {
+    name: { type: "string" },
+    version: { type: "string" },
+    host: {
+      type: "object",
+      properties: { version: { type: "string" }, range: { type: "string" }, tested: { type: "array", items: { type: "string" } } },
+      required: ["version", "range", "tested"],
+      additionalProperties: false,
+    },
+    state: { type: "string", enum: ["ready", "needs_sign_in", "error"] },
+    accounts: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          alias: { type: "string" },
+          state: { type: "string", enum: ["ready", "needs_sign_in", "error"] },
+          owner: { type: "object", additionalProperties: true },
+        },
+        required: ["alias", "state"],
+        additionalProperties: false,
+      },
+    },
+    unguardedAgents: { type: "array", items: { type: "string" } },
+    nextStep: {},
+  },
+  required: ["name", "version", "host", "state", "accounts", "unguardedAgents", "nextStep"],
+  additionalProperties: false,
+}
+const PROBE = {
+  type: "object",
+  properties: {
+    source: { type: "string" },
+    account: { type: "string" },
+    owner: { type: "object", additionalProperties: true },
+    scopes: { type: "array", items: { type: "string" } },
+    trust: { type: "string", enum: ["untrusted"] },
+  },
+  required: ["source", "account", "owner", "trust"],
+  additionalProperties: false,
+}
+const OPTIONS = {
+  type: "object",
+  properties: { options: { type: "array", items: { type: "object", properties: { id: { type: "string" }, label: { type: "string" } }, required: ["id"], additionalProperties: false } } },
+  required: ["options"],
+  additionalProperties: false,
+}
+
+const binding = (account, scope) => ({ plugin: PLUGIN, source: SOURCE, account, ...(scope === undefined ? {} : { scope }) })
+
+/** The contract refusal for a Harbour API failure. The request id is safe to show; no credential is. */
+function refusalFor(error, call, action, next) {
+  if (error instanceof ProviderError) {
+    if (error.code === "UNAUTHENTICATED") {
+      return new RegisterError(refusal("NEEDS_SIGN_IN", `${action} could not sign in to ${call.account} (request ${error.requestId})`, `Sign in again as ${call.account}.`))
+    }
+    if (error.code === "RATE_LIMITED") {
+      return new RegisterError(refusal("RATE_LIMITED", `Harbour asked to slow down (request ${error.requestId})`, "Try again after a short wait."))
+    }
+    if (error.code === "FORBIDDEN") {
+      return new RegisterError(refusal("PERMISSION_DENIED", `${action} is outside what ${call.account} may read (request ${error.requestId})`, next))
+    }
+    if (error.code === "NOT_FOUND") {
+      return new RegisterError(refusal("INPUT_INVALID", `${action} found nothing for that input (request ${error.requestId})`, next))
+    }
+  }
+  const reason = error instanceof Error ? error.message : String(error)
+  return new RegisterError(refusal("UNAVAILABLE", `${action} failed: ${reason}`, "Try again; if it keeps failing, check the plugin's status."))
+}
+
+/** One note as a contract event, through the shared normaliser. */
+function noteEvent(note, account) {
+  return makeEvent({
+    source: SOURCE,
+    account,
+    external_id: note.id,
+    kind: "doc",
+    occurred_at: note.updated_at,
+    actors: [{ role: "from", id: note.author.id, name: note.author.name }],
+    title: note.title,
+    text: note.text,
+    url: note.url,
+    labels: [note.space],
+  })
+}
+
+/**
+ * The handler table.
+ *
+ * @param {object} parts
+ * @param {ReturnType<import("./provider.js").createHarbourProvider>} parts.provider the fake Harbour API
+ * @param {object} parts.manifest the installed capabilities
+ * @param {object} [parts.options] the plugin options, including the account profiles
+ * @param {string} parts.version the installed package version, for status
+ * @param {{ accountProblems?: string[], access?: { rules: unknown[] }, agents?: () => Promise<unknown[]>, hostVersion?: string }} [parts.state] registration state status reads
+ */
+export function createHandlers({ provider, manifest, options = {}, version, state = {} }) {
+  const hostRange = manifest.plugin.host.opencode
+  const tested = manifest.plugin.host.tested
+
+  async function ownersByAlias() {
+    const plan = accountsOf(manifest, options)
+    if (!plan.ok) return { profiles: [], signals: {} }
+    const signals = {}
+    for (const profile of plan.value.accounts) {
+      try {
+        const answer = await provider.whoami({ account: profile.alias })
+        signals[profile.alias] = { state: "ready", owner: answer.owner }
+      } catch (error) {
+        if (error instanceof ProviderError && error.code === "UNAUTHENTICATED") signals[profile.alias] = { state: "needs_sign_in" }
+        else signals[profile.alias] = { state: "error", reason: error instanceof Error ? error.message : String(error) }
+      }
+    }
+    return { profiles: plan.value.accounts, signals }
+  }
+
+  return {
+    status: {
+      description: "Read Harbour's state, its host range and every account alias.",
+      input: EMPTY,
+      output: STATUS,
+      async run() {
+        const { profiles, signals } = await ownersByAlias()
+        const accounts = profiles.length === 0 ? [] : accountStatuses(profiles, signals)
+        const problems = state.accountProblems ?? []
+        const needsSignIn = accounts.some((account) => account.state === "needs_sign_in")
+        const pluginState = problems.length > 0 ? "error" : needsSignIn ? "needs_sign_in" : "ready"
+        let unguarded = []
+        if (state.access !== undefined && state.agents !== undefined) {
+          try {
+            unguarded = [...unguardedAgents(await state.agents(), state.access.rules)]
+          } catch {
+            unguarded = []
+          }
+        }
+        return {
+          name: PLUGIN,
+          version,
+          host: { version: state.hostVersion ?? tested[0], range: hostRange, tested },
+          state: pluginState,
+          accounts,
+          unguardedAgents: unguarded,
+          nextStep: problems.length > 0 ? redactReason(problems[0]).slice(0, 200) : needsSignIn ? "Sign in to the account that needs it, then read status again." : null,
+        }
+      },
+    },
+
+    probe: {
+      description: "Read the signed-in Harbour owner for an account, without reading any note.",
+      input: EMPTY,
+      output: PROBE,
+      async run(_input, call) {
+        try {
+          const answer = await provider.whoami({ account: call.account })
+          return { source: SOURCE, account: call.account, owner: answer.owner, scopes: ["spaces"], trust: "untrusted" }
+        } catch (error) {
+          throw refusalFor(error, call, "probe", "Sign the account in again, then probe it.")
+        }
+      },
+    },
+
+    events_list: {
+      description: "List Harbour notes as contract events, oldest first, with a cursor that belongs to the account and scope.",
+      input: {
+        type: "object",
+        properties: {
+          source: { type: "string" },
+          cursor: { type: "string" },
+          since: { type: "string" },
+          limit: { type: "integer", minimum: 1, maximum: 500 },
+          scope: { type: "object", properties: { spaces: { type: "array", items: { type: "string" } } }, additionalProperties: false },
+        },
+        additionalProperties: false,
+      },
+      output: PAGE,
+      async run(input, call) {
+        if (input.source !== undefined && input.source !== SOURCE) {
+          throw new RegisterError(refusal("SOURCE_UNKNOWN", `${PLUGIN} has no source ${String(input.source)}`, `Read the ${SOURCE} source.`))
+        }
+        const scope = input.scope
+        let position = 0
+        if (input.cursor !== undefined) {
+          const decoded = decodeBoundCursor(binding(call.account, scope), input.cursor)
+          if (!decoded.ok) {
+            throw new RegisterError(refusal("CURSOR_INVALID", `the cursor is ${decoded.reason} to ${call.account}, so this read cannot use it`, "Read again without a cursor."))
+          }
+          if (typeof decoded.state.position !== "number" || !Number.isInteger(decoded.state.position) || decoded.state.position < 0) {
+            throw new RegisterError(refusal("CURSOR_INVALID", "the cursor carries no page Harbour issued", "Read again without a cursor."))
+          }
+          position = decoded.state.position
+        }
+        try {
+          const answer = await provider.listNotes({
+            account: call.account,
+            ...(scope?.spaces === undefined ? {} : { spaces: scope.spaces }),
+            ...(input.cursor !== undefined || input.since === undefined ? {} : { since: input.since }),
+            position,
+            ...(input.limit === undefined ? {} : { limit: input.limit }),
+          })
+          const owner = await provider.whoami({ account: call.account })
+          return {
+            source: SOURCE,
+            account: call.account,
+            owner: owner.owner,
+            events: answer.notes.map((note) => noteEvent(note, call.account)),
+            cursor: encodeBoundCursor(binding(call.account, scope), { position: answer.next_position }),
+            more: answer.more,
+            trust: "untrusted",
+            plugin: PACKAGE,
+            asOf: provider.asOf,
+          }
+        } catch (error) {
+          throw refusalFor(error, call, "events_list", "Confirm a space this account can read, then read again.")
+        }
+      },
+    },
+
+    read_note: {
+      description: "Read one Harbour note, taken from the external_id of the event that listed it.",
+      input: { type: "object", properties: { external_id: { type: "string" } }, required: ["external_id"], additionalProperties: false },
+      output: PAGE,
+      async run(input, call) {
+        try {
+          const answer = await provider.readNote({ account: call.account, id: input.external_id })
+          const owner = await provider.whoami({ account: call.account })
+          return {
+            source: SOURCE,
+            account: call.account,
+            owner: owner.owner,
+            events: [noteEvent(answer.note, call.account)],
+            cursor: encodeBoundCursor(binding(call.account), { detail: input.external_id }),
+            more: false,
+            trust: "untrusted",
+            plugin: PACKAGE,
+            asOf: provider.asOf,
+          }
+        } catch (error) {
+          throw refusalFor(error, call, "read_note", "Read the note that belongs to this account.")
+        }
+      },
+    },
+
+    list_spaces: {
+      description: "List the Harbour spaces this account may confirm for a read.",
+      input: EMPTY,
+      output: OPTIONS,
+      async run(_input, call) {
+        try {
+          const answer = await provider.listSpaces({ account: call.account })
+          return { options: answer.spaces.map((space) => ({ id: space.id, label: space.label })) }
+        } catch (error) {
+          throw refusalFor(error, call, "list_spaces", "Sign the account in again, then list its spaces.")
+        }
+      },
+    },
+  }
+}

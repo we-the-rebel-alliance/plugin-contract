@@ -1,0 +1,385 @@
+{
+  "$comment": "Recorded from the fake Trellis provider through the plugin's own handlers: two mcp accounts, one events source, a thread detail and a suggest read. The vendor's MCP tools are declared as mcp:* and have no handler. Every person, channel and message is invented.",
+  "plugin": "@we-the-rebel-alliance/trellis-plugin",
+  "accounts": {
+    "real": true,
+    "aliases": [
+      "work",
+      "personal"
+    ],
+    "required": {
+      "method": "events_list",
+      "code": "ACCOUNT_REQUIRED"
+    },
+    "unknown": {
+      "method": "events_list",
+      "account": "nobodyhere",
+      "code": "ACCOUNT_UNKNOWN"
+    },
+    "cursors": [
+      {
+        "method": "events_list",
+        "account": "work",
+        "other": "personal",
+        "code": "CURSOR_INVALID"
+      }
+    ]
+  },
+  "sources": {
+    "trellis.messages": {
+      "cases": [
+        {
+          "name": "the research channel of the work account",
+          "input": {
+            "source": "messages",
+            "scope": {
+              "channels": [
+                "C-RESEARCH"
+              ]
+            }
+          },
+          "expect": "page",
+          "answer": {
+            "source": "messages",
+            "account": "work",
+            "owner": {
+              "id": "trellis:U-WORK-ANA",
+              "label": "Ana Silva"
+            },
+            "events": [
+              {
+                "source": "messages",
+                "account": "work",
+                "external_id": "M-WORK-1",
+                "kind": "message",
+                "occurred_at": "2026-11-18T10:15:00.000Z",
+                "thread": "trellis-thread:C-RESEARCH:M-WORK-1",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "trellis:U-WORK-ANA",
+                    "name": "Ana Silva"
+                  }
+                ],
+                "title": "Queue migration notes",
+                "text": "The queue migration is on for Thursday. The runbook is in the shared space.",
+                "url": "https://app.trellis.example.com/channels/C-RESEARCH/p/M-WORK-1",
+                "labels": [
+                  "C-RESEARCH"
+                ],
+                "hash": "sha256:2681b185a3422124ffe12de8b557e4850b378c0ad20073622d856ede55cd59d7"
+              },
+              {
+                "source": "messages",
+                "account": "work",
+                "external_id": "M-WORK-2",
+                "kind": "message",
+                "occurred_at": "2026-11-18T10:31:00.000Z",
+                "thread": "trellis-thread:C-RESEARCH:M-WORK-1",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "trellis:U-WORK-KAI",
+                    "name": "Kai Mensah"
+                  }
+                ],
+                "title": "Re: Queue migration notes",
+                "text": "Rehearsal passed. I will watch the lag after the switch.",
+                "url": "https://app.trellis.example.com/channels/C-RESEARCH/p/M-WORK-2",
+                "labels": [
+                  "C-RESEARCH"
+                ],
+                "hash": "sha256:13a92f3f26417e1462f1f56577fe16166470b633c81e9173390fe007e6b97043"
+              }
+            ],
+            "cursor": "eyJ2IjoyLCJzIjoibWVzc2FnZXMiLCJiIjoiNDcxZTNjYzE3MDQ4MWE3MyIsInBvc2l0aW9uIjoyfQ",
+            "more": false,
+            "trust": "untrusted",
+            "plugin": "@we-the-rebel-alliance/trellis-plugin",
+            "asOf": "2026-11-20T09:00:00.000Z"
+          }
+        },
+        {
+          "name": "every work message, oldest first",
+          "input": {
+            "source": "messages"
+          },
+          "expect": "page",
+          "answer": {
+            "source": "messages",
+            "account": "work",
+            "owner": {
+              "id": "trellis:U-WORK-ANA",
+              "label": "Ana Silva"
+            },
+            "events": [
+              {
+                "source": "messages",
+                "account": "work",
+                "external_id": "M-WORK-1",
+                "kind": "message",
+                "occurred_at": "2026-11-18T10:15:00.000Z",
+                "thread": "trellis-thread:C-RESEARCH:M-WORK-1",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "trellis:U-WORK-ANA",
+                    "name": "Ana Silva"
+                  }
+                ],
+                "title": "Queue migration notes",
+                "text": "The queue migration is on for Thursday. The runbook is in the shared space.",
+                "url": "https://app.trellis.example.com/channels/C-RESEARCH/p/M-WORK-1",
+                "labels": [
+                  "C-RESEARCH"
+                ],
+                "hash": "sha256:2681b185a3422124ffe12de8b557e4850b378c0ad20073622d856ede55cd59d7"
+              },
+              {
+                "source": "messages",
+                "account": "work",
+                "external_id": "M-WORK-2",
+                "kind": "message",
+                "occurred_at": "2026-11-18T10:31:00.000Z",
+                "thread": "trellis-thread:C-RESEARCH:M-WORK-1",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "trellis:U-WORK-KAI",
+                    "name": "Kai Mensah"
+                  }
+                ],
+                "title": "Re: Queue migration notes",
+                "text": "Rehearsal passed. I will watch the lag after the switch.",
+                "url": "https://app.trellis.example.com/channels/C-RESEARCH/p/M-WORK-2",
+                "labels": [
+                  "C-RESEARCH"
+                ],
+                "hash": "sha256:13a92f3f26417e1462f1f56577fe16166470b633c81e9173390fe007e6b97043"
+              },
+              {
+                "source": "messages",
+                "account": "work",
+                "external_id": "M-WORK-3",
+                "kind": "message",
+                "occurred_at": "2026-11-19T08:40:00.000Z",
+                "thread": "trellis-thread:D-KAI:M-WORK-3",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "trellis:U-WORK-KAI",
+                    "name": "Kai Mensah"
+                  }
+                ],
+                "title": "Handover",
+                "text": "No open incidents. Ping me if the queue backs up.",
+                "url": "https://app.trellis.example.com/channels/D-KAI/p/M-WORK-3",
+                "labels": [
+                  "D-KAI"
+                ],
+                "hash": "sha256:26e4615a6564b1f3d897f885e52e0be052009b9164bfb3e728b3ec9d23e5b261"
+              }
+            ],
+            "cursor": "eyJ2IjoyLCJzIjoibWVzc2FnZXMiLCJiIjoiZWE3M2NjYzA2YzZjMGYzNyIsInBvc2l0aW9uIjozfQ",
+            "more": false,
+            "trust": "untrusted",
+            "plugin": "@we-the-rebel-alliance/trellis-plugin",
+            "asOf": "2026-11-20T09:00:00.000Z"
+          }
+        },
+        {
+          "name": "the personal account reads its own direct message",
+          "input": {
+            "source": "messages"
+          },
+          "expect": "page",
+          "answer": {
+            "source": "messages",
+            "account": "personal",
+            "owner": {
+              "id": "trellis:U-PERSONAL-ANA",
+              "label": "Ana Silva (personal)"
+            },
+            "events": [
+              {
+                "source": "messages",
+                "account": "personal",
+                "external_id": "M-PERSONAL-1",
+                "kind": "message",
+                "occurred_at": "2026-11-17T19:05:00.000Z",
+                "thread": "trellis-thread:D-ROWAN:M-PERSONAL-1",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "trellis:U-PERSONAL-ROWAN",
+                    "name": "Rowan Vale"
+                  }
+                ],
+                "title": "Weekend",
+                "text": "Are we still walking on Saturday?",
+                "url": "https://app.trellis.example.com/channels/D-ROWAN/p/M-PERSONAL-1",
+                "labels": [
+                  "D-ROWAN"
+                ],
+                "hash": "sha256:b124d303a7fa5c84887f83253dfadbb5a5dd400938d2f52634c39b0dce66de57"
+              }
+            ],
+            "cursor": "eyJ2IjoyLCJzIjoibWVzc2FnZXMiLCJiIjoiMTc3NzNjYzI4YTY1ZDEyOSIsInBvc2l0aW9uIjoxfQ",
+            "more": false,
+            "trust": "untrusted",
+            "plugin": "@we-the-rebel-alliance/trellis-plugin",
+            "asOf": "2026-11-20T09:00:00.000Z"
+          }
+        }
+      ],
+      "probe": {
+        "input": {
+          "source": "messages",
+          "account": "work"
+        },
+        "answer": {
+          "source": "messages",
+          "account": "work",
+          "owner": {
+            "id": "trellis:U-WORK-ANA",
+            "label": "Ana Silva"
+          },
+          "scopes": [
+            "channels"
+          ],
+          "trust": "untrusted"
+        }
+      },
+      "details": [
+        {
+          "id": "trellis.messages.thread",
+          "event": {
+            "thread": "trellis-thread:C-RESEARCH:M-WORK-1"
+          },
+          "answer": {
+            "source": "messages",
+            "account": "work",
+            "owner": {
+              "id": "trellis:U-WORK-ANA",
+              "label": "Ana Silva"
+            },
+            "events": [
+              {
+                "source": "messages",
+                "account": "work",
+                "external_id": "M-WORK-1",
+                "kind": "message",
+                "occurred_at": "2026-11-18T10:15:00.000Z",
+                "thread": "trellis-thread:C-RESEARCH:M-WORK-1",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "trellis:U-WORK-ANA",
+                    "name": "Ana Silva"
+                  }
+                ],
+                "title": "Queue migration notes",
+                "text": "The queue migration is on for Thursday. The runbook is in the shared space.",
+                "url": "https://app.trellis.example.com/channels/C-RESEARCH/p/M-WORK-1",
+                "labels": [
+                  "C-RESEARCH"
+                ],
+                "hash": "sha256:2681b185a3422124ffe12de8b557e4850b378c0ad20073622d856ede55cd59d7"
+              },
+              {
+                "source": "messages",
+                "account": "work",
+                "external_id": "M-WORK-2",
+                "kind": "message",
+                "occurred_at": "2026-11-18T10:31:00.000Z",
+                "thread": "trellis-thread:C-RESEARCH:M-WORK-1",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "trellis:U-WORK-KAI",
+                    "name": "Kai Mensah"
+                  }
+                ],
+                "title": "Re: Queue migration notes",
+                "text": "Rehearsal passed. I will watch the lag after the switch.",
+                "url": "https://app.trellis.example.com/channels/C-RESEARCH/p/M-WORK-2",
+                "labels": [
+                  "C-RESEARCH"
+                ],
+                "hash": "sha256:13a92f3f26417e1462f1f56577fe16166470b633c81e9173390fe007e6b97043"
+              }
+            ],
+            "cursor": "eyJ2IjoyLCJzIjoibWVzc2FnZXMiLCJiIjoiZWE3M2NjYzA2YzZjMGYzNyIsInRocmVhZCI6InRyZWxsaXMtdGhyZWFkOkMtUkVTRUFSQ0g6TS1XT1JLLTEifQ",
+            "more": false,
+            "trust": "untrusted",
+            "plugin": "@we-the-rebel-alliance/trellis-plugin",
+            "asOf": "2026-11-20T09:00:00.000Z"
+          }
+        },
+        {
+          "id": "trellis.messages.thread",
+          "event": {
+            "thread": "trellis-thread:D-ROWAN:M-PERSONAL-1"
+          },
+          "expect": {
+            "refuses": "PERMISSION_DENIED"
+          },
+          "refuses": "PERMISSION_DENIED: read_thread is outside what work may read (request req_trellis_0011_thread). Next step: Read a thread that belongs to this account."
+        }
+      ],
+      "suggest": {
+        "input": {
+          "source": "trellis.messages",
+          "account": "work"
+        },
+        "answer": {
+          "options": [
+            {
+              "id": "C-RESEARCH",
+              "label": "research"
+            },
+            {
+              "id": "D-KAI",
+              "label": "Kai Mensah (direct message)"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "events": {
+    "status": {
+      "name": "trellis",
+      "version": "0.0.0",
+      "host": {
+        "version": "2.4.1",
+        "range": ">=2.4.1 <2.5.0",
+        "tested": [
+          "2.4.1"
+        ]
+      },
+      "state": "ready",
+      "accounts": [
+        {
+          "alias": "work",
+          "state": "ready",
+          "owner": {
+            "id": "trellis:U-WORK-ANA",
+            "label": "Ana Silva"
+          }
+        },
+        {
+          "alias": "personal",
+          "state": "ready",
+          "owner": {
+            "id": "trellis:U-PERSONAL-ANA",
+            "label": "Ana Silva (personal)"
+          }
+        }
+      ],
+      "unguardedAgents": [],
+      "nextStep": null
+    }
+  },
+  "namespace": "Channels, threads and direct messages from Trellis, with the vendor's MCP tools passed through."
+}

@@ -1,0 +1,319 @@
+{
+  "$comment": "Recorded from the fake Harbour provider through the plugin's own handlers: two accounts, one events source, a detail and a suggest read. Every person, space and note is invented.",
+  "plugin": "@we-the-rebel-alliance/harbour-plugin",
+  "accounts": {
+    "real": true,
+    "aliases": [
+      "work",
+      "personal"
+    ],
+    "required": {
+      "method": "events_list",
+      "code": "ACCOUNT_REQUIRED"
+    },
+    "unknown": {
+      "method": "events_list",
+      "account": "nobodyhere",
+      "code": "ACCOUNT_UNKNOWN"
+    },
+    "cursors": [
+      {
+        "method": "events_list",
+        "account": "work",
+        "other": "personal",
+        "code": "CURSOR_INVALID"
+      }
+    ]
+  },
+  "sources": {
+    "harbour.notes": {
+      "cases": [
+        {
+          "name": "a research page of the work account",
+          "input": {
+            "source": "notes",
+            "scope": {
+              "spaces": [
+                "space-research"
+              ]
+            }
+          },
+          "expect": "page",
+          "answer": {
+            "source": "notes",
+            "account": "work",
+            "owner": {
+              "id": "mailto:ana.silva@harbour.example.com",
+              "label": "Ana Silva"
+            },
+            "events": [
+              {
+                "source": "notes",
+                "account": "work",
+                "external_id": "note-work-1",
+                "kind": "doc",
+                "occurred_at": "2026-11-18T10:15:00.000Z",
+                "thread": null,
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "mailto:ana.silva@harbour.example.com",
+                    "name": "Ana Silva"
+                  }
+                ],
+                "title": "Queue migration notes",
+                "text": "The queue moves to one provider per environment. The runbook follows after the rehearsal.",
+                "url": "https://docs.harbour.example.com/notes/note-work-1",
+                "labels": [
+                  "space-research"
+                ],
+                "hash": "sha256:8476272ff3f9361dd84c7072d76349f140ba9c3dcd4ad543edb77742faa53251"
+              }
+            ],
+            "cursor": "eyJ2IjoyLCJzIjoibm90ZXMiLCJiIjoiYjI0MDgwMTRjMjc2YjU2NCIsInBvc2l0aW9uIjoxfQ",
+            "more": false,
+            "trust": "untrusted",
+            "plugin": "@we-the-rebel-alliance/harbour-plugin",
+            "asOf": "2026-11-20T09:00:00.000Z"
+          }
+        },
+        {
+          "name": "every work note, oldest first",
+          "input": {
+            "source": "notes"
+          },
+          "expect": "page",
+          "answer": {
+            "source": "notes",
+            "account": "work",
+            "owner": {
+              "id": "mailto:ana.silva@harbour.example.com",
+              "label": "Ana Silva"
+            },
+            "events": [
+              {
+                "source": "notes",
+                "account": "work",
+                "external_id": "note-work-1",
+                "kind": "doc",
+                "occurred_at": "2026-11-18T10:15:00.000Z",
+                "thread": null,
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "mailto:ana.silva@harbour.example.com",
+                    "name": "Ana Silva"
+                  }
+                ],
+                "title": "Queue migration notes",
+                "text": "The queue moves to one provider per environment. The runbook follows after the rehearsal.",
+                "url": "https://docs.harbour.example.com/notes/note-work-1",
+                "labels": [
+                  "space-research"
+                ],
+                "hash": "sha256:8476272ff3f9361dd84c7072d76349f140ba9c3dcd4ad543edb77742faa53251"
+              },
+              {
+                "source": "notes",
+                "account": "work",
+                "external_id": "note-work-2",
+                "kind": "doc",
+                "occurred_at": "2026-11-19T08:40:00.000Z",
+                "thread": null,
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "mailto:kai.mensah@harbour.example.com",
+                    "name": "Kai Mensah"
+                  }
+                ],
+                "title": "On-call handover",
+                "text": "No open incidents. Watch the queue lag after the migration.",
+                "url": "https://docs.harbour.example.com/notes/note-work-2",
+                "labels": [
+                  "space-operations"
+                ],
+                "hash": "sha256:8d6613f0b043f179237ab6607964845af1371cd870ff5951c1acf6cbcc5a7ab5"
+              }
+            ],
+            "cursor": "eyJ2IjoyLCJzIjoibm90ZXMiLCJiIjoiZjc5MGEwODI4NDJiNjQ2MyIsInBvc2l0aW9uIjoyfQ",
+            "more": false,
+            "trust": "untrusted",
+            "plugin": "@we-the-rebel-alliance/harbour-plugin",
+            "asOf": "2026-11-20T09:00:00.000Z"
+          }
+        },
+        {
+          "name": "the personal account reads its own note",
+          "input": {
+            "source": "notes"
+          },
+          "expect": "page",
+          "answer": {
+            "source": "notes",
+            "account": "personal",
+            "owner": {
+              "id": "mailto:ana.silva@personal.example",
+              "label": "Ana Silva (personal)"
+            },
+            "events": [
+              {
+                "source": "notes",
+                "account": "personal",
+                "external_id": "note-personal-1",
+                "kind": "doc",
+                "occurred_at": "2026-11-17T19:05:00.000Z",
+                "thread": null,
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "mailto:ana.silva@personal.example",
+                    "name": "Ana Silva"
+                  }
+                ],
+                "title": "Weekend reading",
+                "text": "Finish the two library books, then plan the garden bed.",
+                "url": "https://docs.harbour.example.com/notes/note-personal-1",
+                "labels": [
+                  "space-home"
+                ],
+                "hash": "sha256:928da1f6544defdae2cc3a30fc23693acf3111e91538ccc5f3ef5fb6aad4e4e9"
+              }
+            ],
+            "cursor": "eyJ2IjoyLCJzIjoibm90ZXMiLCJiIjoiYzU5MTU0NDRkYWMzNTEzYSIsInBvc2l0aW9uIjoxfQ",
+            "more": false,
+            "trust": "untrusted",
+            "plugin": "@we-the-rebel-alliance/harbour-plugin",
+            "asOf": "2026-11-20T09:00:00.000Z"
+          }
+        }
+      ],
+      "probe": {
+        "input": {
+          "source": "notes",
+          "account": "work"
+        },
+        "answer": {
+          "source": "notes",
+          "account": "work",
+          "owner": {
+            "id": "mailto:ana.silva@harbour.example.com",
+            "label": "Ana Silva"
+          },
+          "scopes": [
+            "spaces"
+          ],
+          "trust": "untrusted"
+        }
+      },
+      "details": [
+        {
+          "id": "harbour.notes.note",
+          "event": {
+            "external_id": "note-work-1"
+          },
+          "answer": {
+            "source": "notes",
+            "account": "work",
+            "owner": {
+              "id": "mailto:ana.silva@harbour.example.com",
+              "label": "Ana Silva"
+            },
+            "events": [
+              {
+                "source": "notes",
+                "account": "work",
+                "external_id": "note-work-1",
+                "kind": "doc",
+                "occurred_at": "2026-11-18T10:15:00.000Z",
+                "thread": null,
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "mailto:ana.silva@harbour.example.com",
+                    "name": "Ana Silva"
+                  }
+                ],
+                "title": "Queue migration notes",
+                "text": "The queue moves to one provider per environment. The runbook follows after the rehearsal.",
+                "url": "https://docs.harbour.example.com/notes/note-work-1",
+                "labels": [
+                  "space-research"
+                ],
+                "hash": "sha256:8476272ff3f9361dd84c7072d76349f140ba9c3dcd4ad543edb77742faa53251"
+              }
+            ],
+            "cursor": "eyJ2IjoyLCJzIjoibm90ZXMiLCJiIjoiZjc5MGEwODI4NDJiNjQ2MyIsImRldGFpbCI6Im5vdGUtd29yay0xIn0",
+            "more": false,
+            "trust": "untrusted",
+            "plugin": "@we-the-rebel-alliance/harbour-plugin",
+            "asOf": "2026-11-20T09:00:00.000Z"
+          }
+        },
+        {
+          "id": "harbour.notes.note",
+          "event": {
+            "external_id": "note-personal-1"
+          },
+          "expect": {
+            "refuses": "PERMISSION_DENIED"
+          },
+          "refuses": "PERMISSION_DENIED: read_note is outside what work may read (request req_harbour_0011_note). Next step: Read the note that belongs to this account."
+        }
+      ],
+      "suggest": {
+        "input": {
+          "source": "harbour.notes",
+          "account": "work"
+        },
+        "answer": {
+          "options": [
+            {
+              "id": "space-research",
+              "label": "Research"
+            },
+            {
+              "id": "space-operations",
+              "label": "Operations"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "events": {
+    "status": {
+      "name": "harbour",
+      "version": "0.0.0",
+      "host": {
+        "version": "2.4.1",
+        "range": ">=2.4.1 <2.5.0",
+        "tested": [
+          "2.4.1"
+        ]
+      },
+      "state": "ready",
+      "accounts": [
+        {
+          "alias": "work",
+          "state": "ready",
+          "owner": {
+            "id": "mailto:ana.silva@harbour.example.com",
+            "label": "Ana Silva"
+          }
+        },
+        {
+          "alias": "personal",
+          "state": "ready",
+          "owner": {
+            "id": "mailto:ana.silva@personal.example",
+            "label": "Ana Silva (personal)"
+          }
+        }
+      ],
+      "unguardedAgents": [],
+      "nextStep": null
+    }
+  },
+  "namespace": "Notes from Harbour, as contract events, with a sign-in per account."
+}
