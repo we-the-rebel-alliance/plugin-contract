@@ -330,7 +330,7 @@ export interface EventsListRequest {
     /** #42: the read asks for each item's `thumbnail`. Only a source that declares `thumbnails` accepts it. */
     readonly thumbnails?: true;
 }
-/** The one error table (contract §12). A plugin may add codes; it declares them in its manifest. */
+/** The one error table (contract §12). A plugin uses these codes; it does not declare its own. */
 export declare const ERROR_CODES: readonly ["NEEDS_SIGN_IN", "SCOPE_MISSING", "ACCOUNT_REQUIRED", "ACCOUNT_UNKNOWN", "ACCOUNT_MISMATCH", "CURSOR_INVALID", "CURSOR_EXPIRED", "RATE_LIMITED", "BUDGET_EXCEEDED", "SOURCE_DISABLED", "TOO_LARGE", "INPUT_INVALID", "SOURCE_UNKNOWN", "SCHEMA_VIOLATION", "PERMISSION_DENIED", "PLAN_INVALID", "PLAN_USED", "GRANT_INVALID", "HOST_UNTESTED", "OPTIONS_INVALID", "UNAVAILABLE"];
 export type ErrorCode = (typeof ERROR_CODES)[number];
 /** The table's code for `code`, or undefined for a code the table does not hold. */

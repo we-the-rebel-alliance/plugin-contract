@@ -103,10 +103,15 @@ function exportProblems(module: string, exported: Set<string>, listed: readonly 
 }
 
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { exports: Record<string, unknown> }
+/** The page and the source file for one export entry; the root `"."` is the package's own guide. */
+const moduleOf = (entry: string): { readonly page: string; readonly source: string } =>
+  entry === "."
+    ? { page: "plugin-contract", source: join("src", "index.ts") }
+    : { page: entry.slice(2), source: join("src", `${entry.slice(2)}.ts`) }
 const modules = Object.keys(pkg.exports)
-  .filter((entry) => entry.startsWith("./") && entry !== "./package.json")
-  .map((entry) => entry.slice(2))
-  .sort()
+  .filter((entry) => entry === "." || (entry.startsWith("./") && entry !== "./package.json"))
+  .map(moduleOf)
+  .sort((a, b) => a.page.localeCompare(b.page))
 const pages = readdirSync(join(root, "docs"))
   .filter((entry) => entry.endsWith(".md"))
   .map((entry) => entry.slice(0, -3))
@@ -118,15 +123,15 @@ const rootPages = ["consumers", "contract", "decisions", "index", "plugin-standa
 describe("the documentation", () => {
   test("every module has a page whose Exports table is exactly the module's exports", () => {
     assert.ok(modules.length >= 18, `the package exports ${modules.length} modules`)
-    for (const module of modules) {
-      const exported = exportsOf(join("src", `${module}.ts`))
-      const text = readFileSync(join(root, "docs", `${module}.md`), "utf8")
-      assert.deepEqual(exportProblems(module, exported, listedExports(text, `${module}.md`)), [])
+    for (const { page, source } of modules) {
+      const exported = exportsOf(source)
+      const text = readFileSync(join(root, "docs", `${page}.md`), "utf8")
+      assert.deepEqual(exportProblems(page, exported, listedExports(text, `${page}.md`)), [])
     }
   })
 
   test("every page is a module page or one of the root pages", () => {
-    const known = new Set([...modules, ...rootPages])
+    const known = new Set([...modules.map((module) => module.page), ...rootPages])
     assert.deepEqual(
       pages.filter((page) => !known.has(page)),
       [],
@@ -143,8 +148,8 @@ describe("the documentation", () => {
 
   test("README.md links every module's page", () => {
     const readme = readFileSync(join(root, "README.md"), "utf8")
-    for (const module of modules) {
-      assert.match(readme, new RegExp(`\\]\\(docs/${module}\\.md\\)`), `README.md does not link docs/${module}.md`)
+    for (const { page } of modules) {
+      assert.match(readme, new RegExp(`\\]\\(docs/${page}\\.md\\)`), `README.md does not link docs/${page}.md`)
     }
   })
 

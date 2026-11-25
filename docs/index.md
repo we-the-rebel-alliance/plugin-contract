@@ -14,6 +14,7 @@ describes the entry point a plugin or an app imports.
 
 ## Plugin modules
 
+- [plugin-contract](plugin-contract.md): the root entry — the contract wire version and the plain validator types.
 - [manifest](manifest.md): the `capabilities` key, its schema, validation, lookups and canonical hash.
 - [accounts](accounts.md): profiles, names, registration through integrations or MCP, `account` resolution and status.
 - [access](access.md): the three access levels as permission rules, and the fenced sessions a grant compiles to.
@@ -29,7 +30,7 @@ describes the entry point a plugin or an app imports.
 ## App modules
 
 - [read](read.md): fenced reads, detail reads and `probe`, through the catalog or embedded.
-- [act](act.md): preview then commit, under a grant and a host-issued confirmation.
+- [act](act.md): preview then commit of a register-minted plan under a host-signed action grant.
 - [params](params.md): relative times, windows and `$me`, resolved at read time.
 - [pick](pick.md): field selection, checked against the output's schema.
 - [catalog](catalog.md): installed manifests, the broker request and the consumer's reader.

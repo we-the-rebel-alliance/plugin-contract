@@ -52,6 +52,7 @@ bundles only what it imports.
 
 | Module | Side | Does | Docs |
 |---|---|---|---|
+| `.` (root) | both | the contract wire version and the plain validator types | [plugin-contract](docs/plugin-contract.md) |
 | `manifest` | both | `capabilities`: schema, validation, lookups and hashing | [manifest](docs/manifest.md) |
 | `accounts` | plugin | profiles, names, registration, `account` resolution, status | [accounts](docs/accounts.md) |
 | `access` | plugin | the three access levels as permission rules, and the fences a grant compiles to | [access](docs/access.md) |
@@ -62,7 +63,7 @@ bundles only what it imports.
 | `grant` | plugin | the host-signed, single-use action grant: signer, verifier and codes | [grant](docs/grant.md) |
 | `outputs` | both | the snapshot shape registry and its JSON Schemas | [outputs](docs/outputs.md) |
 | `read` | app | fenced reads, detail reads and `probe`, through the catalog or embedded | [read](docs/read.md) |
-| `act` | app | preview then commit, under a grant and a host-issued confirmation | [act](docs/act.md) |
+| `act` | app | preview then commit of a register-minted plan under a host-signed action grant | [act](docs/act.md) |
 | `params` | app | relative times, windows and `$me`, resolved at read time | [params](docs/params.md) |
 | `pick` | app | field selection, checked against the output's schema | [pick](docs/pick.md) |
 | `catalog` | app, catalog | installed manifests, the broker request and the consumer's reader | [catalog](docs/catalog.md) |

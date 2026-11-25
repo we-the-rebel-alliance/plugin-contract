@@ -21,6 +21,7 @@ that list, and status that is unavailable is refused rather than defaulted.
 | Export | Does |
 |---|---|
 | `read` | `read(host, request)` reads a source under a grant; never throws for a refused or failed read |
+| `statusAliases` | `statusAliases(host, installed)` reads the plugin's `status.accounts`, the aliases a fence may name |
 | `readDetail` | `readDetail(host, request)` reads one declared detail of an event, pinned to the confirmed scope |
 | `probe` | `probe(host, request)` reads the signed-in owner and scopes; it reads no content |
 | `checkReadRequest` | the checks before any call, and the source and scope to read |

@@ -160,8 +160,8 @@ function registryTarget(target: string): { readonly name: string; readonly spec?
 
 /**
  * A plain `http(s)` or hosted `ssh://` URL on a hosted Git site, in the shapes `hosted-git-info` reads as Git: a
- * repository path, a GitHub/GitLab tree, a gist. A non-hosted `ssh://` URL throws in `npm-package-arg`, and a file, a
- * release download or a tarball URL is `remote`, which OpenCode does not install.
+ * repository path, a GitHub tree, a Bitbucket source page, a gist. A non-hosted `ssh://` URL throws in
+ * `npm-package-arg`, and a file, a release download or a tarball URL is `remote`, which OpenCode does not install.
  */
 function hostedGitUrl(target: string): boolean {
   if (!/^(?:https?|ssh):\/\//i.test(target)) return false

@@ -57,8 +57,8 @@ Every module is `src/<name>.ts` and an export `"./<name>"` in `package.json`, `{
    else, and a published declaration names nothing outside the package (`npm run check:dist`). zod stays inside: a
    module writes its schema in zod and exports a `Validator<T>`.
 4. **Host-neutral.** No module, doc or test names an app. An app-only hint is allowed only as an `x-<app>` key.
-5. **One error table.** Every failure reads `CODE: What happened. Next step: What to do.` from `ERROR_CODES`. A plugin
-   may add a code; it declares it in its manifest.
+5. **One error table.** Every failure reads `CODE: What happened. Next step: What to do.` from `ERROR_CODES`
+   (contract §12). A plugin uses the contract's codes; it does not declare its own.
 6. **Untrusted data.** Provider text is data, never instructions. Events are screened for secrets, and status and logs
    never carry credentials.
 7. **`dist/` is committed.** Run `npm run build` and commit the result; never hand-edit it. On a conflict, take either

@@ -39,8 +39,8 @@ never a manifest that arrived over RPC.
 ## 2. Read a source
 
 A read runs under a grant: one consumer, one source, one account, one scope and one manifest hash. The app supplies a
-`ReadHost`: two calls over its own OpenCode server. The first opens a session whose rules are exactly the grant's; the
-second calls the plugin's RPC method in that session.
+`ReadHost`: three calls over its own OpenCode server. The first opens a session whose rules are exactly the grant's; the
+second reads the plugin's `status`; the third calls the plugin's RPC method in that session.
 
 ```ts
 import type { ReadHost } from "@we-the-rebel-alliance/plugin-contract/read"
@@ -51,10 +51,14 @@ const host: ReadHost = {
     const session = await app.openFencedSession({ rules, title })
     return { sessionID: session.id, close: () => app.closeSession(session.id) }
   },
-  async call({ package: packageName, method, sessionID, input, signal }) {
+  async status({ package: packageName }) {
+    // The plugin's own status method (contract §11): its accounts are the aliases a fence may name.
+    return app.pluginStatus(packageName)
+  },
+  async call({ package: packageName, method, sessionID, input, grant, consumer, signal }) {
     // The host maps the package to its plugin id. The wire call is POST /api/rpc/<name>/<method>
-    // with { sessionID, input }; this app's client owns the URL and the auth.
-    return app.rpc(packageName, method, { sessionID, input }, signal)
+    // with { sessionID, input }; an act commit adds grant and consumer. This app's client owns the URL and auth.
+    return app.rpc(packageName, method, { sessionID, input, ...(grant === undefined ? {} : { grant, consumer }) }, signal)
   },
 }
 ```
@@ -72,7 +76,6 @@ const outcome = await read(host, {
   since: "-1d",                           // an events read; resolved in the person's time zone
   limit: 100,
   context: { now: Date.now(), timeZone: "Europe/Amsterdam" },
-  aliases: ["work", "personal"],          // the plugin's configured account aliases
 })
 
 if (!outcome.ok) {
@@ -91,9 +94,12 @@ the source — an events read may carry `cursor`, `since`, `limit` and `thumbnai
 whose paths must be in its output schema. The answer is checked for its account, `trust: "untrusted"`, its size against
 the source's `maxBytes`, and its page or output shape. A refused or failed read is a value, never a throw.
 
-The aliases are the account names the person configured for the plugin; the plugin's `status` answer lists them, and a
-host that keeps the plugin's options has them too. A source with provider operations needs the grant's account in that
-list, or the fence refuses the read with `PERMISSION_DENIED` rather than inventing a server name.
+The aliases are the account names the person configured for the plugin, and they come from the plugin's own
+`status.accounts` (contract §11), never from the caller: `read`, `readDetail`, `probe` and `act` call
+`statusAliases(host, installed)` before any fenced call, so a host must implement `status`. A host without it, or a
+status that lists no accounts for a plugin that declares them, is `UNAVAILABLE`; a source with provider operations
+needs the grant's account in that list, or the fence refuses the read with `PERMISSION_DENIED` rather than inventing a
+server name.
 
 ### Cursors
 
@@ -131,7 +137,6 @@ const thread = await readDetail(host, {
   grant,
   consumer: "notes",
   event,                                  // the event as the page listed it
-  aliases: ["work", "personal"],
 })
 if (thread.ok) renderDetail(thread.answer) // the plugin's declared detail output
 ```
@@ -142,7 +147,7 @@ if (thread.ok) renderDetail(thread.answer) // the plugin's declared detail outpu
 ```ts
 import { probe } from "@we-the-rebel-alliance/plugin-contract/read"
 
-const answer = await probe(host, { installed, source: "acme.messages", account: "work", aliases: ["work", "personal"] })
+const answer = await probe(host, { installed, source: "acme.messages", account: "work" })
 if (answer.ok) showOwner(answer.answer.owner) // { id, label, verified?, orgs? }, and scopes
 ```
 
@@ -198,12 +203,14 @@ The plugin side is `busEvents(name)`: `register` places it on its one RPC regist
 
 ## 4. Act: preview, then commit
 
-A write is an action with a `preview` and a `commit`. The preview writes nothing. The commit is the write. The app asks
-for the preview, shows the person `output`, `reaches`, `changes` and `cost`, then commits with the confirmation the host
-issued.
+A write is an action with a `preview` and a `commit`. The preview calls the action's `plans: true` method and writes
+nothing; its answer carries the confirm fields and the plan id the commit spends. The person confirms; the commit calls
+the action's `commits` method with exactly `{ planId }` and the host-signed action grant for that commit.
 
 ```ts
+import { randomUUID } from "node:crypto"
 import { act } from "@we-the-rebel-alliance/plugin-contract/act"
+import { signGrant } from "@we-the-rebel-alliance/plugin-contract/grant"
 
 const preview = await act(host, {
   installed,
@@ -212,102 +219,103 @@ const preview = await act(host, {
   consumer: "notes",
   phase: "preview",
   input: { text: "Deploy finished" },
-  aliases: ["work", "personal"],
 })
 if (!preview.ok) throw new Error(preview.failure.message)
 
-showConfirm(preview.preview)              // output, reaches?, changes?, cost?
+showConfirm(preview.preview)              // output, reaches?, changes?, cost?, method
+const planId = preview.preview.planId     // minted by the plugin's register: 128 random bits, never chosen by a handler
 
-const confirmation = await app.askPerson(preview.preview) // the host records the answer
+// The person confirms. The host signs one action grant for the commit method and exactly { planId }.
+const now = Math.floor(Date.now() / 1000)
+const grantToken = signGrant({
+  key: hostPrivateKey,
+  kid: "host_2026_11",
+  audience: installed.package,
+  consumer: "notes",
+  capability: "acme.send_message",        // the act's commit method, not its preview method
+  account: actGrant.account,
+  scope: {},                              // the whole commit method
+  act: "acme.messages.send",
+  input: { planId },                      // the exact input the commit will run with
+  manifest: installed.hash,
+  iat: now,
+  exp: now + 60,
+  jti: randomUUID(),                      // one use; the plugin's store records it
+  cfm: true,                              // the person confirmed; register requires it on a non-read grant
+})
+
 const commit = await act(host, {
   installed,
   action: "acme.messages.send",
   grant: actGrant,
   consumer: "notes",
   phase: "commit",
-  input: { text: "Deploy finished" },     // the exact input the person confirmed
-  confirmation,                           // the token the host issued
-  aliases: ["work", "personal"],
+  planId,                                 // the plan the preview answered
+  grantToken,                             // the grant the plugin's register verifies
 })
 if (commit.ok) showResult(commit.result.output)
 ```
 
-`ActHost.issuedConfirmation(check)` is the host's own check that `token` was issued for this act, effect, account and
-consumer. A host with no issuer can preview but cannot commit an act whose `effect` is not `local`. A caller-supplied
-token is not a confirmation: the contract verifies one, it never creates one. A preview session allows the preview
-method and not the commit; a commit session allows the commit.
+**The preview.** `act` checks the action, the grant (consumer, act, account, manifest hash), and the input against the
+act's input schema, then calls the preview method in the preview fence: deny everything, allow that method and its
+declared operations for the granted account. The answer carries `trust: "untrusted"`, the act's `output`, the optional
+one-confirm fields and the plan: `planId` and the `method` that commits it. The `planId` is minted by the plugin's
+`register` from 16 random bytes (128 bits) and kept in the plugin's plan store; the handler never chooses it, so a
+person's confirmation binds to a value nobody can guess.
 
-`act` checks the action and grant, the manifest hash, the account, the input against the act's input schema, and the
-answer for `trust`, size, `output` against the act's output schema, and the one-confirm fields. Pass the exact input the
-preview showed the person; the host's confirmation is for the act, account and consumer, so the app must not change the
-input between preview and commit.
+**The confirmation.** The person sees `output`, `reaches`, `changes`, `cost` and the account. The host signs the grant
+with `signGrant` for the action's commit method, the act id, the granted account, the installed manifest's hash and the
+exact `{ planId }`, with `cfm: true` when the person confirmed the act. Contract §8 requires the confirmation for a
+non-`local` effect; the plugin's `register` requires it on every non-read grant it verifies. The grant is short-lived
+and single-use; the plugin's `register` records its `jti` in a durable store.
+
+**The commit.** `act` takes `planId` and `grantToken` — no input, and no `confirmation`. It calls the action's
+`commits` method with exactly `{ planId }`, carrying grant and consumer in the RPC envelope
+(`{ sessionID, input: { planId }, grant, consumer }`), in the **commit fence**: deny everything, then allow the commit
+method and its declared operations for the granted account. A handler's inner call outside that grant is denied, as is
+the preview method. The plugin's `register` verifies the grant, reserves the plan, and runs the handler once with the
+plan handler's full answer as `call.plan`.
+
+**One plan, once.** A plan expires after 15 minutes and commits once. A second commit is `PLAN_USED`; a replayed grant is
+`GRANT_INVALID`; an unknown or expired `planId` is `PLAN_INVALID`; a commit through another method is `PLAN_INVALID`. A
+refusal before the handler runs releases the plan; the handler's start consumes it, so a failed handler still used the
+plan. A `planId` from before a plugin reload is unknown to the new instance.
+
+The commit's answer is checked like a preview's: `trust`, its size, `output` against the act's output schema, and its
+account.
 
 ## 5. A write from an app UI with no agent
 
-Some apps have no session to ask in. The person confirms in the app's own UI, the app's host signs an action grant, and
-the plugin verifies it. The grant is one action and its exact canonical input, for one consumer, capability, account,
-scope and manifest, until a moment, once.
+Some apps have no session to ask in. The person confirms in the app's own UI, the app's host signs the action grant for
+the commit, as §4 showed, and the plugin's `register` verifies it. The grant binds the plugin's package as `aud`, one
+consumer, one capability (the action's commit method), one account, one scope, one act, the digest of exactly
+`{ planId }`, one manifest hash and a short lifetime, and it is single-use.
 
-**The host signs.** It records the person's confirmation as `cfm: true`:
+**The plugin wires the verifier.** A plugin holds public keys and a durable store; it never holds the private key and
+never calls `verifyGrant` itself. It passes the wiring to `register` as its fourth argument; when a non-read call carries
+a grant, the register verifies it:
 
 ```ts
-import { signGrant } from "@we-the-rebel-alliance/plugin-contract/grant"
+import { register } from "@we-the-rebel-alliance/plugin-contract/register"
 
-const now = Math.floor(Date.now() / 1000)
-const token = signGrant({
-  key: hostPrivateKey,                    // an Ed25519 private key the host holds
-  kid: "host_2026_11",
-  audience: installed.package,            // "@we-the-rebel-alliance/acme-plugin"
-  consumer: "notes",                      // the grant key: this app
-  capability: "acme.send_message",        // the commit method's id
-  account: "work",
-  scope: {},                              // the action grant's scope; {} is the whole action
-  act: "acme.messages.send",              // the action id
-  input: { text: "Deploy finished" },     // the exact input the plugin will run
-  manifest: installed.hash,               // the hash the person consented to
-  iat: now,
-  exp: now + 60,                          // short: 60 seconds is the default and the recommendation
-  jti: crypto.randomUUID(),               // one use; the plugin's store records it
-  cfm: true,
+const registration = await register(ctx, manifest, handlers, {
+  grant: {
+    keys: { keys: { host_2026_11: hostPublicKeyPem }, revoked: [] },
+    audience: "@we-the-rebel-alliance/acme-plugin",
+    store: { consume: (claims) => storage.claim(claims.jti) },  // insert-if-absent, durable, atomic
+  },
 })
 ```
 
-The app sends `{ sessionID, input, grant: token, consumer }` to the plugin's RPC method. The `consumer` is the key the
-grant was issued to; the plugin passes it to `verifyGrant` with the exact input.
-
-**The plugin verifies.** The plugin holds public keys and a durable store; it never holds the private key, and it runs
-the action only after the verifier answers:
-
-```ts
-import { verifyGrant, type GrantStore } from "@we-the-rebel-alliance/plugin-contract/grant"
-
-const outcome = await verifyGrant({
-  grant: envelope.grant,                  // the compact token
-  input: envelope.input,                  // the exact input, before validation changes it
-  act: "acme.messages.send",
-  actions: { "acme.messages.send": "required" }, // non-local: required; local: optional
-  keys: { keys: { host_2026_11: hostPublicKeyPem }, revoked: [] },
-  audience: installed.package,
-  consumer: envelope.consumer,
-  capability: "acme.send_message",
-  account: "work",
-  scope: {},
-  manifest: installed.hash,
-  now: Math.floor(Date.now() / 1000),     // the plugin reads the clock, not the module
-  store,                                  // { consume(claims) }: atomic insert-if-absent by claims.jti
-})
-
-if (!outcome.ok) {
-  // outcome.code is precise, for logs; outcome.contractCode is GRANT_INVALID, the code the app shows.
-  return { code: "GRANT_INVALID", message: `GRANT_INVALID: ${outcome.reason.replace(/\.$/, "")}. Next step: confirm the action again.` }
-}
-await runAction(envelope.input)           // the exact input the grant covers
-```
-
-`verifyGrant` checks the token's shape, the trusted key (never "try every key"), the signature, every binding, the
+The register checks the token's shape, the trusted key (never "try every key"), the signature, every binding, the
 lifetime, the input digest, the confirmation and finally the store. A failure before the store writes nothing. The store
 must be durable and atomic: an in-memory map would resurrect a spent grant after a restart. `grant` does no I/O and
-reads no clock.
+reads no clock; the register passes the time.
+
+Every non-read method needs one of contract §8's two confirmations: a grant from an app, as here, or an answered
+permission ask in an agent session. An `allow` rule alone is not a confirmation: the register refuses a non-read RPC
+call with `PERMISSION_DENIED` and names both ways (LD-5). A commit's grant must name the plan's account, or it is
+`ACCOUNT_MISMATCH`.
 
 `consumer` is the grant key everywhere: the app's identity in a grant, a broker request and an audit line. Do not reuse
 another app's consumer string, and do not issue a grant for one consumer to another.
@@ -328,9 +336,10 @@ level. A person's choice for one tool wins. The plugin installs the rules into e
 is reported as unguarded and is never patched behind the person's back.
 
 A read or act also needs the grant's fence to allow it: `read` compiles the grant to a session that denies everything,
-then allows that source's method and its operations for the granted account. `act` does the same for one phase. A
-`read-only` plugin refuses a non-read RPC call even with a grant; `ask-changes` and `all` need the ask or the grant.
-Write and export methods are therefore available over RPC, under a confirmation (LD-5).
+then allows that source's method and its operations for the granted account. `act` does the same for one phase at a
+time: the preview fence allows only the preview method, and the commit fence only the commit method, so a handler cannot
+reach outside the granted phase. A `read-only` plugin refuses a non-read RPC call even with a grant; `ask-changes` and
+`all` need the ask or the grant. Write and export methods are therefore available over RPC, under a confirmation (LD-5).
 
 ## 7. Errors
 
@@ -338,32 +347,35 @@ Every failure reads `CODE: What happened. Next step: What to do.` The one table 
 
 `NEEDS_SIGN_IN`, `SCOPE_MISSING`, `ACCOUNT_REQUIRED`, `ACCOUNT_UNKNOWN`, `ACCOUNT_MISMATCH`, `CURSOR_INVALID`,
 `CURSOR_EXPIRED`, `RATE_LIMITED`, `BUDGET_EXCEEDED`, `SOURCE_DISABLED`, `TOO_LARGE`, `INPUT_INVALID`, `SOURCE_UNKNOWN`,
-`SCHEMA_VIOLATION`, `PERMISSION_DENIED`, `PLAN_INVALID`, `GRANT_INVALID`, `HOST_UNTESTED`, `OPTIONS_INVALID`,
+`SCHEMA_VIOLATION`, `PERMISSION_DENIED`, `PLAN_INVALID`, `PLAN_USED`, `GRANT_INVALID`, `HOST_UNTESTED`, `OPTIONS_INVALID`,
 `UNAVAILABLE`.
 
 | Code | What the app does |
 |---|---|
 | `NEEDS_SIGN_IN` | show the account to sign in; do not retry until it is signed in |
+| `SCOPE_MISSING` | the call needs a scope the person has not confirmed; ask for that scope and retry, never widen the grant yourself |
 | `ACCOUNT_REQUIRED` | ask which alias, from the next step's list |
 | `ACCOUNT_UNKNOWN` | ask again; the alias is not one the plugin has |
 | `ACCOUNT_MISMATCH` | the answer or event is another account's; show the granted account |
 | `CURSOR_INVALID`, `CURSOR_EXPIRED` | restart that source from a fresh window; render a `gap` when one is reported |
 | `RATE_LIMITED` | wait `retryAfterSec` when present; do not spin |
 | `BUDGET_EXCEEDED` | show the budget; a person must widen it |
-| `SOURCE_DISABLED` | the person turned this source off; show the toggle, not an error state |
+| `SOURCE_DISABLED` | the person turned this source or action off; show the toggle, not an error state |
 | `TOO_LARGE` | read a smaller window or fewer items |
 | `INPUT_INVALID`, `SCHEMA_VIOLATION` | a caller bug or a plugin bug; check the manifest and report the latter |
-| `SOURCE_UNKNOWN` | the installed manifest does not declare the source; refresh the listing |
+| `SOURCE_UNKNOWN` | the plugin itself reported no such source; check the source id against the installed manifest (`read` reports an undeclared source as `UNAVAILABLE`) |
 | `PERMISSION_DENIED` | the grant, consumer, scope, manifest hash or access level does not cover it; ask the person, do not widen it yourself |
-| `PLAN_INVALID` | the plan expired or does not belong to the commit; preview again |
+| `PLAN_INVALID` | the plan expired, is unknown, or does not belong to the commit method; preview again |
+| `PLAN_USED` | the plan was already committed; preview again, because a plan commits once |
 | `GRANT_INVALID` | the action grant did not verify; confirm again. The precise `GRANT_CODES` value is for logs |
 | `HOST_UNTESTED` | the plugin refused an OpenCode release outside its range; update or pin |
 | `OPTIONS_INVALID` | the plugin's options cannot be read; fix the configuration |
-| `UNAVAILABLE` | the table does not hold the plugin's own code; read its message and next step |
+| `UNAVAILABLE` | the installed manifest declares no such source, act or method, the host cannot read the plugin's status, or the table does not hold the plugin's own code; read the message and next step |
 
 A `ReadFailure` carries `{ code, message, next, retryAfterSec? }`. A plugin's own refusal, as a `SourceError` or an error
-in the table's form, is read with `parseSourceError`; a code the table does not hold is `UNAVAILABLE`. Treat an unknown
-code as `UNAVAILABLE`, never as success.
+in the table's form, is read with `parseSourceError`; a code the table does not hold is `UNAVAILABLE`. An undeclared
+source or act is `UNAVAILABLE` from `read` and `act`; a plugin's own `SOURCE_UNKNOWN` passes through as itself. Treat an
+unknown code as `UNAVAILABLE`, never as success.
 
 ## What the app owns
 
