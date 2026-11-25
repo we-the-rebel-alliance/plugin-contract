@@ -10,22 +10,53 @@ The first release in `we-the-rebel-alliance`: the contract at wire version 1, gr
 `source-contract` v0.x.
 
 - **The contract and the standard:** `docs/contract.md` and `docs/plugin-standard.md`, with the settled decisions in
-  `docs/decisions.md` and the plugin list in `SUPPORTED.md`.
-- **The modules:** `manifest`, `accounts`, `access`, `register`, `events` (event model, hash, screening, page checks),
-  `cursor` (a bound cursor codec), `outputs` (the snapshot shape registry), `params` and `pick`, `read` and `act`, `bus`,
-  `grant`, `catalog`, `hints`, `schemas` and `conformance`.
+  `docs/decisions.md` and the plugin list in `SUPPORTED.md`. `docs/index.md` lists every page;
+  `docs/consumers.md` is the app's end-to-end guide (discover, read, subscribe, act, the app-UI grant flow, access
+  levels and the error table).
+- **`manifest`:** the `capabilities` schema at wire version 1, strict validation, lookups, canonical JSON and the
+  `sha256:` hash, and `readInstalledManifest` from the installed package on disk.
+- **`accounts`:** aliases and profiles, the `integration`, `mcp` and `local` mechanisms, per-alias registration and
+  status, `account` resolution (`ACCOUNT_REQUIRED`, `ACCOUNT_UNKNOWN`) and redacted reasons.
+- **`access`:** the `all`, `ask-changes` and `read-only` levels compiled to OpenCode permission rules, the per-agent
+  transform and `unguardedAgents`, the `<server>_<tool>` rewrite, and the fenced session rules a grant compiles to.
+- **`register`:** doors 1–3 from one handler table: agent tool, Code Mode and RPC, with strict input and output
+  schemas, account resolution, permission assertions, plan/commit, and the RPC envelope that carries a grant and its
+  consumer. A non-read method over RPC without an ask or a grant is refused (LD-5).
 - **`act` on a plan:** a preview calls the action's `plans: true` method and answers the `planId` the register minted
   for it; the commit calls the action's `commits` method with exactly `{ planId }` and the host-signed action grant that
   `register` verifies, each phase in its own fence, so an app's write works against every plugin built on `register`.
 - **Minted plan ids:** the register mints every `planId` from 128 random bits, keeps the plan handler's full answer for
-  the commit's `call.plan`, and never reuses a live id; a handler that answers its own `planId` is `PLAN_INVALID`.
-- **One error table** (contract §12): `ERROR_CODES`, `SourceError` and `parseSourceError`. There are no aliases;
-  `AUTH_REQUIRED` is not a contract code.
-- **Hints, without routines** (decision D10): a plugin may ship a hint file per source for any model-based consumer;
-  routines belong to the consumer.
-- **The conformance kit** (`runConformance`, `t0`, `t1`): T0 (namespace and skill budgets, tool references, pin
-  evidence, generated docs), T1 (the plugin loads on 2.4.1, its doors and permissions hold, LD-5's RPC refusal, a clean
-  `HOST_UNTESTED` for an unsupported host), the declaration and its classes, two-account recordings, events, status,
-  actions, and the #40 grant cases including the four refusals.
-- **The examples** under `examples/`, each an installed package with a manifest, server entry, skills, generated docs
-  and a recorded fixture, read as an app finds it on disk and run through the kit.
+  the commit's `call.plan`, and never reuses a live id; a handler that answers its own `planId` is `PLAN_INVALID`. A
+  plan expires after 15 minutes and commits once: a second commit is `PLAN_USED`, a replayed grant `GRANT_INVALID`, and
+  the commit fence denies every method outside the commit until it returns.
+- **`events` and `cursor`:** the event and page model, `makeEvent`, `eventHash`, secret and instruction screening, page
+  and fact checks, the one error table (`ERROR_CODES`, `SourceError`, `parseSourceError`), and the opaque cursor bound
+  to plugin, source, account and scope with `foreign` and `malformed` refusals.
+- **`bus`:** the typed `changed`, `status` and `account` nudges, `busEvents` for the one registration, `createBus` to
+  emit, and `readBusEvent` to decode a payload and refuse a secret.
+- **`grant`:** the Ed25519 compact action grant, `signGrant` for the host and `verifyGrant` for `register`, with every
+  binding, the canonical input digest, the confirmation rule, the single-use `GrantStore`, and the published
+  `GRANT_CODES` that all map to `GRANT_INVALID`.
+- **`outputs`:** the twelve snapshot shapes (`agenda`, `inbox`, `metric`, `list`, `progress`, `note`, `links`,
+  `countdown`, `image`, `thread`, `table`, `record`), the extension output rule, and `checkOutput`.
+- **`read`, `act`, `params` and `pick`:** fenced reads with cursors, detail reads and `probe`; preview then commit of the
+  register-minted `{ planId }` under the host-signed action grant; relative times, windows and `$me`; and field
+  selection checked against the output schema.
+- **`catalog`:** installed manifests from the OpenCode 2.4.1 npm cache, including its generations, rejected siblings,
+  Git keys and hosted Git URLs; a manifest read once, validated and hashed; the broker request keyed on `consumer`; and
+  `sourceReader`, which asks a broker first and reads embedded otherwise. A registry target with no version and no own
+  cache entry is reported, never bound to another entry for the package.
+- **`hints`:** the generic hint file, its strict frontmatter, the forbidden consumer decisions and `hintProblems`.
+- **`schemas`:** every published JSON Schema by name, generated from the zod source of truth and bundled at the release.
+- **The conformance kit (`conformance`):** T0 (namespace and skill budgets, tool references, pin evidence, generated
+  docs), T1 (the plugin loads on 2.4.1, its doors and permissions hold, LD-5's RPC refusal, a clean `HOST_UNTESTED` for
+  an unsupported host), the declaration and its classes, two-account recordings, events, status, actions, and the #40
+  grant cases including the four refusals.
+- **`kit`:** `plugin-kit` with `check`, `docs`, `record`, `conformance`, `hosts`, `release`, `supported` and
+  `forbidden`; fixture redaction; the release guards; and the shared OpenCode 2.4 host harness.
+- **The examples** under `examples/`: `integration` (accounts through the integration mechanism, with a fake provider),
+  `mcp` (two aliases, `accounts.real: true`), and `tools` (methods only). Each is an installed package as an app finds
+  it on disk, with a manifest, a server entry, a skill, generated docs and a recorded fixture, run through the kit by
+  `npm run conformance:self-test`.
+- **The docs check:** `test/docs.test.ts` compares every module page's `## Exports` table with the module's real export
+  declarations, both directions, and fails if a name is missing or does not exist.

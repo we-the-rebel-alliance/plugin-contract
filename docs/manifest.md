@@ -346,3 +346,12 @@ that a URL is:
 ```
 
 `x-example` is an app-only hint: another app ignores it, and the conformance kit reads only its name.
+
+## Exports
+
+| Export | Does |
+|---|---|
+| `MANIFEST_SCHEMA`, `MANIFEST_VERSION`, `OPENCODE_RANGE`, `TESTED_OPENCODE`, `checkManifest`, `manifestProblems`, `readInstalledManifest`, `findInstalledPackage`, `canonicalJson`, `manifestHash` | the schema, the validator, the installed read and the canonical hash |
+| `findAction`, `findMethod`, `findSource`, `maxBytesOf`, `methodAccounts`, `MAX_BYTES_DEFAULT`, `MAX_BYTES_LIMIT`, `PLUGIN_NAME`, `SERVICE_ID_MAX`, `SERVICE_LABEL_MAX`, `OWNER_ORGS_LIMIT`, `THUMBNAIL_URL_MAX`, `EXTENSION_KEY` | the lookups and the published limits |
+| `ACTION_EFFECTS`, `ACCOUNT_MECHANISMS`, `BUS_EVENTS`, `COST_CLASSES`, `DETAIL_FIELDS`, `METHOD_ACCOUNTS`, `METHOD_CLASSES`, `METHOD_EFFECTS`, `SOURCE_KINDS`, `SOURCE_SIGNALS`, `SCHEME_QUALIFIED`, `hostMatches`, `thumbnailUrlProblems`, `ownerProblems`, `ownerOrgProblems` | the closed sets and the checks built on them |
+| `ActionEffect`, `ActionItem`, `AccountMechanism`, `AccountsInfo`, `BusEvent`, `Cadence`, `Cost`, `CostClass`, `Detail`, `DetailField`, `HostRange`, `Icon`, `InstalledManifest`, `JsonSchema`, `Manifest`, `ManifestEvents`, `MethodAccounts`, `MethodClass`, `MethodEffect`, `MethodItem`, `Owner`, `OwnerOrg`, `PluginInfo`, `Price`, `Scope`, `Service`, `SourceEvents`, `SourceItem`, `SourceKind`, `SourceSignal`, `SourceSnapshot`, `Suggest`, `Vendor` | the manifest's types |

@@ -147,3 +147,13 @@ if (sent.ok) {
 
 An app that holds a `rpc.slack.changed` for `work` re-reads `slack.mentions` for `work` through RPC and renders what it
 finds. The event itself said only that the source changed.
+
+## Exports
+
+| Export | Does |
+|---|---|
+| `BUS_EVENTS`, `BUS_STATES`, `BusEventName`, `BusState`, `BusSchema`, `BusEvents`, `BusEventData`, `ChangedData`, `StatusData`, `AccountData` | the three events, their data, and the schemas the registration carries |
+| `assertPluginName`, `isPluginName`, `capabilityPattern`, `REASON_MAX` | the contract §3 name rule and the reason's bound |
+| `createBus`, `Bus`, `BusEmitResult`, `BusRegistration` | the writer: wrap the one RPC registration and emit a typed nudge |
+| `busEvents` | the `events` block a plugin merges into that registration |
+| `readBusEvent`, `busEventType`, `BusEvent`, `BusReadReason`, `BusReadResult`, `ReadBusOptions` | the reader: one `/api/event` payload, its reason, and the type filter |

@@ -52,7 +52,7 @@ the person's back.
 `serverOf(name, alias, aliases)` is the one derivation of an account's integration or MCP server name: `<name>` for
 `default`, `<name>-<alias>` otherwise. It returns `Checked<string>` and refuses an alias the plugin does not declare.
 The conformance kit imports it rather than keeping its own copy. The grant fences use the same naming rule for an alias
-the app already resolved from the manifest.
+the host read from the plugin's `status.accounts`.
 
 ## Grant fences
 
@@ -64,18 +64,21 @@ const rules = sessionRules(source, grant) // [{ action: "*", resource: "*", effe
 const outcome = await read(host, { installed, source: source.id, grant, consumer, context })
 ```
 
-- `sessionRules(source, grant)` — the source's method on `*`, and each dotted operation as `<namespace>.read` on
+Each takes the plugin's declared aliases as its last argument: the host reads them from the plugin's own
+`status.accounts` (contract §11), and a fence whose account is not in that list refuses instead of guessing.
+
+- `sessionRules(source, grant, aliases)` — the source's method on `*`, and each dotted operation as `<namespace>.read` on
   `<account>:<operation>`; a bare operation, an MCP tool, as `<server>_<operation>` on `*`.
-- `detailRules(source, detailId, grant)` — the source's rules plus the detail's declared method.
-- `probeRules(source, account, identityOperations, probeAction?)` — the probe action and its identity operations.
-- `actSessionRules(manifest, act, grant, phase)` — deny everything, then allow that phase's method and its operations;
-  a preview session cannot run the commit, and a commit runs in its own grant fence.
+- `detailRules(source, detailId, grant, aliases)` — the source's rules plus the detail's declared method.
+- `probeRules(source, account, identityOperations, probeAction?, aliases)` — the probe action and its identity
+  operations.
+- `actSessionRules(manifest, act, grant, phase, aliases)` — deny everything, then allow that phase's method and its
+  operations; a preview session cannot run the commit, and a commit runs in its own grant fence.
 - `grantCovers(grant, request)` — the grant's source, account and scope cover a read.
 
 `operationRule` returns `Checked<PermissionRule>` and refuses an undeclared alias instead of throwing; its last
-argument is `"tool"` for an MCP tool name that contains a dot, and `toolAction(server, tool)` is the one rewrite. The
-read, act, detail and probe hosts pass the aliases from the plugin's own `status.accounts` (contract §11), so a fence
-never falls back to the grant's own account. `namespaceOf`, `accountProblem`, `DENY_ALL`, `matches` and `evaluate` are exported for the app side and tests.
+argument is `"tool"` for an MCP tool name that contains a dot, and `toolAction(server, tool)` is the one rewrite.
+`namespaceOf`, `accountProblem`, `DENY_ALL` and `evaluate` are exported for the app side and tests.
 `evaluate` is OpenCode's last-match-wins evaluation, with no match asking.
 
 ## Errors
@@ -87,3 +90,14 @@ never falls back to the grant's own account. `namespaceOf`, `accountProblem`, `D
 
 A refused read or act keeps its own codes (`PERMISSION_DENIED`, `SOURCE_DISABLED`, `ACCOUNT_MISMATCH`) from `read` and
 `act`.
+
+## Exports
+
+| Export | Does |
+|---|---|
+| `ACCESS_LEVELS`, `DEFAULT_ACCESS`, `AccessLevel` | the three levels, the default, and the level type |
+| `accessLevel`, `rulesFor`, `effectFor`, `methodAction`, `isMcpMethod`, `serverOf`, `toolAction`, `normalizeToolName`, `aliasesFrom` | derive the rules from `options.access` and `methods` |
+| `applyAccess`, `unguardedAgents`, `withRules`, `AccessContext`, `AccessRegistration`, `AccessRequest`, `AgentEditor`, `AgentLike` | install the rules into every agent and name the agents that lack them |
+| `sessionRules`, `detailRules`, `probeRules`, `actSessionRules`, `grantCovers`, `operationRule`, `evaluate`, `namespaceOf`, `accountProblem`, `ACCOUNT_PATTERN`, `DENY_ALL`, `Grant`, `ActGrant`, `ActPhase`, `PermissionRule` | the fenced session a grant compiles to, and its checks |
+
+`register` calls `applyAccess`; the fence helpers are the same rule language on the app side.

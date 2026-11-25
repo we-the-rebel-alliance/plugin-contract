@@ -423,7 +423,7 @@ export interface EventsListRequest {
 
 // ── Errors (contract §12) ─────────────────────────────────────────────────
 
-/** The one error table (contract §12). A plugin may add codes; it declares them in its manifest. */
+/** The one error table (contract §12). A plugin uses these codes; it does not declare its own. */
 export const ERROR_CODES = [
   "NEEDS_SIGN_IN",
   "SCOPE_MISSING",

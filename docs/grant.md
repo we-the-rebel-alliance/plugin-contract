@@ -2,7 +2,8 @@
 
 A host signs an action grant when a person confirms a write in the host's UI and no agent session is asking. The grant
 says: *this one action, with exactly this input, for this consumer, capability, account, scope and manifest, until this
-moment, once.* A plugin verifies it with `verifyGrant` and spends it through a durable store.
+moment, once.* A plugin's `register` verifies it with `verifyGrant` and spends it through a durable store; a handler
+never calls the verifier.
 
 This page is the published format and the verifier's contract: contract §§8, 12, 13 and 15, roadmap item 1.8, and
 issue #40. The module is `@we-the-rebel-alliance/plugin-contract/grant`; it does no I/O and never reads a clock.
@@ -287,7 +288,10 @@ The verifier answers the first refusal and never goes further:
 
 A failure at any step before 10 writes nothing to the store. A positive answer means the store recorded the grant.
 
-## Example
+## The verifier's contract, as `register` calls it
+
+The register builds this request from the RPC envelope and the method the grant names; the example shows the verifier
+as a unit, with the same arguments.
 
 ```ts
 import { verifyGrant, type GrantStore } from "@we-the-rebel-alliance/plugin-contract/grant"
@@ -300,11 +304,11 @@ const outcome = await verifyGrant({
   keys: { keys: { host_2026_11: publicPem }, revoked: [] },
   audience: "@we-the-rebel-alliance/demo-plugin", // the plugin's package name, as the host uses it
   consumer: "consumer:mail",
-  capability: "demo.mail.send", // the method id
+  capability: "demo.mail_send", // the commit method's id
   account: "work",
   scope: { label: ["INBOX"] },
   manifest: "sha256:…", // the installed manifest's hash
-  now: Math.floor(Date.now() / 1000), // the plugin reads the clock, not the module
+  now: Math.floor(Date.now() / 1000), // the register reads the clock, not the module
   store, // the plugin's durable ledger
 })
 
@@ -312,7 +316,7 @@ if (!outcome.ok) {
   // outcome.code is precise; outcome.contractCode is GRANT_INVALID
   return { code: "GRANT_INVALID", message: `GRANT_INVALID: ${sentenceFor(outcome.code)}` }
 }
-// Run the action with the exact input, and record the receipt from outcome.claims and outcome.kid.
+// The register runs the action with the exact input, and records the receipt from outcome.claims and outcome.kid.
 ```
 
 `verifyGrant` is asynchronous because the store is. It never throws for a bad grant, a bad input or a store failure: a
@@ -329,3 +333,13 @@ it.
 - It does not run the action, validate the action's input against its JSON Schema, or emit events. Those are the
   plugin's `register` and handler work.
 - It does not make a grant confidential. Do not log the token; treat it as a bearer capability until `exp`.
+
+## Exports
+
+| Export | Does |
+|---|---|
+| `GRANT_ALG`, `GRANT_TYP`, `GRANT_INVALID`, `MAX_GRANT_LENGTH`, `MAX_INPUT_BYTES`, `MAX_INPUT_DEPTH`, `DEFAULT_CLOCK_SKEW_SEC`, `MAX_CLOCK_SKEW_SEC`, `DEFAULT_MAX_LIFETIME_SEC`, `MAX_LIFETIME_SEC` | the published format and its limits |
+| `signGrant`, `SignGrantRequest`, `GrantHeader`, `GrantClaims`, `GrantKeyMaterial` | the host's signer and the claims it signs |
+| `canonicalJson`, `canonicalScope`, `digestInput`, `GrantInputError`, `GrantScope` | the canonical input and scope the digest covers |
+| `verifyGrant`, `GRANT_CODES`, `GrantCode`, `GrantFailure`, `GrantSuccess`, `GrantOutcome` | the verifier `register` calls, and every refusal |
+| `GrantRequest`, `GrantKeys`, `GrantStore`, `ConfirmationRule`, `GrantActions` | the request, the trusted keys, the durable store and the confirmation rules |

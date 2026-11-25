@@ -174,3 +174,15 @@ is how this package's tests run every command without a network or a repository.
   and a module without `runConformance`, `t0` and `t1` is a clear `KIT_CONFORMANCE` error rather than a missing gate.
 - `src/internal/host/` is the one host harness; `src/kit.ts` re-exports it, and a kit test proves the exports are the
   same function objects.
+
+## Exports
+
+| Export | Does |
+|---|---|
+| `COMMANDS`, `HELP`, `main`, `Command`, `MainOptions`, `KitError` | the binary's command table, its help, and the programmatic entry |
+| `checkPlugin`, `forbiddenFindings`, `ForbiddenOptions`, `loadConformance`, `ConformanceOptions`, `ConformanceReport`, `ConformanceRunner`, `Finding` | the checks the kit runs without spawning a process |
+| `redactText`, `redactValue` | the fixture redaction `record` applies |
+| `KIT_BUNDLE_MARKER` | the marker that catches the kit bundled into a plugin |
+| `createHost`, `createAutomation`, `automationApi`, `connectMcpServer`, `createCodeMode`, `mcpAddress`, `TurnLog`, `waitForActivation` | the OpenCode 2.4 host harness |
+| `ActivationOptions`, `AutomationAction`, `AutomationApi`, `AutomationClient`, `AutomationHost`, `AutomationResult`, `AutomationSpec`, `AutomationTrigger`, `CodeModeHarness`, `CodeModeSession`, `HostKind`, `HostOptions`, `HostRun`, `McpConnection`, `McpProtocol`, `McpServerConfig`, `McpTransport`, `ToolCall`, `ToolCallInput`, `ToolCallLike`, `TurnEvent` | the harness's structural types |
+| `Git`, `GitResult`, `Io` | the git and output calls `main` takes |

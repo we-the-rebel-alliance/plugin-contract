@@ -264,7 +264,7 @@ Every failure reads `CODE: What happened. Next step: What to do.` One table:
 `CURSOR_EXPIRED`, `RATE_LIMITED`, `BUDGET_EXCEEDED`, `SOURCE_DISABLED`, `TOO_LARGE`, `INPUT_INVALID`, `SOURCE_UNKNOWN`,
 `SCHEMA_VIOLATION`, `PERMISSION_DENIED`, `PLAN_INVALID`, `PLAN_USED`, `GRANT_INVALID`, `HOST_UNTESTED`, `OPTIONS_INVALID`, `UNAVAILABLE`.
 
-A plugin may add codes; it declares them in its manifest, and the kit checks that the README table matches.
+A plugin uses these codes; it does not declare its own.
 
 ## 13. Trust and consent
 

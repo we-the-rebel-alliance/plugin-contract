@@ -108,8 +108,10 @@ import { isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 var PACKAGE_NAME = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/;
 var GIT_SHORTHAND = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
-var GIT_PROTOCOL = /^(?:git\+[a-z0-9.+-]+:|git:\/\/|git@|ssh:\/\/|https?:\/\/)/i;
+var GIT_PROTOCOL = /^(?:git\+[a-z0-9.+-]+:|git:\/\/)/i;
+var GIT_SCP = /^[^@]+@[^:.]+\.[^:]+:.+$/i;
 var GIT_HOSTED = /^(?:github|gitlab|bitbucket|gist):/i;
+var HOSTED_GIT_HOSTS = /* @__PURE__ */ new Set(["github.com", "gitlab.com", "bitbucket.org", "gist.github.com", "git.sr.ht"]);
 var plain2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 function defaultCacheDirectory() {
   const cache = process.env["XDG_CACHE_HOME"] || join(homedir(), ".cache");
@@ -140,12 +142,33 @@ function registryTarget(target) {
   const spec = target.slice(at + 1);
   return spec === "" || spec.includes("/") || spec.includes("\\") ? void 0 : { name, spec };
 }
+function hostedGitUrl(target) {
+  if (!/^(?:https?|ssh):\/\//i.test(target)) return false;
+  let url;
+  try {
+    url = new URL(target);
+  } catch {
+    return false;
+  }
+  const host = url.hostname.toLowerCase().replace(/^www\./, "");
+  if (!HOSTED_GIT_HOSTS.has(host)) return false;
+  const segments = url.pathname.split("/").filter((segment) => segment.length > 0);
+  if (segments.length < 2) return host === "gist.github.com" && segments.length === 1;
+  const path = segments.join("/");
+  if (host === "github.com") {
+    return segments[2] === void 0 || segments[2] === "tree";
+  }
+  if (host === "gitlab.com") return !path.includes("/-/") && !path.includes("/archive.tar.gz");
+  if (host === "bitbucket.org") return segments[2] !== "get";
+  if (host === "gist.github.com") return segments[2] !== "raw";
+  return segments[2] !== "archive";
+}
 function gitTarget(target) {
   const hosted = GIT_HOSTED.test(target);
-  const protocol = GIT_PROTOCOL.test(target);
-  const url = protocol && (/\.git(?:#.*)?$/i.test(target) || target.includes("#") || /^(?:git\+|git@|git:\/\/|ssh:\/\/)/i.test(target));
+  const protocol = GIT_PROTOCOL.test(target) || GIT_SCP.test(target);
+  const url = hostedGitUrl(target);
   const shorthand = GIT_SHORTHAND.test(target);
-  if (!hosted && !url && !shorthand) return void 0;
+  if (!hosted && !protocol && !url && !shorthand) return void 0;
   return { slug: gitSlug(target) };
 }
 function parseTarget(target) {
@@ -214,20 +237,26 @@ function registryKeys(cacheDirectory, name) {
   return entries.filter((entry) => entry.startsWith(prefix)).sort().reverse();
 }
 function registryInstall(cacheDirectory, parsed, version) {
-  const keys = /* @__PURE__ */ new Set();
-  if (parsed.spec !== void 0) keys.add(sanitize(`${parsed.name}@${parsed.spec}`));
-  keys.add(sanitize(`${parsed.name}@latest`));
-  if (version !== void 0) keys.add(sanitize(`${parsed.name}@${version}`));
-  const found = [];
-  const matches = (directory) => version === void 0 || packageVersion(directory) === version;
+  const target = { kind: "registry", name: parsed.name };
+  const exact = packageAt(cacheDirectory, sanitize(`${parsed.name}@${parsed.spec ?? "latest"}`), target);
+  if (version === void 0) return exact;
+  const matches = (directory) => packageVersion(directory) === version;
+  if (exact !== void 0 && matches(exact)) return exact;
+  const found = exact === void 0 ? [] : [exact];
+  const keys = /* @__PURE__ */ new Set([
+    sanitize(`${parsed.name}@${parsed.spec ?? "latest"}`),
+    sanitize(`${parsed.name}@latest`),
+    sanitize(`${parsed.name}@${version}`)
+  ]);
   for (const key of keys) {
-    const directory = packageAt(cacheDirectory, key, { kind: "registry", name: parsed.name });
-    if (directory === void 0) continue;
+    const directory = packageAt(cacheDirectory, key, target);
+    if (directory === void 0 || directory === exact) continue;
     if (matches(directory)) return directory;
     found.push(directory);
   }
   for (const key of registryKeys(cacheDirectory, parsed.name)) {
-    const directory = packageAt(cacheDirectory, key, { kind: "registry", name: parsed.name });
+    if (keys.has(key)) continue;
+    const directory = packageAt(cacheDirectory, key, target);
     if (directory === void 0) continue;
     if (matches(directory)) return directory;
     found.push(directory);

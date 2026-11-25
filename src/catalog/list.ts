@@ -97,8 +97,13 @@ void hostContextIsCatalogHost
 const PACKAGE_NAME = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/
 /** Git shorthands npm accepts: `owner/repo`, and the hosted and URL forms. */
 const GIT_SHORTHAND = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
-const GIT_PROTOCOL = /^(?:git\+[a-z0-9.+-]+:|git:\/\/|git@|ssh:\/\/|https?:\/\/)/i
+/** A Git URL by its protocol: `git+…` and `git://`, which `npm-package-arg` reads as Git on any host. */
+const GIT_PROTOCOL = /^(?:git\+[a-z0-9.+-]+:|git:\/\/)/i
+/** `git@host:owner/repo`, the scp form `npm-package-arg` reads as Git. */
+const GIT_SCP = /^[^@]+@[^:.]+\.[^:]+:.+$/i
 const GIT_HOSTED = /^(?:github|gitlab|bitbucket|gist):/i
+/** The hosts `npm-package-arg`'s `hosted-git-info` reads a plain URL as Git, after `www.`. */
+const HOSTED_GIT_HOSTS = new Set(["github.com", "gitlab.com", "bitbucket.org", "gist.github.com", "git.sr.ht"])
 
 /** One install as OpenCode's `parse()` reads it: a registry name and spec, or a Git slug. */
 type InstallTarget =
@@ -153,13 +158,42 @@ function registryTarget(target: string): { readonly name: string; readonly spec?
   return spec === "" || spec.includes("/") || spec.includes("\\") ? undefined : { name, spec }
 }
 
-/** A Git target, in the forms npm's `parse()` accepts (`npm.js` `parse`, :44). */
+/**
+ * A plain `http(s)` or hosted `ssh://` URL on a hosted Git site, in the shapes `hosted-git-info` reads as Git: a
+ * repository path, a GitHub tree, a Bitbucket source page, a gist. A non-hosted `ssh://` URL throws in
+ * `npm-package-arg`, and a file, a release download or a tarball URL is `remote`, which OpenCode does not install.
+ */
+function hostedGitUrl(target: string): boolean {
+  if (!/^(?:https?|ssh):\/\//i.test(target)) return false
+  let url: URL
+  try {
+    url = new URL(target)
+  } catch {
+    return false
+  }
+  const host = url.hostname.toLowerCase().replace(/^www\./, "")
+  if (!HOSTED_GIT_HOSTS.has(host)) return false
+  const segments = url.pathname.split("/").filter((segment) => segment.length > 0)
+  if (segments.length < 2) return host === "gist.github.com" && segments.length === 1
+  const path = segments.join("/")
+  if (host === "github.com") {
+    // /owner/repo, /owner/repo.git, or /owner/repo/tree/<ref>; a blob or another page is not the repository.
+    return segments[2] === undefined || segments[2] === "tree"
+  }
+  if (host === "gitlab.com") return !path.includes("/-/") && !path.includes("/archive.tar.gz")
+  if (host === "bitbucket.org") return segments[2] !== "get"
+  if (host === "gist.github.com") return segments[2] !== "raw"
+  // git.sr.ht: /~owner/repo, with /archive/<ref> a tarball rather than the repository.
+  return segments[2] !== "archive"
+}
+
+/** A Git target, in the forms `npm-package-arg@13.0.2` reads as `type: "git"` (`npm.js` `parse`, :44). */
 function gitTarget(target: string): { readonly slug: string } | undefined {
   const hosted = GIT_HOSTED.test(target)
-  const protocol = GIT_PROTOCOL.test(target)
-  const url = protocol && (/\.git(?:#.*)?$/i.test(target) || target.includes("#") || /^(?:git\+|git@|git:\/\/|ssh:\/\/)/i.test(target))
+  const protocol = GIT_PROTOCOL.test(target) || GIT_SCP.test(target)
+  const url = hostedGitUrl(target)
   const shorthand = GIT_SHORTHAND.test(target)
-  if (!hosted && !url && !shorthand) return undefined
+  if (!hosted && !protocol && !url && !shorthand) return undefined
   return { slug: gitSlug(target) }
 }
 
@@ -254,20 +288,27 @@ function registryKeys(cacheDirectory: string, name: string): string[] {
 }
 
 /**
- * A registry target's installed package. The target is as the host configured it, so its own spec names the cache
- * entry. `@latest` then the version the host names cover a target without one, and every entry for the package name
- * covers a host that reports no spec; the installed version chooses between them.
+ * A registry target's installed package. The target is as the host configured it, so its own spec names the one cache
+ * entry: `name@<spec>`, or `name@latest` when the host names no spec. That entry is the answer unless the host also
+ * reports a version: then an entry whose installed version is the host's is the answer, so a range or tag cached under
+ * another key still resolves. With no host version there is nothing to compare, and a missing entry stays missing: it
+ * is never bound to another entry for the same package.
  */
 function registryInstall(cacheDirectory: string, parsed: { readonly name: string; readonly spec?: string }, version: string | undefined): string | undefined {
-  const keys = new Set<string>()
-  if (parsed.spec !== undefined) keys.add(sanitize(`${parsed.name}@${parsed.spec}`))
-  keys.add(sanitize(`${parsed.name}@latest`))
-  if (version !== undefined) keys.add(sanitize(`${parsed.name}@${version}`))
-  const found: string[] = []
-  const matches = (directory: string) => version === undefined || packageVersion(directory) === version
+  const target = { kind: "registry", name: parsed.name } as const
+  const exact = packageAt(cacheDirectory, sanitize(`${parsed.name}@${parsed.spec ?? "latest"}`), target)
+  if (version === undefined) return exact
+  const matches = (directory: string) => packageVersion(directory) === version
+  if (exact !== undefined && matches(exact)) return exact
+  const found: string[] = exact === undefined ? [] : [exact]
+  const keys = new Set<string>([
+    sanitize(`${parsed.name}@${parsed.spec ?? "latest"}`),
+    sanitize(`${parsed.name}@latest`),
+    sanitize(`${parsed.name}@${version}`),
+  ])
   for (const key of keys) {
-    const directory = packageAt(cacheDirectory, key, { kind: "registry", name: parsed.name })
-    if (directory === undefined) continue
+    const directory = packageAt(cacheDirectory, key, target)
+    if (directory === undefined || directory === exact) continue
     if (matches(directory)) return directory
     found.push(directory)
   }
@@ -275,7 +316,8 @@ function registryInstall(cacheDirectory: string, parsed: { readonly name: string
   // and take the one whose installed version is the host's; otherwise keep the first, so the manifest read reports the
   // version it found.
   for (const key of registryKeys(cacheDirectory, parsed.name)) {
-    const directory = packageAt(cacheDirectory, key, { kind: "registry", name: parsed.name })
+    if (keys.has(key)) continue
+    const directory = packageAt(cacheDirectory, key, target)
     if (directory === undefined) continue
     if (matches(directory)) return directory
     found.push(directory)

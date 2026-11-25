@@ -33,7 +33,7 @@ does not touch the plan store; the register spends the plan once, and a `planId`
 
 | Export | Does |
 |---|---|
-| `act(host, request)` | previews or commits an act under a grant; never throws for a refusal |
+| `act` | `act(host, request)` previews or commits an act under a grant; never throws for a refusal |
 | `ActHost` | a `ReadHost`: sessions, the status read and the RPC call that may carry a grant |
 | `ActRequest` | the action, grant, consumer, `phase`, the preview `input`, and the commit's `planId` and `grantToken` |
 | `ActAnswer` | `{ trust, output, reaches?, changes?, cost?, account? }` |
@@ -41,6 +41,7 @@ does not touch the plan store; the register spends the plan once, and a `planId`
 | `ActOutcome` | a preview, a commit, or a failure |
 | `ActParty` | who a commit reaches: `{ id, label? }` |
 | `ActGrant`, `ActPhase` | the grant and `"preview" \| "commit"`; the grant's `action` names the write |
+| `ReadFailure` | the error table's failure, re-exported from `read` |
 
 ## Example
 

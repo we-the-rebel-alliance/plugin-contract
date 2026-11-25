@@ -48,16 +48,38 @@ The catalog mirrors `@opencode/util@2.4.1` (`dist/npm.js`: `cacheKey`/`key`, `gi
 `current`, `installedName`; `dist/global-roots.js`: `cache`):
 
 - **`<key>`** is `name@latest` for a bare registry target, `name@<spec>` for a version, range or tag, and
-  `git-<slug>-<sha256(target)[0..12]>` for a Git target (`github:owner/repo#ref`, `git+…`, `git://`, `owner/repo`).
+  `git-<slug>-<sha256(target)[0..12]>` for a Git target (`github:owner/repo#ref`, `git+…`, `git://`, `owner/repo`, and
+  a plain hosted URL such as `https://github.com/owner/repo`).
 - **`<generation>`** is a numeric install. The newest generation wins unless a sibling `<generation>.rejected` file
   exists; then the newest generation without one is the installed copy.
 - **`<name>`** is the package name for a registry target. For a Git target it is the first key of the generation root's
   `package.json` `dependencies`, falling back to the repository name in the target.
 
-OpenCode reports a registry target as it is configured, including its `@spec`. The catalog tries that spec's entry, then
-`@latest`, then the version the host names, then every entry for the package name (for a target a host reports without
-a spec); the installed version chooses between them. A registry package whose installed name is not the target is
-reported, never listed: a cache entry must not be bound to another package's manifest.
+OpenCode reports a registry target as it is configured, including its `@spec`. The catalog reads the target's own cache
+entry: `name@<spec>`, or `name@latest` when the host names no spec. If that entry is missing and the host reports no
+installed version, the target is **not locatable** and is reported; it is never bound to another entry for the same
+package, because that entry was installed for a different version, range or tag. When the host also reports a version,
+the catalog may use an entry whose installed version is that version: it checks the target's entry first, then
+`@latest`, the version's own entry, and every entry for the package name. A registry package whose installed name is
+not the target is reported, never listed: a cache entry must not be bound to another package's manifest.
+
+### What npm reads as a Git target
+
+OpenCode's `parse` calls `npm-package-arg@13.0.2` (`@opencode/util@2.4.1` `dist/npm.js`, `parse` at :44). The catalog
+follows it:
+
+- a plain `https://github.com/owner/repo` (or GitLab, Bitbucket, a gist, or `git.sr.ht`) is `type: "git"`, so its cache
+  key is `git-<slug>-<sha256(target)[0..12]>` exactly as for `git+https://github.com/owner/repo` or
+  `github:owner/repo`; each raw spelling has its own 12-hex hash and the same slug;
+- a hosted `ssh://` URL — `ssh://git@github.com/owner/repo.git`, `ssh://github.com/owner/repo.git`, and the same on
+  GitLab, Bitbucket or a gist — is `type: "git"`; a non-hosted `ssh://` URL throws `Unsupported URL Type "ssh:"` in
+  `npm-package-arg`, so the catalog still reports it as not a target;
+- `git+…`, `git://` and `git@host:owner/repo` are Git on any host;
+- a non-hosted `https://…` URL, a `.tgz` and a repository page such as `https://github.com/owner/repo/blob/main/x.js`
+  are `type: "remote"`, which OpenCode does not install; the catalog reports them as not an npm or Git package target.
+
+Checked against `npa("https://github.com/owner/repo").type === "git"` and
+`npa("https://example.com/demo.tgz").type === "remote"` with that parser.
 
 `cacheDirectory` names the OpenCode cache directory, the one that holds `npm/`. It defaults to
 `<XDG_CACHE_HOME or ~/.cache>/opencode`:
@@ -177,6 +199,8 @@ be trusted for shape, and a refused read is never retried elsewhere.
 | A package target with no installed package | reported in `problems`, never thrown |
 | A package with no manifest, or one that does not validate | reported in `problems` with the validator's paths |
 | A registry package whose version is not the host's | reported in `problems` |
+| A spec target whose own cache entry is missing, with no host version | reported in `problems`; never another entry for the package |
+| A non-hosted `https://…` URL, or a tarball | reported: not an npm or Git package target |
 | A registry package whose installed name is not the target | reported in `problems`, never listed |
 | A grant for another manifest hash | `PERMISSION_DENIED` before the broker is asked |
 | Another consumer's read | `PERMISSION_DENIED` before the broker is asked |
@@ -187,13 +211,10 @@ be trusted for shape, and a refused read is never retried elsewhere.
 
 | Export | Does |
 |---|---|
-| `listInstalledPlugins(host, options?)` | installed manifests, validated and hashed, and the packages that could not be read |
-| `brokerRequest(read)` | the one broker request, keyed on `consumer` |
-| `sourceReader({ host, broker? })` | a consumer's reader: broker first when offered, embedded otherwise |
-| `isBrokerRequest(value)` | true when a value has a broker request's shape, including its `consumer` |
-| `isBrokerAnswer(value)` | true when a value has a broker answer's shape |
-| `CatalogHost`, `CatalogOptions`, `CatalogListing`, `CatalogPlugin`, `CatalogProblem`, `HostPlugin`, `HostPluginState` | the host, its options and the listing |
-| `BrokerRequest`, `BrokerAnswer`, `BrokerTransport`, `SourceReader`, `ReaderOutcome` | the wire shapes and the reader |
+| `listInstalledPlugins`, `CatalogHost`, `CatalogOptions`, `CatalogListing`, `CatalogPlugin`, `CatalogProblem`, `HostPlugin`, `HostPluginState` | `listInstalledPlugins(host, options?)`: installed manifests, validated and hashed, and the packages that could not be read |
+| `brokerRequest`, `isBrokerRequest`, `BrokerRequest` | `brokerRequest(read)` builds the one request, keyed on `consumer`; `isBrokerRequest(value)` checks a request from an untrusted channel |
+| `isBrokerAnswer`, `BrokerAnswer`, `BrokerTransport` | a broker's answer and the one transport function a consumer passes |
+| `sourceReader`, `SourceReader`, `ReaderOutcome` | `sourceReader({ host, broker? })`: broker first when offered, embedded otherwise, with `via` on the outcome |
 
 The listing's `hash` is the same hash `readInstalledManifest` gives and a grant stores. A changed manifest changes the
 hash, so the person is asked again.

@@ -190,3 +190,13 @@ A section sits between markers:
 The sections are `capabilities`, `errors`, `configuration`, `accounts` and `automations`. T0 reads them from `README.md`,
 `docs/capabilities.md`, `docs/configuration.md`, `docs/accounts.md` and `docs/automations.md` when those files exist,
 and fails when a block is missing or differs from the manifest.
+
+## Exports
+
+| Export | Does |
+|---|---|
+| `runConformance` | everything `plugin-kit conformance` runs: T0, the declaration and options, every recording, T1, and the unsupported host |
+| `t0` | the static gate over the installed package on disk |
+| `t1` | one host: load, doors, permissions, Code Mode, events, the RPC confirmation and the unsupported-host refusal |
+| `renderGeneratedDocs` | the generated sections `plugin-kit docs` writes and T0 compares |
+| `ConformanceOptions`, `ConformanceReport`, `Finding` | the options, the report and one finding |

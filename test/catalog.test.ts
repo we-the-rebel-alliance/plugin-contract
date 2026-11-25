@@ -108,6 +108,54 @@ describe("listInstalledPlugins", () => {
     assert.equal(byTarget.get(shorthand)?.directory, shorthandDirectory)
   })
 
+  test("locates a plain https github target as a Git target, as npm parses it", async () => {
+    const cache = join(scratch, "git-https", "opencode")
+    const target = "https://github.com/example/checkout"
+    const key = gitKey(target, "checkout")
+    const generation = writeGeneration(cache, key, "1700000000250", { "@example/checkout": target })
+    const directory = join(generation, "node_modules", "@example", "checkout")
+    writePackage(directory, manifest(), "@example/checkout", "1.0.0")
+    const listing = await listInstalledPlugins(hostOf([active({ type: "package", target, version: "e40fee6" })]), { cacheDirectory: cache })
+    assert.deepEqual(listing.problems, [])
+    assert.equal(listing.plugins[0]?.directory, directory)
+    // npm keys a Git target by its raw spelling, so this is the same slug as `git+https://…` but its own 12-hex hash.
+    assert.match(key, /^git-checkout-[0-9a-f]{12}$/)
+  })
+
+  test("locates hosted ssh targets, and refuses a non-hosted ssh URL", async () => {
+    const cache = join(scratch, "git-ssh", "opencode")
+    const withUser = "ssh://git@github.com/example/checkout-ssh.git"
+    const plain = "ssh://github.com/example/checkout-ssh-plain.git"
+    const withUserGeneration = writeGeneration(cache, gitKey(withUser, "checkout-ssh"), "1700000000260", { "@example/checkout-ssh": withUser })
+    const withUserDirectory = join(withUserGeneration, "node_modules", "@example", "checkout-ssh")
+    writePackage(withUserDirectory, manifest(), "@example/checkout-ssh", "1.0.0")
+    const plainGeneration = writeGeneration(cache, gitKey(plain, "checkout-ssh-plain"), "1700000000261", { "@example/checkout-ssh-plain": plain })
+    const plainDirectory = join(plainGeneration, "node_modules", "@example", "checkout-ssh-plain")
+    writePackage(plainDirectory, manifest(), "@example/checkout-ssh-plain", "1.0.0")
+    const notHosted = "ssh://git@example.com/example/checkout.git"
+    const listing = await listInstalledPlugins(
+      hostOf([
+        active({ type: "package", target: withUser, version: "e40fee7" }),
+        active({ type: "package", target: plain, version: "e40fee8" }),
+        active({ type: "package", target: notHosted }),
+      ]),
+      { cacheDirectory: cache },
+    )
+    assert.equal(listing.plugins.length, 2)
+    const byTarget = new Map(listing.plugins.map((plugin) => [plugin.target, plugin]))
+    assert.equal(byTarget.get(withUser)?.directory, withUserDirectory)
+    assert.equal(byTarget.get(plain)?.directory, plainDirectory)
+    assert.deepEqual(listing.problems.map((problem) => problem.target), [notHosted])
+    assert.match(listing.problems[0]?.problems[0] ?? "", /not an npm or Git package target/)
+  })
+
+  test("keeps a non-hosted tarball URL out, as npm reads it as remote", async () => {
+    const cache = join(scratch, "remote-url", "opencode")
+    const listing = await listInstalledPlugins(hostOf([active({ type: "package", target: "https://example.com/demo.tgz" })]), { cacheDirectory: cache })
+    assert.deepEqual(listing.plugins, [])
+    assert.match(listing.problems[0]?.problems[0] ?? "", /not an npm or Git package target/)
+  })
+
   test("uses the repository name when a Git generation names no dependency", async () => {
     const cache = join(scratch, "git-fallback", "opencode")
     const target = "git+https://example.com/example/fallback.git#main"
@@ -145,6 +193,28 @@ describe("listInstalledPlugins", () => {
     const target = "@example/demo@^1.0.0"
     const directory = installRegistry(cache, target, "301", "@example/demo", "1.2.0")
     const listing = await listInstalledPlugins(hostOf([active({ type: "package", target, version: "1.2.0" })]), { cacheDirectory: cache })
+    assert.deepEqual(listing.problems, [])
+    assert.equal(listing.plugins[0]?.directory, directory)
+  })
+
+  test("does not bind a spec target to another entry when the host reports no version", async () => {
+    const cache = join(scratch, "range-no-version", "opencode")
+    installRegistry(cache, "@example/demo@latest", "302", "@example/demo", "2.0.0")
+    installRegistry(cache, "@example/demo@1.2.0", "303", "@example/demo", "1.2.0")
+    const listing = await listInstalledPlugins(hostOf([active({ type: "package", target: "@example/demo@^1.0.0" })]), { cacheDirectory: cache })
+    assert.deepEqual(listing.plugins, [])
+    assert.equal(listing.problems.length, 1)
+    assert.match(listing.problems[0]?.problems[0] ?? "", /no installed package for @example\/demo@\^1\.0\.0/)
+  })
+
+  test("finds the entry whose installed version matches when a spec target's own entry is missing", async () => {
+    const cache = join(scratch, "range-with-version", "opencode")
+    installRegistry(cache, "@example/demo@latest", "304", "@example/demo", "2.0.0")
+    const directory = installRegistry(cache, "@example/demo@1.2.0", "305", "@example/demo", "1.2.0")
+    const listing = await listInstalledPlugins(
+      hostOf([active({ type: "package", target: "@example/demo@^1.0.0", version: "1.2.0" })]),
+      { cacheDirectory: cache },
+    )
     assert.deepEqual(listing.problems, [])
     assert.equal(listing.plugins[0]?.directory, directory)
   })

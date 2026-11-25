@@ -224,6 +224,11 @@ decodeBoundCursor({ plugin: "example", source: "messages", account: "personal" }
 
 ## Exports
 
-`ALIAS_PATTERN`, `DEFAULT_ALIAS`, `isAlias`, `aliasProblem`, `accountName`,
-`accountLabel`, `accountsOf`, `hasAccount`, `localIdentity`, `registerAccounts` (and its types), `resolveAccount`,
-`aliasesSentence`, `ACCOUNT_STATES`, `accountStatus`, `accountStatuses`, `NO_ACCOUNTS`, `REASON_MAX`, `redactReason`.
+| Export | Does |
+|---|---|
+| `ALIAS_PATTERN`, `DEFAULT_ALIAS`, `isAlias`, `aliasProblem` | the alias rule and the `default` name |
+| `accountName`, `accountLabel` | the integration or MCP server name and the label a person reads |
+| `accountsOf`, `hasAccount`, `localIdentity`, `AccountProfile`, `AccountsPlan` | read the profiles, build the plan, and name the machine's identity |
+| `registerAccounts`, `AccountsContext`, `AccountsRegistration`, `IntegrationEditor`, `IntegrationMethodRegistration`, `MCPEditor`, `MCPServerConfig`, `RegisterAccountsRequest`, `RegisteredAccount` | register one integration or MCP server per alias |
+| `resolveAccount`, `aliasesSentence`, `AccountCode`, `ResolvedAccount` | resolve the `account` of a call, and write its next step |
+| `ACCOUNT_STATES`, `accountStatus`, `accountStatuses`, `NO_ACCOUNTS`, `REASON_MAX`, `redactReason`, `AccountSignal`, `AccountState`, `AccountStatus` | status per alias, with its redacted reason and owner |
