@@ -143,11 +143,16 @@ function registryTarget(target) {
   return spec === "" || spec.includes("/") || spec.includes("\\") ? void 0 : { name, spec };
 }
 function hostedGitUrl(target) {
-  const match = /^https?:\/\/([^/?#]+)(\/[^?#]*)?/i.exec(target);
-  if (match === null) return false;
-  const host = match[1].toLowerCase().replace(/^www\./, "");
+  if (!/^(?:https?|ssh):\/\//i.test(target)) return false;
+  let url;
+  try {
+    url = new URL(target);
+  } catch {
+    return false;
+  }
+  const host = url.hostname.toLowerCase().replace(/^www\./, "");
   if (!HOSTED_GIT_HOSTS.has(host)) return false;
-  const segments = (match[2] ?? "").split("/").filter((segment) => segment.length > 0);
+  const segments = url.pathname.split("/").filter((segment) => segment.length > 0);
   if (segments.length < 2) return host === "gist.github.com" && segments.length === 1;
   const path = segments.join("/");
   if (host === "github.com") {

@@ -159,16 +159,21 @@ function registryTarget(target: string): { readonly name: string; readonly spec?
 }
 
 /**
- * A plain `http(s)` URL on a hosted Git site, in the shapes `hosted-git-info` reads as Git: a repository path, a
- * GitHub/GitLab tree, a gist. A file, a release download or a tarball URL is not one: `npm-package-arg` reads those as
- * `remote`, which OpenCode does not install.
+ * A plain `http(s)` or hosted `ssh://` URL on a hosted Git site, in the shapes `hosted-git-info` reads as Git: a
+ * repository path, a GitHub/GitLab tree, a gist. A non-hosted `ssh://` URL throws in `npm-package-arg`, and a file, a
+ * release download or a tarball URL is `remote`, which OpenCode does not install.
  */
 function hostedGitUrl(target: string): boolean {
-  const match = /^https?:\/\/([^/?#]+)(\/[^?#]*)?/i.exec(target)
-  if (match === null) return false
-  const host = match[1]!.toLowerCase().replace(/^www\./, "")
+  if (!/^(?:https?|ssh):\/\//i.test(target)) return false
+  let url: URL
+  try {
+    url = new URL(target)
+  } catch {
+    return false
+  }
+  const host = url.hostname.toLowerCase().replace(/^www\./, "")
   if (!HOSTED_GIT_HOSTS.has(host)) return false
-  const segments = (match[2] ?? "").split("/").filter((segment) => segment.length > 0)
+  const segments = url.pathname.split("/").filter((segment) => segment.length > 0)
   if (segments.length < 2) return host === "gist.github.com" && segments.length === 1
   const path = segments.join("/")
   if (host === "github.com") {

@@ -122,6 +122,33 @@ describe("listInstalledPlugins", () => {
     assert.match(key, /^git-checkout-[0-9a-f]{12}$/)
   })
 
+  test("locates hosted ssh targets, and refuses a non-hosted ssh URL", async () => {
+    const cache = join(scratch, "git-ssh", "opencode")
+    const withUser = "ssh://git@github.com/example/checkout-ssh.git"
+    const plain = "ssh://github.com/example/checkout-ssh-plain.git"
+    const withUserGeneration = writeGeneration(cache, gitKey(withUser, "checkout-ssh"), "1700000000260", { "@example/checkout-ssh": withUser })
+    const withUserDirectory = join(withUserGeneration, "node_modules", "@example", "checkout-ssh")
+    writePackage(withUserDirectory, manifest(), "@example/checkout-ssh", "1.0.0")
+    const plainGeneration = writeGeneration(cache, gitKey(plain, "checkout-ssh-plain"), "1700000000261", { "@example/checkout-ssh-plain": plain })
+    const plainDirectory = join(plainGeneration, "node_modules", "@example", "checkout-ssh-plain")
+    writePackage(plainDirectory, manifest(), "@example/checkout-ssh-plain", "1.0.0")
+    const notHosted = "ssh://git@example.com/example/checkout.git"
+    const listing = await listInstalledPlugins(
+      hostOf([
+        active({ type: "package", target: withUser, version: "e40fee7" }),
+        active({ type: "package", target: plain, version: "e40fee8" }),
+        active({ type: "package", target: notHosted }),
+      ]),
+      { cacheDirectory: cache },
+    )
+    assert.equal(listing.plugins.length, 2)
+    const byTarget = new Map(listing.plugins.map((plugin) => [plugin.target, plugin]))
+    assert.equal(byTarget.get(withUser)?.directory, withUserDirectory)
+    assert.equal(byTarget.get(plain)?.directory, plainDirectory)
+    assert.deepEqual(listing.problems.map((problem) => problem.target), [notHosted])
+    assert.match(listing.problems[0]?.problems[0] ?? "", /not an npm or Git package target/)
+  })
+
   test("keeps a non-hosted tarball URL out, as npm reads it as remote", async () => {
     const cache = join(scratch, "remote-url", "opencode")
     const listing = await listInstalledPlugins(hostOf([active({ type: "package", target: "https://example.com/demo.tgz" })]), { cacheDirectory: cache })

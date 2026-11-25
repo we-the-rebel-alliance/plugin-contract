@@ -71,6 +71,9 @@ follows it:
 - a plain `https://github.com/owner/repo` (or GitLab, Bitbucket, a gist, or `git.sr.ht`) is `type: "git"`, so its cache
   key is `git-<slug>-<sha256(target)[0..12]>` exactly as for `git+https://github.com/owner/repo` or
   `github:owner/repo`; each raw spelling has its own 12-hex hash and the same slug;
+- a hosted `ssh://` URL — `ssh://git@github.com/owner/repo.git`, `ssh://github.com/owner/repo.git`, and the same on
+  GitLab, Bitbucket or a gist — is `type: "git"`; a non-hosted `ssh://` URL throws `Unsupported URL Type "ssh:"` in
+  `npm-package-arg`, so the catalog still reports it as not a target;
 - `git+…`, `git://` and `git@host:owner/repo` are Git on any host;
 - a non-hosted `https://…` URL, a `.tgz` and a repository page such as `https://github.com/owner/repo/blob/main/x.js`
   are `type: "remote"`, which OpenCode does not install; the catalog reports them as not an npm or Git package target.
