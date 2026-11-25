@@ -131,6 +131,8 @@ export function createHandlers({ provider, manifest, options = {}, version, host
         }
         const scope = request.scope
         let position = 0
+        // A page after a since read keeps the same window: the cursor carries it, because a cursor read has no since input.
+        let since = request.cursor === undefined && request.since !== undefined ? new Date(request.since).toISOString() : undefined
         if (request.cursor !== undefined) {
           const decoded = decodeBoundCursor(binding(call.account, scope), request.cursor)
           if (!decoded.ok) {
@@ -139,13 +141,17 @@ export function createHandlers({ provider, manifest, options = {}, version, host
           if (typeof decoded.state.position !== "number" || !Number.isInteger(decoded.state.position) || decoded.state.position < 0) {
             throw new RegisterError(refusal("CURSOR_INVALID", "the cursor carries no page Harbour issued", "Read again without a cursor."))
           }
+          if (decoded.state.since !== undefined && typeof decoded.state.since !== "string") {
+            throw new RegisterError(refusal("CURSOR_INVALID", "the cursor carries a since this source did not issue", "Read again without a cursor."))
+          }
           position = decoded.state.position
+          since = decoded.state.since
         }
         try {
           const answer = await provider.listNotes({
             account: call.account,
             ...(scope?.spaces === undefined ? {} : { spaces: scope.spaces }),
-            ...(request.cursor !== undefined || request.since === undefined ? {} : { since: new Date(request.since).toISOString() }),
+            ...(since === undefined ? {} : { since }),
             position,
             limit: request.limit,
           })
@@ -155,7 +161,7 @@ export function createHandlers({ provider, manifest, options = {}, version, host
           return eventsListResult(
             { source: SOURCE, account: call.account, owner: owner.owner },
             events.slice(0, fit),
-            encodeBoundCursor(binding(call.account, scope), { position: position + fit }),
+            encodeBoundCursor(binding(call.account, scope), { position: position + fit, ...(since === undefined ? {} : { since }) }),
             answer.more || fit < events.length,
             { plugin: PACKAGE, asOf: provider.asOf },
           )

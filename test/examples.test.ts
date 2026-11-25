@@ -283,6 +283,43 @@ describe("the examples", () => {
     )
   })
 
+  test("a since read paged one event at a time returns every matching event exactly once", async () => {
+    const since = "2026-11-01T00:00:00.000Z"
+    const cases = [
+      { name: "integration", source: "notes", options: { accounts: { work: {}, personal: {} } } },
+      { name: "mcp", source: "messages", options: { accounts: { work: {}, personal: {} } } },
+    ]
+    for (const item of cases) {
+      const providerModule = (await import(pathToFileURL(join(root, "examples", item.name, "provider.js")).href)) as { createHarbourProvider?(): object; createTrellisProvider?(): object }
+      const provider = item.name === "integration" ? providerModule.createHarbourProvider!() : providerModule.createTrellisProvider!()
+      const handlersModule = (await import(pathToFileURL(join(root, "examples", item.name, "handlers.js")).href)) as {
+        createHandlers(parts: object): { events_list: { run(input: Record<string, unknown>, call: { account: string }): Promise<{ events: { external_id: string }[]; cursor: string; more: boolean }> } }
+      }
+      const handlers = handlersModule.createHandlers({
+        provider,
+        manifest: manifestOf(item.name),
+        options: item.options,
+        version: "0.0.0",
+        hostVersion: "2.4.1",
+        accountProblems: [],
+        state: {},
+      })
+      const all = await handlers.events_list.run({ source: item.source, since, limit: 100 }, call("work"))
+      const expected = all.events.map((event) => event.external_id)
+      assert.ok(expected.length > 1, `${item.name} needs more than one event for the page test`)
+      const seen: string[] = []
+      let cursor: string | undefined
+      for (let page = 0; page <= expected.length; page++) {
+        const answer = await handlers.events_list.run({ source: item.source, limit: 1, ...(cursor === undefined ? { since } : { cursor }) }, call("work"))
+        seen.push(...answer.events.map((event) => event.external_id))
+        if (!answer.more) break
+        cursor = answer.cursor
+      }
+      assert.deepEqual(seen, expected, `${item.name}: since + limit 1 must keep the filter across pages`)
+      assert.equal(new Set(seen).size, seen.length, `${item.name}: no event repeats`)
+    }
+  })
+
   test("the Harbour read_note answers TOO_LARGE instead of trimming a detail page over maxBytes", async () => {
     const handlersModule = (await import(pathToFileURL(join(root, "examples", "integration", "handlers.js")).href)) as {
       createHandlers(parts: object): { read_note: { run(input: { external_id: string }, call: { account: string }): Promise<unknown> } }
