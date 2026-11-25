@@ -3,15 +3,17 @@
 // `index.js` passes this table to `register` once. The vendor's own MCP tools are declared as `mcp:*` in the manifest
 // and have no handler: their server owns them. Every method here is the plugin's own read, and the fake Trellis API is
 // behind `provider.js`.
-import { accountStatuses, accountsOf, redactReason, STATUS_SCHEMA, statusAnswer } from "../../dist/accounts.js"
+import { accountStatuses, accountsOf, STATUS_SCHEMA, statusAnswer } from "../../dist/accounts.js"
 import { decodeBoundCursor, encodeBoundCursor } from "../../dist/cursor.js"
-import { LIST_OPTIONS_SCHEMA, makeEvent, PAGE_SCHEMA, PROBE_SCHEMA } from "../../dist/events.js"
+import { eventsListResult, fitPage, LIST_OPTIONS_SCHEMA, makeEvent, PAGE_SCHEMA, parseEventsListInput, PROBE_SCHEMA, probeResult } from "../../dist/events.js"
+import { findSource, maxBytesOf } from "../../dist/manifest.js"
 import { refusal, RegisterError } from "../../dist/register.js"
 import { ProviderError } from "./provider.js"
 
 const PACKAGE = "@we-the-rebel-alliance/trellis-plugin"
 const PLUGIN = "trellis"
 const SOURCE = "messages"
+const SOURCE_ID = "trellis.messages"
 const EMPTY = { type: "object", properties: {}, additionalProperties: false }
 
 const binding = (account, scope) => ({ plugin: PLUGIN, source: SOURCE, account, ...(scope === undefined ? {} : { scope }) })
@@ -65,6 +67,9 @@ function messageEvent(message, account) {
  * @param {string[]} [parts.accountProblems] what registering the accounts could not do, for status
  */
 export function createHandlers({ provider, manifest, options = {}, version, hostVersion, accountProblems = [] }) {
+  const source = findSource(manifest, SOURCE_ID)
+  const maxBytes = source === undefined ? undefined : maxBytesOf(source)
+
   async function ownersByAlias() {
     const plan = accountsOf(manifest, options)
     if (!plan.ok) return { profiles: [], signals: {} }
@@ -88,21 +93,13 @@ export function createHandlers({ provider, manifest, options = {}, version, host
       output: STATUS_SCHEMA,
       async run(_input, call) {
         const { profiles, signals } = await ownersByAlias()
-        const problems = [...accountProblems]
-        let unguarded = []
-        try {
-          unguarded = [...(await call.unguardedAgents())]
-        } catch (error) {
-          // An unreadable agent list is unknown, never zero: status says error, with a redacted next step.
-          problems.unshift(redactReason(error instanceof Error ? error.message : String(error)))
-        }
         return statusAnswer({
           manifest,
           version,
           hostVersion,
           accounts: profiles.length === 0 ? [] : accountStatuses(profiles, signals),
-          problems,
-          unguardedAgents: unguarded,
+          problems: [...accountProblems],
+          unguardedAgents: await call.unguardedAgents(),
         })
       },
     },
@@ -114,7 +111,7 @@ export function createHandlers({ provider, manifest, options = {}, version, host
       async run(_input, call) {
         try {
           const answer = await provider.whoami({ account: call.account })
-          return { source: SOURCE, account: call.account, owner: answer.owner, scopes: ["channels"], trust: "untrusted" }
+          return probeResult({ source: SOURCE, account: call.account, owner: answer.owner }, { scopes: ["channels"] })
         } catch (error) {
           throw refusalFor(error, call, "probe", "Sign the account in again, then probe it.")
         }
@@ -136,13 +133,18 @@ export function createHandlers({ provider, manifest, options = {}, version, host
       },
       output: PAGE_SCHEMA,
       async run(input, call) {
-        if (input.source !== undefined && input.source !== SOURCE) {
-          throw new RegisterError(refusal("SOURCE_UNKNOWN", `${PLUGIN} has no source ${String(input.source)}`, `Read the ${SOURCE} source.`))
+        const parsed = parseEventsListInput(input, { scopeKeys: ["channels"] })
+        if (!parsed.ok) {
+          throw new RegisterError(refusal("INPUT_INVALID", `events_list's input breaks its schema: ${parsed.problems.join("; ")}`, "Pass only the input events_list's schema describes."))
         }
-        const scope = input.scope
+        const request = parsed.value
+        if (request.source !== undefined && request.source !== SOURCE) {
+          throw new RegisterError(refusal("SOURCE_UNKNOWN", `${PLUGIN} has no source ${request.source}`, `Read the ${SOURCE} source.`))
+        }
+        const scope = request.scope
         let position = 0
-        if (input.cursor !== undefined) {
-          const decoded = decodeBoundCursor(binding(call.account, scope), input.cursor)
+        if (request.cursor !== undefined) {
+          const decoded = decodeBoundCursor(binding(call.account, scope), request.cursor)
           if (!decoded.ok) {
             throw new RegisterError(refusal("CURSOR_INVALID", `the cursor is ${decoded.reason} to ${call.account}, so this read cannot use it`, "Read again without a cursor."))
           }
@@ -155,22 +157,20 @@ export function createHandlers({ provider, manifest, options = {}, version, host
           const answer = await provider.listMessages({
             account: call.account,
             ...(scope?.channels === undefined ? {} : { channels: scope.channels }),
-            ...(input.cursor !== undefined || input.since === undefined ? {} : { since: input.since }),
+            ...(request.cursor !== undefined || request.since === undefined ? {} : { since: new Date(request.since).toISOString() }),
             position,
-            ...(input.limit === undefined ? {} : { limit: input.limit }),
+            limit: request.limit,
           })
           const owner = await provider.whoami({ account: call.account })
-          return {
-            source: SOURCE,
-            account: call.account,
-            owner: owner.owner,
-            events: answer.messages.map((message) => messageEvent(message, call.account)),
-            cursor: encodeBoundCursor(binding(call.account, scope), { position: answer.next_position }),
-            more: answer.more,
-            trust: "untrusted",
-            plugin: PACKAGE,
-            asOf: provider.asOf,
-          }
+          const events = answer.messages.map((message) => messageEvent(message, call.account))
+          const fit = fitPage(events, request.limit, maxBytes)
+          return eventsListResult(
+            { source: SOURCE, account: call.account, owner: owner.owner },
+            events.slice(0, fit),
+            encodeBoundCursor(binding(call.account, scope), { position: position + fit }),
+            answer.more || fit < events.length,
+            { plugin: PACKAGE, asOf: provider.asOf },
+          )
         } catch (error) {
           throw refusalFor(error, call, "events_list", "Confirm a channel this account can read, then read again.")
         }
@@ -185,17 +185,15 @@ export function createHandlers({ provider, manifest, options = {}, version, host
         try {
           const answer = await provider.readThread({ account: call.account, thread: input.thread })
           const owner = await provider.whoami({ account: call.account })
-          return {
-            source: SOURCE,
-            account: call.account,
-            owner: owner.owner,
-            events: answer.messages.map((message) => messageEvent(message, call.account)),
-            cursor: encodeBoundCursor(binding(call.account), { thread: input.thread }),
-            more: false,
-            trust: "untrusted",
-            plugin: PACKAGE,
-            asOf: provider.asOf,
-          }
+          const events = answer.messages.map((message) => messageEvent(message, call.account))
+          const fit = fitPage(events, events.length, maxBytes)
+          return eventsListResult(
+            { source: SOURCE, account: call.account, owner: owner.owner },
+            events.slice(0, fit),
+            encodeBoundCursor(binding(call.account), { thread: input.thread }),
+            false,
+            { plugin: PACKAGE, asOf: provider.asOf },
+          )
         } catch (error) {
           throw refusalFor(error, call, "read_thread", "Read a thread that belongs to this account.")
         }

@@ -48,7 +48,6 @@ export interface RegisterWiring {
 export interface Registration {
   readonly name: string
   readonly access: AccessRegistration
-  readonly events: { emit(name: string, data: unknown): Promise<void> }
   /** The typed bus writer, built from the one RPC registration; every handler call reads the same writer as `call.bus`. */
   readonly bus: Bus
   dispose(): Promise<void>
@@ -85,7 +84,7 @@ async function withCleanup<T>(cleanup: readonly (() => Promise<void>)[], action:
  *
  * The table and the manifest must name the same methods; a declared method without a handler is refused at setup, as
  * is a handler the manifest does not declare. The returned registration always carries the bus writer, built from the
- * one RPC registration, and every handler call carries it as `call.bus` and the generated rules as `call.access`.
+ * one RPC registration, and every handler call carries it as `call.bus`.
  */
 export async function register(context: RegisterContext, manifest: Manifest, handlers: HandlerTable, wiring: RegisterWiring = {}): Promise<Registration> {
   const name = manifest.plugin.name
@@ -110,7 +109,6 @@ export async function register(context: RegisterContext, manifest: Manifest, han
       return {
         name,
         access,
-        events: rpc.events,
         bus,
         async dispose() {
           await rpc.dispose().catch(() => undefined)

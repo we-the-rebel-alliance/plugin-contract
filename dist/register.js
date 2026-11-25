@@ -6,7 +6,7 @@ import {
   checkBusData,
   holdsSecret,
   serialise
-} from "./chunks/chunk-6EQKU7LR.js";
+} from "./chunks/chunk-OWUXQ6GV.js";
 import {
   verifyGrant
 } from "./chunks/chunk-ED3MMWUJ.js";
@@ -16,16 +16,16 @@ import {
   evaluate,
   methodAction,
   unguardedAgents
-} from "./chunks/chunk-A6V4KQTI.js";
+} from "./chunks/chunk-HSYZDBOW.js";
 import {
   manifestHash
-} from "./chunks/chunk-RUROPP57.js";
-import "./chunks/chunk-236PJ6AN.js";
+} from "./chunks/chunk-WUXTQJJP.js";
+import "./chunks/chunk-KDEHNYY7.js";
 import {
   MAX_BYTES_DEFAULT,
   errorCodeOf,
   hostInRange
-} from "./chunks/chunk-VAFQUKZ3.js";
+} from "./chunks/chunk-YTAZMRBO.js";
 import {
   problemsOf
 } from "./chunks/chunk-FTEX4OOT.js";
@@ -35,7 +35,7 @@ import {
   accountsOf,
   redactReason,
   resolveAccount
-} from "./chunks/chunk-MNSDPFNH.js";
+} from "./chunks/chunk-OJKZGBMB.js";
 import {
   array,
   fromJSONSchema,
@@ -453,8 +453,13 @@ async function execute(environment, entry, prepared, call, bus) {
         account: prepared.account,
         ...prepared.plan === void 0 ? {} : { plan: prepared.plan },
         bus: bus(),
-        access: environment.access,
-        unguardedAgents: async () => unguardedAgents(await environment.agents(), environment.access.rules)
+        unguardedAgents: async () => {
+          try {
+            return { ok: true, agents: unguardedAgents(await environment.agents(), environment.access.rules) };
+          } catch (error) {
+            return { ok: false, error: reasonOf(error) };
+          }
+        }
       })
     );
     if (entry.item.plans === true) {
@@ -760,7 +765,6 @@ async function register(context, manifest, handlers, wiring = {}) {
       return {
         name,
         access,
-        events: rpc.events,
         bus,
         async dispose() {
           await rpc.dispose().catch(() => void 0);

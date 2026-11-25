@@ -728,10 +728,10 @@ describe("register: the host gate", () => {
 })
 
 describe("register: the bus and the access on every call", () => {
-  test("register always returns the writer and gives it to every handler call, with the access and the unguarded agents", async () => {
+  test("register always returns the writer and gives it to every handler call, with the unguarded agents and no access", async () => {
     const h = makeHarness()
     let seen: unknown
-    let access: unknown
+    let fields: readonly string[] = []
     let unguarded: unknown
     const registration = await register(
       h.ctx,
@@ -742,7 +742,7 @@ describe("register: the bus and the access on every call", () => {
           output: OK,
           run: async (_input, call) => {
             seen = call.bus
-            access = call.access
+            fields = Object.keys(call)
             unguarded = await call.unguardedAgents()
             return { ok: true }
           },
@@ -755,15 +755,15 @@ describe("register: the bus and the access on every call", () => {
 
     await h.tools.get("demo_status")!.tool.execute({}, context())
     assert.equal(seen, registration.bus, "the tool door attaches the same writer")
-    assert.equal(access, registration.access, "the call carries the generated access")
-    assert.deepEqual(unguarded, [], "an agent that keeps every generated rule is not named")
+    assert.equal(fields.includes("access"), false, "a handler gets no access registration, and so no dispose()")
+    assert.deepEqual(unguarded, { ok: true, agents: [] }, "an agent that keeps every generated rule is not named")
     await h.rpc.call("demo", "status", { sessionID: "s1", input: {} })
     assert.equal(seen, registration.bus, "the RPC door attaches the same writer")
   })
 
   test("an agent whose rules were widened after setup is named by call.unguardedAgents()", async () => {
     const h = makeHarness({ options: { access: "ask-changes" } })
-    let unguarded: readonly string[] | undefined
+    let unguarded: unknown
     await register(
       h.ctx,
       demo,
@@ -781,7 +781,42 @@ describe("register: the bus and the access on every call", () => {
     // A later config `"*": "allow"` is exactly the widening `unguardedAgents` reports.
     h.agents[0]!.permissions.push({ action: "*", resource: "*", effect: "allow" })
     await h.tools.get("demo_status")!.tool.execute({}, context())
-    assert.deepEqual(unguarded, ["build"])
+    assert.deepEqual(unguarded, { ok: true, agents: ["build"] })
+  })
+
+  test("an agent list the host cannot read is answered, not thrown, as one redacted line", async () => {
+    const h = makeHarness()
+    const token = `ghp_${"a".repeat(36)}`
+    const failing: typeof h.ctx = {
+      ...h.ctx,
+      agent: {
+        ...h.ctx.agent,
+        async list() {
+          throw new Error(`the agent list is unavailable; the request needed ${token}`)
+        },
+      },
+    }
+    let unguarded: unknown
+    await register(
+      failing,
+      demo,
+      handlers({
+        status: handler({
+          description: "Read the plugin's status.",
+          output: OK,
+          run: async (_input, call) => {
+            unguarded = await call.unguardedAgents()
+            return { ok: true }
+          },
+        }),
+      }),
+    )
+    await h.tools.get("demo_status")!.tool.execute({}, context())
+    const answer = unguarded as { ok: boolean; error?: string }
+    assert.equal(answer.ok, false, "the host's failure is the answer")
+    assert.equal(answer.error?.includes(token), false, "the line is redacted of the token")
+    assert.match(answer.error ?? "", /^the agent list is unavailable/)
+    assert.equal(answer.error?.includes("\n"), false, "one line")
   })
 })
 

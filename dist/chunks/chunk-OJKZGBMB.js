@@ -229,7 +229,9 @@ function accountStatuses(accounts, signals = {}) {
 var NO_ACCOUNTS = [];
 var SIGN_IN_NEXT = "Sign in to the account that needs it, then read status again.";
 function statusAnswer(input) {
-  const problems = input.problems ?? [];
+  const problems = [...input.problems ?? []];
+  const unguarded = input.unguardedAgents;
+  if (!unguarded.ok) problems.push(unguarded.error);
   const needsSignIn = input.accounts.some((account) => account.state === "needs_sign_in");
   return {
     name: input.manifest.plugin.name,
@@ -237,7 +239,7 @@ function statusAnswer(input) {
     host: { version: input.hostVersion, range: input.manifest.plugin.host.opencode, tested: [...input.manifest.plugin.host.tested] },
     state: problems.length > 0 ? "error" : needsSignIn ? "needs_sign_in" : "ready",
     accounts: [...input.accounts],
-    unguardedAgents: [...input.unguardedAgents],
+    unguardedAgents: unguarded.ok ? [...unguarded.agents] : [],
     nextStep: problems.length > 0 ? redactReason(problems[0]) : needsSignIn ? SIGN_IN_NEXT : null
   };
 }

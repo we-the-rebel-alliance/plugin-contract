@@ -18,9 +18,10 @@ export default Plugin.define({
 })
 ```
 
-The returned registration carries the bus events emitter and the typed writer as `registration.bus`, and every handler
-call carries the same writer as `call.bus` (§10), so a plugin needs no flag, no mutable placeholder and no second
-registration. Only the events the manifest declares are registered; emitting an undeclared one answers `unavailable`.
+The returned registration carries the typed writer as `registration.bus`, and every handler call carries the same writer
+as `call.bus` (§10), so a plugin needs no flag, no mutable placeholder and no second registration. Only the events the
+manifest declares are registered; emitting an undeclared one answers `unavailable`. The registration's raw events
+emitter stays inside `register`: `registration.bus` and `call.bus` are the only writers a plugin reaches.
 A plugin never calls `ctx.rpc.register` itself, never adds a tool itself, and never evaluates a permission rule itself.
 
 ## The host gate
@@ -52,16 +53,17 @@ const handlers = {
 | `description` | The agent tool's description. |
 | `input` | The method's own JSON Schema object, without `account`. The register adds the account selector. |
 | `output` | The answer's JSON Schema. A `plans` method answers `{ method, … }`; the register mints the `planId` and the door publishes `PLAN_OUTPUT`. |
-| `run(input, call)` | The work. `call` carries the session, agent, message id, call id, signal, progress, resolved `account`, `bus`, `access`, `unguardedAgents()` and door. |
+| `run(input, call)` | The work. `call` carries the session, agent, message id, call id, signal, progress, resolved `account`, `bus`, `unguardedAgents()` and door. |
 
 `register` refuses a declared method with no handler, a handler the manifest does not declare, and a handler for a
 pass-through MCP method (`mcp:*`). A pass-through MCP method is declared in `methods` for its class and access rule; the
 vendor's server owns its tool, so this module does not register or proxy it.
 
-A handler needs no state of its own. `call.bus` is the writer from the one RPC registration, `call.access` is the
-`AccessRegistration` whose rules `register` generated, and `call.unguardedAgents()` asks the host for the agents whose
-rules no longer give every generated rule its effect. Status reads all three from the call, so nothing is written after
-`register` returns.
+A handler needs no state of its own. `call.bus` is the writer from the one RPC registration, and
+`call.unguardedAgents()` asks the host for the agents whose rules no longer give every generated rule its effect; it
+answers `{ ok: true, agents }` or `{ ok: false, error }` and never throws, so a status handler passes the result
+straight to `statusAnswer`. A handler gets no access registration: nothing on the call can change the rules. Status
+reads its agent answer from the call, so nothing is written after `register` returns.
 
 ## Doors 1–3
 
@@ -215,6 +217,6 @@ registration follows `ToolEditor.add` and `Tool.Options.codemode` (`dist/promise
 | `register` | doors 1–3 from one handler table, a manifest and the optional grant wiring; the registration carries the bus writer |
 | `assertHost`, `HostContext` | the host gate: `ctx.app.version` against the manifest's range, refusing `HOST_UNTESTED` |
 | `RegisterContext`, `RegisterWiring`, `Registration`, `GrantWiring` | the context it takes, the grant wiring, and what it returns (its `access`, its `bus` and its disposer) |
-| `methodEntries`, `Door`, `HandlerTable`, `MethodCall`, `MethodEntry`, `MethodHandler` | the handler table and one call's context: `account`, `bus`, `access` and `unguardedAgents()` |
+| `methodEntries`, `Door`, `HandlerTable`, `MethodCall`, `MethodEntry`, `MethodHandler` | the handler table and one call's context: `account`, `bus` and `unguardedAgents()` |
 | `COMMIT_INPUT`, `PLAN_OUTPUT`, `PLAN_MAX_BYTES` | the shapes a planning method answers and a commit takes, and the most bytes of JSON a stored plan may take |
 | `refusal`, `refusalOf`, `RegisterError`, `Refusal` | a handler's own refusal, in the contract's form |

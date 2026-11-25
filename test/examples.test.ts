@@ -184,7 +184,7 @@ describe("the examples", () => {
 
   test("status reports an unreadable agent list as error, never as an empty unguarded list", async () => {
     // The call's unguardedAgents() reader is the register's; a host whose list fails must make status say error.
-    const failing = { account: "default", unguardedAgents: async () => Promise.reject(new Error("the agent list is unavailable")) }
+    const failing = { account: "default", unguardedAgents: async () => ({ ok: false, error: "the agent list is unavailable" }) }
     const toolsModule = (await import(pathToFileURL(join(root, "examples", "tools", "handlers.js")).href)) as {
       createHandlers(parts: object): { status: { run(input: unknown, call: object): Promise<{ state: string; unguardedAgents: string[]; nextStep: unknown }> } }
     }

@@ -15,6 +15,6 @@
 export { ACCESS_LEVELS, DEFAULT_ACCESS, accessLevel, aliasesFrom, effectFor, isMcpMethod, methodAction, rulesFor, serverOf, toolAction, normalizeToolName, } from "./access/rules.js";
 export type { AccessLevel } from "./access/rules.js";
 export { applyAccess, unguardedAgents, withRules } from "./access/agents.js";
-export type { AccessContext, AccessRegistration, AccessRequest, AgentEditor, AgentLike } from "./access/agents.js";
+export type { AccessContext, AccessRegistration, AccessRequest, AgentEditor, AgentLike, UnguardedAgentsResult } from "./access/agents.js";
 export { ACCOUNT_PATTERN, accountProblem, actSessionRules, DENY_ALL, detailRules, evaluate, grantCovers, namespaceOf, operationRule, probeRules, sessionRules, } from "./access/fences.js";
 export type { ActGrant, ActPhase, Grant, PermissionRule } from "./access/fences.js";

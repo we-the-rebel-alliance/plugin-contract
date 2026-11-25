@@ -118,6 +118,12 @@ export function unguardedAgents(agents: readonly AgentLike[], rules: readonly Pe
     .sort()
 }
 
+/**
+ * What `call.unguardedAgents()` answers: the agent ids the rules miss. A host whose agent list cannot be read is
+ * unknown, never zero, so the call answers the failure as one redacted line instead of throwing.
+ */
+export type UnguardedAgentsResult = { readonly ok: true; readonly agents: readonly string[] } | { readonly ok: false; readonly error: string }
+
 /** The accounts the plugin declares, in the options' order; refused when the options are not a valid accounts map. */
 function aliasesOf(manifest: Manifest, options: Readonly<Record<string, unknown>>): Checked<readonly string[]> {
   if (manifest.accounts === undefined) return { ok: true, value: ["default"] }

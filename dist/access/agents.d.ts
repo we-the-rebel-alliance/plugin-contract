@@ -49,6 +49,17 @@ export declare function withRules(permissions: readonly PermissionRule[], additi
  */
 export declare function unguardedAgents(agents: readonly AgentLike[], rules: readonly PermissionRule[]): readonly string[];
 /**
+ * What `call.unguardedAgents()` answers: the agent ids the rules miss. A host whose agent list cannot be read is
+ * unknown, never zero, so the call answers the failure as one redacted line instead of throwing.
+ */
+export type UnguardedAgentsResult = {
+    readonly ok: true;
+    readonly agents: readonly string[];
+} | {
+    readonly ok: false;
+    readonly error: string;
+};
+/**
  * Generates the rules from `access` and `methods`, then inserts them into every agent the host has. Never throws for a
  * bad option or a failing transform: the problems are returned for status, and `register` refuses to start when they
  * are not empty.

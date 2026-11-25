@@ -2,7 +2,7 @@
 //
 // A read is a pure function. A write is planned first with `plan_write_note`, then committed with `write_note`, and the
 // commit emits the contract's `changed` bus event through `call.bus`, which `register` always attaches.
-import { NO_ACCOUNTS, redactReason, STATUS_SCHEMA, statusAnswer } from "../../dist/accounts.js"
+import { NO_ACCOUNTS, STATUS_SCHEMA, statusAnswer } from "../../dist/accounts.js"
 import { COMMIT_INPUT, refusal, RegisterError } from "../../dist/register.js"
 
 const OBJECT = { type: "object", additionalProperties: true }
@@ -37,15 +37,7 @@ export function createHandlers({ manifest, version, hostVersion }) {
       input: EMPTY,
       output: STATUS_SCHEMA,
       async run(_input, call) {
-        const problems = []
-        let unguarded = []
-        try {
-          unguarded = [...(await call.unguardedAgents())]
-        } catch (error) {
-          // An unreadable agent list is unknown, never zero: status says error, with a redacted next step.
-          problems.push(redactReason(error instanceof Error ? error.message : String(error)))
-        }
-        return statusAnswer({ manifest, version, hostVersion, accounts: NO_ACCOUNTS, problems, unguardedAgents: unguarded })
+        return statusAnswer({ manifest, version, hostVersion, accounts: NO_ACCOUNTS, unguardedAgents: await call.unguardedAgents() })
       },
     },
 

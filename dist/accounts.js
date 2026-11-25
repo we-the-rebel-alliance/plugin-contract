@@ -20,7 +20,7 @@ import {
   registerAccounts,
   resolveAccount,
   statusAnswer
-} from "./chunks/chunk-MNSDPFNH.js";
+} from "./chunks/chunk-OJKZGBMB.js";
 import "./chunks/chunk-4YITQAYJ.js";
 import "./chunks/chunk-WLRWVIVP.js";
 export {

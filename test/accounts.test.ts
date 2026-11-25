@@ -321,7 +321,7 @@ describe("statusAnswer", () => {
   const base = { manifest: value, version: "1.2.3", hostVersion: "2.4.9" }
 
   test("assembles the identity, the host block and every alias, and the answer is what STATUS_SCHEMA describes", () => {
-    const answer = statusAnswer({ ...base, accounts: accountStatuses([{ alias: "work" }], { work: { state: "ready", owner: { id: "mailto:ana@example.com", label: "Ana" } } }), unguardedAgents: [] })
+    const answer = statusAnswer({ ...base, accounts: accountStatuses([{ alias: "work" }], { work: { state: "ready", owner: { id: "mailto:ana@example.com", label: "Ana" } } }), unguardedAgents: { ok: true, agents: [] } })
     assert.deepEqual(answer, {
       name: "demo",
       version: "1.2.3",
@@ -336,17 +336,26 @@ describe("statusAnswer", () => {
   })
 
   test("state is error over needs_sign_in over ready; a problem is the redacted next step", () => {
-    const signedOut = statusAnswer({ ...base, accounts: accountStatuses([{ alias: "work" }], { work: { state: "needs_sign_in" } }), unguardedAgents: ["build"] })
+    const signedOut = statusAnswer({ ...base, accounts: accountStatuses([{ alias: "work" }], { work: { state: "needs_sign_in" } }), unguardedAgents: { ok: true, agents: ["build"] } })
     assert.equal(signedOut.state, "needs_sign_in")
     assert.equal(signedOut.nextStep, "Sign in to the account that needs it, then read status again.")
     assert.deepEqual(signedOut.unguardedAgents, ["build"])
 
     const token = `sk_live_${"9".repeat(40)}`
-    const failed = statusAnswer({ ...base, accounts: [], problems: [`accounts: the key ${token} was refused`], unguardedAgents: [] })
+    const failed = statusAnswer({ ...base, accounts: [], problems: [`accounts: the key ${token} was refused`], unguardedAgents: { ok: true, agents: [] } })
     assert.equal(failed.state, "error")
     assert.equal(failed.nextStep?.includes("sk_live"), false, "a problem is redacted before it reaches nextStep")
     assert.ok((failed.nextStep?.length ?? 0) <= 160)
     assert.deepEqual(failed.accounts, [], "a plugin with no accounts answers an empty list, never a default")
+  })
+
+  test("an agent list the host could not read makes the state error, with an empty list and the reason as a problem", () => {
+    const answer = statusAnswer({ ...base, accounts: [], unguardedAgents: { ok: false, error: "the agent list is unavailable" } })
+    assert.equal(answer.state, "error")
+    assert.deepEqual(answer.unguardedAgents, [], "an unread list is unknown, never zero")
+    assert.equal(answer.nextStep, "the agent list is unavailable")
+    const checked = validate(STATUS_SCHEMA, answer)
+    assert.deepEqual(checked.ok, true, checked.ok ? "" : checked.problems.join("; "))
   })
 })
 
