@@ -5,6 +5,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { describe, test } from "node:test"
 import { isReleaseVersion, runRelease, tagOf } from "../src/kit/release.ts"
+import { KitError } from "../src/kit/types.ts"
 import type { CommandContext, ConformanceRunner, Git } from "../src/kit/types.ts"
 import { fakeConformance } from "./support/kit.ts"
 import { fullPlugin, write } from "./support/plugin.ts"
@@ -81,6 +82,39 @@ describe("the release's version line", () => {
     const local = temp()
     try {
       await assert.rejects(runRelease(context(local.dir), "1.2.3-rc.1", { dryRun: false }), /KIT_VERSION: "1\.2\.3-rc\.1" is not a release version\. Next step: /)
+    } finally {
+      local.cleanup()
+    }
+  })
+})
+
+describe("the release outside a plugin", () => {
+  test("refuses a package.json with no capabilities before the check, and runs no conformance", async () => {
+    const local = temp()
+    try {
+      write(join(local.dir, "package.json"), `${JSON.stringify({ name: "not-a-plugin", version: "0.0.1" }, null, 2)}\n`)
+      let called = 0
+      const answer: CommandContext = {
+        dir: local.dir,
+        json: false,
+        io: { stdout: () => {}, stderr: () => {} },
+        conformance: async () => {
+          called += 1
+          throw new Error("conformance ran outside a plugin")
+        },
+        git: realGit,
+        now: () => new Date("2026-11-24T12:34:56.000Z"),
+      }
+      const error = await runRelease(answer, "0.0.1", { dryRun: false }).then(
+        () => undefined,
+        (reason: unknown) => reason,
+      )
+      assert.ok(error instanceof KitError)
+      assert.equal(error.code, "KIT_NOT_A_PLUGIN")
+      assert.match(error.message, /not a plugin/)
+      assert.match(error.message, /scripts\/release\.mjs/)
+      assert.equal(error.message.includes("\n"), false)
+      assert.equal(called, 0)
     } finally {
       local.cleanup()
     }

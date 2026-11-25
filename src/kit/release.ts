@@ -77,8 +77,16 @@ export async function runRelease(context: CommandContext, version: string, optio
   if (!isReleaseVersion(version)) {
     throw new KitError("KIT_VERSION", `"${version}" is not a release version`, "pass 0.0.x, such as 0.0.0 or 0.0.1; the contract releases only the 0.0 line")
   }
-  const findings: Finding[] = [...(await checkPlugin(context))]
+  // Read the package before the check: a package with no capabilities is not a plugin, so no gate applies to it.
   const plugin = readPlugin(context.dir)
+  if (!Object.hasOwn(plugin.package, "capabilities")) {
+    throw new KitError(
+      "KIT_NOT_A_PLUGIN",
+      `${plugin.name} has no capabilities, so it is not a plugin`,
+      "run release from a plugin's root; this contract itself releases through scripts/release.mjs",
+    )
+  }
+  const findings: Finding[] = [...(await checkPlugin(context))]
   findings.push(...prepared(plugin, version))
   if (hasError(findings)) {
     if (context.json) context.io.stdout(`${JSON.stringify({ command: "release", ok: false, version, tag: tagOf(version), findings: sortFindings(findings) }, null, 2)}\n`)

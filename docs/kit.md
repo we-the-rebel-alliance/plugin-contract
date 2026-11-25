@@ -94,7 +94,7 @@ The scan reads text files outside `node_modules`, `dist` and the other generated
 | Id | What it finds |
 |---|---|
 | `FORBIDDEN.app-name` | an app identifier in code, manifest or docs. An `x-<app>` key is allowed: the prefix is the one place a name belongs. |
-| `FORBIDDEN.main-branch` | a GitHub `blob/main`, `tree/main`, `raw/main` or `raw.githubusercontent.com/…/main` link. Every repository in the org uses `master`. |
+| `FORBIDDEN.main-branch` | a GitHub `blob/main`, `tree/main`, `raw/main` or `raw.githubusercontent.com/…/main` link under the plugin's own owner, read from its `package.json` `repository`. Every repository in the org uses `master`; a third-party repository's `main` branch is legitimate, and a package with no repository has no owner to flag. |
 | `FORBIDDEN.secret` | a credential the contract's own detector (`secretKinds`) recognises. A conformance fixture's `grants.publicKey` and a `grants.cases[].token` that key verifies are public test data, not credentials, and are not reported. The token's payload is still decoded and screened: a secret inside a signed claim is reported, because the signature makes the claim authentic, not secret. |
 | `FORBIDDEN.grant-email` | a real person's email in a verified grant case (`expect.ok: true`). The decoded claims, its plain `input` and its plain `request` are scanned; an address must be on `example.test` or `example.com`. The finding names the case, never the address or its domain. |
 
@@ -110,7 +110,9 @@ reported as a `FORBIDDEN.suppressed` warning with its reason; a line with no rea
 
 `release <version>` releases only the `0.0.x` line (contract §17). It:
 
-1. runs `check`, and writes nothing when an error is found;
+1. reads `package.json` first: a package with no `capabilities` is not a plugin, so it refuses with `KIT_NOT_A_PLUGIN` and
+   names `scripts/release.mjs`, the script this contract itself releases through; otherwise it runs `check`, and writes
+   nothing when an error is found;
 2. requires the release to be prepared, not prepares it: `package.json` must already say the version, and `CHANGELOG.md`
    must already carry its `## [<version>]` section;
 3. refuses unless the branch is `master`, `git status --porcelain` is empty, and `HEAD` equals `origin/master` after a

@@ -288,12 +288,26 @@ function readPlugin(dir) {
     repository: repositoryName(pkg.repository) ?? `${manifest?.plugin.name ?? packageName ?? basename(dir)}-plugin`
   };
 }
-function repositoryName(repository) {
+function repositoryUrl(repository) {
   const url = typeof repository === "string" ? repository : repository?.url;
-  if (typeof url !== "string") return void 0;
+  return typeof url === "string" ? url.trim() : void 0;
+}
+function repositoryName(repository) {
+  const url = repositoryUrl(repository);
+  if (url === void 0) return void 0;
   const trimmed = url.replace(/\.git$/, "").replace(/\/+$/, "");
   const segment = trimmed.slice(trimmed.lastIndexOf("/") + 1);
   return segment === "" ? void 0 : segment;
+}
+function repositoryOwner(repository) {
+  const url = repositoryUrl(repository);
+  if (url === void 0) return void 0;
+  const shorthand = /^github:([^/\s]+)\//i.exec(url);
+  if (shorthand !== null) return shorthand[1];
+  const scp = /^git@github\.com:([^/\s]+)\//i.exec(url);
+  if (scp !== null) return scp[1];
+  const hosted = /^(?:git\+)?(?:https?|git|ssh):\/\/(?:[^@/\s]+@)?(?:www\.)?github\.com\/([^/\s]+)\//i.exec(url);
+  return hosted?.[1];
 }
 function requireManifest(plugin) {
   if (plugin.manifest !== void 0) return plugin.manifest;
@@ -473,9 +487,9 @@ function fixturePublicKey(value) {
 
 // src/kit/forbidden.ts
 var SKIPPED_FILES = /* @__PURE__ */ new Set(["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lockb", "composer.lock", "Cargo.lock"]);
-var MAIN_LINK = /\bhttps?:\/\/[^\s)"'<>]*\/(?:blob|tree|raw)\/main(?:[/#?]|\b)/gi;
-var RAW_MAIN_LINK = /\bhttps?:\/\/raw\.githubusercontent\.com\/[^\s)"'<>]+\/main(?:[/#?]|\b)/gi;
-var SHORT_MAIN_LINK = /\bgithub\.com\/[^\s)"'<>]+\/(?:blob|tree|raw)\/main(?:[/#?]|\b)/gi;
+var MAIN_LINK = /\bhttps?:\/\/(?:www\.)?github\.com\/([^/\s)"'<>]+)\/[^\s)"'<>]*\/(?:blob|tree|raw)\/main(?:[/#?]|\b)/gi;
+var RAW_MAIN_LINK = /\bhttps?:\/\/raw\.githubusercontent\.com\/([^/\s)"'<>]+)\/[^\s)"'<>]*\/main(?:[/#?]|\b)/gi;
+var SHORT_MAIN_LINK = /\bgithub\.com\/([^/\s)"'<>]+)\/[^\s)"'<>]*\/(?:blob|tree|raw)\/main(?:[/#?]|\b)/gi;
 var ALLOW_FILE = ".plugin-kit/forbidden-allow";
 var PATTERNS = ["app-name", "main-branch", "secret", "grant-email"];
 function allowances(dir) {
@@ -575,10 +589,16 @@ function grantClaimFindings(relative2, text) {
   }
   return findings;
 }
+function packageOwner(dir) {
+  const raw = readJson(join5(dir, "package.json"));
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return void 0;
+  return repositoryOwner(raw.repository);
+}
 function forbiddenFindings(dir, options = {}) {
   const apps = options.apps ?? FORBIDDEN_APPS;
   const findings = [];
   const allowed = allowances(dir);
+  const owner = packageOwner(dir);
   const used = /* @__PURE__ */ new Map();
   for (const path of walkFiles(dir, options.skip === void 0 ? {} : { skip: options.skip })) {
     const name = basename2(path);
@@ -614,7 +634,8 @@ function forbiddenFindings(dir, options = {}) {
       }
       for (const pattern of [MAIN_LINK, RAW_MAIN_LINK, SHORT_MAIN_LINK]) {
         const regex = new RegExp(pattern.source, pattern.flags);
-        for (const _match of line.matchAll(regex)) {
+        for (const match of line.matchAll(regex)) {
+          if (owner === void 0 || match[1].toLowerCase() !== owner.toLowerCase()) continue;
           const key = `main:${lineNumber}`;
           if (seen.has(key)) continue;
           seen.add(key);
@@ -622,7 +643,7 @@ function forbiddenFindings(dir, options = {}) {
             id: "FORBIDDEN.main-branch",
             level: "error",
             path: relative2,
-            message: `line ${lineNumber} links to the main branch of a repository; every repository in the org uses master`,
+            message: `line ${lineNumber} links to the main branch of a repository under this plugin's owner; every repository in the org uses master`,
             fix: "point the link at master, not main"
           });
         }
@@ -955,8 +976,15 @@ async function runRelease(context, version, options) {
   if (!isReleaseVersion(version)) {
     throw new KitError("KIT_VERSION", `"${version}" is not a release version`, "pass 0.0.x, such as 0.0.0 or 0.0.1; the contract releases only the 0.0 line");
   }
-  const findings = [...await checkPlugin(context)];
   const plugin = readPlugin(context.dir);
+  if (!Object.hasOwn(plugin.package, "capabilities")) {
+    throw new KitError(
+      "KIT_NOT_A_PLUGIN",
+      `${plugin.name} has no capabilities, so it is not a plugin`,
+      "run release from a plugin's root; this contract itself releases through scripts/release.mjs"
+    );
+  }
+  const findings = [...await checkPlugin(context)];
   findings.push(...prepared(plugin, version));
   if (hasError(findings)) {
     if (context.json) context.io.stdout(`${JSON.stringify({ command: "release", ok: false, version, tag: tagOf(version), findings: sortFindings(findings) }, null, 2)}

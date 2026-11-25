@@ -5,7 +5,9 @@
  *
  * - `FORBIDDEN.app-name`: the plugin names an app. A plugin is host-neutral; an app-only hint is an `x-<app>` key, and
  *   the `x-` prefix is the one place a name is allowed.
- * - `FORBIDDEN.main-branch`: a link points at a `main` branch. Every repository in the org uses `master`.
+ * - `FORBIDDEN.main-branch`: a link points at a `main` branch of a repository under the plugin's own GitHub owner,
+ *   read from its `package.json` `repository`. Every repository in the org uses `master`; a third-party repository's
+ *   `main` branch is legitimate, and a package with no repository has no owner to flag.
  * - `FORBIDDEN.secret`: a credential is committed. The detector is the contract's own (`secretKinds`), so a fixture, a
  *   doc and an event are judged by one set of patterns. A conformance fixture's signed grant claims are decoded and
  *   screened too: a secret inside a signed claim is found even though the raw token is public test data.
@@ -18,9 +20,10 @@
  */
 import { basename, join } from "node:path"
 import { secretKinds } from "../internal/secrets.ts"
-import { isTextFile, readText, relativePath, walkFiles } from "./files.ts"
+import { isTextFile, readJson, readText, relativePath, walkFiles } from "./files.ts"
 import { FORBIDDEN_APPS, type ForbiddenApp } from "./forbidden-apps.ts"
 import { verifiedGrantTokens } from "./grant-token.ts"
+import { repositoryOwner, type PackageJson } from "./plugin.ts"
 import type { CommandContext, Finding } from "./types.ts"
 import { hasError, sortFindings } from "./types.ts"
 import { print } from "./output.ts"
@@ -28,12 +31,12 @@ import { print } from "./output.ts"
 /** Files a scan skips: generated from other files, and not the plugin's own text. */
 const SKIPPED_FILES = new Set(["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lockb", "composer.lock", "Cargo.lock"])
 
-/** A link to a repository's `main` branch, in the forms a GitHub link takes. */
-const MAIN_LINK = /\bhttps?:\/\/[^\s)"'<>]*\/(?:blob|tree|raw)\/main(?:[/#?]|\b)/gi
-/** A raw GitHub link names the branch as the fourth path segment. */
-const RAW_MAIN_LINK = /\bhttps?:\/\/raw\.githubusercontent\.com\/[^\s)"'<>]+\/main(?:[/#?]|\b)/gi
-/** A branch link written without a scheme, as a document often writes one. */
-const SHORT_MAIN_LINK = /\bgithub\.com\/[^\s)"'<>]+\/(?:blob|tree|raw)\/main(?:[/#?]|\b)/gi
+/** A link to a repository's `main` branch, in the forms a GitHub link takes; group 1 is the owner. */
+const MAIN_LINK = /\bhttps?:\/\/(?:www\.)?github\.com\/([^/\s)"'<>]+)\/[^\s)"'<>]*\/(?:blob|tree|raw)\/main(?:[/#?]|\b)/gi
+/** A raw GitHub link names the branch as the fourth path segment; group 1 is the owner. */
+const RAW_MAIN_LINK = /\bhttps?:\/\/raw\.githubusercontent\.com\/([^/\s)"'<>]+)\/[^\s)"'<>]*\/main(?:[/#?]|\b)/gi
+/** A branch link written without a scheme, as a document often writes one; group 1 is the owner. */
+const SHORT_MAIN_LINK = /\bgithub\.com\/([^/\s)"'<>]+)\/[^\s)"'<>]*\/(?:blob|tree|raw)\/main(?:[/#?]|\b)/gi
 
 /** What the scan reads. A test can pass its own app list and skip list. */
 export interface ForbiddenOptions {
@@ -170,11 +173,19 @@ function grantClaimFindings(relative: string, text: string): Finding[] {
   return findings
 }
 
+/** The GitHub owner of the package under `dir`, or undefined when it names no GitHub repository. */
+function packageOwner(dir: string): string | undefined {
+  const raw = readJson(join(dir, "package.json"))
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return undefined
+  return repositoryOwner((raw as PackageJson).repository)
+}
+
 /** Every forbidden pattern under `dir`, with the line each was found on. */
 export function forbiddenFindings(dir: string, options: ForbiddenOptions = {}): Finding[] {
   const apps = options.apps ?? FORBIDDEN_APPS
   const findings: Finding[] = []
   const allowed = allowances(dir)
+  const owner = packageOwner(dir)
   const used = new Map<Allowance, number>()
   for (const path of walkFiles(dir, options.skip === undefined ? {} : { skip: options.skip })) {
     const name = basename(path)
@@ -213,7 +224,9 @@ export function forbiddenFindings(dir: string, options: ForbiddenOptions = {}): 
       }
       for (const pattern of [MAIN_LINK, RAW_MAIN_LINK, SHORT_MAIN_LINK]) {
         const regex = new RegExp(pattern.source, pattern.flags)
-        for (const _match of line.matchAll(regex)) {
+        for (const match of line.matchAll(regex)) {
+          // A third-party repository's main branch is legitimate; only the plugin's own owner is the org's.
+          if (owner === undefined || match[1]!.toLowerCase() !== owner.toLowerCase()) continue
           const key = `main:${lineNumber}`
           if (seen.has(key)) continue
           seen.add(key)
@@ -221,7 +234,7 @@ export function forbiddenFindings(dir: string, options: ForbiddenOptions = {}): 
             id: "FORBIDDEN.main-branch",
             level: "error",
             path: relative,
-            message: `line ${lineNumber} links to the main branch of a repository; every repository in the org uses master`,
+            message: `line ${lineNumber} links to the main branch of a repository under this plugin's owner; every repository in the org uses master`,
             fix: "point the link at master, not main",
           })
         }
