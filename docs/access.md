@@ -73,8 +73,8 @@ const outcome = await read(host, { installed, source: source.id, grant, consumer
 
 `operationRule` returns `Checked<PermissionRule>` and refuses an undeclared alias instead of throwing; its last
 argument is `"tool"` for an MCP tool name that contains a dot, and `toolAction(server, tool)` is the one rewrite. The
-read, act, detail and probe requests carry the plugin's declared account aliases so a fence never falls back to the
-grant's own account. `namespaceOf`, `accountProblem`, `DENY_ALL`, `matches` and `evaluate` are exported for the app side and tests.
+read, act, detail and probe hosts pass the aliases from the plugin's own `status.accounts` (contract §11), so a fence
+never falls back to the grant's own account. `namespaceOf`, `accountProblem`, `DENY_ALL`, `matches` and `evaluate` are exported for the app side and tests.
 `evaluate` is OpenCode's last-match-wins evaluation, with no match asking.
 
 ## Errors

@@ -5,8 +5,8 @@
  * `AssertInput.Encoded` in `dist/permission.d.ts`). A tool's `permission` option only hides a fully denied tool, and
  * `tool.add` adds no ask (`core/src/tool.ts:327,500`; `core/src/tool/AGENTS.md:53-55`;
  * `plugin/src/promise/adapter.ts:574`). So every handler invocation calls `ctx.permission.assert` once, with the
- * method's action `<name>.<method>` and the resources its declared operations name (`<alias>:<operation>`, or `["*"]`
- * when it declares none). The host evaluates the session's rules and asks when the last matching rule says `ask`; a
+ * method's action `<name>.<method>` and the resources its declared operations name (`<alias>:<operation>`, or
+ * `<alias>:*` when it declares none). The host evaluates the session's rules and asks when the last matching rule says `ask`; a
  * deny or a rejection rejects. A tool or Code Mode call may save a pattern scoped to this method's action and account
  * (`<account>:*`) so "Always allow" cannot become a project-wide `*`; an RPC call never saves, because its answer
  * applies to that one call only.

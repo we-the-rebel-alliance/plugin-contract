@@ -135,13 +135,10 @@ plan's account; another account is `ACCOUNT_MISMATCH`. The handler's own input s
 
 ## Permissions on operations
 
-For a method that declares `operations`, the register asserts permissions on each one before the handler runs:
-
-- a dotted operation, such as `gmail.users.messages.get`, is the method's action on `<alias>:<operation>`;
-- a bare operation, an MCP tool, is `<server>_<operation>` on `*`, with the server derived per alias.
-
-A rule for `work` therefore reaches only `<name>-work_<tool>`, never another alias's tools. A denied or rejected
-assertion is `PERMISSION_DENIED`.
+The one gate asks the method's action `<name>.<method>` on `<alias>:<operation>` for each declared operation, or on
+`<alias>:*` when the method declares none. Pass-through MCP tools keep their own `<server>_<tool>` access rules, one
+per alias, so a rule for `work` never reaches another alias's tools. A denied or rejected gate is
+`PERMISSION_DENIED`.
 
 ## Errors
 
