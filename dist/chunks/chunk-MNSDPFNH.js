@@ -227,6 +227,20 @@ function accountStatuses(accounts, signals = {}) {
   return accounts.map((account) => accountStatus(account.alias, signals[account.alias]));
 }
 var NO_ACCOUNTS = [];
+var SIGN_IN_NEXT = "Sign in to the account that needs it, then read status again.";
+function statusAnswer(input) {
+  const problems = input.problems ?? [];
+  const needsSignIn = input.accounts.some((account) => account.state === "needs_sign_in");
+  return {
+    name: input.manifest.plugin.name,
+    version: input.version,
+    host: { version: input.hostVersion, range: input.manifest.plugin.host.opencode, tested: [...input.manifest.plugin.host.tested] },
+    state: problems.length > 0 ? "error" : needsSignIn ? "needs_sign_in" : "ready",
+    accounts: [...input.accounts],
+    unguardedAgents: [...input.unguardedAgents],
+    nextStep: problems.length > 0 ? redactReason(problems[0]) : needsSignIn ? SIGN_IN_NEXT : null
+  };
+}
 var STATUS_SCHEMA = {
   type: "object",
   properties: {
@@ -283,5 +297,6 @@ export {
   accountStatus,
   accountStatuses,
   NO_ACCOUNTS,
+  statusAnswer,
   STATUS_SCHEMA
 };

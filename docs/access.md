@@ -8,11 +8,12 @@ rule language.
 import { applyAccess, unguardedAgents } from "@we-the-rebel-alliance/plugin-contract/access"
 
 const access = await applyAccess(ctx, { manifest, options: ctx.options })
-status.unguardedAgents = unguardedAgents((await ctx.agent.list()).data, access.rules)
+const agents = unguardedAgents((await ctx.agent.list()).data, access.rules)
 ```
 
-`register` calls `applyAccess` itself, so a plugin that only calls `register` gets its access rules too. Import
-`access` directly when a plugin builds status or wants the rules for a test.
+`register` calls `applyAccess` itself, so a plugin that only calls `register` gets its access rules too. A status
+handler reads the same two values from its call, with no setup state: `call.access` is the registration and
+`await call.unguardedAgents()` is the list. Import `access` directly when a test wants the rules.
 
 ## The three levels
 

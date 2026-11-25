@@ -4,22 +4,22 @@ import {
 } from "./chunk-ED3MMWUJ.js";
 import {
   acceptAnswer
-} from "./chunk-LRXS6ETF.js";
+} from "./chunk-4QYYKDFG.js";
 import {
   effectFor,
   evaluate,
   serverOf,
   sessionRules,
   toolAction
-} from "./chunk-ZEP3QZCO.js";
+} from "./chunk-A6V4KQTI.js";
 import {
   maxBytesOf,
   methodAccounts,
   readInstalledManifest
-} from "./chunk-7Z4DMIE3.js";
+} from "./chunk-RUROPP57.js";
 import {
   checkOutput
-} from "./chunk-OXBQN5YW.js";
+} from "./chunk-236PJ6AN.js";
 import {
   BUS_EVENTS,
   ERROR_CODES,
@@ -35,7 +35,7 @@ import {
   removalProblems,
   sourceNamespace,
   thumbnailUrlProblems
-} from "./chunk-2BPMCEJ3.js";
+} from "./chunk-VAFQUKZ3.js";
 import {
   secretKinds
 } from "./chunk-L3NVT2DE.js";
@@ -44,7 +44,7 @@ import {
   REASON_MAX,
   aliasProblem,
   isAlias
-} from "./chunk-YJVHB7PG.js";
+} from "./chunk-MNSDPFNH.js";
 import {
   fromJSONSchema
 } from "./chunk-4YITQAYJ.js";
@@ -11230,6 +11230,32 @@ var TurnLog = class {
 };
 
 // src/internal/host/index.ts
+var HOST_DENIALS = /* @__PURE__ */ new Set(["Permission.BlockedError", "Permission.DeclinedError", "Permission.CorrectedError"]);
+function reportedCode(error2) {
+  if (typeof error2 !== "object" || error2 === null) return void 0;
+  const held = error2;
+  const data = held.data?.code;
+  if (typeof data === "string" && data !== "") return data;
+  return typeof held.code === "string" && held.code !== "" ? held.code : void 0;
+}
+function codeOf(error2) {
+  const reported = reportedCode(error2);
+  if (reported !== void 0) return reported;
+  const message = error2 instanceof Error ? error2.message : typeof error2 === "string" ? error2 : "";
+  const leading = /^([A-Z][A-Z0-9_]*): /.exec(message)?.[1];
+  if (leading !== void 0) return leading;
+  for (const holder of [error2, typeof error2 === "object" && error2 !== null ? error2.error : void 0]) {
+    const tag = typeof holder === "object" && holder !== null ? holder._tag : void 0;
+    if (typeof tag === "string" && HOST_DENIALS.has(tag)) return "PERMISSION_DENIED";
+  }
+  return "UNAVAILABLE";
+}
+function assertFailure(error2) {
+  const raw = error2 instanceof Error ? error2.message : String(error2);
+  const secrets = secretKinds(raw);
+  const message = secrets.length === 0 ? raw.slice(0, 300) : `the host's error held a secret (${secrets.join(", ")}), which the kit did not print`;
+  return { ok: false, code: codeOf(error2), message };
+}
 var SDK = ["@opencode", "sdk"].join("/");
 var PLUGIN_HOST = ["@opencode", "plugin", "host"].join("/");
 async function load(specifier) {
@@ -11449,8 +11475,13 @@ async function createHost(options) {
       return created.id;
     },
     async assert(input) {
-      if (assertAction === void 0) throw new HostError("HOST_UNAVAILABLE", "the plugin never reached setup, so this run has no permission domain", "fix the load failure first, then run T1 again");
-      await assertAction({ sessionID: input.sessionID, action: input.action, resources: input.resources ?? ["*"] });
+      if (assertAction === void 0) return { ok: false, code: "UNAVAILABLE", message: "the plugin never reached setup, so this run has no permission domain" };
+      try {
+        await assertAction({ sessionID: input.sessionID, action: input.action, resources: input.resources ?? ["*"] });
+        return { ok: true };
+      } catch (error2) {
+        return assertFailure(error2);
+      }
     },
     async close() {
       if (closed) return;
@@ -11475,7 +11506,7 @@ function emptyRun(options, entry, failure) {
       return "";
     },
     async assert() {
-      throw new HostError("HOST_UNAVAILABLE", failure, "fix the load failure first, then run T1 again");
+      return { ok: false, code: "UNAVAILABLE", message: failure };
     },
     async close() {
     }
@@ -11685,6 +11716,19 @@ async function rpcFindings(manifest, run, inputs, aliases) {
 function grantAliasApplies(manifest, aliases) {
   return aliases.length >= 2 && Object.keys(manifest.methods).some((method) => method.startsWith("mcp:")) && manifest.sources.some((entry) => (entry.operations ?? []).some((operation) => !operation.includes(".")));
 }
+var GRANT_ASSERT_TIMEOUT_MS = 1500;
+async function assertWithin(run, input) {
+  let timer;
+  const late = new Promise((resolve2) => {
+    timer = setTimeout(() => resolve2({ ok: false, code: "TIMEOUT", message: `the host did not answer the assert for ${input.action} within ${GRANT_ASSERT_TIMEOUT_MS} ms` }), GRANT_ASSERT_TIMEOUT_MS);
+  });
+  const asked = Promise.resolve(run.assert(input)).catch(() => ({ ok: false, code: "UNAVAILABLE", message: "the host's assert threw instead of answering; a host failure is reported as UNAVAILABLE" }));
+  try {
+    return await Promise.race([asked, late]);
+  } finally {
+    if (timer !== void 0) clearTimeout(timer);
+  }
+}
 async function grantAliasFindings(manifest, run, aliases) {
   if (!grantAliasApplies(manifest, aliases)) return [];
   const source = manifest.sources.find((entry) => (entry.operations ?? []).some((operation2) => !operation2.includes(".")));
@@ -11704,25 +11748,30 @@ async function grantAliasFindings(manifest, run, aliases) {
   const denied = toolAction(other.value, operation);
   const sessionID = await run.session(fenced.value);
   const findings = [];
-  try {
-    await run.assert({ sessionID, action: allowed, resources: ["*"] });
-  } catch {
+  const own = await assertWithin(run, { sessionID, action: allowed, resources: ["*"] });
+  if (!own.ok) {
     findings.push(
-      error("T1.grant-alias", `a grant for ${first} does not allow its own tool ${allowed}`, {
+      error("T1.grant-alias", `a grant for ${first} does not allow its own tool ${allowed} (${own.code}: ${own.message})`, {
         path: `capabilities.sources.${source.id}`,
         fix: "Derive the fenced rule from operationRule, so the granted alias's MCP tool is allowed."
       })
     );
   }
-  try {
-    await run.assert({ sessionID, action: denied, resources: ["*"] });
+  const crossed = await assertWithin(run, { sessionID, action: denied, resources: ["*"] });
+  if (crossed.ok) {
     findings.push(
       error("T1.grant-alias", `a grant for ${first} allows ${second}'s tool ${denied}, so one alias can reach another alias's tools`, {
         path: `capabilities.sources.${source.id}`,
         fix: "Compile the grant to the granted alias's server only, never to a wildcard that matches another alias."
       })
     );
-  } catch {
+  } else if (crossed.code !== "PERMISSION_DENIED") {
+    findings.push(
+      error("T1.grant-alias", `a grant for ${first} does not deny ${second}'s tool ${denied} with PERMISSION_DENIED: the host answered ${crossed.code} (${crossed.message})`, {
+        path: `capabilities.sources.${source.id}`,
+        fix: "Compile the grant to a deny for every other alias's server, so the other alias's tool is refused, not asked."
+      })
+    );
   }
   return findings;
 }

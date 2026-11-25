@@ -14,7 +14,7 @@
  * an answer applies to that one call.
  *
  * The registration carries the bus's events block (`busEvents(name)`); a second registration with the same id would
- * hide it, so the plugin registers once, and `register(..., { bus: true })` wraps that one registration with `createBus`.
+ * hide it, so the plugin registers once, and `register` wraps that one registration with the bus writer.
  */
 import { randomUUID } from "node:crypto"
 import type { Plugin } from "@opencode/plugin"
@@ -25,7 +25,7 @@ import type { JsonSchema } from "../manifest.ts"
 import { callEffect, gate } from "./assertions.ts"
 import { permissionRefusal, refusal, refusalOf, RegisterError, type Refusal } from "./errors.ts"
 import type { MethodEntry } from "./handlers.ts"
-import { execute, prepareCall, type BusRef, type CallEnvironment } from "./invoke.ts"
+import { execute, prepareCall, type BusReader, type CallEnvironment } from "./invoke.ts"
 import { validate } from "./validate.ts"
 
 /** The envelope's failure, as the RPC declares it: the code and the next step beside the message. */
@@ -212,7 +212,7 @@ async function invoke(
   raw: unknown,
   rpc: RpcCallContext,
   freshAsks: Set<string>,
-  bus: BusRef | undefined,
+  bus: BusReader,
 ): Promise<unknown> {
   let prepared: Awaited<ReturnType<typeof prepareCall>> | undefined
   try {
@@ -268,11 +268,14 @@ async function invoke(
     }
     if (prepared === undefined) throw new RegisterError(refusal("UNAVAILABLE", "the RPC call prepared no input", "Try again; if it keeps failing, check the plugin's status."))
     if (!gated) {
+      // The source carries the RPC call's id on every ask, fresh or not: it is the handle a cancellation uses to
+      // reject the request this call left pending. `fresh` decides only the one-call evaluate behaviour.
       const source = { type: "tool" as const, messageID: "msg_rpc", id: callID }
       if (fresh) freshAsks.add(callID)
       try {
-        // A fresh one-call ask: the evaluate hook turns an allow that came only from a saved approval back into ask.
-        await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: callID, signal: rpc.signal }, prepared.account, { save: false, ...(fresh ? { source } : {}) })
+        // The evaluate hook reads `freshAsks`: for a fresh ask it turns an allow that came only from a saved approval
+        // back into ask. The source is on every ask, so a cancellation can always find the request it opened.
+        await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: callID, signal: rpc.signal }, prepared.account, { save: false, source })
       } catch (error) {
         throw new RegisterError(permissionRefusal(error, `${environment.name}.${entry.name}`))
       } finally {
@@ -281,7 +284,7 @@ async function invoke(
     }
     const messageID = "msg_rpc"
     const id = `rpc:${randomUUID()}`
-    const value = await execute(entry, prepared, { sessionID, agent: resolved.agent, messageID, id, signal: rpc.signal, progress: async () => {}, door: "rpc" }, environment.plans, bus)
+    const value = await execute(environment, entry, prepared, { sessionID, agent: resolved.agent, messageID, id, signal: rpc.signal, progress: async () => {}, door: "rpc" }, bus)
     return value === undefined ? null : JSON.parse(JSON.stringify(value))
   } catch (error) {
     // A refusal before the handler releases the plan; after the handler starts, consume already made this a no-op.
@@ -293,7 +296,7 @@ async function invoke(
 }
 
 /** The RPC definition and handlers, and the one registration that carries the bus events. */
-export async function installRpc(context: RpcContext, environment: CallEnvironment, level: AccessLevel, wiring?: GrantWiring, bus?: BusRef): Promise<RpcRegistration> {
+export async function installRpc(context: RpcContext, environment: CallEnvironment, level: AccessLevel, wiring: GrantWiring | undefined, bus: BusReader): Promise<RpcRegistration> {
   const methods: Record<string, unknown> = {}
   const handlers: Record<string, (input: unknown, call: RpcCallContext) => Promise<unknown>> = {}
   for (const entry of environment.entries) {

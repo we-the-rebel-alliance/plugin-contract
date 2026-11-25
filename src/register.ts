@@ -2,8 +2,8 @@
  * `register`: doors 1–3 from one handler table (contract §9).
  *
  *   assertHost(ctx, manifest)
- *   const registration = await register(ctx, manifest, handlers, { bus: true })
- *   await registration.bus?.emit("changed", { … })
+ *   const registration = await register(ctx, manifest, handlers)
+ *   await registration.bus.emit("changed", { … })
  *
  * Every method is written once and reached as an agent tool in the `<name>` namespace, as `tools.<name>.<method>` in
  * Code Mode and automations, and as `POST /api/rpc/<name>/<method>` with `{ sessionID, input }` under the session's

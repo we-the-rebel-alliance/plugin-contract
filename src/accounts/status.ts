@@ -4,8 +4,12 @@
  * `status` lists every alias with a `state` of `ready`, `needs_sign_in` or `error`, and the owner once a probe has
  * answered. A failure reason is one line of at most 160 characters, redacted: no URL query string, no bearer token, no
  * token-shaped text, no control character. The library never echoes what a provider said.
+ *
+ * `statusAnswer` assembles the whole answer, so a plugin's `status` handler is a short call to it with the versions,
+ * the account states and the problems it already knows: no state kept between `register` and the handler, no shape
+ * copied.
  */
-import type { JsonSchema, Owner } from "../manifest/types.ts"
+import type { JsonSchema, Manifest, Owner } from "../manifest/types.ts"
 import type { AccountProfile } from "./profiles.ts"
 
 /** What an account can be. */
@@ -78,6 +82,56 @@ export function accountStatuses(accounts: readonly AccountProfile[], signals: Re
 
 /** The status of a plugin with no accounts: an empty list, never a `default` the person cannot sign in to. */
 export const NO_ACCOUNTS: readonly AccountStatus[] = []
+
+/** What `status` knows when it answers: the manifest, the versions, every alias's state, and the agents the rules miss. */
+export interface StatusInput {
+  readonly manifest: Manifest
+  /** The installed package's version. */
+  readonly version: string
+  /** The OpenCode release the plugin runs on: `ctx.app.version`. */
+  readonly hostVersion: string
+  /** One entry per alias, in the options' order. */
+  readonly accounts: readonly AccountStatus[]
+  /** Why the plugin is not ready before any account is asked: a failed registration, an unreadable agent list. */
+  readonly problems?: readonly string[] | undefined
+  /** The agents whose rules no longer give every generated rule its effect, from `access.unguardedAgents`. */
+  readonly unguardedAgents: readonly string[]
+}
+
+/** The `status` answer (contract §11), as `STATUS_SCHEMA` describes it. */
+export interface StatusAnswer {
+  readonly name: string
+  readonly version: string
+  readonly host: { readonly version: string; readonly range: string; readonly tested: readonly string[] }
+  readonly state: AccountState
+  readonly accounts: readonly AccountStatus[]
+  readonly unguardedAgents: readonly string[]
+  /** One redacted line a person can act on, or null when the plugin is ready. */
+  readonly nextStep: string | null
+}
+
+/** The next step a `needs_sign_in` state gives when nothing else is wrong. */
+const SIGN_IN_NEXT = "Sign in to the account that needs it, then read status again."
+
+/**
+ * The whole `status` answer from what the handler knows: the manifest, the installed and host versions, every alias's
+ * state, the problems setup recorded, and the agents the generated rules miss. `state` is `error` when there is a
+ * problem, else `needs_sign_in` when an account is, else `ready`; `nextStep` is the first redacted problem, the
+ * sign-in sentence, or null. A handler needs no state of its own: it passes the values it has and answers this.
+ */
+export function statusAnswer(input: StatusInput): StatusAnswer {
+  const problems = input.problems ?? []
+  const needsSignIn = input.accounts.some((account) => account.state === "needs_sign_in")
+  return {
+    name: input.manifest.plugin.name,
+    version: input.version,
+    host: { version: input.hostVersion, range: input.manifest.plugin.host.opencode, tested: [...input.manifest.plugin.host.tested] },
+    state: problems.length > 0 ? "error" : needsSignIn ? "needs_sign_in" : "ready",
+    accounts: [...input.accounts],
+    unguardedAgents: [...input.unguardedAgents],
+    nextStep: problems.length > 0 ? redactReason(problems[0]) : needsSignIn ? SIGN_IN_NEXT : null,
+  }
+}
 
 /**
  * The JSON Schema of `status` (contract §11): the plugin's identity, the host range it runs on, its state, every alias's

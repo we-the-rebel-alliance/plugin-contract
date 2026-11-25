@@ -10,7 +10,8 @@
  * - the access matrix holds for every real agent at `all`, `ask-changes` and `read-only`, using `effectFor` from
  *   `./access` (`T1.permissions`);
  * - a non-read method over RPC with an allow rule and no grant is refused (LD-5, `T1.rpc-confirmation`);
- * - a grant for one alias cannot reach another alias's MCP tool (`T1.grant-alias`);
+ * - a grant for one alias allows its own MCP tool, and the host denies another alias's with `PERMISSION_DENIED`, each
+ *   assert bounded so a rule that asks is a finding and not a hang (`T1.grant-alias`);
  * - a pinned tool matches the manifest and its signature stays within the Code Mode budget (`T1.pinned`);
  * - two aliases ask for a missing account and refuse an unknown one against the running plugin (`T1.accounts`).
  *
@@ -18,7 +19,7 @@
  */
 import { effectFor, evaluate, serverOf, sessionRules, toolAction, type AccessLevel, type PermissionRule } from "../../access.ts"
 import { hostInRange, OPENCODE_RANGE, type Manifest } from "../../manifest.ts"
-import { createHost, type HostRun } from "../host/index.ts"
+import { createHost, type AssertResult, type HostRun } from "../host/index.ts"
 import { error, warning, type Finding } from "./report.ts"
 
 /** The release the contract is built and tested against. */
@@ -280,6 +281,10 @@ async function rpcFindings(manifest: Manifest, run: HostRun, inputs: Readonly<Re
 /**
  * The grant fence is per alias: a grant for one alias's source allows that alias's MCP tool and denies every other
  * alias's, on the real session and the real `ctx.permission.assert`. The mcp example proves it in the self-test.
+ *
+ * Only `PERMISSION_DENIED` proves the deny: an ask, an `allow`, a `TIMEOUT` or any other code is a finding, because none
+ * of them says the other alias's tool is fenced off. Each assert is bounded, so a plugin whose compiled rule asks
+ * becomes a finding instead of hanging the kit.
  */
 function grantAliasApplies(manifest: Manifest, aliases: readonly string[]): boolean {
   return (
@@ -289,7 +294,28 @@ function grantAliasApplies(manifest: Manifest, aliases: readonly string[]): bool
   )
 }
 
-async function grantAliasFindings(manifest: Manifest, run: HostRun, aliases: readonly string[]): Promise<Finding[]> {
+/** The most time one assert may take: a rule the host turns into an ask never answers on its own. Exported so a test can measure the bound. */
+export const GRANT_ASSERT_TIMEOUT_MS = 1_500
+
+/** One assert, answered by the host or by the clock; a never-answering ask is a `TIMEOUT`, never a hang. */
+async function assertWithin(run: HostRun, input: { readonly sessionID: string; readonly action: string; readonly resources: readonly string[] }): Promise<AssertResult> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<AssertResult>((resolve) => {
+    timer = setTimeout(() => resolve({ ok: false, code: "TIMEOUT", message: `the host did not answer the assert for ${input.action} within ${GRANT_ASSERT_TIMEOUT_MS} ms` }), GRANT_ASSERT_TIMEOUT_MS)
+  })
+  const asked = Promise.resolve(run.assert(input)).catch(() => ({ ok: false as const, code: "UNAVAILABLE", message: "the host's assert threw instead of answering; a host failure is reported as UNAVAILABLE" }))
+  try {
+    return await Promise.race([asked, late])
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
+  }
+}
+
+/**
+ * The fence, proven on a real run: the granted alias's tool is allowed and every other alias's is `PERMISSION_DENIED`.
+ * Exported so the stub-host tests can prove the deny side without a real host.
+ */
+export async function grantAliasFindings(manifest: Manifest, run: HostRun, aliases: readonly string[]): Promise<Finding[]> {
   if (!grantAliasApplies(manifest, aliases)) return []
   const source = manifest.sources.find((entry) => (entry.operations ?? []).some((operation) => !operation.includes(".")))
   if (source === undefined) return []
@@ -308,26 +334,30 @@ async function grantAliasFindings(manifest: Manifest, run: HostRun, aliases: rea
   const denied = toolAction(other.value, operation)
   const sessionID = await run.session(fenced.value)
   const findings: Finding[] = []
-  try {
-    await run.assert({ sessionID, action: allowed, resources: ["*"] })
-  } catch {
+  const own = await assertWithin(run, { sessionID, action: allowed, resources: ["*"] })
+  if (!own.ok) {
     findings.push(
-      error("T1.grant-alias", `a grant for ${first} does not allow its own tool ${allowed}`, {
+      error("T1.grant-alias", `a grant for ${first} does not allow its own tool ${allowed} (${own.code}: ${own.message})`, {
         path: `capabilities.sources.${source.id}`,
         fix: "Derive the fenced rule from operationRule, so the granted alias's MCP tool is allowed.",
       }),
     )
   }
-  try {
-    await run.assert({ sessionID, action: denied, resources: ["*"] })
+  const crossed = await assertWithin(run, { sessionID, action: denied, resources: ["*"] })
+  if (crossed.ok) {
     findings.push(
       error("T1.grant-alias", `a grant for ${first} allows ${second}'s tool ${denied}, so one alias can reach another alias's tools`, {
         path: `capabilities.sources.${source.id}`,
         fix: "Compile the grant to the granted alias's server only, never to a wildcard that matches another alias.",
       }),
     )
-  } catch {
-    // The real host denies the other alias's tool, as the fence requires.
+  } else if (crossed.code !== "PERMISSION_DENIED") {
+    findings.push(
+      error("T1.grant-alias", `a grant for ${first} does not deny ${second}'s tool ${denied} with PERMISSION_DENIED: the host answered ${crossed.code} (${crossed.message})`, {
+        path: `capabilities.sources.${source.id}`,
+        fix: "Compile the grant to a deny for every other alias's server, so the other alias's tool is refused, not asked.",
+      }),
+    )
   }
   return findings
 }

@@ -1,15 +1,16 @@
 /**
- * The writer side of the bus: a plugin registers the three events inside its one RPC registration and emits nudges
+ * The writer side of the bus: `register` registers the three events inside its one RPC registration and answers nudges
  * (contract §10).
  *
- *   const registration = await ctx.rpc.register({ id: name, methods, events: busEvents(name) }, handlers)
- *   const bus = createBus(name, registration)
+ *   const rpc = await installRpc(context, environment, level, grant)
+ *   const bus = createBus(name, rpc)
  *   await bus.emit("changed", { capability: "slack.mentions", account: "work", reason: "write" })
  *
- * `createBus` never registers anything. OpenCode keeps a list of registrations per RPC id and resolves a call to the
- * last one, so a second registration with id `<name>` would hide the plugin's methods and every call would answer
- * `rpc.method_not_found`. The plugin therefore registers once, with `busEvents(name)` merged into its methods, and this
- * module only wraps the events emitter of that registration.
+ * This module is internal: `register` is the only caller, and a plugin reaches the writer as `registration.bus` and
+ * `call.bus`. `createBus` never registers anything. OpenCode keeps a list of registrations per RPC id and resolves a
+ * call to the last one, so a second registration with id `<name>` would hide the plugin's methods and every call would
+ * answer `rpc.method_not_found`. The plugin therefore registers once, with `busEvents(name)` merged into its methods,
+ * and this module only wraps the events emitter of that registration.
  *
  * The host publishes each accepted emit as `rpc.<name>.<event>` on `/api/event`. A payload is checked before it leaves
  * the plugin: a malformed one is refused with its field paths, and one holding a secret is refused with reason

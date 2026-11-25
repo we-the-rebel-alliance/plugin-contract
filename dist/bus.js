@@ -7,13 +7,12 @@ import {
   busEventType,
   busEvents,
   capabilityPattern,
-  createBus,
   isPluginName,
   readBusEvent
-} from "./chunks/chunk-JXGABKQH.js";
+} from "./chunks/chunk-6EQKU7LR.js";
 import "./chunks/chunk-FTEX4OOT.js";
 import "./chunks/chunk-L3NVT2DE.js";
-import "./chunks/chunk-YJVHB7PG.js";
+import "./chunks/chunk-MNSDPFNH.js";
 import "./chunks/chunk-4YITQAYJ.js";
 import "./chunks/chunk-WLRWVIVP.js";
 export {
@@ -24,7 +23,6 @@ export {
   busEventType,
   busEvents,
   capabilityPattern,
-  createBus,
   isPluginName,
   readBusEvent
 };

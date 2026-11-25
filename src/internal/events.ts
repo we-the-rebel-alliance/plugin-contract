@@ -888,6 +888,28 @@ export const PROBE_SCHEMA: JsonSchema = {
   additionalProperties: false,
 }
 
+/**
+ * The JSON Schema of a list-options answer (contract §11): `{ options: [{ id, label? }] }`, the shape a `list_*`
+ * method answers so a person can confirm a scope value. `id` is the value the read takes; `label` is what the person
+ * reads, at most 200 characters. A plugin reuses this constant instead of copying the shape.
+ */
+export const LIST_OPTIONS_SCHEMA: JsonSchema = {
+  type: "object",
+  properties: {
+    options: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { id: { type: "string", minLength: 1 }, label: { type: "string", maxLength: 200 } },
+        required: ["id"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["options"],
+  additionalProperties: false,
+}
+
 /** `probe`'s input checked, or its problems, naming fields and never values. Anything but source and account is refused. */
 export function parseProbeInput(input: unknown): { ok: true; value: ProbeInput } | { ok: false; problems: string[] } {
   const value = input === undefined || input === null ? {} : input

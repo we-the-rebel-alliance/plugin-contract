@@ -86,12 +86,16 @@ export interface HostRun {
     }): Promise<RpcAnswer>;
     /** A session whose rules are exactly `rules`; the plugin's own rules still apply through its agents. */
     session(rules: readonly PermissionRule[]): Promise<string>;
-    /** Assert one action through the real `ctx.permission.assert`; a deny rejects, as it does for the plugin's own gate. */
+    /**
+     * Assert one action through the real `ctx.permission.assert` and answer its result: `{ ok: true }` when the host
+     * allowed it, or `{ ok: false, code, message }` with the contract code (`PERMISSION_DENIED` for the host's deny and
+     * rejection, `UNAVAILABLE` for anything unrecognised). It never throws, so a check can bound its own wait.
+     */
     assert(input: {
         readonly sessionID: string;
         readonly action: string;
         readonly resources?: readonly string[] | undefined;
-    }): Promise<void>;
+    }): Promise<AssertResult>;
     close(): Promise<void>;
 }
 /** One RPC answer or refusal, with the contract code the host reported. */
@@ -103,6 +107,16 @@ export type RpcAnswer = {
     readonly code: string;
     readonly message: string;
 };
+/** What one permission assert answered: allowed, or refused with a contract code and the host's line. */
+export type AssertResult = {
+    readonly ok: true;
+} | {
+    readonly ok: false;
+    readonly code: string;
+    readonly message: string;
+};
+/** The one failure shape, with the host's own line: a secret is named by kind and never printed, and a long line is cut. */
+export declare function assertFailure(error: unknown): AssertResult;
 /** What `createHost` needs. */
 export interface HostOptions {
     readonly directory: string;

@@ -107,6 +107,9 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
   const ctx: RegisterContext = {
     ...(options.options === undefined ? {} : { options: options.options }),
     agent: {
+      async list() {
+        return { data: agents.map((agent) => ({ id: agent.id, permissions: [...agent.permissions] })) }
+      },
       async transform(callback) {
         callback({
           list: () => agents,

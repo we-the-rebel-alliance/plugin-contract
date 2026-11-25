@@ -7,7 +7,7 @@ import {
 } from "./chunk-L3NVT2DE.js";
 import {
   ALIAS_PATTERN
-} from "./chunk-YJVHB7PG.js";
+} from "./chunk-MNSDPFNH.js";
 import {
   _enum,
   object,
@@ -119,30 +119,6 @@ function readBusEvent(payload, options) {
   return { ok: true, event: { type, name, event, data: data.value } };
 }
 
-// src/bus/writer.ts
-function createBus(name, registration) {
-  assertPluginName(name);
-  return {
-    name,
-    async emit(event, data) {
-      if (!BUS_EVENTS.includes(event)) {
-        return { ok: false, reason: "invalid", problems: ["event: must be one of changed, status, account"] };
-      }
-      const text = serialise(data);
-      if (text !== void 0 && holdsSecret(text)) return { ok: false, reason: "secret" };
-      const checked = checkBusData(name, event, data);
-      if (!checked.ok) return { ok: false, reason: "invalid", problems: checked.problems };
-      if (text === void 0) return { ok: false, reason: "invalid", problems: ["data: must be JSON"] };
-      try {
-        await registration.events.emit(event, checked.value);
-      } catch {
-        return { ok: false, reason: "unavailable" };
-      }
-      return { ok: true };
-    }
-  };
-}
-
 export {
   BUS_EVENTS,
   BUS_STATES,
@@ -150,8 +126,10 @@ export {
   isPluginName,
   assertPluginName,
   capabilityPattern,
+  serialise,
+  holdsSecret,
   busEvents,
+  checkBusData,
   busEventType,
-  readBusEvent,
-  createBus
+  readBusEvent
 };

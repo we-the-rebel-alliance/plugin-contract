@@ -1,4 +1,5 @@
 import { type AccountProfile } from "../accounts.js";
+import { type AccessRegistration, type AgentLike } from "../access/agents.js";
 import type { Bus } from "../bus.js";
 import { type Manifest } from "../manifest.js";
 import { type PlanReservation, type PlanStore } from "./plans.js";
@@ -13,13 +14,19 @@ export interface CallEnvironment {
     readonly accounts: readonly AccountProfile[];
     /** The plans this plugin instance made: a commit runs as the account its plan recorded. */
     readonly plans: PlanStore;
+    /** The rules `register` generated into every agent, and what status reads them from. */
+    readonly access: AccessRegistration;
+    /** The host's agents as they are when the call asks, so status reads no state kept at setup. */
+    readonly agents: () => Promise<readonly AgentLike[]>;
 }
-/** The bus writer `register` fills in after its RPC registration exists, so every door reads the same one. */
-export interface BusRef {
-    current?: Bus | undefined;
-}
+/**
+ * The one bus writer, read when a handler runs. `register` creates it from its single RPC registration, which exists
+ * only after the doors are wired, so the doors hold this reader rather than a mutable placeholder; no call can run
+ * before `setup` returns.
+ */
+export type BusReader = () => Bus;
 /** The handler table and account set, validated once at setup. */
-export declare function prepare(manifest: Manifest, handlers: HandlerTable, accounts: readonly AccountProfile[]): CallEnvironment;
+export declare function prepare(manifest: Manifest, handlers: HandlerTable, accounts: readonly AccountProfile[], access: AccessRegistration, agents: () => Promise<readonly AgentLike[]>): CallEnvironment;
 /** A call's input and the account it resolves to, before any handler runs. */
 export interface PreparedCall {
     readonly input: Record<string, unknown>;
@@ -37,7 +44,7 @@ export declare function prepareCall(entry: MethodEntry, raw: unknown, accounts: 
 /** The answer, checked; a plan must name the method that commits it, and must not mint its own id. */
 export declare function checkedOutput(entry: MethodEntry, value: unknown): unknown;
 /** Run a prepared call's handler, checking its answer and mapping its failure. */
-export declare function execute(entry: MethodEntry, prepared: PreparedCall, call: Omit<MethodCall, "account" | "plan" | "bus">, plans: PlanStore, bus?: BusRef): Promise<unknown>;
+export declare function execute(environment: CallEnvironment, entry: MethodEntry, prepared: PreparedCall, call: Omit<MethodCall, "account" | "plan" | "bus" | "access" | "unguardedAgents">, bus: BusReader): Promise<unknown>;
 /** The door's call context from an OpenCode tool context. */
 export declare function toolCall(context: {
     readonly sessionID: string;
@@ -46,4 +53,4 @@ export declare function toolCall(context: {
     readonly id: string;
     readonly signal: AbortSignal;
     readonly progress: (update: Readonly<Record<string, unknown>>) => Promise<void>;
-}, door: Exclude<Door, "rpc">): Omit<MethodCall, "account">;
+}, door: Exclude<Door, "rpc">): Omit<MethodCall, "account" | "plan" | "bus" | "access" | "unguardedAgents">;

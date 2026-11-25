@@ -12,17 +12,16 @@ export default Plugin.define({
   id: manifest.plugin.name,
   async setup(ctx) {
     assertHost(ctx, manifest)
-    const registration = await register(ctx, manifest, handlers, { bus: true })
+    const registration = await register(ctx, manifest, handlers)
     return () => registration.dispose()
   },
 })
 ```
 
-The returned registration carries the bus events emitter. With `{ bus: true }` the register also builds the typed writer
-and returns it as `registration.bus`, and every handler call carries it as `call.bus` (§10), so a plugin needs no mutable
-placeholder between `register` and `createBus`. Only the events the manifest declares are registered; emitting an
-undeclared one answers `unavailable`. A plugin never calls `ctx.rpc.register` itself, never adds a tool itself, and never
-evaluates a permission rule itself.
+The returned registration carries the bus events emitter and the typed writer as `registration.bus`, and every handler
+call carries the same writer as `call.bus` (§10), so a plugin needs no flag, no mutable placeholder and no second
+registration. Only the events the manifest declares are registered; emitting an undeclared one answers `unavailable`.
+A plugin never calls `ctx.rpc.register` itself, never adds a tool itself, and never evaluates a permission rule itself.
 
 ## The host gate
 
@@ -53,11 +52,16 @@ const handlers = {
 | `description` | The agent tool's description. |
 | `input` | The method's own JSON Schema object, without `account`. The register adds the account selector. |
 | `output` | The answer's JSON Schema. A `plans` method answers `{ method, … }`; the register mints the `planId` and the door publishes `PLAN_OUTPUT`. |
-| `run(input, call)` | The work. `call` carries the session, agent, message id, call id, signal, progress, resolved `account` and door. |
+| `run(input, call)` | The work. `call` carries the session, agent, message id, call id, signal, progress, resolved `account`, `bus`, `access`, `unguardedAgents()` and door. |
 
 `register` refuses a declared method with no handler, a handler the manifest does not declare, and a handler for a
 pass-through MCP method (`mcp:*`). A pass-through MCP method is declared in `methods` for its class and access rule; the
 vendor's server owns its tool, so this module does not register or proxy it.
+
+A handler needs no state of its own. `call.bus` is the writer from the one RPC registration, `call.access` is the
+`AccessRegistration` whose rules `register` generated, and `call.unguardedAgents()` asks the host for the agents whose
+rules no longer give every generated rule its effect. Status reads all three from the call, so nothing is written after
+`register` returns.
 
 ## Doors 1–3
 
@@ -90,8 +94,8 @@ Every call passes one gate, `ctx.permission.assert`, once (OpenCode 2.4.1 `Permi
 say `ask`; a `deny` refuses it. The plugin's own `access` level is final: under `read-only` a non-read RPC call is
 refused even with a grant; under `ask-changes` or `all` it needs an ask or a valid grant. An `allow` rule is not a
 confirmation. RPC asks never save: an answer applies to that one call. A call's `signal` cancels a pending ask: the
-gate rejects the request it opened (found by the call's source id) so nothing stays on the person's screen, refuses at
-once, and a commit releases its plan instead of holding it until expiry.
+gate rejects the request it opened (found by the call's source id, which every RPC ask carries) so nothing stays on the
+person's screen, refuses at once, and a commit releases its plan instead of holding it until expiry.
 
 A **non-read** method over RPC needs one of contract §8's two confirmations (LD-5):
 
@@ -139,8 +143,9 @@ The register resolves the account through the `accounts` module before the handl
 
 The input is checked against the handler's schema (`INPUT_INVALID`), the answer against its output schema
 (`SCHEMA_VIOLATION`). A schema with `additionalProperties: false` also refuses an unknown key. A plugin reuses the
-package's output schemas instead of copying them: `STATUS_SCHEMA` from `accounts` for `status`, and `PAGE_SCHEMA` and
-`PROBE_SCHEMA` from `events` for an events source's `events_list` and `probe`.
+package's output schemas instead of copying them: `STATUS_SCHEMA` from `accounts` for `status`, `PAGE_SCHEMA`,
+`PROBE_SCHEMA` and `LIST_OPTIONS_SCHEMA` from `events` for an events source's `events_list`, `probe` and its `list_*`
+scope suggest.
 
 A `plans: true` method answers the committing `method` and §8's preview fields it carries (`output`, `reaches`,
 `changes`, `cost`, `trust`), and any private plan data; it must not answer a `planId` (`PLAN_INVALID`). The register
@@ -207,9 +212,9 @@ registration follows `ToolEditor.add` and `Tool.Options.codemode` (`dist/promise
 
 | Export | Does |
 |---|---|
-| `register` | doors 1–3 from one handler table, a manifest and the optional grant and bus wiring |
+| `register` | doors 1–3 from one handler table, a manifest and the optional grant wiring; the registration carries the bus writer |
 | `assertHost`, `HostContext` | the host gate: `ctx.app.version` against the manifest's range, refusing `HOST_UNTESTED` |
-| `RegisterContext`, `RegisterWiring`, `Registration`, `GrantWiring` | the context it takes, the wiring, and what it returns |
-| `methodEntries`, `Door`, `HandlerTable`, `MethodCall`, `MethodEntry`, `MethodHandler` | the handler table and one call's context |
+| `RegisterContext`, `RegisterWiring`, `Registration`, `GrantWiring` | the context it takes, the grant wiring, and what it returns (its `access`, its `bus` and its disposer) |
+| `methodEntries`, `Door`, `HandlerTable`, `MethodCall`, `MethodEntry`, `MethodHandler` | the handler table and one call's context: `account`, `bus`, `access` and `unguardedAgents()` |
 | `COMMIT_INPUT`, `PLAN_OUTPUT`, `PLAN_MAX_BYTES` | the shapes a planning method answers and a commit takes, and the most bytes of JSON a stored plan may take |
 | `refusal`, `refusalOf`, `RegisterError`, `Refusal` | a handler's own refusal, in the contract's form |

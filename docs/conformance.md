@@ -65,7 +65,7 @@ is not a T0 finding: the file set belongs to the kit's `docs` and `forbidden` ch
 | `T1.events` | the one RPC registration carries exactly the manifest's bus events |
 | `T1.pinned-budget` | a pinned tool's signature is within about 1,000 tokens |
 | `T1.rpc-confirmation` | a non-`read` method over RPC with an allow rule and no grant is refused (LD-5); a commit is planned first, and an unplannable commit is a warning |
-| `T1.grant-alias` | a grant for one account alias allows that alias's MCP tool and the real host denies every other alias's, when the manifest declares `mcp:*` or `mcp:<tool>`, the fixture records two aliases, and a source declares a bare tool operation |
+| `T1.grant-alias` | a grant for one account alias allows that alias's MCP tool, and the host denies every other alias's with exactly `PERMISSION_DENIED`, each assert bounded to 1.5 s so a rule that asks is a finding and never a hang; it runs when the manifest declares `mcp:*` or `mcp:<tool>`, the fixture records two aliases, and a source declares a bare tool operation |
 | `T1.accounts` | with two aliases and `accounts.real`, a missing account is `ACCOUNT_REQUIRED`, an unknown one is `ACCOUNT_UNKNOWN`, and a cursor does not cross accounts |
 | `T1.unsupported-host` | a release outside `>=2.4.1 <2.5.0` is refused with `HOST_UNTESTED` and a next step |
 

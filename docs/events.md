@@ -40,6 +40,13 @@ A removal is an answer, not a drop: the page's cursor covers it and it never hol
 page's events first, then the removals. A `gap` is answered once, on the page where the source restarts its window; no
 later page of that read repeats it.
 
+## The list-options answer
+
+A source may name a `suggest` method for its scope keys, and that `list_*` method answers `{ options: [{ id, label? }] }`:
+`id` is the value a read takes in `scope`, and `label` is what the person reads, at most 200 characters. A plugin reuses
+`LIST_OPTIONS_SCHEMA` for the handler's output instead of copying the shape, and the app renders the options as the
+confirmation a scope needs.
+
 ## The event
 
 | Field | Meaning |
@@ -97,7 +104,7 @@ codes. `npm run conformance:self-test` runs the kit over the examples in `exampl
 | `makeEvent`, `eventHash`, `screenEvents`, `secretKinds`, `cut`, `oldestFirst` | normalise an event, hash it, and refuse a secret or instruction-shaped text |
 | `resultProblems`, `eventProblems`, `factProblems`, `removalProblems`, `scopeProblems`, `fitPage` | the checks and the page-size fit |
 | `eventsListResult`, `parseEventsListInput`, `parseProbeInput`, `probeResult`, `probeResultProblems`, `sinceTime`, `startTime` | the events call: its input, its default window and its answer |
-| `PAGE_SCHEMA`, `PROBE_SCHEMA` | the JSON Schema of an events page and of a probe answer, for a handler's output |
+| `PAGE_SCHEMA`, `PROBE_SCHEMA`, `LIST_OPTIONS_SCHEMA` | the JSON Schema of an events page, of a probe answer, and of a `list_*` method's `{ options }` answer, for a handler's output |
 | `extensionNamespace`, `isEventKind`, `isEventKindIn`, `isExtensionName`, `sourceNamespace` | the `x-<name>/<kind>` namespace rules |
 | `ERROR_CODES`, `ErrorCode`, `errorCodeOf`, `SourceError`, `parseSourceError` | the one error table (contract §12) |
 | `EventProblemOptions`, `ScreenOptions`, `ParseOptions` | the options of the checks |

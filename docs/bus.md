@@ -4,7 +4,7 @@ The `bus` module is how a plugin tells every app that something changed, without
 implements contract §10: three typed events, published by OpenCode as `rpc.<name>.<event>` on `/api/event`.
 
 ```ts
-import { busEvents, createBus, readBusEvent } from "@we-the-rebel-alliance/plugin-contract/bus"
+import { busEvents, readBusEvent } from "@we-the-rebel-alliance/plugin-contract/bus"
 ```
 
 ## A nudge, not the data
@@ -38,46 +38,47 @@ consequences:
 Every event's data is one closed object: exactly those fields, all required, with no extras. The events block supplies
 these JSON Schemas to OpenCode, and the reader applies the same validator to a payload it receives.
 
-## How a plugin wires the writer
+## How a plugin emits
 
 A plugin has **one** RPC registration, through `register` (roadmap 1.6). The bus contributes its events block to that
 registration and never opens a second one. OpenCode keeps a list of registrations per RPC id and resolves a call to the
 last one, so a second registration with id `<name>` would hide the plugin's methods: every
 `POST /api/rpc/<name>/<method>` would answer `rpc.method_not_found`.
 
+`register` builds the writer from that one registration, returns it as `registration.bus`, and gives the same writer to
+every handler call as `call.bus`. There is no flag and no placeholder: `register` always builds the writer, and only the
+manifest's declared events are registered.
+
 ```ts
 import { register } from "@we-the-rebel-alliance/plugin-contract/register"
 
-const registration = await register(ctx, manifest, handlers, { bus: true })
+const registration = await register(ctx, manifest, handlers)
 
 // After the plugin has written through the provider.
-await registration.bus?.emit("changed", { capability: "slack.mentions", account: "work", reason: "write" })
+await registration.bus.emit("changed", { capability: "slack.mentions", account: "work", reason: "write" })
 
 // When an account needs attention.
-await registration.bus?.emit("account", { account: "personal", state: "needs_sign_in" })
+await registration.bus.emit("account", { account: "personal", state: "needs_sign_in" })
 ```
 
-`busEvents(name)` validates the name and returns `changed`, `status` and `account` for the registration's `events`.
-`createBus(name, registration)` validates the name and wraps that registration's `events.emit`; it registers nothing
-itself. Both throw at setup for a name that breaks contract §3: lowercase letters and digits, 2 to 31 characters, no
-hyphen. A plugin name is a bug in the plugin, not data from a provider. Everything after setup is returned, never
-thrown.
+`busEvents(name)` validates the name and returns `changed`, `status` and `account` for the registration's `events`; the
+register keeps only the events the manifest declares. It throws at setup for a name that breaks contract §3: lowercase
+letters and digits, 2 to 31 characters, no hyphen. A plugin name is a bug in the plugin, not data from a provider.
+Everything after setup is returned, never thrown.
 
-### One step from `register`
+### In a handler
 
-`register` builds the writer with `createBus` after its one RPC registration, returns it as `registration.bus`, and puts
-it on every handler call as `call.bus`, so a handler emits without a mutable placeholder:
+`register` puts the writer on every handler call, so a handler emits without a mutable placeholder:
 
 ```ts
 async run(input, call) {
   await provider.write(input)
-  await call.bus?.emit("changed", { capability: "slack.mentions", account: call.account, reason: "write" })
+  await call.bus.emit("changed", { capability: "slack.mentions", account: call.account, reason: "write" })
   return { written: true }
 }
 ```
 
-`createBus(name, registration)` stays available for a plugin that does not use `register`; both forms wrap the one RPC
-registration and register nothing themselves.
+Emitting an event the manifest does not declare answers `unavailable`: only the declared events are registered.
 
 `emit` answers with a result:
 
@@ -149,7 +150,7 @@ A plugin writes one message, then nudges every app:
 ```ts
 const sent = await slack.send({ account: "work", channel: "C0123", text: "Deploy finished" })
 if (sent.ok) {
-  const nudged = await bus.emit("changed", { capability: "slack.mentions", account: "work", reason: "write" })
+  const nudged = await call.bus.emit("changed", { capability: "slack.mentions", account: "work", reason: "write" })
   if (!nudged.ok && nudged.reason === "secret") {
     // The capability, account and reason held something token-shaped. Fix the reason; do not log the payload.
   }
@@ -165,6 +166,6 @@ finds. The event itself said only that the source changed.
 |---|---|
 | `BUS_EVENTS`, `BUS_STATES`, `BusEventName`, `BusState`, `BusSchema`, `BusEvents`, `BusEventData`, `ChangedData`, `StatusData`, `AccountData` | the three events, their data, and the schemas the registration carries |
 | `assertPluginName`, `isPluginName`, `capabilityPattern`, `REASON_MAX` | the contract §3 name rule and the reason's bound |
-| `createBus`, `Bus`, `BusEmitResult`, `BusRegistration` | the writer: wrap the one RPC registration and emit a typed nudge; `register(..., { bus: true })` uses it for `registration.bus` and `call.bus` |
+| `Bus`, `BusEmitResult` | the writer a handler reads as `call.bus`: emit one typed nudge, and its result |
 | `busEvents` | the `events` block a plugin merges into that registration |
 | `readBusEvent`, `busEventType`, `BusEvent`, `BusReadReason`, `BusReadResult`, `ReadBusOptions` | the reader: one `/api/event` payload, its reason, and the type filter |

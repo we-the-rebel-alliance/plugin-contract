@@ -18,8 +18,9 @@ import {
   localIdentity,
   redactReason,
   registerAccounts,
-  resolveAccount
-} from "./chunks/chunk-YJVHB7PG.js";
+  resolveAccount,
+  statusAnswer
+} from "./chunks/chunk-MNSDPFNH.js";
 import "./chunks/chunk-4YITQAYJ.js";
 import "./chunks/chunk-WLRWVIVP.js";
 export {
@@ -41,5 +42,6 @@ export {
   localIdentity,
   redactReason,
   registerAccounts,
-  resolveAccount
+  resolveAccount,
+  statusAnswer
 };

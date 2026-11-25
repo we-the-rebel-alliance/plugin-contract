@@ -478,6 +478,22 @@ var PROBE_SCHEMA = {
   required: ["source", "account", "owner", "trust"],
   additionalProperties: false
 };
+var LIST_OPTIONS_SCHEMA = {
+  type: "object",
+  properties: {
+    options: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { id: { type: "string", minLength: 1 }, label: { type: "string", maxLength: 200 } },
+        required: ["id"],
+        additionalProperties: false
+      }
+    }
+  },
+  required: ["options"],
+  additionalProperties: false
+};
 function parseProbeInput(input) {
   const value = input === void 0 || input === null ? {} : input;
   if (!plainObject2(value)) return { ok: false, problems: ["the input must be an object"] };
@@ -970,6 +986,7 @@ export {
   PROBE,
   PROBE_LIMITS,
   PROBE_SCHEMA,
+  LIST_OPTIONS_SCHEMA,
   parseProbeInput,
   probeResult,
   probeResultProblems,

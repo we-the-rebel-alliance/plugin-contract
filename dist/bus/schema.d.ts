@@ -8,10 +8,9 @@ export type CheckedData<K extends BusEventName> = {
     readonly problems: readonly string[];
 };
 /**
- * The events block a plugin merges into its single RPC registration:
+ * The events block `register` merges into its single RPC registration:
  *
- *   const registration = await ctx.rpc.register({ id: name, methods, events: busEvents(name) }, handlers)
- *   const bus = createBus(name, registration)
+ *   const events = Object.fromEntries(Object.entries(busEvents(name)).filter(([event]) => Object.hasOwn(manifest.events, event)))
  */
 export declare function busEvents(name: string): BusEvents;
 /** Check one event's data against contract §10. The writer and the reader both use this one validator. */

@@ -85,10 +85,9 @@ function schemaOf(validator: Validator<unknown>): BusSchema {
 }
 
 /**
- * The events block a plugin merges into its single RPC registration:
+ * The events block `register` merges into its single RPC registration:
  *
- *   const registration = await ctx.rpc.register({ id: name, methods, events: busEvents(name) }, handlers)
- *   const bus = createBus(name, registration)
+ *   const events = Object.fromEntries(Object.entries(busEvents(name)).filter(([event]) => Object.hasOwn(manifest.events, event)))
  */
 export function busEvents(name: string): BusEvents {
   const validators = busValidators(name)

@@ -1,9 +1,12 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
+  BUS_EVENTS,
   assertPluginName,
   busEvents,
-  createBus
-} from "./chunks/chunk-JXGABKQH.js";
+  checkBusData,
+  holdsSecret,
+  serialise
+} from "./chunks/chunk-6EQKU7LR.js";
 import {
   verifyGrant
 } from "./chunks/chunk-ED3MMWUJ.js";
@@ -11,17 +14,18 @@ import {
   applyAccess,
   effectFor,
   evaluate,
-  methodAction
-} from "./chunks/chunk-ZEP3QZCO.js";
+  methodAction,
+  unguardedAgents
+} from "./chunks/chunk-A6V4KQTI.js";
 import {
   manifestHash
-} from "./chunks/chunk-7Z4DMIE3.js";
-import "./chunks/chunk-OXBQN5YW.js";
+} from "./chunks/chunk-RUROPP57.js";
+import "./chunks/chunk-236PJ6AN.js";
 import {
   MAX_BYTES_DEFAULT,
   errorCodeOf,
   hostInRange
-} from "./chunks/chunk-2BPMCEJ3.js";
+} from "./chunks/chunk-VAFQUKZ3.js";
 import {
   problemsOf
 } from "./chunks/chunk-FTEX4OOT.js";
@@ -31,7 +35,7 @@ import {
   accountsOf,
   redactReason,
   resolveAccount
-} from "./chunks/chunk-YJVHB7PG.js";
+} from "./chunks/chunk-MNSDPFNH.js";
 import {
   array,
   fromJSONSchema,
@@ -365,8 +369,8 @@ function shapes(name, method, item, handler) {
 
 // src/register/invoke.ts
 var plain3 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-function prepare(manifest, handlers, accounts) {
-  return { name: manifest.plugin.name, manifest, hash: manifestHash(manifest), entries: methodEntries(manifest, handlers), accounts, plans: planStore() };
+function prepare(manifest, handlers, accounts, access, agents) {
+  return { name: manifest.plugin.name, manifest, hash: manifestHash(manifest), entries: methodEntries(manifest, handlers), accounts, plans: planStore(), access, agents };
 }
 function checkedInput(entry, raw) {
   if (!plain3(raw)) refuse("INPUT_INVALID", `${entry.name} takes an object as its input`, "Pass the input its schema describes.");
@@ -436,9 +440,9 @@ function failureOf(entry, error) {
   if (own) return own;
   return refusal("UNAVAILABLE", `${entry.name} failed: ${reasonOf(error)}`, "Try again; if it keeps failing, check the plugin's status.");
 }
-async function execute(entry, prepared, call, plans, bus) {
+async function execute(environment, entry, prepared, call, bus) {
   if (prepared.reservation !== void 0) {
-    const taken = plans.consume(prepared.reservation);
+    const taken = environment.plans.consume(prepared.reservation);
     if (!taken.ok) throw new RegisterError(refusal(taken.code, taken.problems.join("; "), "Plan again, then commit with the new planId it answers."));
   }
   try {
@@ -448,12 +452,14 @@ async function execute(entry, prepared, call, plans, bus) {
         ...call,
         account: prepared.account,
         ...prepared.plan === void 0 ? {} : { plan: prepared.plan },
-        ...bus?.current === void 0 ? {} : { bus: bus.current }
+        bus: bus(),
+        access: environment.access,
+        unguardedAgents: async () => unguardedAgents(await environment.agents(), environment.access.rules)
       })
     );
     if (entry.item.plans === true) {
       const answer = value;
-      const recorded = plans.record(answer, prepared.account, entry.commit ?? entry.name);
+      const recorded = environment.plans.record(answer, prepared.account, entry.commit ?? entry.name);
       if (!recorded.ok) {
         throw new RegisterError(refusal(recorded.code, recorded.problems.join("; "), "Answer a plan a copy can carry, at most 64 KB of JSON; preview everything the commit writes."));
       }
@@ -600,7 +606,7 @@ async function invoke(context, environment, level, entry, wiring, raw, rpc, fres
       const source = { type: "tool", messageID: "msg_rpc", id: callID };
       if (fresh) freshAsks.add(callID);
       try {
-        await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: callID, signal: rpc.signal }, prepared.account, { save: false, ...fresh ? { source } : {} });
+        await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: callID, signal: rpc.signal }, prepared.account, { save: false, source });
       } catch (error) {
         throw new RegisterError(permissionRefusal(error, `${environment.name}.${entry.name}`));
       } finally {
@@ -609,8 +615,8 @@ async function invoke(context, environment, level, entry, wiring, raw, rpc, fres
     }
     const messageID = "msg_rpc";
     const id = `rpc:${randomUUID2()}`;
-    const value = await execute(entry, prepared, { sessionID, agent: resolved.agent, messageID, id, signal: rpc.signal, progress: async () => {
-    }, door: "rpc" }, environment.plans, bus);
+    const value = await execute(environment, entry, prepared, { sessionID, agent: resolved.agent, messageID, id, signal: rpc.signal, progress: async () => {
+    }, door: "rpc" }, bus);
     return value === void 0 ? null : JSON.parse(JSON.stringify(value));
   } catch (error) {
     if (prepared?.reservation !== void 0) environment.plans.release(prepared.reservation);
@@ -675,7 +681,7 @@ function toolRegistrations(environment, context, bus) {
           save: true,
           source: { type: "tool", messageID: callContext.messageID, id: callContext.id }
         });
-        const value = await execute(entry, prepared, toolCall(callContext, callContext.codemode === true ? "codemode" : "tool"), environment.plans, bus);
+        const value = await execute(environment, entry, prepared, toolCall(callContext, callContext.codemode === true ? "codemode" : "tool"), bus);
         return { output: value, content: textOf(value) };
       } catch (error) {
         if (prepared?.reservation !== void 0) environment.plans.release(prepared.reservation);
@@ -691,6 +697,30 @@ async function installTools(context, environment, bus) {
     editor.namespace({ name: environment.name, description: environment.manifest.plugin.summary });
     for (const tool of tools) editor.add(tool);
   });
+}
+
+// src/bus/writer.ts
+function createBus(name, registration) {
+  assertPluginName(name);
+  return {
+    name,
+    async emit(event, data) {
+      if (!BUS_EVENTS.includes(event)) {
+        return { ok: false, reason: "invalid", problems: ["event: must be one of changed, status, account"] };
+      }
+      const text = serialise(data);
+      if (text !== void 0 && holdsSecret(text)) return { ok: false, reason: "secret" };
+      const checked = checkBusData(name, event, data);
+      if (!checked.ok) return { ok: false, reason: "invalid", problems: checked.problems };
+      if (text === void 0) return { ok: false, reason: "invalid", problems: ["data: must be JSON"] };
+      try {
+        await registration.events.emit(event, checked.value);
+      } catch {
+        return { ok: false, reason: "unavailable" };
+      }
+      return { ok: true };
+    }
+  };
 }
 
 // src/register/register.ts
@@ -720,18 +750,18 @@ async function register(context, manifest, handlers, wiring = {}) {
     throw new Error(access.problems.join("\n"));
   }
   return withCleanup([() => access.dispose()], async () => {
-    const environment = prepare(manifest, handlers, accounts);
-    const busRef = {};
-    const rpc = await installRpc(context, environment, access.level, wiring.grant, busRef);
-    const bus = wiring.bus === true ? createBus(name, rpc) : void 0;
-    busRef.current = bus;
+    const environment = prepare(manifest, handlers, accounts, access, async () => (await context.agent.list()).data);
+    let bus;
+    const writer = () => bus;
+    const rpc = await installRpc(context, environment, access.level, wiring.grant, writer);
+    bus = createBus(name, rpc);
     return withCleanup([() => rpc.dispose()], async () => {
-      const tools = await installTools(context, environment, busRef);
+      const tools = await installTools(context, environment, writer);
       return {
         name,
         access,
         events: rpc.events,
-        ...bus === void 0 ? {} : { bus },
+        bus,
         async dispose() {
           await rpc.dispose().catch(() => void 0);
           await tools.dispose().catch(() => void 0);

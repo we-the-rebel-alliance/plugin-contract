@@ -81,8 +81,12 @@ export interface HostRun {
   call(method: string, input: unknown, options?: { readonly sessionID?: string | undefined; readonly rules?: readonly PermissionRule[] | undefined }): Promise<RpcAnswer>
   /** A session whose rules are exactly `rules`; the plugin's own rules still apply through its agents. */
   session(rules: readonly PermissionRule[]): Promise<string>
-  /** Assert one action through the real `ctx.permission.assert`; a deny rejects, as it does for the plugin's own gate. */
-  assert(input: { readonly sessionID: string; readonly action: string; readonly resources?: readonly string[] | undefined }): Promise<void>
+  /**
+   * Assert one action through the real `ctx.permission.assert` and answer its result: `{ ok: true }` when the host
+   * allowed it, or `{ ok: false, code, message }` with the contract code (`PERMISSION_DENIED` for the host's deny and
+   * rejection, `UNAVAILABLE` for anything unrecognised). It never throws, so a check can bound its own wait.
+   */
+  assert(input: { readonly sessionID: string; readonly action: string; readonly resources?: readonly string[] | undefined }): Promise<AssertResult>
   close(): Promise<void>
 }
 
@@ -90,6 +94,45 @@ export interface HostRun {
 export type RpcAnswer =
   | { readonly ok: true; readonly output: unknown }
   | { readonly ok: false; readonly code: string; readonly message: string }
+
+/** What one permission assert answered: allowed, or refused with a contract code and the host's line. */
+export type AssertResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly code: string; readonly message: string }
+
+/** The host's own denials: a deny rule and a rejected ask carry no contract code, only the host's tag. */
+const HOST_DENIALS = new Set(["Permission.BlockedError", "Permission.DeclinedError", "Permission.CorrectedError"])
+
+/** The code an error object carries itself: its `data.code`, then its `code`, when either is a non-empty string. */
+function reportedCode(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null) return undefined
+  const held = error as { readonly data?: { readonly code?: unknown } | undefined; readonly code?: unknown }
+  const data = held.data?.code
+  if (typeof data === "string" && data !== "") return data
+  return typeof held.code === "string" && held.code !== "" ? held.code : undefined
+}
+
+/** The code `error` maps to: its own, a message in the contract's form, the host's deny, or `UNAVAILABLE`. */
+function codeOf(error: unknown): string {
+  const reported = reportedCode(error)
+  if (reported !== undefined) return reported
+  const message = error instanceof Error ? error.message : typeof error === "string" ? error : ""
+  const leading = /^([A-Z][A-Z0-9_]*): /.exec(message)?.[1]
+  if (leading !== undefined) return leading
+  for (const holder of [error, typeof error === "object" && error !== null ? (error as { readonly error?: unknown }).error : undefined]) {
+    const tag = typeof holder === "object" && holder !== null ? (holder as { readonly _tag?: unknown })._tag : undefined
+    if (typeof tag === "string" && HOST_DENIALS.has(tag)) return "PERMISSION_DENIED"
+  }
+  return "UNAVAILABLE"
+}
+
+/** The one failure shape, with the host's own line: a secret is named by kind and never printed, and a long line is cut. */
+export function assertFailure(error: unknown): AssertResult {
+  const raw = error instanceof Error ? error.message : String(error)
+  const secrets = secretKinds(raw)
+  const message = secrets.length === 0 ? raw.slice(0, 300) : `the host's error held a secret (${secrets.join(", ")}), which the kit did not print`
+  return { ok: false, code: codeOf(error), message }
+}
 
 /** What `createHost` needs. */
 export interface HostOptions {
@@ -362,8 +405,13 @@ export async function createHost(options: HostOptions): Promise<HostRun> {
       return created.id
     },
     async assert(input) {
-      if (assertAction === undefined) throw new HostError("HOST_UNAVAILABLE", "the plugin never reached setup, so this run has no permission domain", "fix the load failure first, then run T1 again")
-      await assertAction({ sessionID: input.sessionID, action: input.action, resources: input.resources ?? ["*"] })
+      if (assertAction === undefined) return { ok: false, code: "UNAVAILABLE", message: "the plugin never reached setup, so this run has no permission domain" }
+      try {
+        await assertAction({ sessionID: input.sessionID, action: input.action, resources: input.resources ?? ["*"] })
+        return { ok: true }
+      } catch (error) {
+        return assertFailure(error)
+      }
     },
     async close() {
       if (closed) return
@@ -389,7 +437,7 @@ function emptyRun(options: HostOptions, entry: string | undefined, failure: stri
       return ""
     },
     async assert() {
-      throw new HostError("HOST_UNAVAILABLE", failure, "fix the load failure first, then run T1 again")
+      return { ok: false, code: "UNAVAILABLE", message: failure }
     },
     async close() {},
   }

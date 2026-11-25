@@ -394,6 +394,43 @@ describe("the review's real-host cases", () => {
     }
   })
 
+  test("aborting an RPC read whose rule says ask rejects its ask on the real host", { timeout: 30000, skip: skipHost }, async () => {
+    const directory = await mkdtemp(join(tmpdir(), "plugin-contract-host-"))
+    const readManifest = writeManifest("readcancel")
+    const opencode = await startHost([hostPlugin({ manifest: readManifest })], directory, ["readcancel"])
+    try {
+      const session = await opencode.sessions.create({ location: { directory }, agent: "build", permissions: [{ action: "readcancel.status", resource: "*", effect: "ask" }] })
+      const rpc = opencode.rpc({
+        id: "readcancel",
+        methods: {
+          status: {
+            input: { type: "object", properties: { sessionID: { type: "string" }, input: EMPTY }, required: ["sessionID", "input"], additionalProperties: false },
+            output: OK,
+            errors: { failed: { type: "object", properties: { code: { type: "string" }, next: { type: "string" } }, required: ["code", "next"], additionalProperties: false } },
+          },
+        },
+        events: {},
+      })
+      const controller = new AbortController()
+      const called = rpc.status({ sessionID: session.id, input: {} }, { location: { directory }, signal: controller.signal })
+      const pending = await waitFor(async () => {
+        const requests = await opencode.permission.list({ sessionID: session.id })
+        return requests.find((request: { action: string }) => request.action === "readcancel.status")
+      }, "a permission ask for readcancel.status")
+      // A read that asked is not one of the fresh one-call asks, and its source is still the call's own handle.
+      assert.match((pending as { source?: { id?: string } }).source?.id ?? "", /^rpc:/, "the read's ask names the RPC call that opened it")
+      controller.abort()
+      await assert.rejects(called)
+      await waitFor(async () => {
+        const requests = await opencode.permission.list({ sessionID: session.id })
+        return requests.some((request: { id: string }) => request.id === (pending as { id: string }).id) ? undefined : true
+      }, "the rejected ask to leave the permission list")
+    } finally {
+      await opencode.close().catch(() => undefined)
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
   test("both MCP rule orders deny a dotted tool under read-only on the real host", { timeout: 30000, skip: skipHost }, async () => {
     const directory = await mkdtemp(join(tmpdir(), "plugin-contract-host-"))
     let captured: HostContext | undefined

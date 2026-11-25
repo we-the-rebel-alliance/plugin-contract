@@ -6,9 +6,9 @@
  *   account  { account, state }               an account signed in, out, or needs sign-in
  *
  * The host publishes each one as `rpc.<name>.<event>` on `/api/event`. A nudge carries no content: an app reads it and
- * re-reads through the plugin's RPC methods. A plugin registers the events **inside its one RPC registration** with
- * `busEvents(name)`, then wraps that registration with `createBus(name, registration)`: a second registration with the
- * same id would shadow the first and its methods would answer `rpc.method_not_found`.
+ * re-reads through the plugin's RPC methods. `register` puts the events **inside its one RPC registration** with
+ * `busEvents(name)`: a second registration with the same id would shadow the first and its methods would answer
+ * `rpc.method_not_found`.
  */
 /** The events a plugin emits, in the order the contract lists them. */
 export declare const BUS_EVENTS: readonly ["changed", "status", "account"];

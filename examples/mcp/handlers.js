@@ -3,10 +3,9 @@
 // `index.js` passes this table to `register` once. The vendor's own MCP tools are declared as `mcp:*` in the manifest
 // and have no handler: their server owns them. Every method here is the plugin's own read, and the fake Trellis API is
 // behind `provider.js`.
-import { accountStatuses, accountsOf, redactReason, STATUS_SCHEMA } from "../../dist/accounts.js"
-import { unguardedAgents } from "../../dist/access.js"
+import { accountStatuses, accountsOf, redactReason, STATUS_SCHEMA, statusAnswer } from "../../dist/accounts.js"
 import { decodeBoundCursor, encodeBoundCursor } from "../../dist/cursor.js"
-import { makeEvent, PAGE_SCHEMA, PROBE_SCHEMA } from "../../dist/events.js"
+import { LIST_OPTIONS_SCHEMA, makeEvent, PAGE_SCHEMA, PROBE_SCHEMA } from "../../dist/events.js"
 import { refusal, RegisterError } from "../../dist/register.js"
 import { ProviderError } from "./provider.js"
 
@@ -14,12 +13,6 @@ const PACKAGE = "@we-the-rebel-alliance/trellis-plugin"
 const PLUGIN = "trellis"
 const SOURCE = "messages"
 const EMPTY = { type: "object", properties: {}, additionalProperties: false }
-const OPTIONS = {
-  type: "object",
-  properties: { options: { type: "array", items: { type: "object", properties: { id: { type: "string" }, label: { type: "string" } }, required: ["id"], additionalProperties: false } } },
-  required: ["options"],
-  additionalProperties: false,
-}
 
 const binding = (account, scope) => ({ plugin: PLUGIN, source: SOURCE, account, ...(scope === undefined ? {} : { scope }) })
 
@@ -68,12 +61,10 @@ function messageEvent(message, account) {
  * @param {object} parts.manifest the installed capabilities
  * @param {object} [parts.options] the plugin options, including the account profiles
  * @param {string} parts.version the installed package version, for status
- * @param {{ accountProblems?: string[], access?: { rules: unknown[] }, agents?: () => Promise<unknown[]>, hostVersion?: string }} [parts.state] registration state status reads
+ * @param {string} parts.hostVersion the OpenCode release the plugin runs on, for status
+ * @param {string[]} [parts.accountProblems] what registering the accounts could not do, for status
  */
-export function createHandlers({ provider, manifest, options = {}, version, state = {} }) {
-  const hostRange = manifest.plugin.host.opencode
-  const tested = manifest.plugin.host.tested
-
+export function createHandlers({ provider, manifest, options = {}, version, hostVersion, accountProblems = [] }) {
   async function ownersByAlias() {
     const plan = accountsOf(manifest, options)
     if (!plan.ok) return { profiles: [], signals: {} }
@@ -95,31 +86,24 @@ export function createHandlers({ provider, manifest, options = {}, version, stat
       description: "Read Trellis's state, its host range and every account alias.",
       input: EMPTY,
       output: STATUS_SCHEMA,
-      async run() {
+      async run(_input, call) {
         const { profiles, signals } = await ownersByAlias()
-        const accounts = profiles.length === 0 ? [] : accountStatuses(profiles, signals)
-        const problems = state.accountProblems ?? []
-        const needsSignIn = accounts.some((account) => account.state === "needs_sign_in")
-        const pluginState = problems.length > 0 ? "error" : needsSignIn ? "needs_sign_in" : "ready"
+        const problems = [...accountProblems]
         let unguarded = []
-        let agentsError
-        if (state.access !== undefined && state.agents !== undefined) {
-          try {
-            unguarded = [...unguardedAgents(await state.agents(), state.access.rules)]
-          } catch (error) {
-            // An unreadable agent list is unknown, never zero: status says error, with a redacted next step.
-            agentsError = redactReason(error instanceof Error ? error.message : String(error)).slice(0, 200)
-          }
+        try {
+          unguarded = [...(await call.unguardedAgents())]
+        } catch (error) {
+          // An unreadable agent list is unknown, never zero: status says error, with a redacted next step.
+          problems.unshift(redactReason(error instanceof Error ? error.message : String(error)))
         }
-        return {
-          name: PLUGIN,
+        return statusAnswer({
+          manifest,
           version,
-          host: { version: state.hostVersion ?? tested[0], range: hostRange, tested },
-          state: agentsError === undefined ? pluginState : "error",
-          accounts,
+          hostVersion,
+          accounts: profiles.length === 0 ? [] : accountStatuses(profiles, signals),
+          problems,
           unguardedAgents: unguarded,
-          nextStep: agentsError ?? (problems.length > 0 ? redactReason(problems[0]).slice(0, 200) : needsSignIn ? "Sign in to the account that needs it, then read status again." : null),
-        }
+        })
       },
     },
 
@@ -221,7 +205,7 @@ export function createHandlers({ provider, manifest, options = {}, version, stat
     list_channels: {
       description: "List the Trellis channels and direct messages this account may confirm for a read.",
       input: EMPTY,
-      output: OPTIONS,
+      output: LIST_OPTIONS_SCHEMA,
       async run(_input, call) {
         try {
           const answer = await provider.listChannels({ account: call.account })
