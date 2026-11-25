@@ -9,6 +9,7 @@ import {
   COMMITMENT_STATES,
   ERROR_CODES,
   EVENTS_LIST,
+  EVENTS_LIST_INPUT_SCHEMA,
   EVENT_KINDS,
   EVENT_LIMITS,
   EXTENSION_KIND,
@@ -55,7 +56,7 @@ import {
   sinceTime,
   sourceNamespace,
   startTime
-} from "./chunks/chunk-YTAZMRBO.js";
+} from "./chunks/chunk-CQOJNZW4.js";
 import {
   secretKinds
 } from "./chunks/chunk-L3NVT2DE.js";
@@ -70,6 +71,7 @@ export {
   COMMITMENT_STATES,
   ERROR_CODES,
   EVENTS_LIST,
+  EVENTS_LIST_INPUT_SCHEMA,
   EVENT_KINDS,
   EVENT_LIMITS,
   EXTENSION_KIND,

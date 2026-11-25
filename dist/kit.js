@@ -12,20 +12,20 @@ import {
   mcpAddress,
   renderGeneratedDocs,
   waitForActivation
-} from "./chunks/chunk-EU7QYIOH.js";
+} from "./chunks/chunk-6IPYRCBC.js";
 import "./chunks/chunk-ED3MMWUJ.js";
-import "./chunks/chunk-T2WJPLWP.js";
+import "./chunks/chunk-IDA3YFD6.js";
 import "./chunks/chunk-6WEY3U6L.js";
-import "./chunks/chunk-L7UILIYI.js";
-import "./chunks/chunk-HSYZDBOW.js";
+import "./chunks/chunk-M5SZ2OSJ.js";
+import "./chunks/chunk-LJBRNDIR.js";
 import {
   checkManifest
-} from "./chunks/chunk-WUXTQJJP.js";
-import "./chunks/chunk-KDEHNYY7.js";
+} from "./chunks/chunk-QO4BENAJ.js";
+import "./chunks/chunk-SWSUBLXW.js";
 import {
   TESTED_OPENCODE,
   eventHash
-} from "./chunks/chunk-YTAZMRBO.js";
+} from "./chunks/chunk-CQOJNZW4.js";
 import "./chunks/chunk-FTEX4OOT.js";
 import {
   secretKinds

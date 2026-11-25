@@ -750,6 +750,7 @@ describe("register: the bus and the access on every call", () => {
       }),
     )
     assert.equal(seen, undefined, "no handler ran yet")
+    assert.deepEqual(Object.keys(registration).sort(), ["bus", "dispose", "name"], "the registration is the name, the bus and the disposer; the access rules stay internal")
     assert.deepEqual(await registration.bus.emit("changed", { capability: "demo.messages", account: "default", reason: "write" }), { ok: true })
     assert.deepEqual(h.rpc.published.map((event) => event.type), ["rpc.demo.changed"])
 

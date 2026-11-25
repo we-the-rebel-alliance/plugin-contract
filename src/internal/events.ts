@@ -406,6 +406,23 @@ export const PAGE_SCHEMA: JsonSchema = {
   additionalProperties: true,
 }
 
+/**
+ * The base input schema of `events_list`: `source`, `cursor`, `since`, `limit` and `scope`, each optional, and nothing
+ * else at the top level. A source plugin reuses it as its handler's `input`; `parseEventsListInput`, with the source's
+ * scope keys, is still what checks the values and refuses a scope key the source does not declare.
+ */
+export const EVENTS_LIST_INPUT_SCHEMA: JsonSchema = {
+  type: "object",
+  properties: {
+    source: { type: "string" },
+    cursor: { type: "string" },
+    since: { type: "string" },
+    limit: { type: "integer", minimum: PAGE.min, maximum: PAGE.max },
+    scope: { type: "object" },
+  },
+  additionalProperties: false,
+}
+
 export interface EventsListResult {
   /** The source every event names, also on an empty page. */
   readonly source: string

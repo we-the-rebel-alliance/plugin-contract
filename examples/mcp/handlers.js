@@ -5,7 +5,7 @@
 // behind `provider.js`.
 import { accountStatuses, accountsOf, STATUS_SCHEMA, statusAnswer } from "../../dist/accounts.js"
 import { decodeBoundCursor, encodeBoundCursor } from "../../dist/cursor.js"
-import { eventsListResult, fitPage, LIST_OPTIONS_SCHEMA, makeEvent, PAGE_SCHEMA, parseEventsListInput, PROBE_SCHEMA, probeResult } from "../../dist/events.js"
+import { eventsListResult, EVENTS_LIST_INPUT_SCHEMA, fitPage, LIST_OPTIONS_SCHEMA, makeEvent, MAX_PAGE_BYTES, PAGE_SCHEMA, parseEventsListInput, PROBE_SCHEMA, probeResult } from "../../dist/events.js"
 import { findSource, maxBytesOf } from "../../dist/manifest.js"
 import { refusal, RegisterError } from "../../dist/register.js"
 import { ProviderError } from "./provider.js"
@@ -68,7 +68,7 @@ function messageEvent(message, account) {
  */
 export function createHandlers({ provider, manifest, options = {}, version, hostVersion, accountProblems = [] }) {
   const source = findSource(manifest, SOURCE_ID)
-  const maxBytes = source === undefined ? undefined : maxBytesOf(source)
+  const maxBytes = source === undefined ? MAX_PAGE_BYTES : maxBytesOf(source)
 
   async function ownersByAlias() {
     const plan = accountsOf(manifest, options)
@@ -120,17 +120,7 @@ export function createHandlers({ provider, manifest, options = {}, version, host
 
     events_list: {
       description: "List Trellis messages as contract events, oldest first, with a cursor that belongs to the account and scope.",
-      input: {
-        type: "object",
-        properties: {
-          source: { type: "string" },
-          cursor: { type: "string" },
-          since: { type: "string" },
-          limit: { type: "integer", minimum: 1, maximum: 500 },
-          scope: { type: "object", properties: { channels: { type: "array", items: { type: "string" } } }, additionalProperties: false },
-        },
-        additionalProperties: false,
-      },
+      input: EVENTS_LIST_INPUT_SCHEMA,
       output: PAGE_SCHEMA,
       async run(input, call) {
         const parsed = parseEventsListInput(input, { scopeKeys: ["channels"] })
@@ -182,14 +172,14 @@ export function createHandlers({ provider, manifest, options = {}, version, host
       input: { type: "object", properties: { thread: { type: "string" } }, required: ["thread"], additionalProperties: false },
       output: PAGE_SCHEMA,
       async run(input, call) {
+        let page
         try {
           const answer = await provider.readThread({ account: call.account, thread: input.thread })
           const owner = await provider.whoami({ account: call.account })
           const events = answer.messages.map((message) => messageEvent(message, call.account))
-          const fit = fitPage(events, events.length, maxBytes)
-          return eventsListResult(
+          page = eventsListResult(
             { source: SOURCE, account: call.account, owner: owner.owner },
-            events.slice(0, fit),
+            events,
             encodeBoundCursor(binding(call.account), { thread: input.thread }),
             false,
             { plugin: PACKAGE, asOf: provider.asOf },
@@ -197,6 +187,12 @@ export function createHandlers({ provider, manifest, options = {}, version, host
         } catch (error) {
           throw refusalFor(error, call, "read_thread", "Read a thread that belongs to this account.")
         }
+        // A detail read is not trimmed: a page over the source's limit is refused, so the thread is whole or not at all.
+        const bytes = Buffer.byteLength(JSON.stringify(page), "utf8")
+        if (bytes > maxBytes) {
+          throw new RegisterError(refusal("TOO_LARGE", `the thread's detail page is ${bytes} bytes, over the ${maxBytes}-byte limit of ${SOURCE_ID}`, "Request a narrower detail, or read within the source's configured limit."))
+        }
+        return page
       },
     },
 

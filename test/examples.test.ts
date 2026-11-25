@@ -28,6 +28,11 @@ function manifestOf(name: string): Manifest {
   return installed.value.manifest
 }
 
+/** The installed manifest with one source declaring `maxBytes`, for a detail read at and over the cap. */
+function withSourceMaxBytes(manifest: Manifest, id: string, maxBytes: number): Manifest {
+  return { ...manifest, sources: manifest.sources.map((source) => (source.id === id ? { ...source, maxBytes } : source)) }
+}
+
 /** The pages a fixture records, for the events authority. */
 function recordedPages(name: string): { what: string; answer: unknown }[] {
   const file = join(root, "examples", name, "fixtures", "conformance.json")
@@ -273,6 +278,112 @@ describe("the examples", () => {
       () => handlers.read_note.run({ external_id: "note-personal-1" }, call("work")),
       (error: unknown) => {
         assert.match((error as Error).message, /^PERMISSION_DENIED: .*Next step: /)
+        return true
+      },
+    )
+  })
+
+  test("the Harbour read_note answers TOO_LARGE instead of trimming a detail page over maxBytes", async () => {
+    const handlersModule = (await import(pathToFileURL(join(root, "examples", "integration", "handlers.js")).href)) as {
+      createHandlers(parts: object): { read_note: { run(input: { external_id: string }, call: { account: string }): Promise<unknown> } }
+    }
+    const manifest = manifestOf("integration")
+    // The fake provider answers one note as large as a note can be; a page over a small declared maxBytes must refuse,
+    // never cut the note, and a page exactly at the cap is the whole note.
+    const fake = {
+      asOf: "2026-11-20T09:00:00.000Z",
+      async whoami() {
+        return { request_id: "req_harbour_0001_whoami", owner: { id: "mailto:ana.silva@harbour.example.com", label: "Ana Silva" } }
+      },
+      async readNote({ id }: { id: string }) {
+        return {
+          request_id: "req_harbour_0001_note",
+          note: {
+            id,
+            space: "space-research",
+            title: "A note larger than its source's limit",
+            text: "x".repeat(4096),
+            url: "https://docs.harbour.example.com/notes/note-work-1",
+            updated_at: "2026-11-18T10:15:00.000Z",
+            author: { id: "mailto:ana.silva@harbour.example.com", name: "Ana Silva" },
+          },
+        }
+      },
+    }
+    const at = (maxBytes: number) =>
+      handlersModule.createHandlers({
+        provider: fake,
+        manifest: withSourceMaxBytes(manifest, "harbour.notes", maxBytes),
+        options: { accounts: { work: {}, personal: {} } },
+        version: "0.0.0",
+        hostVersion: "2.4.1",
+        accountProblems: [],
+      })
+    const page = await at(262_144).read_note.run({ external_id: "note-work-1" }, call("work"))
+    const bytes = Buffer.byteLength(JSON.stringify(page), "utf8")
+    assert.ok(bytes > 1_024, `the fake note's page is ${bytes} bytes`)
+    assert.deepEqual(await at(bytes).read_note.run({ external_id: "note-work-1" }, call("work")), page, "a page exactly at maxBytes is accepted")
+    await assert.rejects(
+      () => at(bytes - 1).read_note.run({ external_id: "note-work-1" }, call("work")),
+      (error: unknown) => {
+        assert.match((error as Error).message, /^TOO_LARGE: .*Next step: /)
+        assert.match((error as Error).message, new RegExp(`${bytes} bytes, over the ${bytes - 1}-byte limit of harbour.notes`))
+        return true
+      },
+    )
+  })
+
+  test("the Trellis read_thread answers TOO_LARGE instead of trimming a detail page over maxBytes", async () => {
+    const handlersModule = (await import(pathToFileURL(join(root, "examples", "mcp", "handlers.js")).href)) as {
+      createHandlers(parts: object): { read_thread: { run(input: { thread: string }, call: { account: string }): Promise<unknown> } }
+    }
+    const manifest = manifestOf("mcp")
+    // A thread of messages as large as the normaliser allows: over the source's declared 256 KB, so the read refuses.
+    const fake = {
+      asOf: "2026-11-20T09:00:00.000Z",
+      async whoami() {
+        return { request_id: "req_trellis_0001_whoami", owner: { id: "trellis:U-WORK-ANA", label: "Ana Silva" } }
+      },
+      async readThread({ thread }: { thread: string }) {
+        const messages = Array.from({ length: 80 }, (_, index) => ({
+          id: `M-LONG-${index}`,
+          channel: "C-RESEARCH",
+          thread,
+          title: `Message ${index}`,
+          text: "x".repeat(4096),
+          url: `https://app.trellis.example.com/channels/C-RESEARCH/p/M-LONG-${index}`,
+          sent_at: "2026-11-18T10:15:00.000Z",
+          author: { id: "trellis:U-WORK-ANA", name: "Ana Silva" },
+        }))
+        return { request_id: "req_trellis_0001_thread", messages }
+      },
+    }
+    const at = (maxBytes: number) =>
+      handlersModule.createHandlers({
+        provider: fake,
+        manifest: withSourceMaxBytes(manifest, "trellis.messages", maxBytes),
+        options: { accounts: { work: {}, personal: {} } },
+        version: "0.0.0",
+        hostVersion: "2.4.1",
+        accountProblems: [],
+      })
+    const thread = "trellis-thread:C-RESEARCH:M-WORK-1"
+    await assert.rejects(
+      () => at(262_144).read_thread.run({ thread }, call("work")),
+      (error: unknown) => {
+        assert.match((error as Error).message, /^TOO_LARGE: .*Next step: /)
+        assert.match((error as Error).message, /over the 262144-byte limit of trellis\.messages/)
+        return true
+      },
+    )
+    const accepted = await at(1_048_576).read_thread.run({ thread }, call("work"))
+    const bytes = Buffer.byteLength(JSON.stringify(accepted), "utf8")
+    assert.ok(bytes > 262_144, `the fake thread's page is ${bytes} bytes`)
+    assert.deepEqual(await at(bytes).read_thread.run({ thread }, call("work")), accepted, "a page exactly at maxBytes is accepted")
+    await assert.rejects(
+      () => at(bytes - 1).read_thread.run({ thread }, call("work")),
+      (error: unknown) => {
+        assert.match((error as Error).message, new RegExp(`${bytes} bytes, over the ${bytes - 1}-byte limit of trellis\\.messages`))
         return true
       },
     )
