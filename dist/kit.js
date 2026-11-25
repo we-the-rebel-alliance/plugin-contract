@@ -745,6 +745,10 @@ function redactFixture(value, options) {
   return { value: walk(value, redacted, []), findings };
 }
 function redactValue(value, path = [], context = {}) {
+  if (path.length === 2 && path[0] === "grants" && path[1] === "cases" && typeof value === "object" && value !== null && !Array.isArray(value)) {
+    const token = value["token"];
+    if (typeof token === "string" && context.verifiedTokens?.has(token) === true) return value;
+  }
   if (typeof value === "string") return redactText(value);
   if (Array.isArray(value)) return value.map((item) => redactValue(item, path, context));
   if (typeof value !== "object" || value === null) return value;

@@ -205,6 +205,13 @@ describe("plugin-kit record", () => {
     const reported = redactFixture({ events: [wrong] }, { display: FIXTURE_FILE })
     assert.ok(reported.findings.some((finding) => finding.id === "RECORD.hash-mismatch" && finding.message.includes("plain")))
     assert.equal((reported.value as { events: Record<string, any>[] }).events[0]!.hash, "sha256:not-the-content-hash")
+
+    const wrongAndRedacted = { ...changed, hash: "sha256:not-the-content-hash" }
+    const repaired = redactFixture({ events: [wrongAndRedacted] }, { display: FIXTURE_FILE })
+    assert.ok(repaired.findings.some((finding) => finding.id === "RECORD.hash-mismatch" && finding.message.includes("redacted")))
+    const repairedEvent = (repaired.value as { events: Record<string, any>[] }).events[0]!
+    assert.equal(repairedEvent.hash, eventHash(repairedEvent as never))
+    assert.notEqual(repairedEvent.hash, "sha256:not-the-content-hash")
   })
 
   test("grants keep only the verified token and public key, and redact the other fields", () => {
@@ -217,7 +224,10 @@ describe("plugin-kit record", () => {
     const value = redacted.value as Record<string, any>
     assert.equal(value.grants.publicKey, source.grants.publicKey)
     assert.equal(value.grants.cases[0].token, valid)
-    assert.equal(value.grants.cases[0].name, "<redacted:personal>")
+    assert.equal(value.grants.cases[0].name, source.grants.cases[0].name)
+    assert.equal(value.grants.cases[0].input.to, source.grants.cases[0].input.to)
+    assert.equal(value.grants.cases[1].name, "<redacted:personal>")
+    assert.equal(value.grants.cases[1].input.to, "<redacted:email>")
     assert.equal(value.grants.cases[1].token, "<redacted:secret>")
     assert.equal(value.grants.cases[1].request.password, "<redacted:secret>")
   })
@@ -235,7 +245,12 @@ describe("plugin-kit record", () => {
       const redacted = JSON.parse(readFileSync(join(directory, FIXTURE_FILE), "utf8")) as Record<string, any>
       assert.deepEqual(redacted.accounts.aliases, ["work", "personal"])
       assert.match(redacted.grants.cases[0].token, /^eyJ/)
-      assert.equal(redacted.grants.cases[0].name, "<redacted:personal>")
+      assert.equal(redacted.grants.cases[0].name, "valid")
+      assert.equal(redacted.grants.cases[0].input.to, "person@example.test")
+      const report = await runConformance(directory)
+      const errors = report.findings.filter((finding) => finding.level === "error" && finding.id !== "T1.host-unavailable")
+      assert.deepEqual(errors, [])
+      assert.equal(report.findings.filter((finding) => finding.id !== "T1.host-unavailable").length, 0)
     } finally {
       rmSync(root, { recursive: true, force: true })
     }

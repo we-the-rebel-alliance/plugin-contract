@@ -122,6 +122,11 @@ export interface RedactionContext {
 
 /** Replace credentials and personal data in a JSON value, preserving its keys and their order. */
 export function redactValue(value: unknown, path: readonly string[] = [], context: RedactionContext = {}): unknown {
+  // A verified case is one signed unit: its token's digest covers the input, so the key vouches for the whole case.
+  if (path.length === 2 && path[0] === "grants" && path[1] === "cases" && typeof value === "object" && value !== null && !Array.isArray(value)) {
+    const token = (value as Record<string, unknown>)["token"]
+    if (typeof token === "string" && context.verifiedTokens?.has(token) === true) return value
+  }
   if (typeof value === "string") return redactText(value)
   if (Array.isArray(value)) return value.map((item) => redactValue(item, path, context))
   if (typeof value !== "object" || value === null) return value
