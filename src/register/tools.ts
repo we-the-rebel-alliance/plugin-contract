@@ -89,8 +89,9 @@ export function toolRegistrations(environment: CallEnvironment, context: ToolCon
     output: entry.output,
     options: { namespace: environment.name, permission: `${environment.name}.${entry.name}`, codemode: codemodeFor(entry) },
     async execute(raw, callContext) {
+      let prepared: ReturnType<typeof prepareCall> | undefined
       try {
-        const prepared = prepareCall(entry, raw, environment.accounts, environment.plans)
+        prepared = prepareCall(entry, raw, environment.accounts, environment.plans)
         await gate(context, environment.name, entry, callContext, prepared.account, {
           save: true,
           source: { type: "tool", messageID: callContext.messageID, id: callContext.id },
@@ -98,6 +99,8 @@ export function toolRegistrations(environment: CallEnvironment, context: ToolCon
         const value = await execute(entry, prepared, toolCall(callContext, callContext.codemode === true ? "codemode" : "tool"), environment.plans)
         return { output: value, content: textOf(value) }
       } catch (error) {
+        // A refusal before the handler releases the plan; after the handler starts, consume already made this a no-op.
+        if (prepared?.reservation !== undefined) environment.plans.release(prepared.reservation)
         throw new Error(error instanceof RegisterError ? error.message : permissionRefusal(error, `${environment.name}.${entry.name}`).message)
       }
     },

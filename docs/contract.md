@@ -159,7 +159,7 @@ One table covers every callable, including pass-through MCP tools, so a consumer
 | `class` | `read`, `write`, `send` (reaches someone), `share` (widens access), `delete`, `export` (leaves the provider), `admin` |
 | `accounts` | `optional` (takes `account`), `none` |
 | `operations` | the provider operations it may assert, for grants and session rules |
-| `plans: true` | dry-runs a change and answers `{ planId, method }`; the planId commits once, only through that method |
+| `plans: true` | dry-runs a change and answers `{ planId, method }`; a commit reserves it before confirmation, consumes it at handler start, and only that method may commit it |
 | `commits: "<method>"` | takes only `{ planId }` from that planning method; a consumer refuses any other input |
 | `effect` | optional narrowing of access: `ask` or `deny`; never `allow` |
 | `pinned` | `true` for a method whose signature Code Mode sends on every turn. None by default; at most one per plugin, only when session data shows most of the plugin's sessions call it, within about 1,000 tokens |

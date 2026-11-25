@@ -41,7 +41,7 @@ import "./chunks/chunk-7KJXMIQH.js";
 import "./chunks/chunk-WLRWVIVP.js";
 
 // src/register/rpc.ts
-import { randomUUID } from "node:crypto";
+import { randomUUID as randomUUID2 } from "node:crypto";
 
 // src/register/assertions.ts
 function resourcesFor(entry, account) {
@@ -115,6 +115,7 @@ function reasonOf(error) {
 }
 
 // src/register/plans.ts
+import { randomUUID } from "node:crypto";
 var PLAN_TTL_MS = 15 * 6e4;
 function planStore(options = {}) {
   const now = options.now ?? Date.now;
@@ -124,21 +125,32 @@ function planStore(options = {}) {
     const at = now();
     for (const [id, plan2] of plans) if (plan2.expires <= at) plans.delete(id);
   };
+  const same = (plan2, reservation) => plan2.reserved === reservation.token && !plan2.used;
   return {
     record(planId, account, method) {
       prune();
-      plans.set(planId, { account, method, expires: now() + ttl, used: false });
+      plans.set(planId, { account, method, expires: now() + ttl, reserved: void 0, used: false });
     },
-    take(planId, method) {
+    reserve(planId, method) {
       prune();
       const plan2 = plans.get(planId);
       if (plan2 === void 0) return { ok: false, code: "PLAN_INVALID", problems: [`there is no plan '${planId}'; plan again and commit with the planId it answers`] };
-      if (plan2.used) return { ok: false, code: "PLAN_USED", problems: [`the plan '${planId}' was already used; plan again to make a new one`] };
-      if (plan2.method !== method) {
-        return { ok: false, code: "PLAN_INVALID", problems: [`the plan '${planId}' commits ${plan2.method}, not ${method}`] };
+      if (plan2.used || plan2.reserved !== void 0) return { ok: false, code: "PLAN_USED", problems: [`the plan '${planId}' is already reserved or used; plan again to make a new one`] };
+      if (plan2.method !== method) return { ok: false, code: "PLAN_INVALID", problems: [`the plan '${planId}' commits ${plan2.method}, not ${method}`] };
+      const reservation = { planId, method, account: plan2.account, token: randomUUID() };
+      plan2.reserved = reservation.token;
+      return { ok: true, reservation };
+    },
+    release(reservation) {
+      const plan2 = plans.get(reservation.planId);
+      if (plan2 !== void 0 && same(plan2, reservation)) plan2.reserved = void 0;
+    },
+    consume(reservation) {
+      const plan2 = plans.get(reservation.planId);
+      if (plan2 !== void 0 && same(plan2, reservation)) {
+        plan2.used = true;
+        plan2.reserved = void 0;
       }
-      plan2.used = true;
-      return { ok: true, value: plan2.account };
     },
     get size() {
       prune();
@@ -308,11 +320,16 @@ function prepareCall(entry, raw, accounts, plans) {
   const { input, account } = checkedInput(entry, raw);
   if (entry.item.commits !== void 0) {
     const planId = typeof input["planId"] === "string" ? input["planId"] : "";
-    const plan2 = plans.take(planId, entry.name);
+    const plan2 = plans.reserve(planId, entry.name);
     if (!plan2.ok) throw new RegisterError(refusal(plan2.code, plan2.problems.join("; "), "Plan again, then commit with the planId it answers."));
-    const resolved2 = accounts.length === 0 ? { ok: true, alias: plan2.value } : resolveAccount(accounts, { account: plan2.value });
-    if (!resolved2.ok) throw new RegisterError(refusal("ACCOUNT_UNKNOWN", resolved2.what, resolved2.next));
-    return { input, account: resolved2.alias };
+    try {
+      const resolved2 = accounts.length === 0 ? { ok: true, alias: plan2.reservation.account } : resolveAccount(accounts, { account: plan2.reservation.account });
+      if (!resolved2.ok) throw new RegisterError(refusal("ACCOUNT_UNKNOWN", resolved2.what, resolved2.next));
+      return { input, account: resolved2.alias, reservation: plan2.reservation };
+    } catch (error) {
+      plans.release(plan2.reservation);
+      throw error;
+    }
   }
   const resolved = entry.item.accounts === "optional" ? resolveAccount(accounts, { account }) : { ok: true, alias: DEFAULT_ALIAS };
   if (!resolved.ok) throw new RegisterError(refusal(resolved.code, resolved.what, resolved.next));
@@ -337,6 +354,7 @@ function failureOf(entry, error) {
   return refusal("UNAVAILABLE", `${entry.name} failed: ${reasonOf(error)}`, "Try again; if it keeps failing, check the plugin's status.");
 }
 async function execute(entry, prepared, call, plans) {
+  if (prepared.reservation !== void 0) plans.consume(prepared.reservation);
   try {
     const value = checkedOutput(entry, await entry.handler.run(prepared.input, { ...call, account: prepared.account }));
     if (entry.item.plans === true) plans.record(value.planId, prepared.account, entry.commit ?? entry.name);
@@ -432,6 +450,7 @@ async function verify(environment, wiring, request, entry, account) {
   return checked.ok ? { ok: true, account: checked.claims.account } : { ok: false, refusal: refusal("GRANT_INVALID", checked.reason, "Ask the host to issue a fresh grant for this action and input."), code: checked.code };
 }
 async function invoke(context, environment, level, entry, wiring, raw, rpc, freshAsks) {
+  let prepared;
   try {
     if (!plain4(raw)) throw new RegisterError(refusal("INPUT_INVALID", "the RPC envelope must be an object", `Pass {"sessionID":"<session>","input":<the method's input>}.`));
     const sessionID = raw["sessionID"];
@@ -440,8 +459,7 @@ async function invoke(context, environment, level, entry, wiring, raw, rpc, fres
     if (!plain4(input)) throw new RegisterError(refusal("INPUT_INVALID", "the RPC envelope needs an input object", "Pass the method's input as the envelope's input."));
     const resolved = await rulesOf(context, sessionID);
     const nonRead = entry.item.class !== "read";
-    const callID = `rpc:${randomUUID()}`;
-    let prepared;
+    const callID = `rpc:${randomUUID2()}`;
     let gated = false;
     let fresh = false;
     if (nonRead) {
@@ -476,6 +494,7 @@ async function invoke(context, environment, level, entry, wiring, raw, rpc, fres
     } else {
       prepared = prepareCall(entry, input, environment.accounts, environment.plans);
     }
+    if (prepared === void 0) throw new RegisterError(refusal("UNAVAILABLE", "the RPC call prepared no input", "Try again; if it keeps failing, check the plugin's status."));
     if (!gated) {
       const source = { type: "tool", messageID: "msg_rpc", id: callID };
       if (fresh) freshAsks.add(callID);
@@ -488,11 +507,12 @@ async function invoke(context, environment, level, entry, wiring, raw, rpc, fres
       }
     }
     const messageID = "msg_rpc";
-    const id = `rpc:${randomUUID()}`;
+    const id = `rpc:${randomUUID2()}`;
     const value = await execute(entry, prepared, { sessionID, agent: resolved.agent, messageID, id, signal: rpc.signal, progress: async () => {
     }, door: "rpc" }, environment.plans);
     return value === void 0 ? null : JSON.parse(JSON.stringify(value));
   } catch (error) {
+    if (prepared?.reservation !== void 0) environment.plans.release(prepared.reservation);
     const own = refusalOf(error);
     const failure = own ?? refusal("UNAVAILABLE", "the RPC call failed", "Try again; if it keeps failing, check the plugin's status.");
     return rpc.error("failed", failure.message, { code: failure.code, next: failure.next });
@@ -547,8 +567,9 @@ function toolRegistrations(environment, context) {
     output: entry.output,
     options: { namespace: environment.name, permission: `${environment.name}.${entry.name}`, codemode: codemodeFor(entry) },
     async execute(raw, callContext) {
+      let prepared;
       try {
-        const prepared = prepareCall(entry, raw, environment.accounts, environment.plans);
+        prepared = prepareCall(entry, raw, environment.accounts, environment.plans);
         await gate(context, environment.name, entry, callContext, prepared.account, {
           save: true,
           source: { type: "tool", messageID: callContext.messageID, id: callContext.id }
@@ -556,6 +577,7 @@ function toolRegistrations(environment, context) {
         const value = await execute(entry, prepared, toolCall(callContext, callContext.codemode === true ? "codemode" : "tool"), environment.plans);
         return { output: value, content: textOf(value) };
       } catch (error) {
+        if (prepared?.reservation !== void 0) environment.plans.release(prepared.reservation);
         throw new Error(error instanceof RegisterError ? error.message : permissionRefusal(error, `${environment.name}.${entry.name}`).message);
       }
     }

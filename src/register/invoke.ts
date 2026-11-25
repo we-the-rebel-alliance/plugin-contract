@@ -8,7 +8,7 @@
 import { DEFAULT_ALIAS } from "../accounts/alias.ts"
 import { resolveAccount, type AccountProfile } from "../accounts.ts"
 import { manifestHash, type Manifest } from "../manifest.ts"
-import { planStore, type PlanStore } from "./plans.ts"
+import { planStore, type PlanReservation, type PlanStore } from "./plans.ts"
 import { refusal, refusalOf, refuse, RegisterError, reasonOf, type Refusal } from "./errors.ts"
 import { methodEntries, type Door, type HandlerTable, type MethodCall, type MethodEntry } from "./handlers.ts"
 import { validate, validateCommitInput, validatePlan } from "./validate.ts"
@@ -61,6 +61,8 @@ function checkedInput(entry: MethodEntry, raw: unknown): { readonly input: Recor
 export interface PreparedCall {
   readonly input: Record<string, unknown>
   readonly account: string
+  /** A commit's reservation, released on a refusal before the handler or consumed as it starts. */
+  readonly reservation?: PlanReservation
 }
 
 /**
@@ -71,11 +73,17 @@ export function prepareCall(entry: MethodEntry, raw: unknown, accounts: readonly
   const { input, account } = checkedInput(entry, raw)
   if (entry.item.commits !== undefined) {
     const planId = typeof input["planId"] === "string" ? input["planId"] : ""
-    const plan = plans.take(planId, entry.name)
+    const plan = plans.reserve(planId, entry.name)
     if (!plan.ok) throw new RegisterError(refusal(plan.code, plan.problems.join("; "), "Plan again, then commit with the planId it answers."))
-    const resolved = accounts.length === 0 ? { ok: true as const, alias: plan.value } : resolveAccount(accounts, { account: plan.value })
-    if (!resolved.ok) throw new RegisterError(refusal("ACCOUNT_UNKNOWN", resolved.what, resolved.next))
-    return { input, account: resolved.alias }
+    try {
+      const resolved = accounts.length === 0 ? { ok: true as const, alias: plan.reservation.account } : resolveAccount(accounts, { account: plan.reservation.account })
+      if (!resolved.ok) throw new RegisterError(refusal("ACCOUNT_UNKNOWN", resolved.what, resolved.next))
+      return { input, account: resolved.alias, reservation: plan.reservation }
+    } catch (error) {
+      // A bad account is a refusal before the handler; the plan stays committable.
+      plans.release(plan.reservation)
+      throw error
+    }
   }
   // A method declared `accounts: "none"` takes no account: it runs as the internal default even when the plugin has
   // several aliases. Only an `accounts: "optional"` method resolves one, and then a missing account is ACCOUNT_REQUIRED.
@@ -108,6 +116,7 @@ function failureOf(entry: MethodEntry, error: unknown): Refusal {
 
 /** Run a prepared call's handler, checking its answer and mapping its failure. */
 export async function execute(entry: MethodEntry, prepared: PreparedCall, call: Omit<MethodCall, "account">, plans: PlanStore): Promise<unknown> {
+  if (prepared.reservation !== undefined) plans.consume(prepared.reservation)
   try {
     const value = checkedOutput(entry, await entry.handler.run(prepared.input, { ...call, account: prepared.account }))
     if (entry.item.plans === true) plans.record((value as { planId: string }).planId, prepared.account, entry.commit ?? entry.name)

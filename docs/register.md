@@ -130,8 +130,10 @@ A `plans: true` method answers `{ planId, method }` and may carry §8's preview 
 A `commits: "<plan>"` method accepts exactly `{ planId }` from that plan, with no `account`. The register stores each
 plan's account (and expiry, 15 minutes) in the plugin instance: a commit runs as that account, and its permission gate
 names that account. A `planId` commits once, only through the method its plan named; a second commit is `PLAN_USED` and
-another method is `PLAN_INVALID`. An unknown or expired `planId` is `PLAN_INVALID`. A grant for a commit must name the
-plan's account; another account is `ACCOUNT_MISMATCH`. The handler's own input schema is not used for a commit.
+another method is `PLAN_INVALID`. A commit reserves the plan before its permission ask or grant check; a refusal
+releases it, and the handler's start consumes it, so a failed handler still uses the plan. An unknown or expired
+`planId` is `PLAN_INVALID`. A grant for a commit must name the plan's account; another account is
+`ACCOUNT_MISMATCH`. The handler's own input schema is not used for a commit.
 
 ## Permissions on operations
 

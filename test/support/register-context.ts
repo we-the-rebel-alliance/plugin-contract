@@ -57,6 +57,8 @@ export interface Harness {
   readonly assertions: Assertion[]
   readonly namespaces: { name: string; description: string }[]
   readonly rpc: RpcHost
+  /** Flip whether an ask is answered, for a test that refuses first and retries the same plan. */
+  readonly setAnswerAsks: (value: boolean) => void
 }
 
 const sessionRefusal = (sessionID: string) => Object.assign(new Error(`Session not found: ${sessionID}`), { _tag: "Session.NotFoundError" })
@@ -68,7 +70,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
   const tools = new Map<string, RecordedTool>()
   const assertions: Assertion[] = []
   const namespaces: { name: string; description: string }[] = []
-  const answerAsks = options.answerAsks ?? true
+  let answerAsks = options.answerAsks ?? true
   const rpc = makeRpcHost()
 
   const rulesFor = (sessionID: string, agentID?: string): readonly PermissionRule[] => {
@@ -153,7 +155,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
     },
   }
 
-  return { ctx, agents, sessions, tools, assertions, namespaces, rpc }
+  return { ctx, agents, sessions, tools, assertions, namespaces, rpc, setAnswerAsks: (value) => void (answerAsks = value) }
 }
 
 /** The permission rules the fake agent holds, for a test that checks the generated access. */

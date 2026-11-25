@@ -1,6 +1,6 @@
 import { type AccountProfile } from "../accounts.js";
 import { type Manifest } from "../manifest.js";
-import { type PlanStore } from "./plans.js";
+import { type PlanReservation, type PlanStore } from "./plans.js";
 import { type Door, type HandlerTable, type MethodCall, type MethodEntry } from "./handlers.js";
 /** The environment one call runs in, resolved once by `register`. */
 export interface CallEnvironment {
@@ -19,6 +19,8 @@ export declare function prepare(manifest: Manifest, handlers: HandlerTable, acco
 export interface PreparedCall {
     readonly input: Record<string, unknown>;
     readonly account: string;
+    /** A commit's reservation, released on a refusal before the handler or consumed as it starts. */
+    readonly reservation?: PlanReservation;
 }
 /**
  * The input checked and the account resolved, or a contract refusal. A commit takes no account: its account is the one
