@@ -83,7 +83,7 @@ Redaction replaces:
   `full_name` with `<redacted:personal>`;
 - a sensitive URL query value (`token`, `key`, `signature`, `password`, `email`, `code`) with `<redacted>`.
 
-A conformance fixture's `grants.publicKey` and a `grants.cases[].token` that key verifies are signed test data; `record` leaves them unchanged, and redacts every other grant field. The pass is deterministic
+A conformance fixture's `grants.publicKey` and a `grants.cases[].token` that key verifies are signed test data; `record` leaves them unchanged, and redacts every other grant field. An event whose recorded hash was already wrong is `RECORD.hash-mismatch`; redaction does not repair it. The pass is deterministic
 and idempotent: keys keep their order, a placeholder carries no pattern, and a second run changes nothing. `record --check` records nothing and fails (`RECORD.unredacted`) when a committed fixture still needs a
 redaction, so CI can run it on every pull request.
 
