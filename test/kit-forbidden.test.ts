@@ -8,6 +8,17 @@ import { forbiddenFindings } from "../src/kit.ts"
 import { ALLOW_FILE } from "../src/kit/forbidden.ts"
 import { FORBIDDEN_APPS } from "../src/kit/forbidden-apps.ts"
 
+/** The true-positive corpus from the #69 review, one row per line: `<kind> | <line> | <expectation>`. */
+const corpus = readFileSync(new URL("./fixtures/secret-corpus.txt", import.meta.url), "utf8")
+  .trimEnd()
+  .split("\n")
+  .map((row) => {
+    const first = row.indexOf(" | ")
+    const last = row.lastIndexOf(" | ")
+    if (first === -1 || last <= first) throw new Error(`the corpus row has no expectation: ${row}`)
+    return { kind: row.slice(0, first), line: row.slice(first + 3, last), expected: row.slice(last + 3) }
+  })
+
 const write = (path: string, text: string): void => {
   mkdirSync(dirname(path), { recursive: true })
   writeFileSync(path, text)
@@ -35,15 +46,17 @@ describe("plugin-kit forbidden", () => {
     }
   })
 
-  test("finds every main-branch link form, and leaves a master link alone", () => {
+  test("finds every main-branch link form under the package's owner, and leaves a third-party link alone", () => {
     const local = temp()
     try {
+      write(join(local.dir, "package.json"), JSON.stringify({ repository: "https://github.com/acme/acme-plugin" }))
       write(
         join(local.dir, "README.md"),
         [
           "https://github.com/acme/acme-plugin/blob/main/docs/guide.md",
           "https://raw.githubusercontent.com/acme/acme-plugin/main/README.md",
           "github.com/acme/acme-plugin/tree/main/src",
+          "https://github.com/other/repo/blob/main/x.js",
           "https://github.com/acme/acme-plugin/blob/master/docs/guide.md",
         ].join("\n"),
       )
@@ -53,6 +66,46 @@ describe("plugin-kit forbidden", () => {
     } finally {
       local.cleanup()
     }
+  })
+
+  test("reads the owner from a git+https repository object, and compares it case-insensitively", () => {
+    const local = temp()
+    try {
+      write(join(local.dir, "package.json"), JSON.stringify({ repository: { url: "git+https://github.com/AcMe/acme-plugin.git" } }))
+      write(join(local.dir, "README.md"), "https://github.com/acme/acme-plugin/blob/main/docs/guide.md\n")
+      const findings = forbiddenFindings(local.dir).filter((finding) => finding.id === "FORBIDDEN.main-branch")
+      assert.equal(findings.length, 1)
+    } finally {
+      local.cleanup()
+    }
+  })
+
+  test("reads the owner from the github:owner/repo shorthand", () => {
+    const local = temp()
+    try {
+      write(join(local.dir, "package.json"), JSON.stringify({ repository: "github:acme/acme-plugin" }))
+      write(join(local.dir, "README.md"), "github.com/acme/acme-plugin/tree/main/src\n")
+      const findings = forbiddenFindings(local.dir).filter((finding) => finding.id === "FORBIDDEN.main-branch")
+      assert.equal(findings.length, 1)
+    } finally {
+      local.cleanup()
+    }
+  })
+
+  test("a package with no repository has no owner, so a main link is not a finding", () => {
+    const local = temp()
+    try {
+      write(join(local.dir, "package.json"), JSON.stringify({ name: "acme-plugin" }))
+      write(join(local.dir, "README.md"), "https://github.com/acme/acme-plugin/blob/main/docs/guide.md\n")
+      assert.deepEqual(forbiddenFindings(local.dir).filter((finding) => finding.id === "FORBIDDEN.main-branch"), [])
+    } finally {
+      local.cleanup()
+    }
+  })
+
+  test("this repository's docs/catalog.md third-party main link is not a finding", () => {
+    const findings = forbiddenFindings(process.cwd()).filter((finding) => finding.id === "FORBIDDEN.main-branch")
+    assert.equal(findings.some((finding) => finding.path === "docs/catalog.md"), false)
   })
 
   test("ordinary words are not app identifiers, and the real identifiers are", () => {
@@ -199,6 +252,27 @@ describe("plugin-kit forbidden", () => {
     try {
       write(join(local.dir, "notes.md"), "The main reason is the main thread; see README.md for the rest.\n")
       assert.deepEqual(forbiddenFindings(local.dir), [])
+    } finally {
+      local.cleanup()
+    }
+  })
+
+  test("the reviewer's corpus is flagged by the unchanged v0.0.0 detector through forbidden, with the known false positives pinned to #71", () => {
+    const local = temp()
+    try {
+      const rows = corpus.map((row, index) => ({ ...row, path: `corpus/${String(index).padStart(2, "0")}.txt` }))
+      for (const row of rows) write(join(local.dir, row.path), `${row.line}\n`)
+      const flagged = new Set(
+        forbiddenFindings(local.dir).flatMap((finding) =>
+          finding.id === "FORBIDDEN.secret" && finding.path?.startsWith("corpus/") === true ? [finding.path] : [],
+        ),
+      )
+      for (const row of rows) {
+        const label = `${row.kind} | ${row.line}`
+        if (row.expected === "flagged") assert.ok(flagged.has(row.path), `the v0.0.0 detector must flag: ${label}`)
+        else if (row.expected === "not flagged (known false negative on master)") assert.equal(flagged.has(row.path), false, `the v0.0.0 detector does not flag: ${label}`)
+        else assert.ok(flagged.has(row.path), `known false positive (#71), pinned until the redesign: ${label}`)
+      }
     } finally {
       local.cleanup()
     }

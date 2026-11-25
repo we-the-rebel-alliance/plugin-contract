@@ -4,6 +4,16 @@ Releases are tagged GitHub releases, not npm: pin `github:we-the-rebel-alliance/
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/)
 as it applies before 1.0: while `0.x`, a minor release may break, so plugins and apps pin exact tags and move together.
 
+## Unreleased
+
+The two kit fixes that passed review in #69. The v0.0.0 secret detector is unchanged; its redesign is #71.
+
+- **`FORBIDDEN.main-branch`:** only a `main` link under the plugin's own GitHub owner is a finding, read from
+  `package.json` `repository`. A third-party repository's `main` branch is legitimate, and a package with no repository
+  has no owner to flag.
+- **`plugin-kit release` outside a plugin:** it reads the package before the check and refuses a `package.json` with no
+  `capabilities` with one `KIT_NOT_A_PLUGIN` error naming `scripts/release.mjs`; no conformance or check runs.
+
 ## 0.0.0 (2026-11-25)
 
 The first release in `we-the-rebel-alliance`: the contract at wire version 1, greenfield, with no compatibility path to
