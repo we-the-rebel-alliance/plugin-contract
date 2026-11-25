@@ -1,7 +1,7 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   findMethod
-} from "./chunk-QO4BENAJ.js";
+} from "./chunk-X6AQ6GTL.js";
 import {
   DEFAULT_ALIAS,
   accountsOf,

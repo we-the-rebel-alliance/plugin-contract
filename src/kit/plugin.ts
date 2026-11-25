@@ -59,13 +59,35 @@ export function readPlugin(dir: string): Plugin {
   }
 }
 
+/** The repository's URL from a package.json `repository`, in either form npm allows. */
+function repositoryUrl(repository: PackageJson["repository"]): string | undefined {
+  const url = typeof repository === "string" ? repository : repository?.url
+  return typeof url === "string" ? url.trim() : undefined
+}
+
 /** The repository's name from a package.json `repository`, in either form npm allows. */
 export function repositoryName(repository: PackageJson["repository"]): string | undefined {
-  const url = typeof repository === "string" ? repository : repository?.url
-  if (typeof url !== "string") return undefined
+  const url = repositoryUrl(repository)
+  if (url === undefined) return undefined
   const trimmed = url.replace(/\.git$/, "").replace(/\/+$/, "")
   const segment = trimmed.slice(trimmed.lastIndexOf("/") + 1)
   return segment === "" ? undefined : segment
+}
+
+/**
+ * The GitHub owner from a package.json `repository`: `github:owner/repo`,
+ * `git+https://github.com/owner/repo.git`, `https://github.com/owner/repo`,
+ * `git@github.com:owner/repo.git` or an `ssh://` URL. Any other host has no owner.
+ */
+export function repositoryOwner(repository: PackageJson["repository"]): string | undefined {
+  const url = repositoryUrl(repository)
+  if (url === undefined) return undefined
+  const shorthand = /^github:([^/\s]+)\//i.exec(url)
+  if (shorthand !== null) return shorthand[1]
+  const scp = /^git@github\.com:([^/\s]+)\//i.exec(url)
+  if (scp !== null) return scp[1]
+  const hosted = /^(?:git\+)?(?:https?|git|ssh):\/\/(?:[^@/\s]+@)?(?:www\.)?github\.com\/([^/\s]+)\//i.exec(url)
+  return hosted?.[1]
 }
 
 /** The hosts a plugin's CI must run T1 on. Absent manifest: the release this contract is tested on. */

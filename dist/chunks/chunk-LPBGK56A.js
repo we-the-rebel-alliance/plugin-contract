@@ -41,6 +41,10 @@ function codeValue(value) {
     /^[A-Za-z_$][\w$]*(?:\??\.[A-Za-z_$][\w$]*)+;?$/.test(v) && (v.match(/\d/g) ?? []).length <= 2 || /^(?:await\s+)?[A-Za-z_$][\w$.]*\(/.test(v) || /^(?:~|\.{1,2})?\/[\w./-]*$/.test(v) || /^(?:process\.env|os\.environ|import\.meta\.env)\b/.test(v)
   );
 }
+function typeExpression(value) {
+  const v = String(value ?? "").trim();
+  return /^(?:unknown|any|never|void|undefined|null|string|number|boolean|bigint|symbol|object|[A-Z][A-Za-z0-9_]*)(?:<(?:[^<>]|<[^<>]*>)*>)?(?:\[\])*(?:[)\]}>,;:=]+)?$/.test(v);
+}
 function entropy(value) {
   const counts = /* @__PURE__ */ new Map();
   for (const char of value) counts.set(char, (counts.get(char) ?? 0) + 1);
@@ -68,9 +72,10 @@ function credentialValue(value, quoted, key, query) {
   const v = String(value ?? "").trim();
   if (!v || documentation(v)) return false;
   if (query) return tokenShaped(v, 16);
+  if (typeExpression(v) || codeValue(v)) return false;
   const loose = /^(?:token|secret)$/i.test(key);
   if (quoted) return v.length >= (loose ? 8 : 4) && !/^\d+(?:\.\d+)?$/.test(v) && !/^[A-Za-z_$][\w$.]*\(|^\$\{/.test(v);
-  if (codeValue(v) || !TOKENISH.test(v) || /^\d+(?:\.\d+)?$/.test(v)) return false;
+  if (!TOKENISH.test(v) || /^\d+(?:\.\d+)?$/.test(v)) return false;
   if (v.length < (loose ? 8 : 6)) return false;
   return /\d/.test(v) || /[^A-Za-z0-9]/.test(v) || /.[A-Z]/.test(v);
 }

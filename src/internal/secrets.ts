@@ -87,6 +87,17 @@ function codeValue(value: unknown): boolean {
   )
 }
 
+/**
+ * A TypeScript type expression, which an annotation carries instead of a credential:
+ * `unknown`, `string`, `ParsedToken`, `Parser<Item>`, `Record<string, Token[]>` or `Token[]`.
+ * The bare capture keeps the punctuation after the value (`unknown):`), so trailing
+ * delimiters are part of the type position.
+ */
+function typeExpression(value: unknown): boolean {
+  const v = String(value ?? "").trim()
+  return /^(?:unknown|any|never|void|undefined|null|string|number|boolean|bigint|symbol|object|[A-Z][A-Za-z0-9_]*)(?:<(?:[^<>]|<[^<>]*>)*>)?(?:\[\])*(?:[)\]}>,;:=]+)?$/.test(v)
+}
+
 /** Shannon entropy of a string, in bits per character. */
 function entropy(value: string): number {
   const counts = new Map<string, number>()
@@ -119,19 +130,21 @@ function passphrase(rest: unknown): boolean {
 }
 
 /**
- * Whether the value of a credential assignment is one. A quoted value counts
- * from 4 characters (8 for a token or secret); a bare one needs 6 (8) and a
- * digit, a symbol or an inner capital, which a word of prose does not have.
- * A value in a URL query (`?token=…&`) needs 16 characters and the entropy of
- * a random token.
+ * Whether the value of a credential assignment is one. A type annotation, an
+ * identifier or a member access is code, not a credential, quoted or bare. A
+ * quoted value counts from 4 characters (8 for a token or secret); a bare one
+ * needs 6 (8) and a digit, a symbol or an inner capital, which a word of prose
+ * does not have. A value in a URL query (`?token=…&`) needs 16 characters and
+ * the entropy of a random token.
  */
 function credentialValue(value: unknown, quoted: boolean, key: string, query: boolean): boolean {
   const v = String(value ?? "").trim()
   if (!v || documentation(v)) return false
   if (query) return tokenShaped(v, 16)
+  if (typeExpression(v) || codeValue(v)) return false
   const loose = /^(?:token|secret)$/i.test(key)
   if (quoted) return v.length >= (loose ? 8 : 4) && !/^\d+(?:\.\d+)?$/.test(v) && !/^[A-Za-z_$][\w$.]*\(|^\$\{/.test(v)
-  if (codeValue(v) || !TOKENISH.test(v) || /^\d+(?:\.\d+)?$/.test(v)) return false
+  if (!TOKENISH.test(v) || /^\d+(?:\.\d+)?$/.test(v)) return false
   if (v.length < (loose ? 8 : 6)) return false
   return /\d/.test(v) || /[^A-Za-z0-9]/.test(v) || /.[A-Z]/.test(v)
 }

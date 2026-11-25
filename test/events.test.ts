@@ -331,6 +331,20 @@ describe("the secret-pattern refusal", () => {
     for (const clean of ["password: rotated quarterly", "token: 4096", "api_key=<your-key-here>", "Let's review the plan on Monday", "sk-example"]) expect(secretKinds(clean), clean).toEqual([])
   })
 
+  test("a type annotation, an identifier or a member access is code, not a credential", () => {
+    for (const clean of [
+      "export function parseToken(token: unknown): ParsedToken {",
+      "function login(password: string) {",
+      "* The action grant's token: `header.payload.signature` in base64url",
+      "token: ParsedToken",
+      "api_key: Parser<Item>",
+      "token: Record<string, Token[]>",
+      "token: Token[]",
+      "token: string[]",
+    ]) expect(secretKinds(clean), clean).toEqual([])
+    expect(secretKinds('token: "lin_api_abcdefghijklmnopqrstuvwxyz0123456789"')).toEqual(["token"])
+  })
+
   test("screenEvents refuses an event that is not the owner's, holds a secret, or is instruction-shaped, never echoing it", () => {
     const events = [event(1), event(2, { text: "the key is ghp_abcdefghijklmnop1234" }), event(3), event(4)]
     const screened = screenEvents(events, { ownedBy: (e) => e.external_id !== "item-3", instruction: (e) => e.external_id === "item-4" })
