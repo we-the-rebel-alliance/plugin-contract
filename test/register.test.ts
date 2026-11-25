@@ -121,6 +121,15 @@ describe("register: input, account and output", () => {
     await assert.rejects(h.tools.get("demo_status")!.tool.execute({ account: "work" }, context()), /INPUT_INVALID: status takes no account/)
   })
 
+  test("a method declared accounts none runs as default with two aliases, and takes no account", async () => {
+    const h = makeHarness({ options: { accounts: { work: {}, personal: {} } } })
+    await register(h.ctx, demo, handlers())
+    const result = await h.tools.get("demo_status")!.tool.execute({}, context())
+    assert.deepEqual(result.output, { ok: true })
+    await assert.rejects(h.tools.get("demo_status")!.tool.execute({ account: "work" }, context()), /INPUT_INVALID: status takes no account/)
+    await assert.rejects(h.tools.get("demo_events_list")!.tool.execute({}, context()), /ACCOUNT_REQUIRED: .*Next step: Pass account, one of: work, personal\./)
+  })
+
   test("an input outside the handler's schema is INPUT_INVALID", async () => {
     const h = makeHarness()
     await register(h.ctx, demo, handlers())
