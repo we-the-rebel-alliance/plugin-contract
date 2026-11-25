@@ -2,7 +2,6 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 import { checkManifest } from "../src/manifest.ts"
 import { evaluate, type Grant, type PermissionRule } from "../src/access.ts"
-import { probeProblems } from "../src/conformance.ts"
 import { probeResultProblems } from "../src/internal/events.ts"
 import { detailFields, probe, read, readDetail, type ProbeAnswer, type ReadHost, type ReadRequest } from "../src/read.ts"
 import { installed, manifest } from "./support/manifest.ts"
@@ -288,10 +287,8 @@ describe("probe", () => {
   for (const [name, answer, ok] of answers) {
     test(`one probe check: ${name} ${ok ? "passes" : "fails"} (#8, D230)`, async () => {
       const viaRead = await probe(fakeHost(() => answer).host, { aliases: [ana], installed: demo, source: "demo.messages", account: ana, identityOperations: [] })
-      const viaKit = probeProblems(answer, source as never, { account: ana })
       const viaEvents = probeResultProblems(answer, { source: "messages", account: ana })
       assert.equal(viaRead.ok, ok, viaRead.ok ? "" : viaRead.failure.message)
-      assert.equal(viaKit.length === 0, ok, viaKit.join("; "))
       assert.equal(viaEvents.length === 0, ok, viaEvents.join("; "))
     })
   }

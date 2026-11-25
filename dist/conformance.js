@@ -1,33 +1,189 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
-  SOURCES_SCHEMA
-} from "./chunks/chunk-IMGQH7PB.js";
+  verifyGrant
+} from "./chunks/chunk-ED3MMWUJ.js";
 import {
-  hintProblems
-} from "./chunks/chunk-J6MOXA3F.js";
+  acceptAnswer
+} from "./chunks/chunk-WWPEFWNU.js";
+import "./chunks/chunk-6WEY3U6L.js";
+import "./chunks/chunk-D545RHPD.js";
+import "./chunks/chunk-SQQJ24OZ.js";
 import {
-  maxBytesOf
-} from "./chunks/chunk-YRYY3WXH.js";
-import "./chunks/chunk-FZW2HFUR.js";
+  effectFor,
+  evaluate,
+  serverOf,
+  toolAction
+} from "./chunks/chunk-PRLLFQV2.js";
 import {
-  AUTHOR_ROLES,
+  maxBytesOf,
+  methodAccounts,
+  readInstalledManifest
+} from "./chunks/chunk-RIPYHT4Z.js";
+import {
+  checkOutput
+} from "./chunks/chunk-SBSFNGFN.js";
+import {
+  BUS_EVENTS,
+  ERROR_CODES,
+  GAP_REASONS,
+  METHOD_CLASSES,
+  OPENCODE_RANGE,
   PAGE,
   REFUSAL_REASONS,
+  eventHash,
   isEventKindIn,
-  probeResultProblems,
+  ownerProblems,
   removalProblems,
-  resultProblems,
-  sourceNamespace
+  sourceNamespace,
+  thumbnailUrlProblems
 } from "./chunks/chunk-4TUKQJKX.js";
-import "./chunks/chunk-S3ZVQTGH.js";
+import "./chunks/chunk-FTEX4OOT.js";
 import {
   secretKinds
 } from "./chunks/chunk-L3NVT2DE.js";
 import {
+  ACCOUNT_STATES,
+  aliasProblem,
+  isAlias
+} from "./chunks/chunk-JWZEPM5E.js";
+import {
   fromJSONSchema
-} from "./chunks/chunk-3GQYQSG2.js";
+} from "./chunks/chunk-4YITQAYJ.js";
 import "./chunks/chunk-7KJXMIQH.js";
 import "./chunks/chunk-WLRWVIVP.js";
+
+// src/conformance.ts
+import { resolve } from "node:path";
+
+// src/internal/conformance/report.ts
+function finding(id, level, message, options = {}) {
+  return {
+    id,
+    level,
+    message,
+    ...options.path === void 0 ? {} : { path: options.path },
+    ...options.fix === void 0 ? {} : { fix: options.fix }
+  };
+}
+var error = (id, message, options = {}) => finding(id, "error", message, options);
+var warning = (id, message, options = {}) => finding(id, "warning", message, options);
+function isOk(findings) {
+  return findings.every((entry) => entry.level !== "error");
+}
+
+// src/internal/conformance/accounts.ts
+var CURSOR_CODES = ["CURSOR_INVALID", "ACCOUNT_MISMATCH"];
+function accountFindings(manifest, recorded, options = {}) {
+  const findings = [];
+  const name = manifest.plugin.name;
+  const aliases = recorded?.aliases ?? [];
+  if (manifest.accounts === void 0) {
+    if (aliases.length > 0) {
+      findings.push(error("accounts.undeclared", `the fixture records the accounts ${aliases.join(", ")}, and capabilities declares no accounts`, { path: "capabilities.accounts", fix: "Remove the accounts block, or declare how they are held." }));
+    }
+    for (const [method, item] of Object.entries(manifest.methods)) {
+      if (methodAccounts(item) !== "optional") continue;
+      findings.push(warning("accounts.undeclared", `${method} takes an account, and the plugin declares no accounts`, { path: `capabilities.methods.${method}.accounts`, fix: "Declare accounts, or set the method's accounts to none." }));
+    }
+    return findings;
+  }
+  if (recorded === void 0) {
+    findings.push(
+      options.record === true ? warning("accounts.recorded", `${name} declares accounts and records no two-account behaviour yet`, { path: "fixtures/conformance.json" }) : error("accounts.recorded", `${name} declares accounts and records no two-account behaviour`, {
+        path: "fixtures/conformance.json",
+        fix: "Record two aliases with ACCOUNT_REQUIRED, ACCOUNT_UNKNOWN and a cursor that another account may not use."
+      })
+    );
+    return findings;
+  }
+  if (aliases.length < 2) {
+    findings.push(error("accounts.aliases", `${name} declares accounts and the fixture records ${aliases.length === 0 ? "none" : `one alias (${aliases[0]})`}: several accounts are the contract's promise`, { path: "fixtures/conformance.json", fix: "Record at least two aliases, such as work and personal." }));
+  }
+  const seen = /* @__PURE__ */ new Set();
+  for (const alias of aliases) {
+    const problem = aliasProblem(alias, `the alias "${String(alias)}"`);
+    if (problem !== void 0) findings.push(error("accounts.aliases", problem, { path: "fixtures/conformance.json" }));
+    if (seen.has(alias)) findings.push(error("accounts.aliases", `the fixture records the alias ${alias} twice`, { path: "fixtures/conformance.json" }));
+    seen.add(alias);
+    const server = serverOf(name, alias, aliases);
+    if (!server.ok) findings.push(error("accounts.names", `${alias} derives no integration or MCP server name: ${server.problems.join("; ")}`, { path: "fixtures/conformance.json" }));
+  }
+  if (manifest.accounts.via === "local" && aliases.length > 1) {
+    findings.push(error("accounts.local", `${name} holds accounts as the machine's identity, and the fixture records ${aliases.length} aliases: a local plugin has one account`, { path: "capabilities.accounts.via" }));
+  }
+  const required = recorded.required;
+  if (required === void 0) {
+    findings.push(error("accounts.required", "the fixture records no ACCOUNT_REQUIRED case: with two aliases and no account, a call is refused", { path: "fixtures/conformance.json" }));
+  } else {
+    if (required.code !== "ACCOUNT_REQUIRED") findings.push(error("accounts.required", `the required-account case answers ${String(required.code)}, not ACCOUNT_REQUIRED`, { path: "fixtures/conformance.json" }));
+    const method = typeof required.method === "string" ? required.method : "";
+    if (method === "" || manifest.methods[method] === void 0) findings.push(error("accounts.required", `the required-account case names ${String(required.method)}, which is not a declared method`, { path: "fixtures/conformance.json" }));
+    else if (methodAccounts(manifest.methods[method]) !== "optional") findings.push(error("accounts.required", `${method} does not take an account, so it cannot ask for one`, { path: `capabilities.methods.${method}.accounts` }));
+  }
+  const unknown = recorded.unknown;
+  if (unknown === void 0) {
+    findings.push(error("accounts.unknown", "the fixture records no ACCOUNT_UNKNOWN case: an alias the plugin does not serve is refused", { path: "fixtures/conformance.json" }));
+  } else {
+    if (unknown.code !== "ACCOUNT_UNKNOWN") findings.push(error("accounts.unknown", `the unknown-account case answers ${String(unknown.code)}, not ACCOUNT_UNKNOWN`, { path: "fixtures/conformance.json" }));
+    if (typeof unknown.account !== "string" || isAlias(unknown.account) === false) findings.push(error("accounts.unknown", `the unknown-account case names ${String(unknown.account)}, which is not an alias`, { path: "fixtures/conformance.json" }));
+    else if (aliases.includes(unknown.account)) findings.push(error("accounts.unknown", `the unknown-account case names ${unknown.account}, and the fixture records it as an alias`, { path: "fixtures/conformance.json" }));
+    const method = typeof unknown.method === "string" ? unknown.method : "";
+    if (method === "" || manifest.methods[method] === void 0) findings.push(error("accounts.unknown", `the unknown-account case names ${String(unknown.method)}, which is not a declared method`, { path: "fixtures/conformance.json" }));
+  }
+  const cursors = recorded.cursors ?? [];
+  if (cursors.length === 0) {
+    findings.push(error("accounts.cursors", "the fixture records no cursor another account may not use: a cursor is bound to its account", { path: "fixtures/conformance.json" }));
+  }
+  for (const [index, cursor] of cursors.entries()) {
+    const at = `cursors[${index}]`;
+    if (typeof cursor.account !== "string" || !aliases.includes(cursor.account)) findings.push(error("accounts.cursors", `${at} names ${String(cursor.account)}, which is not a recorded alias`, { path: "fixtures/conformance.json" }));
+    if (typeof cursor.other !== "string" || !aliases.includes(cursor.other)) findings.push(error("accounts.cursors", `${at} reads under ${String(cursor.other)}, which is not a recorded alias`, { path: "fixtures/conformance.json" }));
+    if (cursor.account === cursor.other) findings.push(error("accounts.cursors", `${at} reads under the same account that issued the cursor`, { path: "fixtures/conformance.json" }));
+    if (!CURSOR_CODES.includes(cursor.code)) findings.push(error("accounts.cursors", `${at} answers ${String(cursor.code)}, not ${CURSOR_CODES.join(" or ")}`, { path: "fixtures/conformance.json" }));
+    const method = typeof cursor.method === "string" ? cursor.method : "";
+    if (method === "" || manifest.methods[method] === void 0) findings.push(error("accounts.cursors", `${at} names ${String(cursor.method)}, which is not a declared method`, { path: "fixtures/conformance.json" }));
+  }
+  return findings;
+}
+
+// src/internal/conformance/actions.ts
+var plain = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var PREVIEW_KEYS = ["output", "reaches", "changes", "cost", "trust"];
+function actionFindings(manifest, recorded, options = {}) {
+  const findings = [];
+  const byId = new Map((recorded ?? []).map((entry) => [entry.id, entry]));
+  for (const entry of recorded ?? []) {
+    if (manifest.actions.some((action) => action.id === entry.id)) continue;
+    findings.push(error("actions.declared", `the fixture records the action ${entry.id}, which capabilities.actions does not declare`, { path: "fixtures/conformance.json" }));
+  }
+  for (const action of manifest.actions) {
+    if (action.effect === "local") continue;
+    const recording = byId.get(action.id);
+    if (recording?.preview?.answer === void 0) {
+      findings.push(
+        options.record === true ? warning("actions.recorded", `${action.id} records no preview yet`, { path: "fixtures/conformance.json" }) : error("actions.recorded", `${action.id} records no preview, so nothing shows what its preview answers`, {
+          path: "fixtures/conformance.json",
+          fix: "Record the preview and the commit with plugin-kit record."
+        })
+      );
+      continue;
+    }
+    const answer = recording.preview.answer;
+    if (!plain(answer)) {
+      findings.push(error("actions.preview", `${action.id}'s preview answer is not an object`, { path: "fixtures/conformance.json" }));
+      continue;
+    }
+    for (const key of Object.keys(answer)) if (!PREVIEW_KEYS.includes(key)) findings.push(error("actions.preview", `${action.id}'s preview carries ${key}, which \xA78 does not define`, { path: "fixtures/conformance.json" }));
+    if (!Object.hasOwn(answer, "output")) findings.push(error("actions.preview", `${action.id}'s preview carries no output`, { path: "fixtures/conformance.json" }));
+    if (answer["trust"] !== "untrusted") findings.push(error("actions.preview", `${action.id}'s preview trust must be "untrusted"`, { path: "fixtures/conformance.json" }));
+    if (recording.commit?.answer === void 0) {
+      findings.push(
+        options.record === true ? warning("actions.recorded", `${action.id} records no commit yet`, { path: "fixtures/conformance.json" }) : error("actions.recorded", `${action.id} records no commit, so the confirm-then-commit flow is not proven`, { path: "fixtures/conformance.json" })
+      );
+    }
+  }
+  return findings;
+}
 
 // src/internal/conformance/public-suffix-list.ts
 var RULES = `ac
@@ -10451,80 +10607,7 @@ nett.to
 zabc.net`;
 var PUBLIC_SUFFIX_RULES = RULES.split("\n");
 
-// src/internal/conformance/rules.ts
-var READ_VERBS = ["get", "list", "read", "search", "query", "fetch", "count", "describe", "probe", "status", "lookup", "view", "history", "find"];
-var WRITE_VERB_WORDS = `delete remove send create update write insert patch put set add modify move trash archive revoke
-  grant share invite approve merge close reply forward upload publish unarchive unshare unsubscribe subscribe unwatch
-  watch untrash empty ban unban kick mute unmute block unblock follow unfollow pin unpin star unstar assign unassign
-  rename restore react like unlike retweet repost join leave transfer execute exec run invoke trigger dispatch start
-  stop cancel schedule submit accept decline reject mark lock unlock enable disable open push sync reset revert deploy
-  release sign pay charge refund purchase order book reserve purge wipe clear erase destroy drop truncate kill terminate
-  suspend resume rotate regenerate import save overwrite notify escalate resolve vote snooze dismiss acknowledge ack
-  connect disconnect login logout signin signout mint verify hide unhide ingest index reindex generate copy print
-  convert download`;
-var WRITE_VERBS = WRITE_VERB_WORDS.split(/\s+/).filter((word) => word !== "");
-var NOUN_VERBS = ["issue", "post", "comment", "draft", "label", "message", "export", "mention", "note", "file", "bookmark"];
-var JOINERS = ["and", "then", "or"];
-var READ = new Set(READ_VERBS);
-var WRITE = new Set(WRITE_VERBS);
-var NOUN = new Set(NOUN_VERBS);
-var JOIN = new Set(JOINERS);
-var isVerb = (token) => READ.has(token) || WRITE.has(token);
-function tokensOf(name) {
-  return String(name ?? "").replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2").split(/[._\-\s]+/).filter((token) => token !== "").map((token) => token.toLowerCase());
-}
-function joinerProblem(name, tokens) {
-  for (let index = 1; index < tokens.length - 1; index++) {
-    const token = tokens[index] ?? "";
-    const next = tokens[index + 1] ?? "";
-    if (JOIN.has(token) && (isVerb(next) || NOUN.has(next))) return `"${name}" joins two actions with "${token}": name the one action it is`;
-  }
-  return void 0;
-}
-function nameProblem(name) {
-  if (typeof name !== "string" || name.length === 0) return "a read must be named";
-  const tokens = tokensOf(name);
-  const joiner = joinerProblem(name, tokens);
-  if (joiner !== void 0) return joiner;
-  const write = tokens.find((token) => WRITE.has(token));
-  if (write !== void 0) return `"${name}" carries the write verb ${write}: a read never sends, changes or watches`;
-  const verb = verbPosition(tokens);
-  if (verb === void 0) return void 0;
-  if (NOUN.has(verb.token)) return `"${name}" puts "${verb.token}" where the verb sits, and it is not a read verb`;
-  return void 0;
-}
-function verbPosition(tokens) {
-  const [first = ""] = tokens;
-  if (READ.has(first) || WRITE.has(first) || NOUN.has(first)) return { token: first, index: 0 };
-  const second = tokens[1];
-  if (second !== void 0 && (READ.has(second) || WRITE.has(second) || NOUN.has(second))) return { token: second, index: 1 };
-  return void 0;
-}
-function readVerbProblem(name) {
-  const problem = nameProblem(name);
-  if (problem !== void 0) return problem;
-  if (!tokensOf(name).some((token) => READ.has(token))) return `"${String(name)}" carries no read verb (${READ_VERBS.join(", ")})`;
-  return void 0;
-}
-function operationProblem(operation) {
-  if (typeof operation !== "string" || operation.length === 0) return "an operation must be named";
-  const joiner = joinerProblem(operation, tokensOf(operation));
-  if (joiner !== void 0) return joiner;
-  const segment = operation.includes(".") ? operation.split(".").pop() ?? "" : operation;
-  const tokens = tokensOf(segment);
-  const write = tokens.find((token) => WRITE.has(token));
-  if (write !== void 0) return `"${operation}" carries the write verb ${write} in "${segment}": a read never sends, changes or watches`;
-  const verb = verbPosition(tokens);
-  if (verb !== void 0 && NOUN.has(verb.token) && tokens.length > verb.index + 1) {
-    return `"${operation}" puts "${verb.token}" where the verb sits, with an object after it, so "${segment}" is a write`;
-  }
-  return void 0;
-}
-var MAX_OUTPUT_SCHEMA_BYTES = 32768;
-var EVENT_FIELDS = ["external_id", "kind", "occurred_at", "title", "text", "url", "thread", "actors", "labels", "hash"];
-var DETAIL_FIELDS = ["external_id", "kind", "occurred_at", "url", "thread", "actors", "labels", "hash"];
-var plain = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-var unique = (values) => [...new Set(values)];
+// src/internal/conformance/url-hosts.ts
 var SHARED_HOSTS = /* @__PURE__ */ new Set([
   "cloudfront.net",
   "amazonaws.com",
@@ -10631,1057 +10714,1642 @@ function urlHostProblem(host) {
   for (const listed of TRACKER_HOSTS) if (bare === listed || bare.endsWith(`.${listed}`)) return `is a tracker (${listed}), which is no source's destination`;
   return null;
 }
-function declarationProblems(sources, options = {}) {
-  const checked = SOURCES_SCHEMA.check(sources);
-  const problems = checked.ok ? [] : [...checked.problems];
-  if (!plain(sources)) return problems;
-  const items = Array.isArray(sources["items"]) ? sources["items"] : [];
-  const tools = options.tools;
-  const toolOf = (id) => tools?.find((tool) => tool.id === id);
-  const ids = items.filter(isSourceItem).map((item) => item.id);
-  for (const id of unique(ids)) {
-    if (ids.filter((entry) => entry === id).length > 1) problems.push(`items: two sources share the id "${id}": a source id is unique`);
+function thumbnailHostProblem(url) {
+  let host;
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    return "is not a URL";
   }
-  for (const [index, item] of items.entries()) {
-    if (!isSourceItem(item)) continue;
-    const at = `items[${index}] (${item.id})`;
-    const head = item.id.split(".")[0] ?? item.id;
-    const operations = item.permission.operations ?? [];
-    const rules = item.permission.rules ?? [];
-    for (const named of itemTools(item)) {
-      const verb2 = nameProblem(named.name);
-      if (verb2 !== void 0) problems.push(`${at}.${named.where}: ${verb2}`);
-      if (tools !== void 0) {
-        const declared = toolOf(named.name);
-        if (declared === void 0) problems.push(`${at}.${named.where} names "${named.name}", which the plugin does not declare`);
-        else if (declared.readOnly !== true) problems.push(`${at}.${named.where} names "${named.name}", which is not declared readOnly: true`);
-      }
-    }
-    const action = item.kind === "events" ? item.permission.events : item.permission.tool;
-    if (!action.startsWith(`${head}.`) && !action.startsWith(`${head}_`)) {
-      problems.push(`${at}.permission.${item.kind === "events" ? "events" : "tool"} "${action}" is not in the plugin's namespace "${head}"`);
-    }
-    const verb = nameProblem(action);
-    if (verb !== void 0) problems.push(`${at}.permission.${item.kind === "events" ? "events" : "tool"}: ${verb}`);
-    for (const operation of operations) {
-      const problem = operationProblem(operation);
-      if (problem !== void 0) problems.push(`${at}.permission.operations: ${problem}`);
-    }
-    for (const operation of unique(operations)) {
-      if (operations.filter((entry) => entry === operation).length > 1) {
-        problems.push(`${at}.permission.operations lists "${operation}" twice: an operation is granted once`);
-      }
-    }
-    const namespace = sourceNamespace(item.id);
-    if (item.kind === "events" && !isEventKindIn(item.reads, namespace)) {
-      problems.push(`${at}.reads "${item.reads}" is not a core kind, or an extension kind in the namespace "${namespace}"`);
-    }
-    if (item.kind === "snapshot") {
-      if (item.output.startsWith("x-") && !isEventKindIn(item.output, namespace)) {
-        problems.push(`${at}.output "${item.output}" is an extension name in another namespace, and this source is in "${namespace}"`);
-      }
-      if (item.output.startsWith("x-")) {
-        const bytes = item.outputSchema === void 0 ? 0 : new TextEncoder().encode(JSON.stringify(item.outputSchema)).length;
-        if (bytes > MAX_OUTPUT_SCHEMA_BYTES) {
-          problems.push(`${at}.outputSchema is ${bytes} bytes of compact JSON, over the ${MAX_OUTPUT_SCHEMA_BYTES}-byte cap`);
-        }
-      }
-    }
-    const server = item.accounts?.server;
-    if (server !== void 0 && !new RegExp(`^${head}(?:[-_]|\\{account\\})`).test(server)) {
-      problems.push(`${at}.accounts.server "${server}" does not begin with the plugin's namespace "${head}": every action of a source begins with it`);
-    }
-    for (const rule of rules) {
-      if (typeof rule.action !== "string" || typeof rule.resource !== "string") problems.push(`${at}.permission.rules entries must be { action, resource }`);
-    }
-    const identity = item.permission.identity ?? [];
-    for (const operation of identity) {
-      const problem = operationProblem(operation);
-      if (problem !== void 0) problems.push(`${at}.permission.identity: ${problem}`);
-      if (!(item.permission.operations ?? []).includes(operation)) {
-        problems.push(`${at}.permission.identity lists "${operation}", which permission.operations does not: a source's operations are everything its reads assert, identity included`);
-      }
-    }
-    for (const operation of unique(identity)) {
-      if (identity.filter((entry) => entry === operation).length > 1) problems.push(`${at}.permission.identity lists "${operation}" twice`);
-    }
-    const identityRules = item.permission.identityRules ?? [];
-    const ruleKey = (rule) => `${rule.action}\0${rule.resource}`;
-    const declaredRules = new Set(rules.map(ruleKey));
-    const seenIdentityRules = /* @__PURE__ */ new Set();
-    for (const rule of identityRules) {
-      if (!declaredRules.has(ruleKey(rule))) {
-        problems.push(`${at}.permission.identityRules lists ${rule.action} on ${rule.resource}, which permission.rules does not: a source's rules are everything its reads assert, identity included`);
-      }
-      if (seenIdentityRules.has(ruleKey(rule))) problems.push(`${at}.permission.identityRules lists ${rule.action} on ${rule.resource} twice`);
-      seenIdentityRules.add(ruleKey(rule));
-    }
-    const details = item.kind === "events" ? item.details ?? [] : [];
-    for (const [i, detail] of details.entries()) {
-      const where = `${at}.details[${i}]`;
-      if (!detail.id.startsWith(`${head}.`)) problems.push(`${where}.id "${detail.id}" does not start with the plugin's namespace "${head}."`);
-      for (const field of detail.from) {
-        const name = field;
-        if (name === "title" || name === "text") {
-          problems.push(`${where}.from names "${name}", which is item text: a detail's input comes only from an event's identifiers`);
-        } else if (!EVENT_FIELDS.includes(name)) {
-          problems.push(`${where}.from names "${name}", which is not an event field (${EVENT_FIELDS.join(", ")})`);
-        }
-      }
-      for (const field of unique(detail.from)) {
-        if (detail.from.filter((entry) => entry === field).length > 1) problems.push(`${where}.from names "${field}" twice`);
-      }
-    }
-    for (const id of unique(details.map((entry) => entry.id))) {
-      if (details.filter((entry) => entry.id === id).length > 1) problems.push(`${at}.details has two entries with the id "${id}"`);
-    }
-    const scope = item.scope;
-    if (scope !== void 0) {
-      for (const key2 of unique(scope.keys)) {
-        if (scope.keys.filter((entry) => entry === key2).length > 1) problems.push(`${at}.scope.keys names "${key2}" twice`);
-      }
-      const suggest = scope.suggest;
-      if (suggest !== void 0) {
-        for (const operation of suggest.operations) {
-          const problem = operationProblem(operation);
-          if (problem !== void 0) problems.push(`${at}.scope.suggest.operations: ${problem}`);
-          if ((item.permission.operations ?? []).includes(operation)) {
-            problems.push(`${at}.scope.suggest.operations lists "${operation}", which permission.operations also lists: a bind-time read must not enter the running grant`);
-          }
-        }
-        for (const operation of unique(suggest.operations)) {
-          if (suggest.operations.filter((entry) => entry === operation).length > 1) problems.push(`${at}.scope.suggest.operations lists "${operation}" twice`);
-        }
-      }
-    }
-    for (const host of item.urlHosts ?? []) {
-      const problem = urlHostProblem(host);
-      if (problem !== null) problems.push(`${at}.urlHosts has ${JSON.stringify(host)}, which ${problem}`);
-    }
-    const factTypes = item.kind === "events" ? item.facts ?? [] : [];
-    for (const type of unique(factTypes)) {
-      if (factTypes.filter((entry) => entry === type).length > 1) problems.push(`${at}.facts lists "${type}" twice: a fact type is declared once`);
-    }
-    const hintPaths = item.hints ?? [];
-    for (const path of unique(hintPaths)) {
-      if (hintPaths.filter((entry) => entry === path).length > 1) problems.push(`${at}.hints lists "${path}" twice: one file is declared once`);
-    }
-  }
-  problems.push(...actDeclarationProblems(sources, tools));
-  return problems;
-}
-function actDeclarationProblems(sources, tools) {
-  const acts = sources["acts"];
-  if (acts === void 0) return [];
-  if (!Array.isArray(acts)) return ["acts must be a list"];
-  const problems = [];
-  for (const [index, act] of acts.entries()) {
-    if (!plain(act)) continue;
-    const at = `acts[${index}]${typeof act["id"] === "string" ? ` (${act["id"]})` : ""}`;
-    const preview = act["preview"];
-    if (typeof preview === "string") {
-      const verb = nameProblem(preview);
-      if (verb !== void 0) problems.push(`${at}.preview: ${verb}: a preview writes nothing`);
-      if (tools !== void 0) {
-        const declared = tools.find((tool) => tool.id === preview);
-        if (declared === void 0) problems.push(`${at}.preview names "${preview}", which the plugin does not declare`);
-        else if (declared.readOnly !== true) problems.push(`${at}.preview names "${preview}", which is not declared readOnly: true: a preview writes nothing`);
-      }
-    }
-    const commit = act["commit"];
-    if (tools !== void 0 && typeof commit === "string" && tools.every((tool) => tool.id !== commit)) {
-      problems.push(`${at}.commit names "${commit}", which the plugin does not declare`);
-    }
-    for (const key2 of ["input", "output"]) {
-      const schema = act[key2];
-      if (schema === void 0) continue;
-      const size = new TextEncoder().encode(JSON.stringify(schema)).length;
-      if (size > MAX_OUTPUT_SCHEMA_BYTES) problems.push(`${at}.${key2} is ${size} bytes of compact JSON, over the ${MAX_OUTPUT_SCHEMA_BYTES}-byte cap`);
-    }
-  }
-  return problems;
-}
-function publicToolId(tool) {
-  if (typeof tool.id === "string" && tool.id.length > 0) return tool.id;
-  if (typeof tool.name === "string" && tool.name.length > 0) return tool.name;
-  return void 0;
-}
-function exclusionReason(tool) {
-  if (typeof tool.exclude !== "string") return void 0;
-  const reason = tool.exclude.trim();
-  return reason.length === 0 ? void 0 : reason;
-}
-function declaredToolIds(declaration) {
-  if (!plain(declaration)) return [];
-  const ids = [];
-  const items = Array.isArray(declaration["items"]) ? declaration["items"] : [];
-  for (const item of items) {
-    if (!plain(item)) continue;
-    if (typeof item["tool"] === "string") ids.push(item["tool"]);
-    if (Array.isArray(item["details"])) {
-      for (const detail of item["details"]) if (plain(detail) && typeof detail["tool"] === "string") ids.push(detail["tool"]);
-    }
-    const scope = item["scope"];
-    const suggest = plain(scope) ? scope["suggest"] : void 0;
-    if (plain(suggest) && typeof suggest["tool"] === "string") ids.push(suggest["tool"]);
-  }
-  const acts = Array.isArray(declaration["acts"]) ? declaration["acts"] : [];
-  for (const act of acts) {
-    if (!plain(act)) continue;
-    if (typeof act["preview"] === "string") ids.push(act["preview"]);
-    if (typeof act["commit"] === "string") ids.push(act["commit"]);
-  }
-  return ids;
-}
-function undeclaredToolProblems(declaration, tools) {
-  const declared = new Set(declaredToolIds(declaration));
-  const problems = [];
-  const seen = /* @__PURE__ */ new Set();
-  for (const [index, tool] of tools.entries()) {
-    const id = publicToolId(tool);
-    if (id === void 0) {
-      problems.push(`tools[${index}] has no id: pass id, or name when the table uses name`);
-      continue;
-    }
-    if (seen.has(id)) continue;
-    seen.add(id);
-    if (declared.has(id)) continue;
-    if (tool.exclude !== void 0 && exclusionReason(tool) === void 0) {
-      problems.push(`"${id}" is excluded with no reason: a reason says why it is neither a source nor an act`);
-      continue;
-    }
-    if (exclusionReason(tool) !== void 0) continue;
-    problems.push(`"${id}" is neither a source, an act, nor excluded with a reason`);
-  }
-  return problems;
-}
-function assertDeclaredTools(declaration, tools) {
-  const problems = undeclaredToolProblems(declaration, tools);
-  if (problems.length > 0) {
-    throw new Error(`SCHEMA_VIOLATION: a public tool is not declared. Next step: declare it as a source or an act, or exclude it with a reason.
-- ${problems.join("\n- ")}`);
-  }
-}
-function assertDeclaration(sources, options = {}) {
-  const problems = declarationProblems(sources, options);
-  if (problems.length > 0) {
-    throw new Error(`SCHEMA_VIOLATION: the sources declaration breaks contract version 1. Next step: fix each problem listed.
-- ${problems.join("\n- ")}`);
-  }
-}
-function itemTools(item) {
-  const found = [{ name: item.tool, where: "tool" }];
-  const details = item.kind === "events" ? item.details ?? [] : [];
-  for (const [i, detail] of details.entries()) found.push({ name: detail.tool, where: `details[${i}].tool` });
-  if (item.scope?.suggest !== void 0) found.push({ name: item.scope.suggest.tool, where: "scope.suggest.tool" });
-  return found;
-}
-function isSourceItem(value) {
-  if (!plain(value)) return false;
-  const kind = value["kind"];
-  if (kind !== "events" && kind !== "snapshot") return false;
-  if (typeof value["id"] !== "string" || typeof value["tool"] !== "string") return false;
-  const permission = value["permission"];
-  if (!plain(permission)) return false;
-  const operations = permission["operations"];
-  const rules = permission["rules"];
-  if (operations !== void 0 && (!Array.isArray(operations) || !operations.every((operation) => typeof operation === "string"))) return false;
-  if (rules !== void 0 && (!Array.isArray(rules) || !rules.every((rule) => plain(rule) && typeof rule["action"] === "string" && typeof rule["resource"] === "string"))) return false;
-  const identityRules = permission["identityRules"];
-  if (identityRules !== void 0 && (!Array.isArray(identityRules) || !identityRules.every((rule) => plain(rule) && typeof rule["action"] === "string" && typeof rule["resource"] === "string"))) return false;
-  const action = kind === "events" ? permission["events"] : permission["tool"];
-  if (typeof action !== "string") return false;
-  if (permission["operations"] === void 0 && permission["rules"] === void 0) return false;
-  const identity = permission["identity"];
-  if (identity !== void 0 && (!Array.isArray(identity) || !identity.every((operation) => typeof operation === "string"))) return false;
-  const details = value["details"];
-  if (details !== void 0 && !Array.isArray(details)) return false;
-  if (Array.isArray(details) && !details.every(isDetail)) return false;
-  const scope = value["scope"];
-  if (scope !== void 0) {
-    if (!plain(scope) || !Array.isArray(scope["keys"]) || !scope["keys"].every((key2) => typeof key2 === "string")) return false;
-    if (typeof scope["describe"] !== "string") return false;
-    const suggest = scope["suggest"];
-    if (suggest !== void 0) {
-      if (!plain(suggest) || typeof suggest["tool"] !== "string" || !Array.isArray(suggest["operations"])) return false;
-      if (!suggest["operations"].every((operation) => typeof operation === "string")) return false;
-    }
-  }
-  if (kind === "events" && typeof value["reads"] !== "string") return false;
-  if (kind === "snapshot") {
-    if (typeof value["output"] !== "string") return false;
-    const schema = value["outputSchema"];
-    if (schema !== void 0 && typeof schema !== "boolean" && !plain(schema)) return false;
-  }
-  const hosts = value["urlHosts"];
-  if (hosts !== void 0 && (!Array.isArray(hosts) || !hosts.every((host) => typeof host === "string"))) return false;
-  return true;
-}
-function isDetail(value) {
-  return plain(value) && typeof value["id"] === "string" && typeof value["tool"] === "string" && Array.isArray(value["from"]);
+  return urlHostProblem(host);
 }
 
-// src/internal/conformance/permission.ts
-var key = (action, resource) => `${action}\0${resource}`;
-function grantsFor(source, account) {
-  if (source.permission.rules !== void 0) {
-    const action2 = source.kind === "events" ? source.permission.events : source.permission.tool;
-    return [{ action: action2, resource: "*" }, ...source.permission.rules.map((rule) => ({ action: rule.action, resource: rule.resource }))];
+// src/internal/conformance/declaration.ts
+var PREFIXES = [
+  { pattern: /^(?:delete|remove|purge|trash)_/, class: "delete", because: "a method that deletes something is class delete" },
+  { pattern: /^(?:send|post|reply|forward|publish)_/, class: "send", because: "a method that sends something is class send" },
+  { pattern: /^share_/, class: "share", because: "a method that widens access is class share" },
+  { pattern: /^(?:export|download)_/, class: "export", because: "a method whose output leaves the provider is class export" },
+  { pattern: /^(?:create|update|write|set|edit|put|patch|insert|add|modify|move|rename|upload|save)_/, class: "write", because: "a method that changes something is class write" },
+  { pattern: /^admin_/, class: "admin", because: "a method that administers the provider is class admin" }
+];
+var RISK = { read: 0, write: 1, export: 2, send: 3, share: 4, delete: 5, admin: 6 };
+function methodName(method) {
+  return method.startsWith("mcp:") ? method.slice("mcp:".length) : method;
+}
+function declarationFindings(installed) {
+  const findings = [];
+  const { manifest } = installed;
+  const name = manifest.plugin.name;
+  const expectedPackage = `@we-the-rebel-alliance/${name}-plugin`;
+  if (installed.package !== expectedPackage) {
+    findings.push(
+      error("names.package", `the package is ${installed.package}, and contract \xA73 derives ${expectedPackage} from the plugin name ${name}`, {
+        path: "package.json",
+        fix: `Rename the package to ${expectedPackage}, or change capabilities.plugin.name to the name the package already uses.`
+      })
+    );
   }
-  const action = source.kind === "events" ? source.permission.events : source.permission.tool;
-  const head = source.id.split(".")[0] ?? source.id;
-  const grants = [{ action, resource: "*" }];
-  for (const operation of source.permission.operations ?? []) addGrant(grants, source, operation, account);
-  return grants;
-}
-function bindGrantsFor(source, account = "default") {
-  const suggest = source.scope?.suggest;
-  if (suggest === void 0) return [];
-  const action = source.kind === "events" ? source.permission.events : source.permission.tool;
-  const head = source.id.split(".")[0] ?? source.id;
-  const grants = [{ action: action.includes(".") ? `${head}.${suggest.tool}` : `${head}_${suggest.tool}`, resource: "*" }];
-  for (const operation of suggest.operations) addGrant(grants, source, operation, account);
-  return grants;
-}
-function identityGrantsFor(source, identityOperations, account = "default") {
-  const grants = [];
-  for (const operation of identityOperations) addGrant(grants, source, operation, account);
-  return grants;
-}
-function probeIdentityGrants(source, identityOperations, account = "default") {
-  const verbatim = source.permission.identityRules;
-  if (verbatim !== void 0) return verbatim.map((rule) => ({ action: rule.action, resource: rule.resource }));
-  return identityGrantsFor(source, identityOperations, account);
-}
-function addGrant(grants, source, operation, account) {
-  const namespace = source.id.split(".")[0] ?? source.id;
-  const server = source.accounts?.server !== void 0 && account !== "default" ? source.accounts.server.replace("{account}", account) : namespace;
-  const grant = operation.includes(".") ? { action: `${server}.read`, resource: `${account}:${operation}`.replace(`${account}:`, "{account}:") } : { action: `${server}_${operation}`, resource: "*" };
-  if (!grants.some((held) => held.action === grant.action && held.resource === grant.resource)) grants.push(grant);
-}
-function sameResource(declared, asserted) {
-  if (declared === asserted || declared === "*") return true;
-  if (declared.startsWith("{account}:")) {
-    return wildcard(declared.slice("{account}:".length), asserted.replace(/^[^:]*:/, ""));
-  }
-  return wildcard(declared, asserted);
-}
-function assertionMatches(assertions, grant) {
-  return assertions.some(
-    (assertion) => assertion.action === grant.action && (assertion.resources.length > 0 ? assertion.resources : ["*"]).some((resource) => sameResource(grant.resource, resource))
-  );
-}
-function recordingPermission(grants) {
-  const held = new Set(grants.map((grant) => key(grant.action, grant.resource)));
-  const assertions = [];
-  const undeclared = [];
-  const permission = {
-    async assert(input) {
-      const resources = input.resources ?? ["*"];
-      assertions.push({ action: input.action, resources });
-      const allowed = resources.every(
-        (resource) => [...held].some((entry) => {
-          const [action, heldResource] = entry.split("\0");
-          return sameResource(heldResource ?? "", resource) && wildcard(action ?? "", input.action);
+  for (const [method, item] of Object.entries(manifest.methods)) {
+    const named = methodName(method);
+    if (named === "*") continue;
+    for (const prefix of PREFIXES) {
+      if (!prefix.pattern.test(named) || item.class === prefix.class) continue;
+      if (RISK[item.class] > RISK[prefix.class]) continue;
+      findings.push(
+        error("methods.class", `${method} is class ${item.class}, and its name says ${prefix.class}: ${prefix.because}`, {
+          path: `capabilities.methods.${method}.class`,
+          fix: `Set its class to ${prefix.class}, or rename it so the name and the class agree.`
         })
       );
-      if (!allowed) {
-        undeclared.push(input.action);
-        throw Object.assign(
-          new Error(`PERMISSION_DENIED: ${input.action} needs a grant this declaration does not hold. Next step: declare the action and its resource in the sources declaration.`),
-          { _tag: "Tool.Error" }
+      break;
+    }
+    if (METHOD_CLASSES.includes(item.class) === false) {
+      findings.push(error("methods.class", `${method} names no class the contract defines`, { path: `capabilities.methods.${method}.class` }));
+    }
+    if (item.plans === true && item.class !== "read") {
+      findings.push(
+        error("methods.plans", `${method} plans a change and is class ${item.class}: a plan writes nothing, so its method is a read`, {
+          path: `capabilities.methods.${method}.class`,
+          fix: "Make the planning method class read, and leave the change to the method its commits names."
+        })
+      );
+    }
+    if (item.commits !== void 0 && manifest.methods[item.commits]?.class !== "read") {
+      findings.push(
+        error("methods.commits", `${method} commits ${item.commits}, which is class ${manifest.methods[item.commits]?.class}: a plan dry-runs the change and is a read`, {
+          path: `capabilities.methods.${method}.commits`,
+          fix: `Class ${item.commits} read, or name another planning method.`
+        })
+      );
+    }
+    if (method.startsWith("mcp:") && method !== "mcp:*" && manifest.methods["mcp:*"] !== void 0) {
+      findings.push(
+        warning("methods.mcp-wildcard", `${method} is listed beside mcp:*, which already covers every pass-through MCP tool`, {
+          path: `capabilities.methods.${method}`,
+          fix: "Keep mcp:* and remove the specific pass-through tools it covers."
+        })
+      );
+    }
+  }
+  for (const source of manifest.sources) {
+    const method = manifest.methods[source.method];
+    if (method === void 0) continue;
+    if (method.class !== "read") {
+      findings.push(
+        error("sources.method", `${source.id} is read by ${source.method}, which is class ${method.class}: a source is a read`, {
+          path: `capabilities.sources.${source.id}.method`,
+          fix: `Read ${source.id} through a read method.`
+        })
+      );
+    }
+    if (source.operations !== void 0 && method.operations !== void 0) {
+      for (const operation of source.operations) {
+        if (method.operations.includes(operation)) continue;
+        findings.push(
+          error("sources.operations", `${source.id} asserts ${operation}, and ${source.method} does not list it among its operations`, {
+            path: `capabilities.sources.${source.id}.operations`,
+            fix: `Add ${operation} to capabilities.methods.${source.method}.operations, or remove it from the source.`
+          })
         );
       }
     }
-  };
-  return { permission, assertions, undeclared };
-}
-function unusedGrants(grants, assertions) {
-  return grants.filter((grant) => !assertionMatches(assertions, grant));
-}
-var wildcard = (pattern, value) => {
-  const expression = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replaceAll("*", ".*").replaceAll("?", ".");
-  return new RegExp(`^${expression}$`).test(value);
-};
-
-// src/internal/conformance/page.ts
-var plain2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-function pageChecks(answer, options) {
-  const limit = typeof options.input["limit"] === "number" && Number.isInteger(options.input["limit"]) ? options.input["limit"] : PAGE.max;
-  const shape = [...resultProblems(answer, limit, maxBytesOf(options.source))];
-  const page = answer;
-  if (plain2(answer) && answer["plugin"] !== options.plugin) {
-    shape.push(`the page names plugin ${JSON.stringify(answer["plugin"])}, not ${options.plugin}`);
-  }
-  if (plain2(answer) && answer["source"] !== namedSource(options.source)) {
-    shape.push(`the page names source ${JSON.stringify(answer["source"])}, not ${namedSource(options.source)}`);
-  }
-  const cursor = [];
-  if (options.detail !== true && Array.isArray(page?.failed) && page.failed.length > 0) {
-    const held = typeof options.input["cursor"] === "string" ? options.input["cursor"] : "";
-    if (page.cursor !== held) {
-      cursor.push(`the page failed[] holds the cursor back, and this page answered ${JSON.stringify(page.cursor)} instead of ${JSON.stringify(held)}`);
-    }
-  }
-  const refused = [];
-  for (const [index, event] of (Array.isArray(page?.events) ? page.events : []).entries()) {
-    if (event.kind.startsWith("x-") && !isEventKindIn(event.kind, sourceNamespace(options.source.id))) {
-      shape.push(`the page events[${index}] has the kind ${event.kind}, which is in another namespace than the source "${sourceNamespace(options.source.id)}"`);
-    }
-    const kinds = secretKinds([event.title, event.text].filter(Boolean).join("\n"));
-    if (kinds.length > 0) {
-      refused.push(`the page events[${index}] holds a secret (${kinds.join(", ")}): it belongs in refused[] with reason "secret"`);
-    }
-  }
-  if (plain2(answer) && Array.isArray(answer["refused"])) {
-    for (const [index, entry] of answer["refused"].entries()) {
-      if (plain2(entry) && !REFUSAL_REASONS.includes(entry["reason"])) {
-        refused.push(`the page refused[${index}] names no reason of ${REFUSAL_REASONS.join(", ")}`);
+    if (source.details !== void 0) {
+      for (const detail of source.details) {
+        if (!detail.id.startsWith(`${source.id}.`)) {
+          findings.push(
+            error("sources.details", `${detail.id} is a detail of ${source.id} and does not begin with ${source.id}.`, {
+              path: `capabilities.sources.${source.id}.details`,
+              fix: `Rename the detail to ${source.id}.<name>.`
+            })
+          );
+        }
+        const read = manifest.methods[detail.method];
+        if (read !== void 0 && read.class !== "read") {
+          findings.push(
+            error("sources.details", `${detail.id} is read by ${detail.method}, which is class ${read.class}: a detail read is a read`, {
+              path: `capabilities.sources.${source.id}.details`
+            })
+          );
+        }
       }
     }
+    const suggested = source.scope?.suggest;
+    if (suggested !== void 0) {
+      const read = manifest.methods[suggested.method];
+      if (read !== void 0 && read.class !== "read") {
+        findings.push(
+          error("sources.suggest", `${source.id}'s scope is listed by ${suggested.method}, which is class ${read.class}: a bind-time read is a read`, {
+            path: `capabilities.sources.${source.id}.scope.suggest.method`
+          })
+        );
+      }
+      for (const operation of suggested.operations ?? []) {
+        if ((source.operations ?? []).includes(operation)) {
+          findings.push(
+            error("sources.suggest", `${source.id}'s suggest lists ${operation}, which the source's own operations also list: a bind-time read stays out of the running grant`, {
+              path: `capabilities.sources.${source.id}.scope.suggest.operations`
+            })
+          );
+        }
+      }
+    }
+    if (source.kind === "events" && source.thumbnails === true && source.urlHosts === void 0) {
+      findings.push(error("sources.thumbnails", `${source.id} declares thumbnails and no urlHosts: a thumbnail is displayed only on a host the source names`, { path: `capabilities.sources.${source.id}.thumbnails` }));
+    }
+    for (const host of source.urlHosts ?? []) {
+      const problem = urlHostProblem(host);
+      if (problem !== null) findings.push(error("sources.urlHosts", `${source.id}'s urlHost ${JSON.stringify(host)} ${problem}`, { path: `capabilities.sources.${source.id}.urlHosts` }));
+    }
   }
-  const cost = [];
-  if (plain2(answer) && answer["cost"] === void 0 && options.source.cost.class === "billed") {
-    cost.push("the page cost is missing: a billed source reports what the provider charged");
+  for (const action of manifest.actions) previewFindings(manifest, action, findings);
+  return findings;
+}
+function previewFindings(manifest, action, findings) {
+  const preview = manifest.methods[action.preview];
+  const commit = manifest.methods[action.commit];
+  if (preview !== void 0 && preview.class !== "read") {
+    findings.push(
+      error("actions.preview", `${action.id}'s preview is ${action.preview}, which is class ${preview.class}: a preview writes nothing`, {
+        path: `capabilities.actions.${action.id}.preview`,
+        fix: `Preview ${action.id} through a read method, and commit it through ${action.commit}.`
+      })
+    );
   }
-  return { shape, cursor, gap: [], refused, cost };
+  if (commit !== void 0 && commit.class === "read") {
+    findings.push(
+      error("actions.commit", `${action.id}'s commit is ${action.commit}, which is class read: committing an action changes something`, {
+        path: `capabilities.actions.${action.id}.commit`,
+        fix: `Class ${action.commit} by what it does.`
+      })
+    );
+  }
+  if (action.preview === action.commit) {
+    findings.push(error("actions.commit", `${action.id} previews and commits through ${action.commit}: \xA78 asks for two different methods`, { path: `capabilities.actions.${action.id}` }));
+  }
 }
-function pageProblems(answer, options) {
-  const checks = pageChecks(answer, options);
-  return [...checks.shape, ...checks.cursor, ...checks.gap, ...checks.refused, ...checks.cost];
+function optionsFindings(manifest) {
+  const findings = [];
+  const schema = manifest.options;
+  const properties = schema["properties"] ?? {};
+  const access = properties["access"];
+  if (access === void 0) {
+    findings.push(error("options.access", "the options schema does not declare access", { path: "capabilities.options.properties.access", fix: "Declare access as all, ask-changes or read-only, default all." }));
+  } else {
+    const values = access["enum"];
+    if (Array.isArray(values) && (values.length !== 3 || !["all", "ask-changes", "read-only"].every((value) => values.includes(value)))) {
+      findings.push(error("options.access", `access offers ${values.map(String).join(", ")}, and the contract's levels are all, ask-changes and read-only`, { path: "capabilities.options.properties.access.enum" }));
+    }
+    if (access["default"] !== void 0 && access["default"] !== "all") {
+      findings.push(error("options.access-default", `access defaults to ${JSON.stringify(access["default"])}, and standard \xA75 gives all`, { path: "capabilities.options.properties.access.default", fix: "Default access to all." }));
+    }
+  }
+  const untested = properties["allowUntestedHost"];
+  if (untested !== void 0 && untested["default"] !== void 0 && untested["default"] !== false) {
+    findings.push(error("options.untested-default", `allowUntestedHost defaults to ${JSON.stringify(untested["default"])}, and standard \xA75 gives false`, { path: "capabilities.options.properties.allowUntestedHost.default" }));
+  }
+  if (manifest.accounts !== void 0 && properties["accounts"] === void 0) {
+    findings.push(error("options.accounts", `${manifest.plugin.name} signs in and its options declare no accounts map`, { path: "capabilities.options.properties.accounts", fix: "Declare accounts as a map of alias to profile." }));
+  }
+  findings.push(...defaultsFindings(schema, properties));
+  return findings;
 }
-function namedSource(source) {
+function defaultsFindings(schema, properties) {
+  const defaults = {};
+  for (const [name, value] of Object.entries(properties)) {
+    if (value === null || typeof value !== "object") continue;
+    const property = value;
+    if (property["default"] !== void 0) defaults[name] = property["default"];
+  }
+  try {
+    const parsed = fromJSONSchema(schema).safeParse(defaults);
+    if (parsed.success) return [];
+    return [
+      error("options.defaults", `the options' defaults do not satisfy the options schema: ${parsed.error.issues.map((issue) => `${issue.path.join(".") || "the options"}: ${issue.message}`).join("; ")}`, {
+        path: "capabilities.options",
+        fix: "Give every option a default the schema accepts."
+      })
+    ];
+  } catch (cause) {
+    return [error("options.defaults", `the options schema cannot be read: ${cause instanceof Error ? cause.message : String(cause)}`, { path: "capabilities.options" })];
+  }
+}
+
+// src/internal/conformance/fixture.ts
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+function readFixture(directory) {
+  let text;
+  try {
+    text = readFileSync(join(directory, "fixtures", "conformance.json"), "utf8");
+  } catch {
+    return {};
+  }
+  try {
+    const value = JSON.parse(text);
+    if (value === null || typeof value !== "object" || Array.isArray(value)) return { problem: "fixtures/conformance.json is not an object" };
+    return { fixture: value };
+  } catch (cause) {
+    return { problem: `fixtures/conformance.json is not JSON: ${cause instanceof Error ? cause.message : String(cause)}` };
+  }
+}
+
+// src/internal/conformance/grants.ts
+var REQUIRED_GRANT_CODES = ["GRANT_AUDIENCE_MISMATCH", "GRANT_DIGEST_MISMATCH", "GRANT_EXPIRED", "GRANT_REPLAYED"];
+function kidOf(token) {
+  const [encoded] = token.split(".");
+  if (encoded === void 0) return void 0;
+  try {
+    const header = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
+    return typeof header.kid === "string" ? header.kid : void 0;
+  } catch {
+    return void 0;
+  }
+}
+async function grantFindings(manifest, recorded, options = {}) {
+  const findings = [];
+  const nonLocal = manifest.actions.filter((action) => action.effect !== "local");
+  if (nonLocal.length === 0) return findings;
+  if (recorded === void 0 || (recorded.cases ?? []).length === 0) {
+    findings.push(
+      options.record === true ? warning("grants.recorded", `${manifest.plugin.name} has non-local actions and records no grant case yet`, { path: "fixtures/conformance.json" }) : error("grants.recorded", `${manifest.plugin.name} has non-local actions and records no grant case`, {
+        path: "fixtures/conformance.json",
+        fix: "Record a valid grant and the four refusals #40 names, then verify them with the grant module."
+      })
+    );
+    return findings;
+  }
+  const publicKey = recorded.publicKey;
+  if (typeof publicKey !== "string" || publicKey.trim() === "") {
+    findings.push(error("grants.key", "the grant recording names no host public key", { path: "fixtures/conformance.json", fix: "Record the host's public key, never its private key." }));
+    return findings;
+  }
+  const codes = /* @__PURE__ */ new Set();
+  let succeeded = false;
+  for (const [index, item] of (recorded.cases ?? []).entries()) {
+    const where = `grant(${item.name ?? `case ${index + 1}`})`;
+    if (typeof item.token !== "string") {
+      findings.push(error("grants.case", `${where} has no token`, { path: "fixtures/conformance.json" }));
+      continue;
+    }
+    if (item.request === void 0) {
+      findings.push(error("grants.case", `${where} has no request: the action, consumer, account, scope and manifest it was signed for`, { path: "fixtures/conformance.json" }));
+      continue;
+    }
+    if (item.expect === void 0 || typeof item.expect.ok !== "boolean") {
+      findings.push(error("grants.case", `${where} says neither that the grant verifies nor that it is refused`, { path: "fixtures/conformance.json" }));
+      continue;
+    }
+    const act = item.request["act"];
+    if (typeof act === "string" && !manifest.actions.some((action) => action.id === act)) {
+      findings.push(error("grants.action", `${where} is signed for ${act}, which capabilities.actions does not declare`, { path: "fixtures/conformance.json" }));
+    }
+    const kid = kidOf(item.token) ?? "host";
+    const used = new Set(item.store?.used ?? []);
+    const request = {
+      ...item.request,
+      grant: item.token,
+      input: item.input,
+      keys: { keys: { [kid]: publicKey } },
+      store: {
+        consume: async (claims) => {
+          if (used.has(claims.jti)) return false;
+          used.add(claims.jti);
+          return true;
+        }
+      }
+    };
+    const outcome = await verifyGrant(request);
+    if (item.expect.ok === true) {
+      if (!outcome.ok) {
+        findings.push(error("grants.verdict", `${where} does not verify: ${outcome.code} (${outcome.reason})`, { path: "fixtures/conformance.json" }));
+        continue;
+      }
+      succeeded = true;
+      continue;
+    }
+    const expected = typeof item.expect.code === "string" ? item.expect.code : void 0;
+    if (outcome.ok) {
+      findings.push(error("grants.verdict", `${where} verifies, and the recording says it is refused${expected === void 0 ? "" : ` (${expected})`}`, { path: "fixtures/conformance.json" }));
+      continue;
+    }
+    codes.add(outcome.code);
+    if (expected !== void 0 && outcome.code !== expected) findings.push(error("grants.verdict", `${where} is refused with ${outcome.code}, not the recorded ${expected}`, { path: "fixtures/conformance.json" }));
+  }
+  if (!succeeded) findings.push(error("grants.cases", "no recorded grant verifies: a verifier that only refuses is not proven", { path: "fixtures/conformance.json" }));
+  const missing = REQUIRED_GRANT_CODES.filter((code) => !codes.has(code));
+  if (missing.length > 0) {
+    findings.push(
+      error("grants.cases", `the recording proves no ${missing.join(", ")}: #40's negative cases settle where the per-plugin copies disagreed`, {
+        path: "fixtures/conformance.json",
+        fix: "Record one case for each required refusal."
+      })
+    );
+  }
+  return findings;
+}
+function rpcConfirmationFindings(manifest, recorded, options = {}) {
+  const calls = recorded?.calls ?? [];
+  if (calls.length === 0) return [];
+  const findings = [];
+  for (const [index, call] of calls.entries()) {
+    const method = typeof call.method === "string" ? call.method : "";
+    const item = manifest.methods[method];
+    if (item === void 0) {
+      findings.push(error("rpc.method", `rpc.calls[${index}] names ${String(call.method)}, which is not a declared method`, { path: "fixtures/conformance.json" }));
+      continue;
+    }
+    if (item.class === "read") continue;
+    const expect = call.expect !== null && typeof call.expect === "object" ? call.expect : {};
+    if (call.ask === "denied") {
+      const refused = expect["code"] === "PERMISSION_DENIED";
+      if (!refused) findings.push(error("rpc.confirmation", `${method} is class ${item.class}, and its recorded RPC call with the ask denied answers ${String(expect["code"])}, not PERMISSION_DENIED`, { path: "fixtures/conformance.json", fix: "Refuse a non-read method over RPC without an answered ask or a valid grant." }));
+      continue;
+    }
+    if (call.grant !== void 0 && call.ask === "none" && expect["ok"] !== true) {
+      findings.push(error("rpc.grant", `${method}'s RPC call presents a grant and answers ${String(expect["code"] ?? expect["ok"])}, not success`, { path: "fixtures/conformance.json" }));
+    }
+  }
+  return findings;
+}
+
+// src/internal/host/errors.ts
+var HostError = class extends Error {
+  code;
+  next;
+  constructor(code, message, next) {
+    super(`${code}: ${message.replace(/[.!?]$/, "")}. Next step: ${next}`);
+    this.name = "HostError";
+    this.code = code;
+    this.next = next;
+  }
+};
+
+// src/internal/host/activation.ts
+var sleepFor = (ms) => new Promise((resolve2) => setTimeout(resolve2, ms));
+async function waitForActivation(options) {
+  const timeoutMs = options.timeoutMs ?? 1e4;
+  const pollMs = options.pollMs ?? 25;
+  const now = options.now ?? Date.now;
+  const sleep = options.sleep ?? sleepFor;
+  const started = now();
+  for (; ; ) {
+    if (await options.isActive()) return;
+    const elapsed = now() - started;
+    if (elapsed >= timeoutMs) {
+      throw new HostError("HOST_TIMEOUT", `the plugin did not become active within ${timeoutMs} ms`, "read the host log for a setup error; T1 cannot call a plugin before it finishes setup");
+    }
+    await sleep(Math.min(pollMs, Math.max(1, timeoutMs - elapsed)));
+  }
+}
+
+// src/internal/host/index.ts
+var SDK = ["@opencode", "sdk"].join("/");
+var PLUGIN_HOST = ["@opencode", "plugin", "host"].join("/");
+async function load(specifier) {
+  try {
+    return await import(specifier);
+  } catch {
+    return void 0;
+  }
+}
+async function pluginEntry(directory) {
+  const host = await load(PLUGIN_HOST);
+  if (host === void 0) throw new HostError("HOST_DEPENDENCY", "the conformance host cannot load @opencode/plugin", "install @opencode/plugin 2.4.1 as a devDependency, and run T1 again");
+  const resolved = host.resolve({ directory });
+  if (resolved.server === void 0) throw new HostError("HOST_ENTRY", `${directory} has no server entry: package.json maps no ./server or ., and there is no index file`, 'add an exports["./server"] entry or an index.js to the plugin');
+  return { entry: resolved.server, module: await host.load(resolved.server) };
+}
+function definitionOf(module) {
+  if (module === null || typeof module !== "object") return void 0;
+  const record = module;
+  const candidate = record["default"] ?? record["plugin"];
+  if (candidate === null || typeof candidate !== "object") return void 0;
+  const definition = candidate;
+  if (typeof definition["id"] !== "string" || typeof definition["setup"] !== "function") return void 0;
+  return definition;
+}
+function toolOf(registration, namespace) {
+  const options = registration["options"] ?? {};
+  const codemode = options["codemode"];
+  return {
+    id: `${namespace}_${String(registration["name"] ?? "")}`,
+    name: String(registration["name"] ?? ""),
+    description: String(registration["description"] ?? ""),
+    namespace: typeof options["namespace"] === "string" ? options["namespace"] : namespace,
+    permission: typeof options["permission"] === "string" ? options["permission"] : "",
+    input: registration["input"],
+    output: registration["output"],
+    codemode: typeof codemode === "boolean" || codemode !== null && typeof codemode === "object" ? codemode : false
+  };
+}
+async function createHost(options) {
+  let loaded;
+  try {
+    loaded = await pluginEntry(options.directory);
+  } catch (cause) {
+    return emptyRun(options, void 0, cause instanceof Error ? cause.message : String(cause));
+  }
+  const definition = definitionOf(loaded.module);
+  if (definition === void 0) {
+    return emptyRun(options, loaded.entry, `the server entry exports no Plugin.define({ id, setup }) value`);
+  }
+  const sdk = await load(SDK);
+  if (sdk === void 0) {
+    return emptyRun(options, loaded.entry, "the conformance host cannot load @opencode/sdk 2.4.1");
+  }
+  const tools = [];
+  let namespace;
+  let rpc;
+  const asks = [];
+  let setupError;
+  let setupDone = false;
+  const pluginOptions = options.options ?? {};
+  const wrapper = {
+    id: definition.id,
+    async setup(context) {
+      const real = context;
+      const toolDomain = real["tool"];
+      const permissionDomain = real["permission"];
+      const rpcDomain = real["rpc"];
+      const toolProxy = new Proxy(toolDomain, {
+        get(toolTarget, field2) {
+          if (field2 === "transform") {
+            return (callback) => toolTarget.transform((editor) => {
+              const proxied = new Proxy(editor, {
+                get(editorTarget, editorField) {
+                  if (editorField === "namespace") {
+                    return (value3) => {
+                      namespace = value3;
+                      return editorTarget["namespace"](value3);
+                    };
+                  }
+                  if (editorField === "add") {
+                    return (registration) => {
+                      const recorded = toolOf(registration, namespace?.name ?? definition.id);
+                      const at = tools.findIndex((tool) => tool.permission === recorded.permission);
+                      if (at === -1) tools.push(recorded);
+                      else tools[at] = recorded;
+                      return editorTarget["add"](registration);
+                    };
+                  }
+                  const value2 = Reflect.get(editorTarget, editorField);
+                  return typeof value2 === "function" ? value2.bind(editorTarget) : value2;
+                }
+              });
+              return callback(proxied);
+            });
+          }
+          const value = Reflect.get(toolTarget, field2);
+          return typeof value === "function" ? value.bind(toolTarget) : value;
+        }
+      });
+      const rpcProxy = new Proxy(rpcDomain, {
+        get(rpcTarget, field2) {
+          if (field2 === "register") {
+            return (registration, handlers) => {
+              rpc = {
+                id: String(registration["id"] ?? ""),
+                methods: Object.keys(registration["methods"] ?? {}),
+                events: Object.keys(registration["events"] ?? {})
+              };
+              return rpcTarget.register(registration, handlers);
+            };
+          }
+          const value = Reflect.get(rpcTarget, field2);
+          return typeof value === "function" ? value.bind(rpcTarget) : value;
+        }
+      });
+      const permissionProxy = new Proxy(permissionDomain, {
+        get(permissionTarget, field2) {
+          if (field2 === "assert") {
+            return async (input) => {
+              asks.push({ action: input.action, resources: input.resources ?? [] });
+              return permissionTarget.assert(input);
+            };
+          }
+          const value = Reflect.get(permissionTarget, field2);
+          return typeof value === "function" ? value.bind(permissionTarget) : value;
+        }
+      });
+      const proxy = new Proxy(real, {
+        get(target, property) {
+          if (property === "options") return pluginOptions;
+          if (property === "tool") return toolProxy;
+          if (property === "rpc") return rpcProxy;
+          if (property === "permission") return permissionProxy;
+          return Reflect.get(target, property);
+        }
+      });
+      try {
+        const cleanup = await definition.setup(proxy);
+        if (typeof cleanup === "function") return cleanup;
+        return void 0;
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        const secrets = secretKinds(message);
+        setupError = secrets.length === 0 ? message.slice(0, 300) : `the plugin's setup error held a secret (${secrets.join(", ")}), which the kit did not print`;
+        throw cause;
+      } finally {
+        setupDone = true;
+      }
+    }
+  };
+  let host;
+  try {
+    host = await sdk.OpenCode.create({
+      plugins: [wrapper],
+      config: { directory: options.directory },
+      app: { name: "opencode", version: options.version },
+      log: { level: "error", emit: () => void 0 }
+    });
+  } catch (cause) {
+    return emptyRun(options, loaded.entry, `the embedded OpenCode host did not start: ${cause instanceof Error ? cause.message : String(cause)}`);
+  }
+  let sessionID;
+  try {
+    const session = await host.sessions.create({
+      location: { directory: options.directory },
+      agent: options.agent ?? "build",
+      permissions: options.sessionRules ?? []
+    });
+    sessionID = session.id;
+    await host.sessions.prompt({ sessionID: session.id, text: "activate the conformance plugin", delivery: "queue" }).catch(() => void 0);
+    await waitForActivation({
+      isActive: () => setupDone || setupError !== void 0,
+      ...options.timeoutMs === void 0 ? {} : { timeoutMs: options.timeoutMs }
+    });
+    await waitForActivation({
+      isActive: async () => {
+        const list2 = await host.plugin.list({ location: { directory: options.directory } }).catch(() => void 0);
+        return list2?.data.some((entry) => entry.id === definition.id) ?? false;
+      },
+      ...options.timeoutMs === void 0 ? {} : { timeoutMs: options.timeoutMs }
+    }).catch(() => void 0);
+  } catch (cause) {
+    setupError ??= cause instanceof Error ? cause.message : String(cause);
+  }
+  const agents = sessionID === void 0 ? [] : (await host.agent.list({ location: { directory: options.directory } }).catch(() => ({ data: [] }))).data.map((agent) => ({ id: agent.id, permissions: agent.permissions }));
+  const refusal = setupError !== void 0 && setupError.startsWith("HOST_UNTESTED:") ? setupError : void 0;
+  const failure = setupError !== void 0 && refusal === void 0 ? setupError : void 0;
+  let closed = false;
+  return {
+    host: "embedded-sdk",
+    version: options.version,
+    entry: loaded.entry,
+    definition,
+    ...namespace === void 0 ? {} : { namespace },
+    tools,
+    ...rpc === void 0 ? {} : { rpc },
+    agents,
+    asks,
+    ...refusal === void 0 ? {} : { refusal },
+    ...failure === void 0 ? {} : { failure },
+    ...sessionID === void 0 ? {} : { sessionID },
+    async call(method, input, callOptions = {}) {
+      const id = callOptions.sessionID ?? (await host.sessions.create({ location: { directory: options.directory }, agent: options.agent ?? "build", permissions: callOptions.rules ?? [] })).id;
+      try {
+        const answer = await host.rpc.call({ rpcID: definition.id, method, input: { sessionID: id, input }, location: { directory: options.directory } });
+        return { ok: true, output: answer?.output };
+      } catch (cause) {
+        const error2 = cause;
+        return { ok: false, code: error2.data?.code ?? error2.type ?? "UNAVAILABLE", message: error2.message ?? String(cause) };
+      }
+    },
+    async session(rules) {
+      const created = await host.sessions.create({ location: { directory: options.directory }, agent: options.agent ?? "build", permissions: rules });
+      return created.id;
+    },
+    async close() {
+      if (closed) return;
+      closed = true;
+      await host.close().catch(() => void 0);
+    }
+  };
+}
+function emptyRun(options, entry, failure) {
+  return {
+    host: "embedded-sdk",
+    version: options.version,
+    ...entry === void 0 ? {} : { entry },
+    tools: [],
+    agents: [],
+    asks: [],
+    failure,
+    async call() {
+      return { ok: false, code: "UNAVAILABLE", message: failure };
+    },
+    async session() {
+      return "";
+    },
+    async close() {
+    }
+  };
+}
+
+// src/internal/conformance/host.ts
+var UNSUPPORTED_HOST = "2.5.0";
+function hostInRange(host) {
+  const match = /^(\d+)\.(\d+)\.(\d+)/.exec(host);
+  if (match === null) return false;
+  const [major, minor, patch] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  return major === 2 && minor === 4 && patch >= 1;
+}
+var nodeMajor = Number(process.versions.node.split(".")[0]);
+function hostRuntimeProblem(nodeVersion = process.versions.node, bunVersion = process.versions.bun ?? null) {
+  if (bunVersion !== null) return void 0;
+  if (Number(nodeVersion.split(".")[0]) >= 24) return void 0;
+  return error("T1.host-unavailable", "T1 needs Node 24 or Bun", {
+    path: "package.json",
+    fix: "Run T1 on Node 24 or Bun; Node 22 cannot parse the embedded host's `await using`."
+  });
+}
+async function inspectHost(directory, manifest, host, options = {}) {
+  const runtime = hostRuntimeProblem();
+  if (runtime !== void 0) return { findings: [runtime] };
+  const supported = hostInRange(host);
+  const pluginOptions = { access: "all", ...options.accounts === void 0 || options.accounts.length === 0 ? {} : { accounts: Object.fromEntries(options.accounts.map((alias) => [alias, {}])) } };
+  if (!supported) {
+    const refused = await createHost({ directory, version: host, pluginId: manifest.plugin.name, options: { ...pluginOptions, allowUntestedHost: false } });
+    try {
+      if (refused.refusal === void 0) {
+        return {
+          run: refused,
+          findings: [
+            error("T1.unsupported-host", `OpenCode ${host} is outside ${OPENCODE_RANGE}, and the plugin ${refused.failure === void 0 ? "started" : `failed with "${refused.failure}"`} instead of refusing with HOST_UNTESTED`, {
+              path: "capabilities.plugin.host",
+              fix: "Refuse an untested host with HOST_UNTESTED and a next step, unless options.allowUntestedHost is true."
+            })
+          ]
+        };
+      }
+      const findings = [];
+      if (!refused.refusal.includes("Next step: ")) findings.push(error("T1.unsupported-host", `the refusal of OpenCode ${host} reads "${refused.refusal.slice(0, 160)}", and every failure reads CODE: What happened. Next step: What to do.`, { path: "capabilities.plugin.host" }));
+      return { run: refused, findings };
+    } finally {
+      await refused.close();
+    }
+  }
+  const run = await createHost({ directory, version: host, pluginId: manifest.plugin.name, options: pluginOptions });
+  try {
+    if (run.refusal !== void 0) {
+      return {
+        run,
+        findings: [error("T1.load", `the plugin refused OpenCode ${host}, which its manifest says it supports: ${run.refusal.slice(0, 160)}`, { path: "capabilities.plugin.host" })]
+      };
+    }
+    if (run.failure !== void 0) {
+      const dependency = run.failure.includes("@opencode/sdk") ? "@opencode/sdk" : run.failure.includes("@opencode/plugin") ? "@opencode/plugin" : void 0;
+      return {
+        run,
+        findings: [
+          dependency === void 0 ? error("T1.load", `${manifest.plugin.name} does not load on OpenCode ${host}: ${run.failure}`, { path: run.entry ?? "package.json", fix: "Build the plugin and fix the error setup reports." }) : error("T1.host", `the conformance host cannot load ${dependency}`, { path: "package.json", fix: `Add ${dependency} 2.4.1 as a devDependency and run T1 again.` })
+        ]
+      };
+    }
+    if (run.definition === void 0) return { run, findings: [error("T1.load", `${manifest.plugin.name} loads on OpenCode ${host} and exports no Plugin.define({ id, setup }) value`, { path: "package.json" })] };
+    const findings = [];
+    if (run.definition.id !== manifest.plugin.name) findings.push(error("T1.id", `the plugin's id is ${run.definition.id}, and capabilities.plugin.name is ${manifest.plugin.name}`, { path: "package.json" }));
+    if (run.namespace === void 0) findings.push(error("T1.doors", `${manifest.plugin.name} registers no tool namespace`, { path: run.entry, fix: "Call ctx.tool.namespace({ name, description }) before adding tools." }));
+    else if (run.namespace.name !== manifest.plugin.name) findings.push(error("T1.doors", `the tool namespace is ${run.namespace.name}, and the plugin's name is ${manifest.plugin.name}`, { path: run.entry }));
+    findings.push(...doorFindings(manifest, run));
+    findings.push(...codemodeFindings(manifest, run));
+    findings.push(...eventFindings(manifest, run));
+    findings.push(...pinnedFindings(manifest, run));
+    findings.push(...await permissionFindings(directory, manifest, host, run, pluginOptions, options.accounts ?? []));
+    findings.push(...await rpcFindings(manifest, run, options.inputs ?? {}, options.accounts ?? []));
+    if (options.realAccounts === true) findings.push(...await accountFindings2(manifest, run, options.accounts ?? [], options.inputs ?? {}, options.accountMethod, options.accountCursor));
+    return { run, findings };
+  } finally {
+    await run.close();
+  }
+}
+async function hostFindings(directory, manifest, host, options = {}) {
+  return [...(await inspectHost(directory, manifest, host, options)).findings];
+}
+function doorFindings(manifest, run) {
+  const findings = [];
+  const name = manifest.plugin.name;
+  const declared = Object.keys(manifest.methods).filter((method) => !method.startsWith("mcp:"));
+  const permissions = new Set(run.tools.map((tool) => tool.permission));
+  for (const method of declared) {
+    if (!permissions.has(`${name}.${method}`)) findings.push(error("T1.doors", `${method} is declared and no agent tool has the permission ${name}.${method}`, { path: `capabilities.methods.${method}`, fix: "Register every method through contract.register, which adds the tool and its permission." }));
+    if (run.rpc === void 0 || !run.rpc.methods.includes(method)) findings.push(error("T1.doors", `${method} is declared and the RPC registration ${run.rpc?.id ?? "(none)"} does not carry it`, { path: `capabilities.methods.${method}`, fix: "Register every method through contract.register, whose one RPC registration carries them all." }));
+  }
+  for (const tool of run.tools) {
+    if (tool.permission === "") {
+      findings.push(error("T1.doors", `the tool ${tool.id} carries no permission, and every tool is permitted as ${name}.<method>`, { path: run.entry }));
+      continue;
+    }
+    if (!tool.permission.startsWith(`${name}.`)) {
+      findings.push(error("T1.doors", `the tool ${tool.id} is permitted as ${tool.permission}, outside the plugin's namespace ${name}.`, { path: run.entry }));
+      continue;
+    }
+    const method = tool.permission.slice(name.length + 1);
+    if (!declared.includes(method)) findings.push(error("T1.doors", `the tool ${tool.id} is registered for ${method}, which capabilities.methods does not declare`, { path: run.entry }));
+    if (tool.namespace !== name) findings.push(error("T1.doors", `the tool ${tool.id} is in the namespace ${tool.namespace}, not ${name}`, { path: run.entry }));
+  }
+  if (run.rpc !== void 0 && run.rpc.id !== name) findings.push(error("T1.doors", `the RPC registration's id is ${run.rpc.id}, and the plugin's name is ${name}`, { path: run.entry }));
+  for (const method of run.rpc?.methods ?? []) {
+    if (!declared.includes(method)) findings.push(error("T1.doors", `the RPC registration carries ${method}, which capabilities.methods does not declare`, { path: run.entry }));
+  }
+  return findings;
+}
+function codemodeFindings(manifest, run) {
+  const findings = [];
+  for (const tool of run.tools) {
+    const method = tool.permission.startsWith(`${manifest.plugin.name}.`) ? tool.permission.slice(manifest.plugin.name.length + 1) : void 0;
+    if (tool.codemode === false) findings.push(error("T1.codemode", `${tool.permission || tool.id} is not exposed to Code Mode`, { path: method === void 0 ? void 0 : `capabilities.methods.${method}`, fix: "Every method is in Code Mode (\xA79); do not pass codemode: false." }));
+    const pinned = typeof tool.codemode === "object" && tool.codemode !== null && tool.codemode.pinned === true;
+    if (pinned && method !== void 0 && manifest.methods[method]?.pinned !== true) findings.push(error("T1.codemode", `${tool.permission} is pinned in Code Mode, and capabilities.methods does not declare pinned: true`, { path: `capabilities.methods.${method}.pinned` }));
+    if (!pinned && method !== void 0 && manifest.methods[method]?.pinned === true) findings.push(error("T1.codemode", `${method} declares pinned: true and its Code Mode entry is not pinned`, { path: `capabilities.methods.${method}.pinned` }));
+  }
+  return findings;
+}
+function eventFindings(manifest, run) {
+  const declared = Object.keys(manifest.events);
+  const registered = run.rpc?.events ?? [];
+  const findings = [];
+  for (const event of declared) if (!registered.includes(event)) findings.push(error("T1.events", `the RPC registration does not carry the declared bus event ${event}`, { path: `capabilities.events.${event}`, fix: "Register the events block with the manifest's events through contract.register." }));
+  for (const event of registered) if (!declared.includes(event)) findings.push(error("T1.events", `the RPC registration carries ${event}, which capabilities.events does not declare`, { path: "capabilities.events" }));
+  return findings;
+}
+function pinnedFindings(manifest, run) {
+  const findings = [];
+  const pinned = run.tools.filter((tool) => typeof tool.codemode === "object" && tool.codemode !== null && tool.codemode.pinned === true);
+  if (pinned.length > 1) findings.push(error("T1.pinned", `${pinned.length} tools are pinned, and at most one is`, { path: "capabilities.methods" }));
+  for (const [method, item] of Object.entries(manifest.methods)) {
+    if (item.pinned !== true || method.startsWith("mcp:")) continue;
+    const tool = run.tools.find((entry) => entry.permission === `${manifest.plugin.name}.${method}`);
+    if (tool === void 0) continue;
+    const tokens = Math.ceil(JSON.stringify([run.namespace?.description ?? "", tool.description, tool.input]).length / 4);
+    if (tokens > 1e3) findings.push(error("T1.pinned-budget", `${method}'s pinned signature is about ${tokens} tokens, over the 1,000-token budget`, { path: `capabilities.methods.${method}.pinned`, fix: "Trim the pinned tool's description or input schema, or unpin it." }));
+  }
+  return findings;
+}
+function mcpActions(name, tool, aliases) {
+  const declared = aliases.length === 0 ? ["default"] : aliases;
+  return declared.flatMap((alias) => {
+    const server = serverOf(name, alias, declared);
+    return server.ok ? [toolAction(server.value, tool)] : [];
+  });
+}
+async function permissionFindings(directory, manifest, host, all, options, aliases) {
+  const findings = [];
+  if (all.agents.every((agent) => agent.permissions.length === 0)) {
+    return [error("T1.permissions", `${manifest.plugin.name} installs no permission rules, so an agent keeps its own defaults`, { path: "src/index.ts", fix: "Generate the access rules into every agent with ctx.agent.transform, as contract \xA76 requires." })];
+  }
+  const levels = Object.values(manifest.methods).every((item) => item.class === "read" && item.effect === void 0) ? ["all"] : ["all", "ask-changes", "read-only"];
+  for (const level of levels) {
+    const run = level === "all" ? all : await createHost({ directory, version: host, pluginId: manifest.plugin.name, options: { ...options, access: level } });
+    try {
+      if (run.failure !== void 0) continue;
+      for (const agent of run.agents) {
+        if (evaluate(agent.permissions, "*", "*") === "deny") continue;
+        for (const [method, item] of Object.entries(manifest.methods)) {
+          const expected = effectFor(item, level);
+          const actions = method.startsWith("mcp:") ? mcpActions(manifest.plugin.name, method.slice("mcp:".length), aliases) : [`${manifest.plugin.name}.${method}`];
+          for (const action of actions) {
+            const actual = evaluate(agent.permissions, action, "*");
+            if (actual === expected) continue;
+            findings.push(error("T1.permissions", `access ${level} gives ${agent.id} ${actual} for ${action}, and the contract gives ${expected}`, { path: `capabilities.methods.${method}`, fix: "Generate the access rules from the access setting and each method's class and effect." }));
+          }
+        }
+      }
+    } finally {
+      if (level !== "all") await run.close();
+    }
+  }
+  return findings;
+}
+async function rpcFindings(manifest, run, inputs, aliases) {
+  if (run.rpc === void 0) return [];
+  const findings = [];
+  const rules = [{ action: "*", resource: "*", effect: "allow" }];
+  const account = aliases[0];
+  for (const [method, item] of Object.entries(manifest.methods)) {
+    if (item.class === "read" || method.startsWith("mcp:")) continue;
+    let input = { ...inputs[method] ?? {} };
+    if (item.commits !== void 0) {
+      const planned = await run.call(item.commits, { ...inputs[item.commits] ?? {}, ...account === void 0 ? {} : { account } }, { rules });
+      const planId = planned.ok && planned.output !== null && typeof planned.output === "object" ? planned.output.planId : void 0;
+      if (typeof planId !== "string") {
+        findings.push(warning("T1.rpc-confirmation", `${method} commits ${item.commits}, whose plan did not answer a planId, so LD-5 is unproven for it`, { path: `capabilities.methods.${method}` }));
+        continue;
+      }
+      input = { planId };
+    } else if (account !== void 0 && item.accounts === "optional" && input["account"] === void 0) {
+      input = { ...input, account };
+    }
+    const answer = await run.call(method, input, { rules });
+    if (answer.ok || answer.code !== "PERMISSION_DENIED") {
+      findings.push(error("T1.rpc-confirmation", `${method} is class ${item.class} and its RPC call ran with an allow rule and no grant${answer.ok ? "" : ` (${answer.code})`}`, { path: `capabilities.methods.${method}`, fix: "Refuse a non-read method over RPC unless an ask was answered or a valid action grant verifies (contract \xA78)." }));
+    }
+  }
+  return findings;
+}
+async function accountFindings2(manifest, run, aliases, inputs, preferred, cursor) {
+  if (manifest.accounts === void 0 || aliases.length < 2) return [];
+  const method = preferred !== void 0 && manifest.methods[preferred]?.accounts === "optional" ? preferred : Object.keys(manifest.methods).find((name) => manifest.methods[name]?.accounts === "optional" && !name.startsWith("mcp:"));
+  if (method === void 0) return [];
+  const findings = [];
+  const base = inputs[method] ?? {};
+  const missing = await run.call(method, base, {});
+  if (missing.ok || missing.code !== "ACCOUNT_REQUIRED") findings.push(error("T1.accounts", `${method} with two aliases and no account answered ${missing.ok ? "a result" : missing.code}, not ACCOUNT_REQUIRED`, { path: `capabilities.methods.${method}.accounts` }));
+  const unknown = await run.call(method, { ...base, account: "nobodyhere" }, {});
+  if (unknown.ok || unknown.code !== "ACCOUNT_UNKNOWN") findings.push(error("T1.accounts", `${method} with the unknown alias nobodyhere answered ${unknown.ok ? "a result" : unknown.code}, not ACCOUNT_UNKNOWN`, { path: `capabilities.methods.${method}.accounts` }));
+  const cursorMethod = typeof cursor?.method === "string" && manifest.methods[cursor.method] !== void 0 ? cursor.method : method === "events_list" ? method : void 0;
+  const first = typeof cursor?.account === "string" && aliases.includes(cursor.account) ? cursor.account : aliases[0];
+  const second = typeof cursor?.other === "string" && aliases.includes(cursor.other) ? cursor.other : aliases[1];
+  if (cursorMethod !== void 0 && first !== void 0 && second !== void 0 && first !== second) {
+    const issued = await run.call(cursorMethod, { ...inputs[cursorMethod] ?? {}, account: first }, {});
+    const token = issued.ok && issued.output !== null && typeof issued.output === "object" ? issued.output.cursor : void 0;
+    if (typeof token === "string") {
+      const crossed = await run.call(cursorMethod, { ...inputs[cursorMethod] ?? {}, account: second, cursor: token }, {});
+      if (crossed.ok || crossed.code !== "CURSOR_INVALID") findings.push(error("T1.accounts", `${first}'s cursor read under ${second} answered ${crossed.ok ? "a page" : crossed.code}, not CURSOR_INVALID`, { path: `capabilities.methods.${cursorMethod}.accounts` }));
+    }
+  }
+  return findings;
+}
+
+// src/internal/conformance/static.ts
+import { existsSync, readFileSync as readFileSync3, readdirSync, statSync } from "node:fs";
+import { join as join3, relative } from "node:path";
+
+// src/internal/conformance/docs.ts
+import { readFileSync as readFileSync2 } from "node:fs";
+import { join as join2 } from "node:path";
+var DOC_FILES = [
+  { file: "README.md", sections: ["capabilities", "errors"] },
+  { file: "docs/capabilities.md", sections: ["capabilities"] },
+  { file: "docs/configuration.md", sections: ["configuration"] },
+  { file: "docs/accounts.md", sections: ["accounts"] },
+  { file: "docs/automations.md", sections: ["automations"] }
+];
+var CODE_MEANING = {
+  NEEDS_SIGN_IN: "the account is not signed in",
+  SCOPE_MISSING: "the call needs a scope the person has not confirmed",
+  ACCOUNT_REQUIRED: "the plugin serves several accounts and the call names none",
+  ACCOUNT_UNKNOWN: "the call names an alias the plugin does not serve",
+  ACCOUNT_MISMATCH: "the item belongs to another account",
+  CURSOR_INVALID: "the cursor is malformed, or belongs to another source, account or scope",
+  CURSOR_EXPIRED: "the provider no longer keeps the history the cursor names",
+  RATE_LIMITED: "the provider asked the plugin to slow down",
+  BUDGET_EXCEEDED: "the read would cost more than the person allows",
+  SOURCE_DISABLED: "the person turned this source or action off",
+  TOO_LARGE: "the answer is larger than the source's maxBytes",
+  INPUT_INVALID: "the input does not match the method's schema",
+  SOURCE_UNKNOWN: "the plugin declares no such source",
+  SCHEMA_VIOLATION: "an answer does not keep the contract's shape",
+  PERMISSION_DENIED: "the person's grant does not cover the call",
+  PLAN_INVALID: "the plan is missing, or belongs to another method",
+  GRANT_INVALID: "the action grant did not verify, or was already spent",
+  HOST_UNTESTED: "OpenCode is outside the plugin's tested range",
+  OPTIONS_INVALID: "the plugin's options do not match their schema",
+  UNAVAILABLE: "the provider could not be reached"
+};
+var cell = (value) => String(value ?? "").replace(/\|/g, "\\|").replace(/\s+/g, " ").trim();
+function list(values) {
+  return values === void 0 || values.length === 0 ? "\u2014" : values.map((value) => `\`${cell(value)}\``).join(", ");
+}
+function renderGeneratedDocs(manifest) {
+  return {
+    capabilities: renderCapabilities(manifest),
+    errors: renderErrors(),
+    configuration: renderConfiguration(manifest),
+    accounts: renderAccounts(manifest),
+    automations: renderAutomations(manifest)
+  };
+}
+function renderCapabilities(manifest) {
+  const methods = ["| Method | Class | Accounts | Operations |", "|---|---|---|---|"];
+  for (const [method, item] of Object.entries(manifest.methods)) {
+    methods.push(`| \`${cell(method)}\` | ${cell(item.class)} | ${item.accounts ?? "none"} | ${list(item.operations)} |`);
+  }
+  const sources = ["| Source | Kind | Reads or output | Method | Cost |", "|---|---|---|---|---|"];
+  for (const source of manifest.sources) {
+    sources.push(`| \`${cell(source.id)}\` | ${source.kind} | \`${cell(source.kind === "events" ? source.reads : source.output)}\` | \`${cell(source.method)}\` | ${source.cost.class} |`);
+  }
+  const actions = ["| Action | Effect | Preview | Commit |", "|---|---|---|---|"];
+  for (const action of manifest.actions) {
+    actions.push(`| \`${cell(action.id)}\` | ${action.effect} | \`${cell(action.preview)}\` | \`${cell(action.commit)}\` |`);
+  }
+  const events = Object.keys(manifest.events);
+  return [
+    "### Methods",
+    "",
+    ...methods,
+    "",
+    "### Sources",
+    "",
+    ...sources,
+    "",
+    "### Actions",
+    "",
+    actions.length > 2 ? actions.join("\n") : "None.",
+    "",
+    "### Bus events",
+    "",
+    events.length === 0 ? "None." : events.map((event) => `\`rpc.${manifest.plugin.name}.${event}\``).join(", ")
+  ].join("\n");
+}
+function renderErrors() {
+  const rows = ["| Code | Meaning |", "|---|---|"];
+  for (const name of ERROR_CODES) rows.push(`| \`${name}\` | ${CODE_MEANING[name] ?? "a failure the contract defines"} |`);
+  return rows.join("\n");
+}
+function typeOf(schema) {
+  if (Array.isArray(schema["enum"])) return schema["enum"].map((value) => `\`${cell(value)}\``).join(" \\| ");
+  if (Array.isArray(schema["type"])) return schema["type"].map(cell).join(" \\| ");
+  if (typeof schema["type"] === "string") return cell(schema["type"]);
+  if (schema["$ref"] !== void 0) return "profile";
+  return "value";
+}
+function renderConfiguration(manifest) {
+  const properties = manifest.options["properties"];
+  if (properties === void 0) return "The plugin declares no options.";
+  const rows = ["| Option | Type | Default | Description |", "|---|---|---|---|"];
+  for (const [name, schema] of Object.entries(properties)) {
+    const described = schema["description"] ?? schema["title"] ?? "";
+    rows.push(`| \`${cell(name)}\` | ${typeOf(schema)} | ${schema["default"] === void 0 ? "\u2014" : `\`${cell(JSON.stringify(schema["default"]))}\``} | ${cell(described)} |`);
+  }
+  return rows.join("\n");
+}
+function renderAccounts(manifest) {
+  const info = manifest.accounts;
+  if (info === void 0) return "The plugin signs in to nothing.";
+  const options = manifest.options;
+  const properties = options["properties"] ?? {};
+  const accounts = properties["accounts"] ?? {};
+  const profile = accounts["additionalProperties"] ?? {};
+  const fields = profile["properties"] ?? {};
+  const rows = ["| Field | Type | Required |", "|---|---|---|"];
+  const required = Array.isArray(profile["required"]) ? profile["required"] : [];
+  for (const [field2, schema] of Object.entries(fields)) rows.push(`| \`${cell(field2)}\` | ${typeOf(schema)} | ${required.includes(field2) ? "yes" : "no"} |`);
+  return [
+    `Accounts are held by the **${info.via}** mechanism: ${info.via === "integration" ? "the plugin holds the credentials" : info.via === "mcp" ? "the vendor's MCP server holds them" : "the machine's own identity"}.`,
+    "",
+    fields === void 0 || Object.keys(fields).length === 0 ? "The profile has no fields." : rows.join("\n")
+  ].join("\n");
+}
+function renderAutomations(manifest) {
+  const events = manifest.sources.filter((source) => source.kind === "events");
+  if (events.length === 0) return "The plugin declares no events source.";
+  const rows = ["| Source | Method | Provider floor | Suggested | Signals |", "|---|---|---|---|---|"];
+  for (const source of events) {
+    const cadence = source.cadence;
+    rows.push(
+      `| \`${cell(source.id)}\` | \`tools.${manifest.plugin.name}.${cell(source.method)}\` | ${cadence?.providerMinMinutes === void 0 ? "\u2014" : `${cadence.providerMinMinutes} min`} | ${cadence?.suggestMinutes === void 0 ? "\u2014" : `${cadence.suggestMinutes} min`} | ${list(source.signals)} |`
+    );
+  }
+  return rows.join("\n");
+}
+var START = (section) => `<!-- generated:${section} -->`;
+var END = (section) => `<!-- /generated:${section} -->`;
+function block(text, section) {
+  const start = text.indexOf(START(section));
+  const end = text.indexOf(END(section));
+  if (start < 0 && end < 0) return { problem: `has no ${START(section)} block` };
+  if (start < 0) return { problem: `closes ${section} without opening it` };
+  if (end < 0) return { problem: `opens ${section} without closing it` };
+  if (end < start) return { problem: `closes ${section} before opening it` };
+  return { body: text.slice(start + START(section).length, end) };
+}
+var normalise = (text) => text.replace(/\r\n/g, "\n").split("\n").map((line) => line.trimEnd()).join("\n").trim();
+var driftId = (section) => `T0.docs-${section}`;
+function docsFindings(directory, manifest) {
+  const findings = [];
+  const rendered = renderGeneratedDocs(manifest);
+  for (const doc of DOC_FILES) {
+    const path = join2(directory, doc.file);
+    let text;
+    try {
+      text = readFileSync2(path, "utf8");
+    } catch {
+      continue;
+    }
+    for (const section of doc.sections) {
+      if (section === "accounts" && manifest.accounts === void 0) continue;
+      if (section === "automations" && !manifest.sources.some((source) => source.kind === "events")) continue;
+      const found = block(text, section);
+      if (found.problem !== void 0) {
+        findings.push(error(driftId(section), `${doc.file} ${found.problem}, so its ${section} section is not generated from the manifest`, { path: doc.file, fix: `Add ${START(section)} and ${END(section)} around the generated section, then run plugin-kit docs.` }));
+        continue;
+      }
+      if (normalise(found.body ?? "") === normalise(rendered[section])) continue;
+      findings.push(error(driftId(section), `${doc.file}'s ${section} section does not match capabilities: run plugin-kit docs`, { path: doc.file, fix: "Run plugin-kit docs and commit the result." }));
+    }
+    for (const match of text.matchAll(/<!-- generated:([a-z-]+) -->/g)) {
+      const section = match[1] ?? "";
+      if (doc.sections.includes(section)) continue;
+      findings.push(warning("T0.docs-section", `${doc.file} carries a generated ${section} block, which is not a section this file generates`, { path: doc.file }));
+    }
+  }
+  return findings;
+}
+
+// src/internal/conformance/static.ts
+var NAMESPACE_LINE_MAX = 400;
+var SKILL_DESCRIPTION_MAX = 300;
+function frontMatter(text) {
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  if (lines[0]?.trim() !== "---") return void 0;
+  const end = lines.indexOf("---", 1);
+  if (end < 0) return void 0;
+  return lines.slice(1, end).join("\n");
+}
+function field(text, key) {
+  const lines = text.split("\n");
+  const at = lines.findIndex((line) => new RegExp(`^${key}\\s*:`).test(line));
+  if (at < 0) return void 0;
+  const first = (lines[at] ?? "").replace(new RegExp(`^${key}\\s*:\\s*`), "").trim();
+  const block2 = ["|", ">", "|-", ">-", "|+", ">+"];
+  if (first !== "" && !block2.includes(first)) {
+    const parts = [unquote(first)];
+    for (const line of lines.slice(at + 1)) {
+      if (line.trim() === "") continue;
+      if (!/^\s/.test(line)) break;
+      parts.push(line.trim());
+    }
+    return parts.join(" ");
+  }
+  const body = [];
+  for (const line of lines.slice(at + 1)) {
+    if (line.trim() !== "" && !/^\s/.test(line)) break;
+    body.push(line.replace(/^\s{2}/, ""));
+  }
+  const folded = first.startsWith(">");
+  const joined = folded ? body.map((line) => line.trim()).filter((line) => line !== "").join(" ") : body.join("\n").trim();
+  return unquote(joined);
+}
+function unquote(value) {
+  const trimmed = value.trim();
+  if (trimmed.startsWith('"') && trimmed.endsWith('"') || trimmed.startsWith("'") && trimmed.endsWith("'")) return trimmed.slice(1, -1);
+  return trimmed;
+}
+function skillsOf(directory) {
+  const root = join3(directory, "skills");
+  const found = [];
+  const walk = (at) => {
+    for (const entry of readdirSync(at).sort()) {
+      const path = join3(at, entry);
+      if (statSync(path).isDirectory()) {
+        walk(path);
+        continue;
+      }
+      if (entry !== "SKILL.md") continue;
+      const text = readFileSync3(path, "utf8");
+      const matter = frontMatter(text) ?? "";
+      const name = field(matter, "name");
+      const description = field(matter, "description");
+      found.push({ file: relative(directory, path), ...name === void 0 ? {} : { name }, ...description === void 0 ? {} : { description } });
+    }
+  };
+  if (existsSync(root) && statSync(root).isDirectory()) walk(root);
+  return found;
+}
+function proseFiles(directory) {
+  const found = [];
+  for (const entry of ["AGENTS.md", "README.md", "SUPPORTED.md"]) {
+    if (existsSync(join3(directory, entry))) found.push(entry);
+  }
+  const docs = join3(directory, "docs");
+  if (existsSync(docs) && statSync(docs).isDirectory()) {
+    const walk = (at) => {
+      for (const entry of readdirSync(at).sort()) {
+        const path = join3(at, entry);
+        if (statSync(path).isDirectory()) walk(path);
+        else if (entry.endsWith(".md")) found.push(relative(directory, path));
+      }
+    };
+    walk(docs);
+  }
+  for (const skill of skillsOf(directory)) found.push(skill.file);
+  return [...new Set(found)];
+}
+function namedTools(text, plugin, underscored) {
+  const named = [];
+  const dotted = new RegExp(`tools\\.${plugin}\\.([a-z][a-z0-9_]*)`, "g");
+  for (const match of text.matchAll(dotted)) named.push(match[1] ?? "");
+  if (underscored) {
+    const bare = new RegExp(`\\b${plugin}(?:-[a-z0-9]+)?_([a-z][a-z0-9_]*)`, "g");
+    for (const match of text.matchAll(bare)) named.push(match[1] ?? "");
+  }
+  return named;
+}
+function pinnedEvidence(directory) {
+  try {
+    const value = JSON.parse(readFileSync3(join3(directory, "fixtures", "conformance.json"), "utf8"));
+    return value.pinned !== null && typeof value.pinned === "object" && !Array.isArray(value.pinned) ? value.pinned : {};
+  } catch {
+    return {};
+  }
+}
+function staticFindings(directory, manifest, options = {}) {
+  const findings = [];
+  const name = manifest.plugin.name;
+  const line = options.namespace;
+  if (line !== void 0) {
+    if (line.length > NAMESPACE_LINE_MAX) {
+      findings.push(
+        error("T0.namespace-length", `the registered namespace line is ${line.length} characters, over the ${NAMESPACE_LINE_MAX}-character budget`, {
+          path: "src/index.ts",
+          fix: `Cut the namespace description to ${NAMESPACE_LINE_MAX} characters or fewer.`
+        })
+      );
+    }
+    if (/[\r\n]/.test(line)) findings.push(error("T0.namespace-length", "the registered namespace line is more than one line", { path: "src/index.ts", fix: "Write the namespace description as one line." }));
+  } else {
+    findings.push(warning("T0.namespace-unmeasured", "the registered namespace line was not measured, because no real host run happened", { fix: "Record the namespace text with plugin-kit record, or run plugin-kit check, whose T1 reading measures it live." }));
+  }
+  const skills = skillsOf(directory);
+  if (skills.length === 0) {
+    findings.push(warning("T0.skills-missing", `${name} ships no skills/<name>/SKILL.md`, { path: "skills", fix: `Add skills/${name}/SKILL.md, with a description of at most ${SKILL_DESCRIPTION_MAX} characters.` }));
+  }
+  for (const skill of skills) {
+    const where = skill.name === void 0 ? skill.file : `${skill.name} (${skill.file})`;
+    if (skill.description === void 0) {
+      findings.push(error("T0.skill-length", `${where} has no description, and a skill's description is what an agent reads first`, { path: skill.file, fix: "Add a description to the SKILL.md front matter." }));
+    } else if (skill.description.length > SKILL_DESCRIPTION_MAX) {
+      findings.push(
+        error("T0.skill-length", `${where}'s description is ${skill.description.length} characters, over the ${SKILL_DESCRIPTION_MAX}-character budget`, {
+          path: skill.file,
+          fix: `Cut the description to ${SKILL_DESCRIPTION_MAX} characters or fewer.`
+        })
+      );
+    }
+    const which = skill.name ?? skill.file.split("/").at(-2) ?? "";
+    if (which !== name && !which.startsWith(`${name}-`)) {
+      findings.push(error("T0.skill-name", `${where} is outside the namespace ${name}: a skill is ${name} or ${name}-<topic>`, { path: skill.file, fix: `Rename the skill to ${name} or ${name}-<topic>.` }));
+    }
+  }
+  const declared = new Set(Object.keys(manifest.methods).filter((method) => !method.startsWith("mcp:")));
+  const mcpWildcard = Object.hasOwn(manifest.methods, "mcp:*");
+  const mcpTools = new Set(Object.keys(manifest.methods).filter((method) => method.startsWith("mcp:") && method !== "mcp:*").map((method) => method.slice("mcp:".length)));
+  const known = (method) => declared.has(method) || mcpTools.has(method) || mcpWildcard;
+  const seen = /* @__PURE__ */ new Set();
+  for (const file of proseFiles(directory)) {
+    const text = readFileSync3(join3(directory, file), "utf8");
+    for (const method of namedTools(text, name, file.startsWith("skills/"))) {
+      if (known(method)) continue;
+      if (seen.has(`${file}\0${method}`)) continue;
+      seen.add(`${file}\0${method}`);
+      findings.push(
+        error("T0.tools", `${file} names the tool ${name}_${method}, and capabilities.methods declares no ${method}`, {
+          path: file,
+          fix: `Name a declared method as tools.${name}.<method>, or declare ${method} in capabilities.methods.`
+        })
+      );
+    }
+  }
+  for (const method of line === void 0 ? [] : namedTools(line, name, false)) {
+    if (known(method)) continue;
+    findings.push(error("T0.tools", `the namespace line names the tool ${name}_${method}, which capabilities.methods does not declare`, { path: "src/index.ts" }));
+  }
+  const evidence = pinnedEvidence(directory);
+  for (const [method, item] of Object.entries(manifest.methods)) {
+    if (item.pinned !== true) continue;
+    const reason = evidence[method];
+    if (typeof reason === "string" && reason.trim() !== "") continue;
+    findings.push(
+      (options.record === true ? warning : error)("T0.pinned", `${method} is pinned, and nothing declares the session data that shows most sessions call it`, {
+        path: "capabilities.methods." + method,
+        fix: `Add "pinned": { "${method}": "<the evidence>" } to fixtures/conformance.json, or unpin it.`
+      })
+    );
+  }
+  findings.push(...docsFindings(directory, manifest));
+  return findings;
+}
+
+// src/internal/conformance/status.ts
+var plain2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+function busFindings(manifest, recorded, options = {}) {
+  const findings = [];
+  const declared = Object.keys(manifest.events);
+  const emitted = (recorded?.emitted ?? []).filter((event) => typeof event === "string");
+  if (recorded?.emitted === void 0) {
+    if (declared.length > 0) {
+      findings.push(
+        options.record === true ? warning("events.recorded", `${manifest.plugin.name} declares ${declared.join(", ")} and records none`, { path: "fixtures/conformance.json" }) : error("events.recorded", `${manifest.plugin.name} declares ${declared.join(", ")} and records none: a declared event is one the plugin emits`, {
+          path: "fixtures/conformance.json",
+          fix: "Emit each declared event in a test and record it, or remove the declaration."
+        })
+      );
+    }
+    return findings;
+  }
+  for (const event of emitted) {
+    if (!BUS_EVENTS.includes(event)) findings.push(error("events.declared", `the fixture records the bus event ${event}, which \xA710 does not define`, { path: "fixtures/conformance.json" }));
+    else if (!declared.includes(event)) findings.push(error("events.declared", `the plugin emits ${event}, and capabilities.events does not declare it`, { path: `capabilities.events.${event}`, fix: `Add "${event}": {} to capabilities.events.` }));
+  }
+  for (const event of declared) {
+    if (!emitted.includes(event)) findings.push(error("events.emitted", `${manifest.plugin.name} declares ${event} and no recorded test emitted it`, { path: `capabilities.events.${event}`, fix: "Emit it where the contract says it belongs, and record it, or remove the declaration." }));
+  }
+  return findings;
+}
+var STATUS_KEYS = ["name", "version", "host", "state", "accounts", "unguardedAgents", "nextStep"];
+var ACCOUNT_KEYS = ["alias", "state", "owner"];
+var HOST_KEYS = ["version", "range", "tested"];
+function statusFindings(manifest, version, answer, aliases) {
+  if (!plain2(answer)) return [error("status.shape", "the fixture records no status answer", { path: "fixtures/conformance.json" })];
+  const findings = [];
+  for (const key of Object.keys(answer)) if (!STATUS_KEYS.includes(key)) findings.push(error("status.shape", `status carries ${key}, which contract \xA711 does not define`, { path: "fixtures/conformance.json" }));
+  if (answer["name"] !== manifest.plugin.name) findings.push(error("status.name", `status names ${JSON.stringify(answer["name"])}, not ${manifest.plugin.name}`, { path: "fixtures/conformance.json" }));
+  if (answer["version"] !== version) findings.push(error("status.version", `status names version ${JSON.stringify(answer["version"])}, not the installed ${version}`, { path: "fixtures/conformance.json" }));
+  if (!["ready", "needs_sign_in", "error"].includes(String(answer["state"]))) findings.push(error("status.state", `status is ${JSON.stringify(answer["state"])}, not ready, needs_sign_in or error`, { path: "fixtures/conformance.json" }));
+  if (!Array.isArray(answer["unguardedAgents"]) || answer["unguardedAgents"].some((agent) => typeof agent !== "string" || agent.length === 0 || agent.length > 64)) {
+    findings.push(error("status.shape", "status.unguardedAgents must be a list of agent names", { path: "fixtures/conformance.json" }));
+  }
+  if (answer["nextStep"] !== null && answer["nextStep"] !== void 0 && (typeof answer["nextStep"] !== "string" || answer["nextStep"].length > 200)) {
+    findings.push(error("status.shape", "status.nextStep must be one line of at most 200 characters, or null", { path: "fixtures/conformance.json" }));
+  }
+  const host = answer["host"];
+  if (!plain2(host)) findings.push(error("status.host", "status.host must be { version, range, tested }", { path: "fixtures/conformance.json" }));
+  else {
+    for (const key of Object.keys(host)) if (!HOST_KEYS.includes(key)) findings.push(error("status.host", `status.host carries ${key}, which contract \xA711 does not define`, { path: "fixtures/conformance.json" }));
+    if (typeof host["version"] !== "string" || host["version"].length === 0) findings.push(error("status.host", "status.host.version must name the OpenCode release it ran on", { path: "fixtures/conformance.json" }));
+    if (host["range"] !== OPENCODE_RANGE) findings.push(error("status.host", `status.host.range is ${JSON.stringify(host["range"])}, and the manifest's is ${OPENCODE_RANGE}`, { path: "fixtures/conformance.json" }));
+    if (!Array.isArray(host["tested"]) || host["tested"].length === 0 || host["tested"].some((tested) => typeof tested !== "string")) findings.push(error("status.host", "status.host.tested must list the releases CI ran", { path: "fixtures/conformance.json" }));
+  }
+  const accounts = answer["accounts"];
+  if (!Array.isArray(accounts)) findings.push(error("status.accounts", "status.accounts must be a list, one entry per alias", { path: "fixtures/conformance.json" }));
+  else {
+    const seen = /* @__PURE__ */ new Set();
+    for (const [index, entry] of accounts.entries()) {
+      if (!plain2(entry)) {
+        findings.push(error("status.accounts", `status.accounts[${index}] must be { alias, state, owner? }`, { path: "fixtures/conformance.json" }));
+        continue;
+      }
+      for (const key of Object.keys(entry)) if (!ACCOUNT_KEYS.includes(key)) findings.push(error("status.accounts", `status.accounts[${index}] carries ${key}, which contract \xA711 does not define`, { path: "fixtures/conformance.json" }));
+      const alias = entry["alias"];
+      if (typeof alias !== "string" || !(aliases.length === 0 || aliases.includes(alias))) findings.push(error("status.accounts", `status.accounts[${index}] names ${JSON.stringify(alias)}, which the fixture does not record as an alias`, { path: "fixtures/conformance.json" }));
+      else if (seen.has(alias)) findings.push(error("status.accounts", `status lists ${alias} twice`, { path: "fixtures/conformance.json" }));
+      else seen.add(alias);
+      if (!ACCOUNT_STATES.includes(entry["state"])) findings.push(error("status.accounts", `status.accounts[${index}].state is ${JSON.stringify(entry["state"])}, not ${ACCOUNT_STATES.join(", ")}`, { path: "fixtures/conformance.json" }));
+      if (entry["owner"] !== void 0) findings.push(...ownerProblems(entry["owner"], `status.accounts[${index}].owner`).map((problem) => error("status.accounts", problem, { path: "fixtures/conformance.json" })));
+    }
+    for (const alias of aliases) if (!seen.has(alias)) findings.push(error("status.accounts", `status lists no account ${alias}, and the fixture records it`, { path: "fixtures/conformance.json" }));
+  }
+  const secrets = secretKinds(JSON.stringify(answer));
+  if (secrets.length > 0) findings.push(error("status.secret", `status carries a secret (${secrets.join(", ")}): status and logs never carry credentials`, { path: "fixtures/conformance.json" }));
+  return findings;
+}
+
+// src/internal/events-conformance.ts
+function pageSourceName(source) {
   const named = source.input?.["source"];
   return typeof named === "string" ? named : source.id;
 }
-
-// src/internal/conformance/probe.ts
 var plain3 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-function probeSourceName(source) {
-  const name = source.input?.["source"];
-  return typeof name === "string" ? name : void 0;
+var codesOf = (expect) => {
+  if (typeof expect === "string" && !["page", "empty", "expired"].includes(expect)) return expect;
+  if (plain3(expect) && typeof expect["refuses"] === "string") return expect["refuses"].split(":", 1)[0] ?? void 0;
+  return void 0;
+};
+function refusalFindings(item, where) {
+  const findings = [];
+  const message = item.refuses;
+  if (typeof message !== "string") return findings;
+  const code = codesOf(item.expect) ?? (item.expect === "expired" ? "CURSOR_EXPIRED" : void 0);
+  if (code !== void 0 && !message.startsWith(`${code}: `)) findings.push(error("pages.refusal", `${where} refuses with "${message.slice(0, 120)}", and its case expects ${code}`, { path: "fixtures/conformance.json" }));
+  if (!message.includes("Next step: ")) findings.push(error("pages.refusal", `${where}'s refusal has no "Next step: ", and every failure reads CODE: What happened. Next step: What to do.`, { path: "fixtures/conformance.json" }));
+  return findings;
 }
-function probeProblems(answer, source, expected = {}) {
-  const where = `probe(${source.id})`;
-  if (!plain3(answer)) return [`${where} answered nothing: an object with source, account, owner and trust`];
-  const name = probeSourceName(source);
-  const problems = probeResultProblems(answer, { ...name === void 0 ? {} : { source: name }, ...expected.account === void 0 ? {} : { account: expected.account } }).map((problem) => `${where}: ${problem}`);
-  if (answer["owner"] === null) problems.push(`${where} must not answer owner: null: a source that is not signed in refuses with NEEDS_SIGN_IN and a next step, and a local source names a synthetic owner (os-user:<user>@<host>)`);
-  return problems;
-}
-
-// src/internal/conformance/details.ts
-var SENTINEL = "CONFORMANCE-SENTINEL-ITEM-TEXT";
-function syntheticEvent(source) {
-  const host = source.urlHosts?.[0]?.replace(/^\*\./, "") ?? "example.com";
-  const kind = source.kind === "events" ? source.reads : "file";
-  return {
-    external_id: "conformance-1",
-    kind,
-    occurred_at: "2026-01-01T09:00:00.000Z",
-    title: SENTINEL,
-    text: SENTINEL,
-    url: `https://${host}/conformance/1`,
-    thread: "conformance-thread:1",
-    actors: [{ id: "conformance:1", label: "Conformance" }],
-    labels: ["conformance"],
-    hash: "conformance-placeholder"
-  };
-}
-function detailInput(detail, source, options) {
-  const event = { ...syntheticEvent(source), ...options.event ?? {} };
-  const fields = {};
-  for (const field of detail.from) fields[field] = event[field];
-  return { account: options.account, scope: options.scope ?? {}, fields };
-}
-function detailInputProblems(detail, input) {
-  const problems = [];
-  const where = `details(${detail.id})`;
-  for (const field of Object.keys(input.fields)) {
-    if (!detail.from.includes(field)) problems.push(`${where} was called with "${field}", which its from does not name`);
+function eventsFindings(options) {
+  const { plugin, source, recorded } = options;
+  const cases = recorded.cases ?? [];
+  const findings = [];
+  if (cases.length === 0) {
+    findings.push(
+      options.record === true ? warning("pages.recorded", `${source.id} has no recorded page, and the fixture is being recorded`, { path: "fixtures/conformance.json" }) : error("pages.recorded", `${source.id} records no page, so nothing shows what its read answers`, {
+        path: "fixtures/conformance.json",
+        fix: "Record at least one page from a real account with plugin-kit record."
+      })
+    );
+    return findings;
   }
-  if (JSON.stringify(input.fields).includes(SENTINEL)) problems.push(`${where} was called with an event's title or text: a detail's input comes only from identifiers`);
-  if (input.account.length === 0) problems.push(`${where} was called with no account`);
-  return problems;
+  const hashes = /* @__PURE__ */ new Map();
+  let sawThumbnail = false;
+  for (const [index, item] of cases.entries()) {
+    const where = `events_list(${item.name ?? `case ${index + 1}`})`;
+    const refusal = codesOf(item.expect);
+    findings.push(...refusalFindings(item, where));
+    if (item.answer === void 0) {
+      if (refusal === void 0 && item.expect !== "expired") findings.push(error("pages.answer", `${where} records no answer and no refusal code`, { path: "fixtures/conformance.json" }));
+      if (item.expect === "expired" && item.refuses === void 0) findings.push(error("pages.answer", `${where} is an expired-cursor case with neither a gap nor a CURSOR_EXPIRED refusal`, { path: "fixtures/conformance.json" }));
+      continue;
+    }
+    if (refusal !== void 0) {
+      findings.push(error("pages.answer", `${where} expects the refusal ${refusal} and records an answer`, { path: "fixtures/conformance.json" }));
+      continue;
+    }
+    const answer = item.answer;
+    const input = item.input ?? {};
+    const asked = input["thumbnails"] === true;
+    if (asked && source.thumbnails !== true) {
+      findings.push(error("pages.thumbnail", `${where} asks for thumbnails, and ${source.id} does not declare thumbnails`, { path: `capabilities.sources.${source.id}.thumbnails`, fix: "Declare thumbnails: true and urlHosts, or stop asking." }));
+    }
+    if (!asked && source.thumbnails === true) {
+      for (const event of eventsOf(answer)) {
+        if (event["thumbnail"] !== void 0) findings.push(error("pages.thumbnail", `${where} answers a thumbnail although the read did not ask for one`, { path: "fixtures/conformance.json" }));
+      }
+    }
+    const account = plain3(answer) && typeof answer["account"] === "string" ? answer["account"] : "default";
+    const limit = typeof input["limit"] === "number" && Number.isInteger(input["limit"]) ? input["limit"] : PAGE.max;
+    const accepted = acceptAnswer(source, account, answer, { limit, ...asked ? { thumbnails: true } : {} });
+    if (!accepted.ok) {
+      findings.push(error("pages.shape", `${where}: ${accepted.failure.message}`, { path: "fixtures/conformance.json", fix: "Fix the page the method answers, then record it again." }));
+      continue;
+    }
+    if (!plain3(answer)) continue;
+    const page = answer;
+    const requestedAccount = typeof input["account"] === "string" ? input["account"] : void 0;
+    if (requestedAccount !== void 0 && page.account !== requestedAccount) findings.push(error("pages.account", `${where} was read for ${requestedAccount} and names ${page.account}`, { path: "fixtures/conformance.json" }));
+    if (page.plugin !== void 0 && page.plugin !== plugin) findings.push(error("pages.plugin", `${where} names the plugin ${page.plugin}, not ${plugin}`, { path: "fixtures/conformance.json" }));
+    if (typeof source.input?.["source"] === "string" && page.source !== pageSourceName(source)) {
+      findings.push(error("pages.source", `${where} names the source ${page.source}, not ${pageSourceName(source)}`, { path: `capabilities.sources.${source.id}.input` }));
+    }
+    if (item.expect === "empty" && page.events.length > 0) findings.push(error("pages.answer", `${where} expects an empty page and lists ${page.events.length} events`, { path: "fixtures/conformance.json" }));
+    if (item.expect === "expired" && page.gap?.reason !== "expired") findings.push(error("pages.gap", `${where} expects an expired cursor and answers no gap.reason "expired"`, { path: "fixtures/conformance.json" }));
+    if (page.gap !== void 0) findings.push(...gapFindings(source, item, page, cases));
+    if (Array.isArray(page.failed) && page.failed.length > 0) {
+      const held = typeof input["cursor"] === "string" ? input["cursor"] : "";
+      if (page.cursor !== held) findings.push(error("pages.cursor", `${where} carries failed[] and answers another cursor than the one it was read with`, { path: "fixtures/conformance.json", fix: "A failed entry holds the consumer's cursor back." }));
+    }
+    if (Array.isArray(page.refused)) {
+      for (const [at, entry] of page.refused.entries()) {
+        if (plain3(entry) && !REFUSAL_REASONS.includes(entry["reason"])) findings.push(error("pages.refused", `${where} refused[${at}] names no reason of ${REFUSAL_REASONS.join(", ")}`, { path: "fixtures/conformance.json" }));
+      }
+    }
+    findings.push(...removalProblems(page).map((problem) => error("pages.removals", `${where}: ${problem}`, { path: "fixtures/conformance.json" })));
+    if (source.cost.class === "billed" && page.cost === void 0) findings.push(error("pages.cost", `${where} carries no cost, and ${source.id} is a billed source`, { path: "fixtures/conformance.json" }));
+    for (const [at, event] of page.events.entries()) {
+      if (typeof event.kind === "string" && !isEventKindIn(event.kind, sourceNamespace(source.id))) {
+        findings.push(error("pages.kinds", `${where} events[${at}] is a ${event.kind}, outside the namespace ${sourceNamespace(source.id)}`, { path: `capabilities.sources.${source.id}.reads` }));
+      }
+      const kinds = secretKinds([event.title, event.text].filter(Boolean).join("\n"));
+      if (kinds.length > 0) findings.push(error("pages.secrets", `${where} events[${at}] holds a secret (${kinds.join(", ")}): it belongs in refused[] with reason "secret"`, { path: "fixtures/conformance.json" }));
+      const before = hashes.get(`${event.account}\0${event.external_id}`);
+      if (before !== void 0 && before !== event.hash) findings.push(error("pages.hash", `${where} lists ${event.external_id} with another hash than an earlier page`, { path: "fixtures/conformance.json" }));
+      else hashes.set(`${event.account}\0${event.external_id}`, event.hash);
+      if (event.thumbnail !== void 0) {
+        sawThumbnail = true;
+        findings.push(...thumbnailFindings(where, event, source));
+      }
+    }
+  }
+  if (source.thumbnails === true && !sawThumbnail) {
+    findings.push(warning("pages.thumbnail", `${source.id} declares thumbnails, and no recorded page carries one`, { path: "fixtures/conformance.json", fix: "Record one page with thumbnails: true, or stop declaring them." }));
+  }
+  return findings;
 }
-function scopeProblems(scope, declared, where) {
-  const problems = [];
-  const keys = declared?.keys ?? [];
-  if (keys.length > 0 && Object.keys(scope).length === 0) {
-    problems.push(`${where} was called with no confirmed scope, which is not what a person confirms`);
+function gapFindings(source, item, page, cases) {
+  const findings = [];
+  if (page.gap !== void 0 && !GAP_REASONS.includes(page.gap.reason)) {
+    findings.push(error("pages.gap", `events_list(${item.name ?? "a case"}) carries a gap reason outside ${GAP_REASONS.join(", ")}`, { path: "fixtures/conformance.json" }));
   }
-  for (const key2 of Object.keys(scope)) {
-    if (!keys.includes(key2)) problems.push(`${where} names the scope key "${key2}", which the source does not declare`);
+  if (page.gap === void 0 || page.more !== true) return findings;
+  const next = cases.find((entry) => plain3(entry.input) && entry.input["cursor"] === page.cursor);
+  if (next === void 0) {
+    findings.push(warning("pages.gap", `events_list(${item.name ?? "a case"}) carries a gap and more: true, and the page its cursor names is not recorded, so the gap is not shown answered once`, { path: "fixtures/conformance.json" }));
+    return findings;
   }
-  for (const [key2, values] of Object.entries(scope)) {
-    if (!Array.isArray(values) || values.length === 0) problems.push(`${where}.${key2} must list at least one confirmed value`);
-  }
-  return problems;
+  if (plain3(next.answer) && next.answer["gap"] !== void 0) findings.push(error("pages.gap", `events_list(${item.name ?? "a case"}) answers a gap, and the page its cursor names answers another`, { path: "fixtures/conformance.json", fix: "A consumer counts one resync per gap." }));
+  return findings;
 }
-
-// src/internal/conformance/suggest.ts
-var plain4 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-function suggestProblems(answer, where) {
-  if (!plain4(answer)) return [`${where} answered nothing: an object with options`];
-  const problems = [];
+function thumbnailFindings(where, event, source) {
+  const findings = [];
+  for (const problem of thumbnailUrlProblems(event.thumbnail, source.urlHosts ?? [])) {
+    findings.push(error("pages.thumbnail", `${where} ${event.external_id}'s thumbnail ${problem}`, { path: "fixtures/conformance.json" }));
+  }
+  if (typeof event.thumbnail === "string") {
+    const unsafe = thumbnailHostProblem(event.thumbnail);
+    if (unsafe !== null) findings.push(error("pages.thumbnail", `${where} ${event.external_id}'s thumbnail host ${unsafe}: a thumbnail is displayed only from a site the source can claim`, { path: "fixtures/conformance.json" }));
+  }
+  const { hash, ...rest } = event;
+  if (eventHash({ ...rest, thumbnail: "https://example.invalid/another.png" }) !== hash) {
+    findings.push(error("pages.thumbnail", `${where} ${event.external_id}'s hash changes with its thumbnail: a thumbnail is outside the hash`, { path: "fixtures/conformance.json" }));
+  }
+  return findings;
+}
+var eventsOf = (answer) => plain3(answer) && Array.isArray(answer["events"]) ? answer["events"].filter(plain3) : [];
+function probeFindings(source, answer, account) {
+  if (!plain3(answer)) return [error("probe.shape", `probe(${source.id}) records no answer`, { path: "fixtures/conformance.json" })];
+  const findings = [];
+  const keys = ["source", "account", "owner", "scopes", "cost", "trust"];
+  for (const key of Object.keys(answer)) if (!keys.includes(key)) findings.push(error("probe.shape", `probe(${source.id}) carries ${key}: a probe reads the account, never content`, { path: "fixtures/conformance.json" }));
+  if (answer["source"] !== void 0 && typeof source.input?.["source"] === "string" && answer["source"] !== pageSourceName(source)) findings.push(error("probe.shape", `probe(${source.id}) names the source ${String(answer["source"])}, not ${pageSourceName(source)}`, { path: "fixtures/conformance.json" }));
+  if (typeof answer["account"] !== "string" || answer["account"].length === 0) findings.push(error("probe.shape", `probe(${source.id}) names no account`, { path: "fixtures/conformance.json" }));
+  else if (account !== void 0 && answer["account"] !== account) findings.push(error("probe.shape", `probe(${source.id}) names ${answer["account"]}, not the account it was asked about`, { path: "fixtures/conformance.json" }));
+  findings.push(...ownerProblems(answer["owner"], `probe(${source.id}).owner`).map((problem) => error("probe.shape", problem, { path: "fixtures/conformance.json" })));
+  if (plain3(answer["owner"]) && typeof answer["owner"]["id"] === "string" && !/^[a-z][a-z0-9+.-]*:/.test(answer["owner"]["id"])) {
+    findings.push(error("probe.shape", `probe(${source.id}).owner.id must be scheme-qualified, such as mailto:someone@example.com or slack:U0123`, { path: "fixtures/conformance.json" }));
+  }
+  if (answer["owner"] === null) findings.push(error("probe.shape", `probe(${source.id}) answers owner: null: an account that is not signed in refuses with NEEDS_SIGN_IN`, { path: "fixtures/conformance.json" }));
+  if (answer["trust"] !== "untrusted") findings.push(error("probe.shape", `probe(${source.id}).trust must be "untrusted"`, { path: "fixtures/conformance.json" }));
+  return findings;
+}
+function detailFindings(source, recorded, account) {
+  const findings = [];
+  for (const item of recorded) {
+    const detail = source.details?.find((entry) => entry.id === item.id);
+    if (detail === void 0) {
+      findings.push(error("details.declared", `the fixture records the detail ${item.id}, which ${source.id} does not declare`, { path: "fixtures/conformance.json" }));
+      continue;
+    }
+    const expected = codesOf(item.expect);
+    if (item.refuses !== void 0) {
+      const code = expected ?? "PERMISSION_DENIED";
+      if (!item.refuses.startsWith(`${code}: `)) findings.push(error("details.refusal", `details(${item.id}) refuses with "${item.refuses.slice(0, 120)}", and its case expects ${code}`, { path: "fixtures/conformance.json" }));
+      if (!item.refuses.includes("Next step: ")) findings.push(error("details.refusal", `details(${item.id})'s refusal has no "Next step: "`, { path: "fixtures/conformance.json" }));
+    }
+    if (item.answer === void 0) {
+      if (expected === void 0) findings.push(error("details.answer", `details(${item.id}) records no answer and no refusal code`, { path: "fixtures/conformance.json" }));
+      else if (item.refuses === void 0) findings.push(error("details.answer", `details(${item.id}) expects the refusal ${expected} and records no message`, { path: "fixtures/conformance.json" }));
+      continue;
+    }
+    if (expected !== void 0) {
+      findings.push(error("details.answer", `details(${item.id}) expects the refusal ${expected} and records an answer`, { path: "fixtures/conformance.json" }));
+      continue;
+    }
+    findings.push(...detailInputFindings(detail, item));
+    const answerAccount = plain3(item.answer) && typeof item.answer["account"] === "string" ? item.answer["account"] : account;
+    const accepted = acceptAnswer(source, answerAccount, item.answer);
+    if (!accepted.ok) findings.push(error("details.shape", `details(${item.id}): ${accepted.failure.message}`, { path: "fixtures/conformance.json" }));
+  }
+  return findings;
+}
+function detailInputFindings(detail, item) {
+  const findings = [];
+  const event = item.event ?? {};
+  for (const field2 of Object.keys(event)) {
+    if (detail.from.includes(field2)) continue;
+    findings.push(error("details.input", `details(${detail.id}) records the event field ${field2}, which its from does not name`, { path: "fixtures/conformance.json" }));
+  }
+  if (event["title"] !== void 0 || event["text"] !== void 0) findings.push(error("details.input", `details(${detail.id}) records an event's title or text, and a detail's input comes only from identifiers`, { path: "fixtures/conformance.json" }));
+  for (const field2 of detail.from) {
+    if (event[field2] === void 0) findings.push(error("details.input", `details(${detail.id}) records no ${field2}, and the declared input needs it`, { path: "fixtures/conformance.json" }));
+  }
+  return findings;
+}
+function suggestFindings(source, answer) {
+  const where = `scope.suggest(${source.scope?.suggest?.method ?? "\u2014"})`;
+  if (!plain3(answer)) return [error("suggest.answer", `${where} records no answer`, { path: "fixtures/conformance.json" })];
   const options = answer["options"];
-  if (!Array.isArray(options)) return [`${where} options must be a list, empty when there is nothing to offer`];
-  if (options.length > 64) problems.push(`${where} offered ${options.length} options, over 64`);
+  if (!Array.isArray(options)) return [error("suggest.answer", `${where} options must be a list, empty when there is nothing to offer`, { path: "fixtures/conformance.json" })];
+  const findings = [];
+  if (options.length > 64) findings.push(error("suggest.answer", `${where} offers ${options.length} options, over 64`, { path: "fixtures/conformance.json" }));
   const ids = /* @__PURE__ */ new Set();
   for (const [index, option] of options.entries()) {
-    if (!plain4(option) || typeof option["id"] !== "string" || option["id"].length === 0 || option["id"].length > 200) {
-      problems.push(`${where} options[${index}] must be { id, label? }`);
+    if (!plain3(option) || typeof option["id"] !== "string" || option["id"].length === 0 || option["id"].length > 200) {
+      findings.push(error("suggest.answer", `${where} options[${index}] must be { id, label? }`, { path: "fixtures/conformance.json" }));
       continue;
     }
-    if (option["label"] !== void 0 && (typeof option["label"] !== "string" || option["label"].length > 200)) {
-      problems.push(`${where} options[${index}].label must be at most 200 characters`);
-    }
-    if (ids.has(option["id"])) problems.push(`${where} offers ${option["id"]} twice`);
+    if (ids.has(option["id"])) findings.push(error("suggest.answer", `${where} offers ${option["id"]} twice`, { path: "fixtures/conformance.json" }));
     ids.add(option["id"]);
+    if (option["label"] !== void 0 && (typeof option["label"] !== "string" || option["label"].length > 200)) findings.push(error("suggest.answer", `${where} options[${index}].label must be at most 200 characters`, { path: "fixtures/conformance.json" }));
   }
-  return problems;
+  return findings;
+}
+function snapshotFindings(source, answer, account) {
+  const findings = [];
+  const accepted = acceptAnswer(source, account, answer);
+  if (!accepted.ok) findings.push(error("snapshot.shape", `snapshot(${source.id}): ${accepted.failure.message}`, { path: "fixtures/conformance.json" }));
+  if (plain3(answer)) {
+    if (typeof answer["asOf"] !== "string" || !Number.isFinite(Date.parse(answer["asOf"]))) findings.push(error("snapshot.shape", `snapshot(${source.id}) has no asOf time`, { path: "fixtures/conformance.json" }));
+    const checked = checkOutput(source.output, answer["data"]);
+    if (!checked.ok) findings.push(...checked.problems.map((problem) => error("snapshot.shape", `snapshot(${source.id}) data: ${problem}`, { path: "fixtures/conformance.json" })));
+  }
+  if (source.maxBytes !== void 0 && answer !== void 0) {
+    const bytes = Buffer.byteLength(JSON.stringify(answer));
+    if (bytes > maxBytesOf(source)) findings.push(error("snapshot.shape", `snapshot(${source.id}) is ${bytes} bytes, over its maxBytes of ${maxBytesOf(source)}`, { path: "fixtures/conformance.json" }));
+  }
+  return findings;
 }
 
-// src/internal/conformance/kit.ts
-var OUT_OF_SCOPE_CODE = "PERMISSION_DENIED";
-var RECOVERY_SINCE = "2026-01-01T00:00:00.000Z";
-async function sourceConformance(options) {
-  const { plugin, source, tools, calls } = options;
-  const cases = options.cases ?? [];
-  const account = options.account ?? "conformance";
-  const declaredIdentity = source.permission.identity;
-  const probeAction = options.sources?.probe?.action;
-  const identityOperations = declaredIdentity ?? options.identityOperations ?? [];
-  const declaredProbe = options.sources?.probe?.action;
-  const runningGrants = options.grants ?? [
-    ...grantsFor(source, account),
-    ...declaredProbe === void 0 ? [] : [{ action: declaredProbe, resource: "*" }]
-  ];
-  const running = recordingPermission(runningGrants);
-  const identityGrants = probeIdentityGrants(source, identityOperations, account);
-  const identity = [];
-  const bind = recordingPermission(bindGrantsFor(source, account));
-  const context = { account, permission: running.permission };
-  const bindContext = { account, permission: bind.permission };
-  const checks = [];
-  const add = (name, problems2, ran = true, notApplicable = false, reason) => {
-    checks.push({ name, ran, notApplicable, ...reason === void 0 ? {} : { reason }, problems: problems2 });
-  };
-  const isEvents = source.kind === "events";
-  add("declaration", declarationProblems({ contractVersion: 1, items: [source] }, { tools }));
-  const ownSources = options.ownSources ?? [source.id];
-  const readFile = options.files;
-  const fileCheck = (paths) => {
-    const problems2 = [];
-    for (const path of paths) {
-      const where = `hints("${path}")`;
-      if (readFile === void 0) {
-        problems2.push(`${where} is declared and the kit has no file reader: pass files, (path) => the file's text`);
-        continue;
-      }
-      const text = readFile(path);
-      if (text === void 0) {
-        problems2.push(`${where} is declared and the package holds no such file`);
-        continue;
-      }
-      const found = hintProblems(text, { sources: ownSources });
-      problems2.push(...found.map((problem) => `${where}: ${problem}`));
-    }
-    return problems2;
-  };
-  const declaredHints = source.hints ?? [];
-  add("hints", fileCheck(declaredHints), declaredHints.length > 0, declaredHints.length === 0);
-  const shape = [];
-  const cursor = [];
-  const gap = [];
-  const refused = [];
-  const cost = [];
-  let sawFailed = false;
-  let sawRefused = false;
-  const removals = [];
-  let sawRemovals = false;
-  let sawGap = false;
-  const gapOnce = [];
-  let sawAnyGap = false;
-  const fitsMaxBytes = [];
-  let sawEvents = false;
-  const maxBytes = maxBytesOf(source);
-  const version = versionState(source, options.machineActors);
-  const actorKind = [];
-  const oneAuthor = [];
-  const facts = [];
-  const commitmentKey = [];
-  const partsStable = [];
-  if (cases.length > 0 && calls.list === void 0) shape.push("events_list cases are declared and the kit has no list call");
-  for (const item of cases) {
-    const where = `events_list(${item.name})`;
-    const expect = item.expect ?? "page";
-    const assertedBeforePage = running.assertions.length;
-    let answer;
-    try {
-      answer = await calls.list?.(item.input, context);
-    } catch (error) {
-      if (isRefusal(expect)) {
-        if (!messageOf(error).includes(expect.refuses)) shape.push(`${where}: refused with "${messageOf(error)}", not the expected ${expect.refuses}`);
-        continue;
-      }
-      if (expect === "expired") {
-        sawGap = true;
-        gap.push(...await expiredByError(where, error, { source, plugin, calls, context, input: item.input }));
-        continue;
-      }
-      shape.push(`${where}: failed: ${messageOf(error)}`);
-      continue;
-    }
-    if (isRefusal(expect)) {
-      shape.push(`${where}: it must be refused with ${expect.refuses}, and it answered`);
-      continue;
-    }
-    if (expect === "expired") {
-      sawGap = true;
-      gap.push(...await expiredByGap(where, answer, { source, plugin, calls, context, input: item.input }));
-      if (hasGap(answer)) {
-        sawAnyGap = true;
-        gapOnce.push(...await gapAnsweredOnce(where, answer, { calls, context, input: item.input }));
-      }
-      continue;
-    }
-    const page = { source, plugin, input: item.input };
-    const result = pageChecks(answer, page);
-    shape.push(...result.shape);
-    cursor.push(...result.cursor);
-    gap.push(...result.gap);
-    refused.push(...result.refused);
-    cost.push(...result.cost);
-    identity.push(...identityOverlap(running.assertions.slice(assertedBeforePage), identityGrants, where, source.permission.readsIdentity === true));
-    if (hasGap(answer)) {
-      sawAnyGap = true;
-      gapOnce.push(...await gapAnsweredOnce(where, answer, { calls, context, input: item.input }));
-    }
-    if (plain5(answer) && answer["removals"] !== void 0) {
-      sawRemovals = true;
-      removals.push(...removalProblems(answer).map((problem) => `${where}: ${problem}`));
-    }
-    if (plain5(answer) && Array.isArray(answer["events"])) {
-      for (const event of answer["events"]) {
-        sawEvents = true;
-        const bytes = Buffer.byteLength(JSON.stringify(event));
-        if (bytes > maxBytes) {
-          const id = plain5(event) && typeof event["external_id"] === "string" ? event["external_id"] : "an event";
-          fitsMaxBytes.push(`${where}: the event ${id} is ${bytes} bytes of JSON, over the source's maxBytes of ${maxBytes}: split its sections, or list only the parts it has not listed`);
-        }
-      }
-    }
-    const versionFound = versionProblems(answer, where, version);
-    actorKind.push(...versionFound.actorKind);
-    oneAuthor.push(...versionFound.oneAuthor);
-    facts.push(...versionFound.facts);
-    commitmentKey.push(...versionFound.commitmentKey);
-    partsStable.push(...versionFound.partsStable);
-    sawFailed ||= hasEntries(answer, "failed");
-    sawRefused ||= hasEntries(answer, "refused");
-    if (expect === "empty" && plain5(answer) && Array.isArray(answer["events"]) && answer["events"].length > 0) {
-      shape.push(`${where}: it must list nothing`);
-    }
-  }
-  add("page-result", shape, isEvents && cases.length > 0, !isEvents);
-  add("event-within-max-bytes", fitsMaxBytes, isEvents && sawEvents, !isEvents || !sawEvents);
-  const atomicReason = options.atomicPages?.reason.trim() ?? "";
-  const atomic = isEvents && atomicReason !== "";
-  add("failed-holds-cursor", cursor, atomic ? false : isEvents && sawFailed, !isEvents || atomic, atomic ? atomicReason : void 0);
-  const noExpiryReason = options.noExpiry?.reason.trim() ?? "";
-  const noExpiry = isEvents && noExpiryReason !== "";
-  add("gap-and-cursor-expired", gap, noExpiry ? false : isEvents && sawGap, !isEvents || noExpiry, noExpiry ? noExpiryReason : void 0);
-  add("gap-once-per-read", gapOnce, isEvents && sawAnyGap, !isEvents || !sawAnyGap);
-  add("refused-is-final", refused, isEvents && sawRefused, !isEvents);
-  add("removals-are-final", removals, isEvents && sawRemovals, !isEvents || !sawRemovals);
-  for (const id of version.machine) {
-    if (!version.seenMachine.has(id)) actorKind.push(`the fixture names ${id} as an agent, a bot or a service, and no page lists it`);
-  }
-  add("actor-kind", actorKind, isEvents && version.machine.size > 0, !isEvents || version.machine.size === 0);
-  add("one-author", oneAuthor, isEvents && version.sawAuthor, !isEvents || !version.sawAuthor);
-  add("facts", facts, isEvents && version.sawFacts, !isEvents || !version.sawFacts);
-  add("commitment-key", commitmentKey, isEvents && version.sawCommitment, !isEvents || !version.sawCommitment);
-  add("parts-stable", partsStable, isEvents && version.sawParts, !isEvents || !version.sawParts);
-  add("billed-cost", cost, source.cost.class === "billed" && isEvents, source.cost.class !== "billed");
-  for (const operation of identityOperations) {
-    if (!(source.permission.operations ?? []).includes(operation)) {
-      identity.push(`${operation} is declared an identity operation and is not among permission.operations: a source's operations are everything its reads assert, identity included`);
-    }
-  }
-  const probe = [];
-  const assertedBeforeProbe = running.assertions.length;
-  try {
-    const answer = await calls.probe({ source: probeSourceName(source) ?? source.id, account }, context);
-    probe.push(...probeProblems(answer, source, { account }));
-  } catch (error) {
-    probe.push(`probe(${source.id}) failed: ${messageOf(error)}`);
-  }
-  const probeAssertions = running.assertions.slice(assertedBeforeProbe);
-  if (probeAssertions.length === 0) probe.push(`probe(${source.id}) asserted nothing: it reads the identity under its own grant`);
-  const declared = probeAction !== void 0;
-  probe.push(...identityProblems(probeAssertions, source, identityGrants, declared ? probeAction : void 0));
-  add("probe", probe);
-  const details = [];
-  const declaredDetails = isEvents ? source.details ?? [] : [];
-  const detailCases = options.detailCases ?? declaredDetails.flatMap((detail) => isEvents ? [{ id: detail.id }] : []);
-  const scopeKeys = source.scope?.keys ?? [];
-  for (const detail of declaredDetails) {
-    const read = calls.details?.[detail.id];
-    if (read === void 0) {
-      details.push(`details(${detail.id}) is declared and the kit has no call for it`);
-      continue;
-    }
-    const own = detailCases.filter((entry) => entry.id === detail.id);
-    const inside = own.filter((entry) => entry.expect === void 0);
-    const outside = own.filter((entry) => entry.expect !== void 0);
-    for (const entry of own) await assertDetail(entry, detail, source, read, context, running, runningGrants, identityOperations, plugin, details);
-    if (inside.length === 0) details.push(`details(${detail.id}) has no case inside the confirmed scope`);
-    if (scopeKeys.length > 0 && outside.length === 0) {
-      details.push(`details(${detail.id}) has no case outside the confirmed scope: a read pinned to a scope must refuse one that is not`);
-    }
-  }
-  for (const entry of detailCases) {
-    if (!declaredDetails.some((detail) => detail.id === entry.id)) details.push(`details(${entry.id}) is not declared by the source`);
-  }
-  add("details", details, declaredDetails.length > 0, declaredDetails.length === 0);
-  const suggest = [];
-  const suggested = source.scope?.suggest;
-  if (suggested !== void 0) {
-    const assertedBeforeSuggest = bind.assertions.length;
-    if (calls.suggest === void 0) suggest.push(`scope.suggest names "${suggested.tool}" and the kit has no call for it`);
-    else {
-      try {
-        const answer = await calls.suggest({ source: source.id, account }, bindContext);
-        suggest.push(...suggestProblems(answer, `scope.suggest(${suggested.tool})`));
-      } catch (error) {
-        suggest.push(`scope.suggest(${suggested.tool}) failed: ${messageOf(error)}`);
-      }
-      const suggestAssertions = bind.assertions.slice(assertedBeforeSuggest);
-      if (suggestAssertions.length === 0) suggest.push(`scope.suggest(${suggested.tool}) asserted nothing: even at bind it reads under the grant`);
-      suggest.push(...outsideGrants(suggestAssertions, bindGrantsFor(source, account), `scope.suggest(${suggested.tool})`));
-      for (const grant of unusedGrants(bindGrantsFor(source, account), bind.assertions)) {
-        suggest.push(`the bind declaration grants ${grant.action} on ${grant.resource}, which no bind-time read asserts: a suggest operation is exactly what it asserts`);
-      }
-    }
-  }
-  add("suggest", suggest, suggested !== void 0, suggested === void 0);
-  const snapshot = [];
-  const outputSchema = [];
-  const extensionOutput = !isEvents && /^x-/.test(source.output);
-  if (!isEvents) {
-    const snapshotCases = options.snapshotCases ?? [];
-    if (calls.snapshot === void 0) snapshot.push("the source is a snapshot and the kit has no snapshot call, so its grants cannot be checked");
-    else {
-      for (const input of snapshotCases) {
-        const assertedBeforeSnapshot = running.assertions.length;
-        try {
-          const answer = await calls.snapshot(input, context);
-          identity.push(...identityOverlap(running.assertions.slice(assertedBeforeSnapshot), identityGrants, `snapshot_read(${JSON.stringify(input)})`, source.permission.readsIdentity === true));
-          if (extensionOutput) outputSchema.push(...snapshotDataProblems(answer, source));
-        } catch (error) {
-          snapshot.push(`snapshot_read(${JSON.stringify(input)}) failed: ${messageOf(error)}`);
-        }
-      }
-      if (snapshotCases.length === 0) snapshot.push("the source is a snapshot and no snapshot case ran");
-    }
-  }
-  add("identity-grants", identity);
-  add("output-schema", outputSchema, extensionOutput && snapshot.length === 0, !extensionOutput);
-  const rpc = options.sources?.rpc;
-  add(
-    "rpc-id",
-    rpc === void 0 ? [] : [...oldToolsRpcIdProblems(rpc, options.describe)],
-    rpc !== void 0,
-    rpc === void 0
-  );
-  const unused = unusedGrants(runningGrants, running.assertions).map(
-    (grant) => `the declaration grants ${grant.action} on ${grant.resource}, which no read asserts: a source's grants are exactly what it asserts`
-  );
-  const unusedRan = isEvents ? cases.length > 0 : snapshot.length === 0;
-  add("unused-grants", [...unused, ...snapshot], unusedRan, false);
-  if (running.undeclared.length > 0 || bind.undeclared.length > 0) {
-    checks.push({
-      name: "undeclared-grants",
-      ran: true,
-      notApplicable: false,
-      problems: [...running.undeclared, ...bind.undeclared].map((action) => `${action} was asserted and is not among the grants the declaration derives`)
-    });
-  }
-  const problems = checks.flatMap((check) => check.problems);
-  const incomplete = checks.some((check) => !check.ran && !check.notApplicable);
-  return {
-    source: source.id,
-    plugin,
-    identityOperations,
-    ...probeAction === void 0 ? {} : { probeAction },
-    checks,
-    problems,
-    ok: problems.length === 0 && !incomplete,
-    incomplete
-  };
+// src/conformance.ts
+async function t0(pluginDir) {
+  const directory = resolve(pluginDir);
+  const installed = readInstalledManifest(directory);
+  if (!installed.ok) return installed.problems.map((problem) => error("T0.manifest", problem, { path: "package.json", fix: "Fix capabilities in package.json, then run T0 again." }));
+  const namespace = readFixture(directory).fixture?.namespace;
+  return staticFindings(directory, installed.value.manifest, { ...namespace === void 0 ? {} : { namespace } });
 }
-function assertConformance(report) {
-  if (report.ok) return;
-  const failed = report.checks.filter((check) => check.problems.length > 0).length;
-  const missing = report.checks.filter((check) => !check.ran && !check.notApplicable).map((check) => check.name);
-  const why = [
-    ...failed > 0 ? [`${failed} checks failed`] : [],
-    ...missing.length > 0 ? [`${missing.join(", ")} did not run`] : []
-  ].join(", and ");
-  throw new Error(`CONFORMANCE_FAILED: the source ${report.source} of ${report.plugin} is not conformant: ${why}. Next step: fix each problem listed.
-- ${report.problems.join("\n- ")}`);
-}
-async function assertDetail(entry, detail, source, read, context, running, runningGrants, identityOperations, plugin, problems) {
-  const where = `details(${detail.id})`;
-  const scope = entry.scope ?? {};
-  problems.push(...scopeProblems(scope, source.scope, where));
-  const input = detailInput(detail, source, {
-    account: context.account,
-    scope,
-    ...entry.event === void 0 ? {} : { event: entry.event }
+async function t1(pluginDir, host) {
+  const directory = resolve(pluginDir);
+  const installed = readInstalledManifest(directory);
+  if (!installed.ok) return installed.problems.map((problem) => error("T1.manifest", problem, { path: "package.json", fix: "Fix capabilities in package.json, then run T1 again." }));
+  const read = readFixture(directory).fixture;
+  return hostFindings(directory, installed.value.manifest, host, {
+    ...read?.accounts?.aliases === void 0 ? {} : { accounts: read.accounts.aliases },
+    ...read?.accounts?.real === true ? { realAccounts: true } : {},
+    ...typeof read?.accounts?.required?.method === "string" ? { accountMethod: read.accounts.required.method } : {},
+    ...read?.accounts?.cursors?.[0] === void 0 ? {} : { accountCursor: read.accounts.cursors[0] },
+    ...read?.rpc?.inputs === void 0 ? {} : { inputs: read.rpc.inputs }
   });
-  if (entry.expect !== void 0) {
-    if (entry.expect.refuses !== OUT_OF_SCOPE_CODE) {
-      problems.push(`${where} expects ${entry.expect.refuses} for an out-of-scope read, and \xA72.3's table names ${OUT_OF_SCOPE_CODE}`);
+}
+async function runConformance(pluginDir, options = {}) {
+  const directory = resolve(pluginDir);
+  const installed = readInstalledManifest(directory);
+  if (!installed.ok) {
+    return { ok: false, findings: installed.problems.map((problem) => error("manifest.invalid", problem, { path: "package.json", fix: "Fix capabilities in package.json." })) };
+  }
+  const { manifest, package: packageName, version } = installed.value;
+  const findings = [];
+  const record = options.record === true;
+  findings.push(...declarationFindings(installed.value));
+  findings.push(...optionsFindings(manifest));
+  const read = readFixture(directory);
+  const fixture = read.fixture;
+  if (read.problem !== void 0) {
+    findings.push(error("fixture.read", read.problem, { path: "fixtures/conformance.json", fix: "Fix the JSON, then run conformance again." }));
+  } else if (fixture?.plugin !== void 0 && fixture.plugin !== packageName) {
+    findings.push(error("fixture.plugin", `the fixture was recorded for ${fixture.plugin}, not ${packageName}`, { path: "fixtures/conformance.json" }));
+  }
+  const aliases = fixture?.accounts?.aliases ?? [];
+  const account = aliases[0] ?? "default";
+  for (const source of manifest.sources) {
+    const recorded = fixture?.sources?.[source.id];
+    if (recorded === void 0) {
+      findings.push(
+        record ? warning("sources.recorded", `${source.id} records no answer yet`, { path: "fixtures/conformance.json" }) : error("sources.recorded", `${source.id} records no answer, so nothing shows what its read returns`, {
+          path: "fixtures/conformance.json",
+          fix: "Record it with plugin-kit record."
+        })
+      );
+      continue;
     }
-    try {
-      await read(input, context);
-      problems.push(`${where} answered a call outside the confirmed scope: it must be refused with ${OUT_OF_SCOPE_CODE}: \u2026 Next step: \u2026`);
-    } catch (error) {
-      const message = messageOf(error);
-      if (!message.startsWith(`${OUT_OF_SCOPE_CODE}: `) || !message.includes("Next step: ")) {
-        problems.push(`${where} refused an out-of-scope call with "${message}", not ${OUT_OF_SCOPE_CODE}: \u2026 Next step: \u2026`);
-      }
-    }
-    return;
-  }
-  problems.push(...detailInputProblems(detail, input));
-  const assertedBefore = running.assertions.length;
-  try {
-    const answer = await read(input, context);
-    const result = pageChecks(answer, { source, plugin, input: {}, detail: true });
-    problems.push(...result.shape, ...result.cursor, ...result.gap, ...result.refused, ...result.cost);
-  } catch (error) {
-    problems.push(`${where} failed inside the confirmed scope: ${messageOf(error)}`);
-  }
-  problems.push(...outsideGrants(running.assertions.slice(assertedBefore), runningGrants, where));
-  problems.push(...identityOverlap(running.assertions.slice(assertedBefore), probeIdentityGrants(source, identityOperations, context.account), where, source.permission.readsIdentity === true));
-}
-function messageOf(error) {
-  if (error instanceof Error) return error.message;
-  return String(error);
-}
-var isRefusal = (expect) => typeof expect === "object" && expect !== null && "refuses" in expect;
-var plain5 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-var hasEntries = (answer, key2) => plain5(answer) && Array.isArray(answer[key2]) && answer[key2].length > 0;
-var hasGap = (answer) => plain5(answer) && answer["gap"] !== void 0;
-async function gapAnsweredOnce(where, answer, options) {
-  if (answer["more"] !== true) return [];
-  const cursor = answer["cursor"];
-  if (typeof cursor !== "string" || cursor.length === 0) return [`${where}: the page carries gap and more: true, and no cursor to read the rest of the read with`];
-  let next;
-  try {
-    next = await options.calls.list?.({ ...options.input, cursor }, options.context);
-  } catch (error) {
-    return [`${where}: the page carries gap and more: true, so the page its cursor names must be recorded to show the gap is not repeated (${messageOf(error)})`];
-  }
-  if (hasGap(next)) return [`${where}: the read's second page repeats the gap, which a consumer counts as a second resync`];
-  return [];
-}
-async function expiredByGap(where, answer, options) {
-  if (!plain5(answer) || !plain5(answer["gap"]) || answer["gap"]["reason"] !== "expired") {
-    return [`${where}: an expired cursor must answer gap.reason "expired", or throw CURSOR_EXPIRED`];
-  }
-  const cursor = answer["cursor"];
-  if (typeof cursor !== "string" || cursor.length === 0) return [`${where}: an expired cursor must answer a cursor a consumer can restart from`];
-  let next;
-  try {
-    next = await options.calls.list?.({ ...options.input, cursor }, options.context);
-  } catch (error) {
-    return [`${where} after the restart: failed with ${messageOf(error)}`];
-  }
-  const checks = pageChecks(next, { source: options.source, plugin: options.plugin, input: { ...options.input, cursor } });
-  const problems = [...checks.shape, ...checks.cursor];
-  if (plain5(next) && plain5(next["gap"]) && next["gap"]["reason"] === "expired") {
-    problems.push(`${where}: the cursor the expired page answered expired again, so the round trip does not restart`);
-  }
-  return problems.map((problem) => `${where} after the restart: ${problem}`);
-}
-async function expiredByError(where, error, options) {
-  const message = messageOf(error);
-  if (!/^CURSOR_EXPIRED: /.test(message)) return [`${where}: failed with "${message}", not CURSOR_EXPIRED or a gap`];
-  const since = String(error.since ?? "");
-  const hint = /(?:Z|[+-]\d{2}:\d{2})$/.test(since) && !Number.isNaN(Date.parse(since)) ? since : RECOVERY_SINCE;
-  let next;
-  try {
-    next = await options.calls.list?.({ ...options.input, since: hint }, options.context);
-  } catch (failed) {
-    return [`${where} after the restart: failed with ${messageOf(failed)}`];
-  }
-  const checks = pageChecks(next, { source: options.source, plugin: options.plugin, input: { ...options.input, since: hint } });
-  return [...checks.shape, ...checks.cursor].map((problem) => `${where} after the restart: ${problem}`);
-}
-function outsideGrants(assertions, grants, where) {
-  const problems = [];
-  for (const assertion of assertions) {
-    const resources = assertion.resources.length > 0 ? assertion.resources : ["*"];
-    for (const resource of resources) {
-      const held = grants.some((grant) => assertionMatches([{ action: assertion.action, resources: [resource] }], grant));
-      if (!held) problems.push(`${where} asserts ${assertion.action} on ${resource}, which the source does not grant: a read asserts only its own grant`);
-    }
-  }
-  return problems;
-}
-function snapshotDataProblems(answer, source) {
-  if (source.kind !== "snapshot" || source.outputSchema === void 0) return ["the source is an x- output and states no outputSchema"];
-  if (!plain5(answer)) return ["snapshot_read answered nothing: an object with data and asOf"];
-  const checked = fromJSONSchema(source.outputSchema).safeParse(answer["data"]);
-  if (checked.success) return [];
-  return checked.error.issues.map((issue) => `snapshot_read data at ${issue.path.length === 0 ? "the value" : issue.path.map(String).join(".")}: ${issue.message}`);
-}
-function identityOverlap(assertions, identityGrants, where, readsIdentity = false) {
-  if (readsIdentity) return [];
-  const problems = [];
-  for (const assertion of assertions) {
-    const resources = assertion.resources.length > 0 ? assertion.resources : ["*"];
-    for (const resource of resources) {
-      if (identityGrants.some((grant) => assertionMatches([{ action: assertion.action, resources: [resource] }], grant))) {
-        problems.push(`${where}: a content read asserts ${assertion.action} on ${resource}, which is an identity operation: identity reads belong to probe`);
-      }
-    }
-  }
-  return problems;
-}
-function identityProblems(assertions, source, identityGrants, probeAction) {
-  const action = probeAction ?? (source.kind === "events" ? source.permission.events : source.permission.tool);
-  const allowed = [{ action, resource: "*" }, ...identityGrants];
-  const problems = [];
-  for (const assertion of assertions) {
-    const resources = assertion.resources.length > 0 ? assertion.resources : ["*"];
-    for (const resource of resources) {
-      if (!allowed.some((grant) => assertionMatches([{ action: assertion.action, resources: [resource] }], grant))) {
-        problems.push(`probe(${source.id}) asserts ${assertion.action} on ${resource}, which is not an identity operation: a probe reads the account, never content`);
-      }
-    }
-  }
-  for (const grant of allowed) {
-    if (probeAction !== void 0 && !assertionMatches(assertions, grant)) {
-      problems.push(`probe(${source.id}) does not assert ${grant.action} on ${grant.resource}, which the declaration names`);
-    }
-  }
-  return problems;
-}
-function versionState(source, machineActors) {
-  return {
-    machine: new Set(machineActors ?? []),
-    seenMachine: /* @__PURE__ */ new Set(),
-    declaredFacts: new Set(source.kind === "events" ? source.facts ?? [] : []),
-    keys: /* @__PURE__ */ new Map(),
-    items: /* @__PURE__ */ new Map(),
-    parts: /* @__PURE__ */ new Map(),
-    sawAuthor: false,
-    sawFacts: false,
-    sawCommitment: false,
-    sawParts: false
-  };
-}
-function versionProblems(answer, where, state) {
-  const actorKind = [];
-  const oneAuthor = [];
-  const facts = [];
-  const commitmentKey = [];
-  const partsStable = [];
-  if (!plain5(answer) || !Array.isArray(answer["events"])) return { actorKind, oneAuthor, facts, commitmentKey, partsStable };
-  for (const event of answer["events"]) {
-    if (!plain5(event)) continue;
-    const id = typeof event["external_id"] === "string" ? event["external_id"] : "";
-    if (Array.isArray(event["actors"])) {
-      const authors = event["actors"].filter((actor) => plain5(actor) && AUTHOR_ROLES.includes(actor["role"]));
-      if (authors.length > 0) state.sawAuthor = true;
-      if (authors.length > 1) oneAuthor.push(`${where}: the event ${id} lists more than one author: from, or its alias author, names at most one actor`);
-      for (const actor of event["actors"]) {
-        if (!plain5(actor) || typeof actor["id"] !== "string" || !state.machine.has(actor["id"])) continue;
-        state.seenMachine.add(actor["id"]);
-        if (!MACHINE_KINDS.includes(String(actor["kind"]))) {
-          actorKind.push(`${where}: the actor ${actor["id"]} is an agent, a bot or a service, and says no kind: an agent, a bot and a service each carry one`);
+    if (source.kind === "events") {
+      findings.push(...eventsFindings({ plugin: packageName, source, recorded, record }));
+      if (source.details !== void 0 && source.details.length > 0) {
+        if (recorded.details === void 0 || recorded.details.length === 0) {
+          findings.push(record ? warning("details.recorded", `${source.id} declares detail reads and records none`, { path: "fixtures/conformance.json" }) : error("details.recorded", `${source.id} declares detail reads and records none`, { path: "fixtures/conformance.json", fix: "Record one read inside the scope, and one outside it." }));
+        } else {
+          findings.push(...detailFindings(source, recorded.details, account));
         }
       }
-    }
-    if (Array.isArray(event["facts"])) {
-      for (const fact of event["facts"]) {
-        if (!plain5(fact)) continue;
-        state.sawFacts = true;
-        const type = String(fact["type"]);
-        if (!state.declaredFacts.has(type)) facts.push(`${where}: the event ${id} carries a ${type} fact, and the descriptor does not declare that type`);
-        if (type !== "commitment") continue;
-        state.sawCommitment = true;
-        const key2 = fact["key"];
-        const title = fact["title"];
-        const owner = fact["owner"];
-        if (typeof key2 !== "string" || typeof title !== "string" || typeof owner !== "string") continue;
-        const identity = `${title}\0${owner}`;
-        const named = state.keys.get(key2);
-        if (named !== void 0 && named !== identity) commitmentKey.push(`${where}: the commitment key ${key2} names another commitment (another title and owner) than on an earlier page`);
-        else state.keys.set(key2, identity);
-        const item = `${id}\0${identity}`;
-        const before = state.items.get(item);
-        if (before !== void 0 && before !== key2) commitmentKey.push(`${where}: the event ${id} lists one commitment (title ${title}, owner ${owner}) under two keys: a key is stable for one item`);
-        else state.items.set(item, key2);
+      if (source.scope?.suggest !== void 0) {
+        if (recorded.suggest?.answer === void 0) {
+          findings.push(record ? warning("suggest.recorded", `${source.id} declares a suggest read and records no answer`, { path: "fixtures/conformance.json" }) : error("suggest.recorded", `${source.id} declares a suggest read and records no answer`, { path: "fixtures/conformance.json" }));
+        } else {
+          findings.push(...suggestFindings(source, recorded.suggest.answer));
+        }
+      }
+    } else {
+      if (recorded.snapshot?.answer === void 0) {
+        findings.push(record ? warning("snapshot.recorded", `${source.id} records no snapshot answer`, { path: "fixtures/conformance.json" }) : error("snapshot.recorded", `${source.id} records no snapshot answer`, { path: "fixtures/conformance.json", fix: "Record one snapshot with plugin-kit record." }));
+      } else {
+        findings.push(...snapshotFindings(source, recorded.snapshot.answer, account));
       }
     }
-    if (Array.isArray(event["parts"])) {
-      for (const part of event["parts"]) {
-        if (!plain5(part) || typeof part["id"] !== "string" || typeof part["text"] !== "string") continue;
-        state.sawParts = true;
-        const at = `${id}\0${part["id"]}`;
-        const text = `${part["text"]}\0${typeof part["actor"] === "string" ? part["actor"] : ""}`;
-        const before = state.parts.get(at);
-        if (before !== void 0 && before !== text) partsStable.push(`${where}: the event ${id} re-lists the part ${part["id"]} with another text: a part's id and text never change once listed`);
-        else state.parts.set(at, text);
-      }
+    if (recorded.probe?.answer !== void 0) findings.push(...probeFindings(source, recorded.probe.answer, void 0));
+  }
+  if (manifest.accounts !== void 0) {
+    const missing = manifest.sources.filter((source) => fixture?.sources?.[source.id]?.probe?.answer === void 0);
+    if (missing.length > 0) {
+      findings.push(
+        record ? warning("probe.recorded", `${missing.map((source) => source.id).join(", ")} record no probe answer`, { path: "fixtures/conformance.json" }) : error("probe.recorded", `${missing.map((source) => source.id).join(", ")} record no probe answer, and a plugin with accounts declares probe`, {
+          path: "fixtures/conformance.json",
+          fix: "Record probe for each account alias."
+        })
+      );
     }
   }
-  return { actorKind, oneAuthor, facts, commitmentKey, partsStable };
-}
-var MACHINE_KINDS = ["agent", "bot", "service"];
-function oldToolsRpcIdProblems(declared, described) {
-  const pattern = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*\.tools$/;
-  if (typeof declared !== "string" || declared.length > 214 || !pattern.test(declared)) return ["the tools-RPC id must be the plugin id and .tools, such as google-workspace.gws.tools"];
-  if (described !== void 0 && described.id !== declared) return [`the plugin's describe reports the tools-RPC id ${String(described.id)}, not ${declared}`];
-  return [];
+  findings.push(...accountFindings(manifest, fixture?.accounts, { record }));
+  findings.push(...busFindings(manifest, fixture?.events, { record }));
+  if (fixture?.events?.status === void 0) {
+    findings.push(record ? warning("status.recorded", `${packageName} records no status answer`, { path: "fixtures/conformance.json" }) : error("status.recorded", `${packageName} records no status answer`, { path: "fixtures/conformance.json", fix: "Record status from one account." }));
+  } else {
+    findings.push(...statusFindings(manifest, version, fixture.events.status, aliases));
+  }
+  findings.push(...actionFindings(manifest, fixture?.actions, { record }));
+  findings.push(...await grantFindings(manifest, fixture?.grants, { record }));
+  findings.push(...rpcConfirmationFindings(manifest, fixture?.rpc, { record }));
+  const hosts = options.hosts ?? manifest.plugin.host.tested;
+  if (hosts.length === 0) {
+    findings.push(warning("T1.unchecked", "no host was run, so the doors, permissions and LD-5 were not proven", { fix: 'Pass hosts: ["2.4.1"], or run plugin-kit hosts.' }));
+  }
+  let namespace;
+  for (const host of hosts) {
+    const inspection = await inspectHost(directory, manifest, host, {
+      ...aliases.length === 0 ? {} : { accounts: aliases },
+      ...fixture?.accounts?.real === true ? { realAccounts: true } : {},
+      ...typeof fixture?.accounts?.required?.method === "string" ? { accountMethod: fixture.accounts.required.method } : {},
+      ...fixture?.accounts?.cursors?.[0] === void 0 ? {} : { accountCursor: fixture.accounts.cursors[0] },
+      ...fixture?.rpc?.inputs === void 0 ? {} : { inputs: fixture.rpc.inputs }
+    });
+    findings.push(...inspection.findings);
+    if (namespace === void 0 && inspection.run?.namespace !== void 0) namespace = inspection.run.namespace.description;
+  }
+  if (hosts.length > 0 && !hosts.includes(UNSUPPORTED_HOST)) findings.push(...await hostFindings(directory, manifest, UNSUPPORTED_HOST, aliases.length === 0 ? {} : { accounts: aliases }));
+  const recordedNamespace = namespace ?? fixture?.namespace;
+  findings.unshift(...staticFindings(directory, manifest, { ...recordedNamespace === void 0 ? {} : { namespace: recordedNamespace }, record }));
+  return { ok: isOk(findings), findings };
 }
 export {
-  DETAIL_FIELDS,
-  EVENT_FIELDS,
-  JOINERS,
-  READ_VERBS,
-  SENTINEL,
-  WRITE_VERBS,
-  assertConformance,
-  assertDeclaration,
-  assertDeclaredTools,
-  assertionMatches,
-  declarationProblems,
-  declaredToolIds,
-  detailInput,
-  detailInputProblems,
-  nameProblem,
-  operationProblem,
-  pageChecks,
-  pageProblems,
-  probeProblems,
-  probeSourceName,
-  publicSuffixOf,
-  readVerbProblem,
-  recordingPermission,
-  sameResource,
-  scopeProblems,
-  sourceConformance,
-  suggestProblems,
-  syntheticEvent,
-  tokensOf,
-  undeclaredToolProblems,
-  unusedGrants,
-  urlHostProblem
+  renderGeneratedDocs,
+  runConformance,
+  t0,
+  t1
 };

@@ -81,6 +81,7 @@ it declares the code in its manifest. The events module exports `ERROR_CODES`, `
 
 ## Conformance
 
-`eventsListConformance` walks a recorded source whole and page by page, and checks every page with `resultProblems`. It
-proves the page shape, the sizes, the order, the hash, the kinds, the refusals, the bound cursor and the error codes.
-`npm run conformance:self-test` runs the same checks over the examples in `examples/`.
+The conformance kit's recorded-source checks live in `conformance` (`internal/events-conformance.ts`): each recorded
+page is checked with `resultProblems` and `read.acceptAnswer`, and the checks prove the page shape, the sizes, the
+order, the hash, the kinds, the refusals, `failed` holding the cursor, one gap per read, the removals and the error
+codes. `npm run conformance:self-test` runs the kit over the examples in `examples/`.

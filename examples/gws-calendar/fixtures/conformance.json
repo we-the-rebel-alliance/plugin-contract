@@ -1,17 +1,29 @@
 {
   "$comment": "Sanitised from the off-line gws pilot fixture: every address, meeting and id is invented. Recorded as page results of the contract, with page tokens, sync tokens, a 410 and a cancellation. The kit replays each case by its input exactly.",
   "plugin": "@we-the-rebel-alliance/gws-plugin",
-  "account": "sam.rivera@example.com",
-  "tools": [
-    {
-      "id": "events_list",
-      "readOnly": true
+  "accounts": {
+    "aliases": [
+      "work",
+      "personal"
+    ],
+    "required": {
+      "method": "events_list",
+      "code": "ACCOUNT_REQUIRED"
     },
-    {
-      "id": "calendar_today",
-      "readOnly": true
-    }
-  ],
+    "unknown": {
+      "method": "events_list",
+      "account": "nobodyhere",
+      "code": "ACCOUNT_UNKNOWN"
+    },
+    "cursors": [
+      {
+        "method": "events_list",
+        "account": "work",
+        "other": "personal",
+        "code": "CURSOR_INVALID"
+      }
+    ]
+  },
   "sources": {
     "gws.calendar": {
       "cases": [
@@ -19,23 +31,13 @@
           "name": "a first page, with another page behind it",
           "input": {
             "source": "calendar",
-            "account": "sam.rivera@example.com"
+            "account": "work"
           },
           "expect": "page",
-          "asserts": [
-            {
-              "action": "gws.events_list",
-              "resource": "*"
-            },
-            {
-              "action": "gws.read",
-              "resource": "sam.rivera@example.com:calendar.events.list"
-            }
-          ],
           "answer": {
             "source": "calendar",
             "plugin": "@we-the-rebel-alliance/gws-plugin",
-            "account": "sam.rivera@example.com",
+            "account": "work",
             "owner": {
               "id": "mailto:sam.rivera@example.com",
               "label": "Sam Rivera"
@@ -68,8 +70,8 @@
                   "Room-3"
                 ],
                 "source": "calendar",
-                "account": "sam.rivera@example.com",
-                "hash": "sha256:32c3413b27b6bdc89fc3c9f0769b153d1e8f17d5e6df2b101a7eda8045ef920e"
+                "account": "work",
+                "hash": "sha256:3df468b72502970d5d95a7c4fdda0f8041b56d5e467faf31aa3b537852a583a8"
               }
             ],
             "cursor": "calendar:sam.rivera@example.com:page:page-2",
@@ -82,20 +84,14 @@
           "name": "the next page, with a cancelled meeting",
           "input": {
             "source": "calendar",
-            "account": "sam.rivera@example.com",
+            "account": "work",
             "cursor": "calendar:sam.rivera@example.com:page:page-2"
           },
           "expect": "page",
-          "asserts": [
-            {
-              "action": "gws.read",
-              "resource": "sam.rivera@example.com:calendar.events.list"
-            }
-          ],
           "answer": {
             "source": "calendar",
             "plugin": "@we-the-rebel-alliance/gws-plugin",
-            "account": "sam.rivera@example.com",
+            "account": "work",
             "owner": {
               "id": "mailto:sam.rivera@example.com",
               "label": "Sam Rivera"
@@ -112,12 +108,12 @@
                   "cancelled"
                 ],
                 "source": "calendar",
-                "account": "sam.rivera@example.com",
+                "account": "work",
                 "actors": [],
                 "title": "",
                 "text": "",
                 "url": null,
-                "hash": "sha256:25e580ac5df39ec593b4afcb53df245ba596b552cf87681a3846439fd3dfbf44"
+                "hash": "sha256:c58d9c53f6c8674e3d3e3e0c12ac32977e159c301588901e3569bbc844ad1d0e"
               },
               {
                 "kind": "meeting",
@@ -143,8 +139,8 @@
                   "confirmed"
                 ],
                 "source": "calendar",
-                "account": "sam.rivera@example.com",
-                "hash": "sha256:cd4ac5290655960933e86e87fa597336a5214f9549601e59717c2c68ed2cffd0"
+                "account": "work",
+                "hash": "sha256:696ca52b4b876368870d1511485ff0ed8b6ca5c8d2165fc91c004759fedfa782"
               }
             ],
             "cursor": "calendar:sam.rivera@example.com:sync:sync-1",
@@ -163,20 +159,14 @@
           "name": "a since before the window restarts with a gap",
           "input": {
             "source": "calendar",
-            "account": "sam.rivera@example.com",
+            "account": "work",
             "since": "2026-01-01T00:00:00.000Z"
           },
           "expect": "page",
-          "asserts": [
-            {
-              "action": "gws.read",
-              "resource": "sam.rivera@example.com:calendar.events.list"
-            }
-          ],
           "answer": {
             "source": "calendar",
             "plugin": "@we-the-rebel-alliance/gws-plugin",
-            "account": "sam.rivera@example.com",
+            "account": "work",
             "owner": {
               "id": "mailto:sam.rivera@example.com",
               "label": "Sam Rivera"
@@ -209,8 +199,8 @@
                   "Room-3"
                 ],
                 "source": "calendar",
-                "account": "sam.rivera@example.com",
-                "hash": "sha256:32c3413b27b6bdc89fc3c9f0769b153d1e8f17d5e6df2b101a7eda8045ef920e"
+                "account": "work",
+                "hash": "sha256:3df468b72502970d5d95a7c4fdda0f8041b56d5e467faf31aa3b537852a583a8"
               }
             ],
             "cursor": "calendar:sam.rivera@example.com:sync:sync-2",
@@ -227,20 +217,14 @@
           "name": "a since before the window, in pages: the gap is on the first page only",
           "input": {
             "source": "calendar",
-            "account": "sam.rivera@example.com",
+            "account": "work",
             "since": "2025-06-01T00:00:00.000Z"
           },
           "expect": "page",
-          "asserts": [
-            {
-              "action": "gws.read",
-              "resource": "sam.rivera@example.com:calendar.events.list"
-            }
-          ],
           "answer": {
             "source": "calendar",
             "plugin": "@we-the-rebel-alliance/gws-plugin",
-            "account": "sam.rivera@example.com",
+            "account": "work",
             "owner": {
               "id": "mailto:sam.rivera@example.com",
               "label": "Sam Rivera"
@@ -273,8 +257,8 @@
                   "Room-3"
                 ],
                 "source": "calendar",
-                "account": "sam.rivera@example.com",
-                "hash": "sha256:32c3413b27b6bdc89fc3c9f0769b153d1e8f17d5e6df2b101a7eda8045ef920e"
+                "account": "work",
+                "hash": "sha256:3df468b72502970d5d95a7c4fdda0f8041b56d5e467faf31aa3b537852a583a8"
               }
             ],
             "cursor": "calendar:sam.rivera@example.com:page:gap-page-2",
@@ -291,21 +275,15 @@
           "name": "the read's second page carries no gap",
           "input": {
             "source": "calendar",
-            "account": "sam.rivera@example.com",
+            "account": "work",
             "since": "2025-06-01T00:00:00.000Z",
             "cursor": "calendar:sam.rivera@example.com:page:gap-page-2"
           },
           "expect": "page",
-          "asserts": [
-            {
-              "action": "gws.read",
-              "resource": "sam.rivera@example.com:calendar.events.list"
-            }
-          ],
           "answer": {
             "source": "calendar",
             "plugin": "@we-the-rebel-alliance/gws-plugin",
-            "account": "sam.rivera@example.com",
+            "account": "work",
             "owner": {
               "id": "mailto:sam.rivera@example.com",
               "label": "Sam Rivera"
@@ -338,8 +316,8 @@
                   "Room-3"
                 ],
                 "source": "calendar",
-                "account": "sam.rivera@example.com",
-                "hash": "sha256:32c3413b27b6bdc89fc3c9f0769b153d1e8f17d5e6df2b101a7eda8045ef920e"
+                "account": "work",
+                "hash": "sha256:3df468b72502970d5d95a7c4fdda0f8041b56d5e467faf31aa3b537852a583a8"
               }
             ],
             "cursor": "calendar:sam.rivera@example.com:sync:sync-4",
@@ -352,16 +330,10 @@
           "name": "a sync token Google has forgotten is CURSOR_EXPIRED",
           "input": {
             "source": "calendar",
-            "account": "sam.rivera@example.com",
+            "account": "work",
             "cursor": "calendar:sam.rivera@example.com:sync:sync-expired"
           },
           "expect": "expired",
-          "asserts": [
-            {
-              "action": "gws.read",
-              "resource": "sam.rivera@example.com:calendar.events.list"
-            }
-          ],
           "refuses": "CURSOR_EXPIRED: Google no longer keeps the history this cursor names. Next step: read again with since to restart the window.",
           "since": "2026-10-13T09:00:00.000Z"
         },
@@ -369,21 +341,15 @@
           "name": "the restarted window reads on",
           "input": {
             "source": "calendar",
-            "account": "sam.rivera@example.com",
+            "account": "work",
             "cursor": "calendar:sam.rivera@example.com:sync:sync-expired",
             "since": "2026-10-13T09:00:00.000Z"
           },
           "expect": "page",
-          "asserts": [
-            {
-              "action": "gws.read",
-              "resource": "sam.rivera@example.com:calendar.events.list"
-            }
-          ],
           "answer": {
             "source": "calendar",
             "plugin": "@we-the-rebel-alliance/gws-plugin",
-            "account": "sam.rivera@example.com",
+            "account": "work",
             "owner": {
               "id": "mailto:sam.rivera@example.com",
               "label": "Sam Rivera"
@@ -416,8 +382,8 @@
                   "Room-3"
                 ],
                 "source": "calendar",
-                "account": "sam.rivera@example.com",
-                "hash": "sha256:32c3413b27b6bdc89fc3c9f0769b153d1e8f17d5e6df2b101a7eda8045ef920e"
+                "account": "work",
+                "hash": "sha256:3df468b72502970d5d95a7c4fdda0f8041b56d5e467faf31aa3b537852a583a8"
               }
             ],
             "cursor": "calendar:sam.rivera@example.com:sync:sync-3",
@@ -430,7 +396,7 @@
           "name": "a scope key this source does not declare is refused",
           "input": {
             "source": "calendar",
-            "account": "sam.rivera@example.com",
+            "account": "work",
             "scope": {
               "labels": [
                 "INBOX"
@@ -440,28 +406,73 @@
           "expect": {
             "refuses": "INPUT_INVALID"
           },
-          "refuses": "INPUT_INVALID: this source reads calendars, not labels. Next step: confirm the calendars to read.",
-          "asserts": []
+          "refuses": "INPUT_INVALID: this source reads calendars, not labels. Next step: confirm the calendars to read."
+        },
+        {
+          "name": "a page of the personal account",
+          "input": {
+            "source": "calendar",
+            "account": "personal"
+          },
+          "expect": "page",
+          "answer": {
+            "source": "calendar",
+            "plugin": "@we-the-rebel-alliance/gws-plugin",
+            "account": "personal",
+            "owner": {
+              "id": "mailto:sam.rivera.personal@example.com",
+              "label": "Sam Rivera (personal)"
+            },
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "trust": "untrusted",
+            "events": [
+              {
+                "kind": "meeting",
+                "external_id": "evt-a",
+                "occurred_at": "2026-11-01T10:00:00.000Z",
+                "thread": "calendar:evt-a",
+                "actors": [
+                  {
+                    "role": "organizer",
+                    "id": "mailto:ama.mensah@example.com",
+                    "name": "Ama Mensah"
+                  },
+                  {
+                    "role": "attendee",
+                    "id": "mailto:sam.rivera@example.com",
+                    "name": "Sam Rivera"
+                  }
+                ],
+                "title": "Quarterly plan",
+                "text": "Agenda: Q4 numbers, hiring, the board pack.",
+                "url": "https://calendar.google.com/calendar/event?eid=evt-a",
+                "labels": [
+                  "confirmed",
+                  "Room-3"
+                ],
+                "source": "calendar",
+                "account": "personal",
+                "hash": "sha256:fff752edc0736a72d8c10a36f9c39703fcc843bc80a59e31195d1868ce746895"
+              }
+            ],
+            "cursor": "calendar:sam.rivera@example.com:page:page-2",
+            "more": true,
+            "refused": [],
+            "failed": []
+          }
         }
       ],
+      "atomicPages": {
+        "reason": "calendar.events.list answers the page in one call, so no event can fail on its own"
+      },
       "probe": {
         "input": {
           "source": "calendar",
-          "account": "sam.rivera@example.com"
+          "account": "work"
         },
-        "asserts": [
-          {
-            "action": "gws.probe",
-            "resource": "*"
-          },
-          {
-            "action": "gws.read",
-            "resource": "sam.rivera@example.com:calendar.calendarList.get"
-          }
-        ],
         "answer": {
           "source": "calendar",
-          "account": "sam.rivera@example.com",
+          "account": "work",
           "owner": {
             "id": "mailto:sam.rivera@example.com",
             "label": "Sam Rivera"
@@ -469,13 +480,6 @@
           "scopes": [],
           "trust": "untrusted"
         }
-      },
-      "details": [],
-      "identity": [
-        "calendar.calendarList.get"
-      ],
-      "atomicPages": {
-        "reason": "calendar.events.list answers the page in one call, so no event can fail on its own"
       }
     },
     "gws.calendar.today": {
@@ -483,21 +487,11 @@
       "probe": {
         "input": {
           "source": "calendar",
-          "account": "sam.rivera@example.com"
+          "account": "work"
         },
-        "asserts": [
-          {
-            "action": "gws.probe",
-            "resource": "*"
-          },
-          {
-            "action": "gws.read",
-            "resource": "sam.rivera@example.com:calendar.calendars.get"
-          }
-        ],
         "answer": {
           "source": "calendar",
-          "account": "sam.rivera@example.com",
+          "account": "work",
           "owner": {
             "id": "mailto:sam.rivera@example.com",
             "label": "Sam Rivera"
@@ -506,28 +500,14 @@
           "trust": "untrusted"
         }
       },
-      "details": [],
-      "identity": [
-        "calendar.calendars.get"
-      ],
       "snapshot": {
         "input": {
           "params": {
             "window": "today"
           }
         },
-        "asserts": [
-          {
-            "action": "gws.calendar_today",
-            "resource": "*"
-          },
-          {
-            "action": "gws.read",
-            "resource": "sam.rivera@example.com:calendar.events.list"
-          }
-        ],
         "answer": {
-          "account": "sam.rivera@example.com",
+          "account": "work",
           "data": {
             "items": [
               {
@@ -545,5 +525,43 @@
         }
       }
     }
-  }
+  },
+  "events": {
+    "emitted": [
+      "changed"
+    ],
+    "status": {
+      "name": "gws",
+      "version": "0.0.0",
+      "host": {
+        "version": "2.4.1",
+        "range": ">=2.4.1 <2.5.0",
+        "tested": [
+          "2.4.1"
+        ]
+      },
+      "state": "ready",
+      "accounts": [
+        {
+          "alias": "work",
+          "state": "ready",
+          "owner": {
+            "id": "mailto:sam.rivera@example.com",
+            "label": "Sam Rivera"
+          }
+        },
+        {
+          "alias": "personal",
+          "state": "ready",
+          "owner": {
+            "id": "mailto:sam.rivera.personal@example.com",
+            "label": "Sam Rivera (personal)"
+          }
+        }
+      ],
+      "unguardedAgents": [],
+      "nextStep": null
+    }
+  },
+  "namespace": "Gmail, Calendar and Drive as contract events, with a sign-in per account."
 }

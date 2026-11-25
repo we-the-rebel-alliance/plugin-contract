@@ -1,30 +1,27 @@
+import { type ConformanceReport, type Finding } from "./internal/conformance/report.js";
+export type { ConformanceReport, Finding } from "./internal/conformance/report.js";
+export { renderGeneratedDocs } from "./internal/conformance/docs.js";
+/** What `runConformance` checks that the caller chooses. */
+export interface ConformanceOptions {
+    /** The OpenCode releases to load the plugin on. Default: the manifest's `plugin.host.tested`. */
+    readonly hosts?: readonly string[] | undefined;
+    /** While recording: a missing recording is a warning, not an error. */
+    readonly record?: boolean | undefined;
+}
 /**
- * The conformance kit: what a source plugin's declaration must satisfy, and the checks that prove it against the
- * plugin's own answers.
- *
- * The package's `conformance` entry exports it:
- *
- *   const report = await sourceConformance({ plugin, source, tools, calls, cases })
- *   assertConformance(report)
- *
- * The kit takes page results, cursors and permission contexts as inputs. It defines no page, cursor, permission or
- * descriptor of its own: those are the `events`, `cursor`, `permission`, `read` and `descriptor` modules' work, and a
- * plugin under test supplies what it can genuinely answer.
- *
- * The rules a JSON Schema cannot express are `declarationProblems`: the read-verb and joiner lists, the namespace of an
- * action, the `urlHosts` suffix rules, and uniqueness. Everything the generated schema can carry is in `./schema`.
+ * T0, the static gate: the namespace line, each skill description, every tool a text names, a pinned method's
+ * evidence, and the generated doc sections. No model, no network, no host.
  */
-export { assertDeclaration, assertDeclaredTools, declarationProblems, declaredToolIds, nameProblem, operationProblem, publicSuffixOf, readVerbProblem, undeclaredToolProblems, urlHostProblem } from "./internal/conformance/rules.js";
-export { DETAIL_FIELDS, EVENT_FIELDS, JOINERS, READ_VERBS, WRITE_VERBS, tokensOf } from "./internal/conformance/rules.js";
-export type { DeclarationOptions, PublicTool, ToolDeclaration } from "./internal/conformance/rules.js";
-export { assertionMatches, recordingPermission, sameResource, unusedGrants } from "./internal/conformance/permission.js";
-export type { AssertInput, Assertion, Grant, RecordingPermission, SessionContext } from "./internal/conformance/permission.js";
-export { pageChecks, pageProblems } from "./internal/conformance/page.js";
-export type { PageChecks, PageOptions } from "./internal/conformance/page.js";
-export { probeProblems, probeSourceName } from "./internal/conformance/probe.js";
-export { SENTINEL, detailInput, detailInputProblems, scopeProblems, syntheticEvent } from "./internal/conformance/details.js";
-export type { DetailCallInput } from "./internal/conformance/details.js";
-export { suggestProblems } from "./internal/conformance/suggest.js";
-export type { ScopeOption } from "./internal/conformance/suggest.js";
-export { assertConformance, sourceConformance } from "./internal/conformance/kit.js";
-export type { CaseExpectation, ConformanceCalls, ConformanceCheck, ConformanceReport, DetailCase, PageCase, Refusal, SourceConformanceOptions, } from "./internal/conformance/kit.js";
+export declare function t0(pluginDir: string): Promise<Finding[]>;
+/**
+ * T1, the host gate: the plugin loads on `host`, every method is a tool and an RPC method with permission
+ * `<name>.<method>`, the access levels hold, and a non-read method over RPC without an answered ask is refused. An
+ * unsupported `host` is expected to refuse cleanly with `HOST_UNTESTED`.
+ */
+export declare function t1(pluginDir: string, host: string): Promise<Finding[]>;
+/**
+ * Everything `plugin-kit conformance` runs: T0, the manifest's own declaration and options, every recorded source and
+ * account, the bus and status, actions, grants and the RPC confirmation, then T1 on every host the manifest tested and
+ * on the first unsupported one.
+ */
+export declare function runConformance(pluginDir: string, options?: ConformanceOptions): Promise<ConformanceReport>;

@@ -1,33 +1,33 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
-  verifyGrant
-} from "./chunks/chunk-ED3MMWUJ.js";
-import {
   assertPluginName,
   busEvents
-} from "./chunks/chunk-2VJOVDNM.js";
+} from "./chunks/chunk-TT6TETU6.js";
+import {
+  verifyGrant
+} from "./chunks/chunk-ED3MMWUJ.js";
 import {
   applyAccess,
   effectFor,
   evaluate,
   methodAction
-} from "./chunks/chunk-HBOP7XMF.js";
-import {
-  accountsOf,
-  redactReason,
-  resolveAccount
-} from "./chunks/chunk-R6LVJOLA.js";
+} from "./chunks/chunk-PRLLFQV2.js";
 import {
   manifestHash
-} from "./chunks/chunk-YRYY3WXH.js";
-import "./chunks/chunk-FZW2HFUR.js";
+} from "./chunks/chunk-RIPYHT4Z.js";
+import "./chunks/chunk-SBSFNGFN.js";
 import {
   errorCodeOf
 } from "./chunks/chunk-4TUKQJKX.js";
 import {
   problemsOf
-} from "./chunks/chunk-S3ZVQTGH.js";
+} from "./chunks/chunk-FTEX4OOT.js";
 import "./chunks/chunk-L3NVT2DE.js";
+import {
+  accountsOf,
+  redactReason,
+  resolveAccount
+} from "./chunks/chunk-JWZEPM5E.js";
 import {
   array,
   fromJSONSchema,
@@ -35,7 +35,7 @@ import {
   strictObject,
   string,
   unknown
-} from "./chunks/chunk-3GQYQSG2.js";
+} from "./chunks/chunk-4YITQAYJ.js";
 import "./chunks/chunk-7KJXMIQH.js";
 import "./chunks/chunk-WLRWVIVP.js";
 

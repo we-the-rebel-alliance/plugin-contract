@@ -4,83 +4,81 @@
   "private": true,
   "type": "module",
   "description": "Example: the gws plugin's Calendar sources as the contract declares them. Every address and meeting is invented.",
-  "sources": {
-    "contractVersion": 1,
-    "items": [
+  "exports": {
+    "./server": "./index.js"
+  },
+  "capabilities": {
+    "version": 1,
+    "plugin": {
+      "name": "gws",
+      "title": "Google Workspace",
+      "summary": "Gmail, Calendar and Drive as contract events, with a sign-in per account.",
+      "vendor": { "id": "google", "name": "Google", "domain": "google.com" },
+      "icons": [{ "src": "assets/icon.svg", "type": "image/svg+xml" }],
+      "host": { "opencode": ">=2.4.1 <2.5.0", "tested": ["2.4.1"] }
+    },
+    "accounts": {
+      "via": "integration",
+      "profile": { "$ref": "#/options/properties/accounts/additionalProperties" },
+      "owner": "mailto"
+    },
+    "options": {
+      "type": "object",
+      "properties": {
+        "access": { "type": "string", "enum": ["all", "ask-changes", "read-only"], "default": "all", "description": "How much the plugin's methods may do." },
+        "accounts": {
+          "type": "object",
+          "description": "One profile per account alias.",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "mode": { "type": "string", "enum": ["personal", "work"], "description": "Which Google account mode the alias uses." },
+              "enabledServices": { "type": "array", "items": { "type": "string" }, "description": "The Google services this alias may read." }
+            },
+            "additionalProperties": false
+          }
+        },
+        "allowUntestedHost": { "type": "boolean", "default": false, "description": "Start outside the tested OpenCode range." }
+      },
+      "additionalProperties": false
+    },
+    "methods": {
+      "status": { "class": "read", "accounts": "none" },
+      "probe": { "class": "read", "accounts": "optional", "operations": ["calendar.calendarList.get"] },
+      "events_list": { "class": "read", "accounts": "optional", "operations": ["calendar.calendarList.get", "calendar.events.list"] },
+      "calendar_today": { "class": "read", "accounts": "optional", "operations": ["calendar.calendars.get", "calendar.events.list"] }
+    },
+    "sources": [
       {
         "id": "gws.calendar",
         "kind": "events",
         "reads": "meeting",
-        "tool": "events_list",
-        "input": {
-          "source": "calendar"
-        },
-        "accounts": {
-          "named": true
-        },
-        "scope": {
-          "keys": [
-            "calendars"
-          ],
-          "describe": "Which calendars to read. The primary calendar is the default."
-        },
-        "permission": {
-          "events": "gws.events_list",
-          "operations": [
-            "calendar.calendarList.get",
-            "calendar.events.list"
-          ],
-          "identity": [
-            "calendar.calendarList.get"
-          ]
-        },
+        "method": "events_list",
+        "input": { "source": "calendar" },
+        "service": { "id": "gws.calendar", "label": "Calendar" },
+        "operations": ["calendar.calendarList.get", "calendar.events.list"],
+        "scope": { "keys": ["calendars"], "describe": "Which calendars to read. The primary calendar is the default." },
+        "cadence": { "suggestMinutes": 2 },
+        "signals": ["bus"],
         "private": true,
-        "cost": {
-          "class": "free"
-        },
+        "cost": { "class": "free" },
         "maxBytes": 262144,
-        "retentionDays": 30,
-        "urlHosts": [
-          "calendar.google.com"
-        ]
+        "urlHosts": ["calendar.google.com"]
       },
       {
         "id": "gws.calendar.today",
         "kind": "snapshot",
-        "tool": "calendar_today",
         "output": "agenda",
-        "params": {
-          "window": {
-            "relative": true
-          }
-        },
-        "accounts": {
-          "named": true
-        },
-        "permission": {
-          "tool": "gws.calendar_today",
-          "operations": [
-            "calendar.calendars.get",
-            "calendar.events.list"
-          ],
-          "identity": [
-            "calendar.calendars.get"
-          ]
-        },
+        "method": "calendar_today",
+        "service": { "id": "gws.calendar", "label": "Calendar" },
+        "operations": ["calendar.calendars.get", "calendar.events.list"],
         "private": true,
-        "cost": {
-          "class": "free"
-        },
-        "maxAgeSec": 900,
+        "cost": { "class": "free" },
         "maxBytes": 65536,
-        "urlHosts": [
-          "calendar.google.com"
-        ]
+        "urlHosts": ["calendar.google.com"]
       }
     ],
-    "rpc": "google-workspace.gws.tools",
-    "probe": {
-      "action": "gws.probe"
-    }
+    "actions": [],
+    "events": { "changed": {} }
   }
 }
