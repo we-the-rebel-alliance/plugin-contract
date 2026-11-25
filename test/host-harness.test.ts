@@ -1,6 +1,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
-import { createAutomation, legacySchedule, type AutomationSpec } from "../src/internal/host/automation.ts"
+import type { Mcp, Plugin } from "@opencode/plugin"
+import type { Tool } from "@opencode/schema/tool"
+import { automationApi, createAutomation, type AutomationApi, type AutomationSpec } from "../src/internal/host/automation.ts"
+import type { ToolCallLike } from "../src/internal/host/codemode.ts"
 import { waitForActivation } from "../src/internal/host/activation.ts"
 import { createCodeMode } from "../src/internal/host/codemode.ts"
 import { connectMcpServer } from "../src/internal/host/mcp.ts"
@@ -33,8 +36,9 @@ describe("the host harness: automations", () => {
     assert.deepEqual(await createAutomation({ kind: "server" }, { create: async () => ({ id: "aut_1" }) }, spec), { status: "created", id: "aut_1" })
     assert.deepEqual(await createAutomation({ kind: "sdk" }, { create: async () => ({ id: "aut_2" }) }, spec, { allowScheduler: true }), { status: "created", id: "aut_2" })
   })
-  test("experimental.schedule is gone", () => {
-    assert.throws(() => legacySchedule({}), /HOST_API_GONE: experimental\.schedule is gone from OpenCode 2\.4\. Next step: /)
+  test("experimental.schedule is gone, and the 2.4 automation API is used", () => {
+    assert.throws(() => automationApi({ experimental: { schedule: () => undefined } }), /HOST_API_GONE: experimental\.schedule is gone from OpenCode 2\.4\. Next step: /)
+    assert.equal(typeof automationApi({ experimental: { automation: { create: async () => ({ id: "aut_1" }) } } }).create, "function")
   })
 })
 
@@ -83,5 +87,19 @@ describe("the host harness: a turn's first step", () => {
     assert.deepEqual(log.push(step), [])
     assert.deepEqual(log.push(start), [start, step])
     assert.deepEqual(log.flush(), [])
+  })
+})
+
+describe("the host harness's real 2.4 types", () => {
+  test("the real Tool.Context, Mcp.ServerConfig and automation create fit without a cast", async () => {
+    const asToolCall = (context: Tool.Context): ToolCallLike => context
+    void asToolCall
+    const server: Mcp.ServerConfig = { type: "remote", url: "https://mcp.example.test", protocol: "legacy" }
+    assert.equal((await connectMcpServer(server, { request: async () => ({ status: 200 }) })).status, "initialized")
+    const create: Plugin.Context["experimental"]["automation"]["create"] = async () => {
+      throw new Error("signature only")
+    }
+    const accepts: AutomationApi = { create }
+    assert.equal(typeof accepts.create, "function")
   })
 })

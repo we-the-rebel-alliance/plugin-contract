@@ -25,7 +25,7 @@ import { HostError } from "./errors.ts"
 export { waitForActivation, type ActivationOptions } from "./activation.ts"
 export { createCodeMode, type CodeModeHarness, type CodeModeSession, type ToolCall, type ToolCallInput, type ToolCallLike } from "./codemode.ts"
 export { connectMcpServer, mcpAddress, type McpConnection, type McpProtocol, type McpServerConfig, type McpTransport } from "./mcp.ts"
-export { automationApi, createAutomation, legacySchedule, type AutomationAction, type AutomationApi, type AutomationClient, type AutomationHost, type AutomationResult, type AutomationSpec, type AutomationTrigger, type HostKind } from "./automation.ts"
+export { automationApi, createAutomation, type AutomationAction, type AutomationApi, type AutomationClient, type AutomationHost, type AutomationResult, type AutomationSpec, type AutomationTrigger, type HostKind } from "./automation.ts"
 export { TurnLog, type TurnEvent } from "./turn.ts"
 export { HostError } from "./errors.ts"
 

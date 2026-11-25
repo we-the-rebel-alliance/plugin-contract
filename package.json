@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "description": "The contract between OpenCode plugins and the apps that use them: one manifest, one data model, one error table, and the library that reads all three.",
   "license": "MIT",
+  "bin": {
+    "plugin-kit": "./bin/plugin-kit.js"
+  },
   "private": true,
   "type": "module",
   "repository": {
@@ -14,6 +17,7 @@
   },
   "files": [
     "dist",
+    "bin",
     "LICENSE",
     "README.md"
   ],
@@ -61,6 +65,10 @@
     "./hints": {
       "types": "./dist/hints.d.ts",
       "default": "./dist/hints.js"
+    },
+    "./kit": {
+      "types": "./dist/kit.d.ts",
+      "default": "./dist/kit.js"
     },
     "./outputs": {
       "types": "./dist/outputs.d.ts",

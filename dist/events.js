@@ -1,4 +1,5 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
+import "./chunks/chunk-2EGRD2TX.js";
 import {
   ACTOR_KINDS,
   ACTOR_ROLES,
