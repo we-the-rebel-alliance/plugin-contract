@@ -1,12 +1,15 @@
 /**
- * `broker-client`: a consumer uses a host's broker when one is offered, and reads embedded when none is (contract §9).
- * Nothing here needs a host: an app reads embedded with `read`.
+ * The broker side of `catalog`: one request and one answer (contract §9, §14).
  *
  * A broker is a thin layer a host builds over the same library. It adds a persistent cache keyed by the provider
  * identity from `probe` plus `(source, account, scope, params, window)`, per-person budgets and cadence, and an audit
  * line per read with no content. The host holds the grants it drew consent for, and may only narrow them: a cached
  * answer serves a consumer only when that consumer's own grant covers the same source, account and scope, never
  * another person or viewer. It never advances a consumer's cursor and never transforms an answer.
+ *
+ * **The grant key is `consumer`.** The request names who reads (`consumer`), and `package`, `version` and
+ * `manifestHash` describe the source's installed manifest. A broker looks the grant up by consumer, compares the
+ * version and hash with its own installed copy, and refuses another declaration with `PERMISSION_DENIED` (issue #8).
  *
  * **The wire shape** is one request and one answer (`BrokerRequest`, `BrokerAnswer`), so any host can offer a broker
  * through its own channel.
@@ -20,18 +23,19 @@
  * find one by asking over RPC: an RPC id has no owner in OpenCode, so another plugin could answer in the broker's
  * name.
  */
-import { canonicalScope } from "./cursor.ts"
-import { failureFromError } from "./internal/failure.ts"
-import { acceptAnswer, checkReadRequest, read, type ReadHost, type ReadOutcome, type ReadRequest } from "./read.ts"
+import { canonicalScope } from "../cursor.ts"
+import { failureFromError } from "../internal/failure.ts"
+import { acceptAnswer, checkReadRequest, read, type ReadHost, type ReadOutcome, type ReadRequest } from "../read.ts"
 
 /** One read, as a consumer asks a host's broker for it. */
 export interface BrokerRequest {
-  /** The installed package and version the consumer read its manifest from. */
+  /** The installed package the consumer read its manifest from. */
   readonly package: string
+  /** The installed package's version. */
   readonly version: string
   /** The manifest hash the consumer consented under; a broker whose own copy differs refuses with PERMISSION_DENIED. */
   readonly manifestHash: string
-  /** Who reads, such as `notes`: for the broker's grant check and its audit line. */
+  /** Who reads, such as `notes`: the broker's grant key and its audit line. */
   readonly consumer: string
   readonly source: string
   readonly account?: string
@@ -87,6 +91,9 @@ export function brokerRequest(request: ReadRequest): BrokerRequest {
 
 const plain = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
 
+/** Every key a broker request may carry; any other is refused. */
+const REQUEST_KEYS = new Set(["package", "version", "manifestHash", "consumer", "source", "account", "scope", "cursor", "since", "limit", "pick"])
+
 /** True when `answer` has a broker answer's shape. */
 export function isBrokerAnswer(answer: unknown): answer is BrokerAnswer {
   if (!plain(answer)) return false
@@ -97,9 +104,35 @@ export function isBrokerAnswer(answer: unknown): answer is BrokerAnswer {
 }
 
 /**
- * The reader a consumer uses. With a broker transport, each read goes to the broker first, after the same checks an
- * embedded read makes; it runs embedded when the broker says it is not offered, when the transport fails, or when its
- * answer is not a broker answer. Without one, every read runs embedded over the consumer's own host.
+ * True when `request` has a broker request's shape, for a broker reading one from an untrusted channel. `consumer` is
+ * required and non-empty: it is the grant key, so a request without one cannot be served. `manifestHash` is the
+ * contract's `sha256:…` hash, and no key outside the request is allowed.
+ */
+export function isBrokerRequest(request: unknown): request is BrokerRequest {
+  if (!plain(request)) return false
+  for (const key of Object.keys(request)) if (!REQUEST_KEYS.has(key)) return false
+  for (const key of ["package", "version", "consumer", "source"] as const) {
+    const value = request[key]
+    if (typeof value !== "string" || value.length === 0) return false
+  }
+  const manifestHash = request["manifestHash"]
+  if (typeof manifestHash !== "string" || !/^sha256:[0-9a-f]{64}$/.test(manifestHash)) return false
+  if (request["account"] !== undefined && typeof request["account"] !== "string") return false
+  if (request["cursor"] !== undefined && typeof request["cursor"] !== "string") return false
+  if (request["since"] !== undefined && typeof request["since"] !== "string") return false
+  if (request["limit"] !== undefined && !(typeof request["limit"] === "number" && Number.isInteger(request["limit"]) && request["limit"] > 0)) return false
+  const scope = request["scope"]
+  if (scope !== undefined && !(plain(scope) && Object.values(scope).every((values) => Array.isArray(values) && values.every((value) => typeof value === "string")))) return false
+  const pick = request["pick"]
+  if (pick !== undefined && !(Array.isArray(pick) && pick.every((value) => typeof value === "string"))) return false
+  return true
+}
+
+/**
+ * The reader a consumer uses. With a broker transport, each read goes to the broker first, after the pre-call checks
+ * an embedded read makes (a relative `since` is the broker's to resolve); it runs embedded when the broker says it is
+ * not offered, when the transport fails, or when its answer is not a broker answer. Without one, every read runs
+ * embedded over the consumer's own host.
  */
 export function sourceReader(options: { readonly host: ReadHost; readonly broker?: BrokerTransport }): SourceReader {
   const { host, broker } = options

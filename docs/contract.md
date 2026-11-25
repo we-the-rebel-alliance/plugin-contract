@@ -278,8 +278,8 @@ Remote apps can't read the disk, and RPC is untrusted for manifests. The **catal
 - **`catalog-plugin`** (its own repository): serves `catalog.list`, `broker.read` and `broker.act` over RPC, enforcing
   grants through sessions, and emits `rpc.catalog.changed` when plugins are installed or updated. Apps trust one pinned
   RPC id.
-- **Broker request:** `consumer` is the grant key. `package`, `version` and `hash` describe the source's manifest. This
-  settles #8, and an app's host broker adopts the same shape.
+- **Broker request:** `consumer` is the grant key. `package`, `version` and `manifestHash` describe the source's
+  manifest. This settles #8, and an app's host broker adopts the same shape.
 
 ## 15. Library modules
 

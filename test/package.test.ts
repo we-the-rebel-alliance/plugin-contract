@@ -12,7 +12,10 @@ describe("the package", () => {
     assert.equal(pkg.version, "0.0.0")
     assert.equal(pkg.repository.url, "git+https://github.com/we-the-rebel-alliance/plugin-contract.git")
     assert.deepEqual(pkg.exports["./outputs"], { types: "./dist/outputs.d.ts", default: "./dist/outputs.js" })
+    assert.deepEqual(pkg.exports["./catalog"], { types: "./dist/catalog.d.ts", default: "./dist/catalog.js" })
     assert.equal(pkg.exports["./registry"], undefined)
+    assert.equal(pkg.exports["./list"], undefined)
+    assert.equal(pkg.exports["./broker-client"], undefined)
   })
 
   test("implements contract version 1 and reads it", () => {

@@ -30,13 +30,13 @@
       "types": "./dist/act.d.ts",
       "default": "./dist/act.js"
     },
-    "./broker-client": {
-      "types": "./dist/broker-client.d.ts",
-      "default": "./dist/broker-client.js"
-    },
     "./bus": {
       "types": "./dist/bus.d.ts",
       "default": "./dist/bus.js"
+    },
+    "./catalog": {
+      "types": "./dist/catalog.d.ts",
+      "default": "./dist/catalog.js"
     },
     "./conformance": {
       "types": "./dist/conformance.d.ts",
@@ -57,10 +57,6 @@
     "./hints": {
       "types": "./dist/hints.d.ts",
       "default": "./dist/hints.js"
-    },
-    "./list": {
-      "types": "./dist/list.d.ts",
-      "default": "./dist/list.js"
     },
     "./outputs": {
       "types": "./dist/outputs.d.ts",
