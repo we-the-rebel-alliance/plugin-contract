@@ -358,6 +358,22 @@ describe("recorded sources, accounts, status, actions and grants", () => {
     assert.ok(found.includes("accounts.cursors"))
   })
 
+  test("a plugin with no cursor-bearing source is not asked for a cursor", () => {
+    const { manifest, recorded } = fixture()
+    const without = clone(recorded.accounts)
+    without.cursors = []
+    // The fixture declares an events source, so the recording must carry a cursor.
+    assert.ok(ids(accountFindings(manifest, without)).includes("accounts.cursors"))
+    // A plugin with no source has nothing to page.
+    const noSources = clone(manifest) as any
+    noSources.sources = []
+    assert.ok(!ids(accountFindings(noSources, without)).includes("accounts.cursors"))
+    // A snapshot returns the latest state, not a page: it has no cursor either.
+    const snapshotOnly = clone(manifest) as any
+    snapshotOnly.sources = [{ id: "fixture.messages", kind: "snapshot", method: "events_list", output: "agenda", cost: { class: "free" } }]
+    assert.ok(!ids(accountFindings(snapshotOnly, without)).includes("accounts.cursors"))
+  })
+
   test("events, status and actions are declared and recorded", () => {
     const { manifest, recorded } = fixture()
     const missing = clone(recorded.events)

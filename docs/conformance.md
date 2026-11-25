@@ -115,7 +115,7 @@ the fields its `from` names; a suggest answer lists `{ id, label? }` at most 64 
 | `suggest.*` | the values a person may confirm |
 | `accounts.aliases` | at least two aliases, each a valid alias; `local` has one |
 | `accounts.required`, `accounts.unknown` | `ACCOUNT_REQUIRED` and `ACCOUNT_UNKNOWN` are recorded, on a method that takes an account |
-| `accounts.cursors` | a cursor issued for one account is refused for another |
+| `accounts.cursors` | a cursor issued for one account is refused for another; required only when the plugin declares an events source, the only read that pages with a cursor |
 
 With `accounts.real: true` in the fixture, T1 runs the same cases against the real host; the fixture plugin below sets
 it, so the account behaviour is proven by execution, not only by a recording.

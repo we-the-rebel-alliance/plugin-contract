@@ -127,9 +127,10 @@ function accountFindings(manifest, recorded, options = {}) {
     const method = typeof unknown.method === "string" ? unknown.method : "";
     if (method === "" || manifest.methods[method] === void 0) findings.push(error("accounts.unknown", `the unknown-account case names ${String(unknown.method)}, which is not a declared method`, { path: "fixtures/conformance.json" }));
   }
+  const cursorBearing = manifest.sources.some((source) => source.kind === "events");
   const cursors = recorded.cursors ?? [];
-  if (cursors.length === 0) {
-    findings.push(error("accounts.cursors", "the fixture records no cursor another account may not use: a cursor is bound to its account", { path: "fixtures/conformance.json" }));
+  if (cursorBearing && cursors.length === 0) {
+    findings.push(error("accounts.cursors", "the fixture records no cursor another account may not use: a cursor is bound to its account", { path: "fixtures/conformance.json", fix: "Record one page under two aliases, and the CURSOR_INVALID refusal for the other." }));
   }
   for (const [index, cursor] of cursors.entries()) {
     const at = `cursors[${index}]`;
