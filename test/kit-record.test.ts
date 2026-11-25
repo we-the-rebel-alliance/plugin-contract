@@ -163,6 +163,21 @@ describe("plugin-kit record", () => {
     }
   })
 
+  test("a runtime where the real host cannot run records the fixture and warns", async () => {
+    const local = temp()
+    try {
+      write(join(local.dir, FIXTURE_FILE), `${JSON.stringify({ ...fixture(), email: "ana@example.com" }, null, 2)}
+`)
+      const gate = { ok: false, findings: [{ id: "T1.host-unavailable", level: "error" as const, message: "T1 needs Node 24 or Bun" }] }
+      const run = context(local.dir, okRunner(gate))
+      assert.equal(await runRecord(run, { fixtures: undefined, check: false }), 0)
+      assert.match(run.err(), /RECORD\.host-unavailable/)
+      assert.doesNotMatch(readFileSync(join(local.dir, FIXTURE_FILE), "utf8"), /ana@example\.com/)
+    } finally {
+      local.cleanup()
+    }
+  })
+
   test("a missing fixture is a finding, not a directory walk", async () => {
     const local = temp()
     try {
@@ -185,7 +200,10 @@ describe("plugin-kit record", () => {
       assert.deepEqual(fixtureAliases(value), ["work", "personal"])
       assert.match(readFileSync(join(directory, FIXTURE_FILE), "utf8"), /<redacted:personal>/)
       const report = await runConformance(directory, { hosts: [] })
-      assert.equal(report.ok, true, report.findings.map((finding) => finding.id).join(", "))
+      assert.deepEqual(
+        report.findings.filter((finding) => finding.level === "error" && finding.id !== "T1.host-unavailable").map((finding) => finding.id),
+        [],
+      )
     } finally {
       rmSync(root, { recursive: true, force: true })
     }

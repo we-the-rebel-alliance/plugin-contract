@@ -695,6 +695,20 @@ function redactValue(value, path = []) {
   }
   return result;
 }
+var HOST_UNAVAILABLE = "T1.host-unavailable";
+function recordReport(report) {
+  const host = report.findings.filter((finding) => finding.id === HOST_UNAVAILABLE);
+  if (host.length === 0) return { ok: report.ok, findings: [...report.findings] };
+  const findings = report.findings.filter((finding) => finding.id !== HOST_UNAVAILABLE);
+  findings.push({
+    id: "RECORD.host-unavailable",
+    level: "warning",
+    path: "package.json",
+    message: "the real host cannot run on this runtime (T1 needs Node 24 or Bun); the fixture was still recorded and redacted",
+    fix: "Run plugin-kit check on Node 24 or Bun; record does not need the real host."
+  });
+  return { ok: !hasError(findings), findings };
+}
 function fixtureAt(path, display) {
   const text = readText(path);
   if (text === void 0) {
@@ -715,7 +729,7 @@ function fixtureAliases(value) {
 }
 async function runRecord(context, options) {
   const file = options.fixtures === void 0 ? join6(context.dir, "fixtures", "conformance.json") : resolve(context.dir, options.fixtures);
-  const report = options.check ? { ok: true, findings: [] } : await (await context.conformance()).runConformance(context.dir, { record: true });
+  const report = recordReport(options.check ? { ok: true, findings: [] } : await (await context.conformance()).runConformance(context.dir, { record: true }));
   const display = relativePath(context.dir, file);
   const read = fixtureAt(file, display);
   if ("finding" in read) {

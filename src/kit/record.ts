@@ -91,6 +91,24 @@ export function redactValue(value: unknown, path: readonly string[] = []): unkno
   return result
 }
 
+/** The one report finding that says this runtime cannot run the real host; record still writes the fixture. */
+const HOST_UNAVAILABLE = "T1.host-unavailable"
+
+/** Keep every record finding except the runtime gate, which becomes a warning with the next step. */
+function recordReport(report: { readonly ok: boolean; readonly findings: readonly Finding[] }): { readonly ok: boolean; readonly findings: Finding[] } {
+  const host = report.findings.filter((finding) => finding.id === HOST_UNAVAILABLE)
+  if (host.length === 0) return { ok: report.ok, findings: [...report.findings] }
+  const findings = report.findings.filter((finding) => finding.id !== HOST_UNAVAILABLE)
+  findings.push({
+    id: "RECORD.host-unavailable",
+    level: "warning",
+    path: "package.json",
+    message: "the real host cannot run on this runtime (T1 needs Node 24 or Bun); the fixture was still recorded and redacted",
+    fix: "Run plugin-kit check on Node 24 or Bun; record does not need the real host.",
+  })
+  return { ok: !hasError(findings), findings }
+}
+
 /** The fixture file a plugin records, beside its package. */
 export const FIXTURE_FILE = "fixtures/conformance.json"
 
@@ -123,7 +141,7 @@ export async function runRecord(
   options: { readonly account?: string | undefined; readonly fixtures: string | undefined; readonly check: boolean },
 ): Promise<number> {
   const file = options.fixtures === undefined ? join(context.dir, "fixtures", "conformance.json") : resolve(context.dir, options.fixtures)
-  const report = options.check ? { ok: true, findings: [] } : await (await context.conformance()).runConformance(context.dir, { record: true })
+  const report = recordReport(options.check ? { ok: true, findings: [] } : await (await context.conformance()).runConformance(context.dir, { record: true }))
   const display = relativePath(context.dir, file)
   const read = fixtureAt(file, display)
   if ("finding" in read) {
