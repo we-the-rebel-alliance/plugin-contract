@@ -8,7 +8,7 @@
  * 4. the answer is checked: its account, `trust: "untrusted"`, its size against `maxBytes`, and a snapshot's `data`
  *    against its output schema; then `pick` keeps only the picked paths.
  *
- * The host is two calls: open a session with given rules, and call a plugin's tools-RPC method in it. Each app
+ * The host is two calls: open a session with given rules, and call a plugin's RPC method in it. Each app
  * implements them over its own OpenCode server. An app keeps its own cursor: `read` returns the page and never stores
  * anything.
  */
