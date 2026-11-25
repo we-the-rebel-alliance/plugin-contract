@@ -12,7 +12,7 @@ import type { Plugin } from "@opencode/plugin"
 import { gate } from "./assertions.ts"
 import { permissionRefusal, RegisterError } from "./errors.ts"
 import type { MethodEntry } from "./handlers.ts"
-import { execute, prepareCall, toolCall, type BusRef, type CallEnvironment } from "./invoke.ts"
+import { execute, prepareCall, toolCall, type BusReader, type CallEnvironment } from "./invoke.ts"
 
 /** The tool context an executor receives, as much of OpenCode's `ToolContext` as this module uses. */
 export interface ToolCallContext {
@@ -81,7 +81,7 @@ function codemodeFor(entry: MethodEntry): ToolRegistration["options"]["codemode"
 }
 
 /** The tool registrations, built once, so a test can inspect them before OpenCode runs them. */
-export function toolRegistrations(environment: CallEnvironment, context: ToolContext, bus?: BusRef): readonly ToolRegistration[] {
+export function toolRegistrations(environment: CallEnvironment, context: ToolContext, bus: BusReader): readonly ToolRegistration[] {
   return environment.entries.map((entry) => ({
     name: entry.name,
     description: entry.handler.description,
@@ -96,7 +96,7 @@ export function toolRegistrations(environment: CallEnvironment, context: ToolCon
           save: true,
           source: { type: "tool", messageID: callContext.messageID, id: callContext.id },
         })
-        const value = await execute(entry, prepared, toolCall(callContext, callContext.codemode === true ? "codemode" : "tool"), environment.plans, bus)
+        const value = await execute(environment, entry, prepared, toolCall(callContext, callContext.codemode === true ? "codemode" : "tool"), bus)
         return { output: value, content: textOf(value) }
       } catch (error) {
         // A refusal before the handler releases the plan; after the handler starts, consume already made this a no-op.
@@ -108,7 +108,7 @@ export function toolRegistrations(environment: CallEnvironment, context: ToolCon
 }
 
 /** Register every tool in the plugin's namespace, and return the registration to dispose. */
-export async function installTools(context: ToolContext, environment: CallEnvironment, bus?: BusRef): Promise<{ dispose(): Promise<void> }> {
+export async function installTools(context: ToolContext, environment: CallEnvironment, bus: BusReader): Promise<{ dispose(): Promise<void> }> {
   const tools = toolRegistrations(environment, context, bus)
   return (await context.tool.transform((raw) => {
     const editor = raw as ToolEditor

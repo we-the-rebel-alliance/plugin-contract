@@ -159,6 +159,11 @@ The harness's types are structural, so a published declaration names no host pac
 passes the real 2.4.1 `Tool.Context`, `Mcp.ServerConfig` and `experimental.automation.create` to the harness and lets
 TypeScript prove the fit.
 
+`HostRun.assert({ sessionID, action, resources })` runs one action through the real `ctx.permission.assert` and answers
+`{ ok: true }` or `{ ok: false, code, message }`: the host's deny and rejection are `PERMISSION_DENIED`, an error with
+its own code or a leading `CODE:` keeps it, and anything else is `UNAVAILABLE`. It never throws, so a check can bound its
+own wait, and a message holding a secret is named by kind and never printed.
+
 ## Programmatic use
 
 The dev export also publishes `checkPlugin`, `forbiddenFindings`, `redactText`, `redactValue`, `loadConformance` and the
@@ -186,5 +191,5 @@ is how this package's tests run every command without a network or a repository.
 | `redactText`, `redactValue` | the fixture redaction `record` applies |
 | `KIT_BUNDLE_MARKER` | the marker that catches the kit bundled into a plugin |
 | `createHost`, `createAutomation`, `automationApi`, `connectMcpServer`, `createCodeMode`, `mcpAddress`, `TurnLog`, `waitForActivation` | the OpenCode 2.4 host harness |
-| `ActivationOptions`, `AutomationAction`, `AutomationApi`, `AutomationClient`, `AutomationHost`, `AutomationResult`, `AutomationSpec`, `AutomationTrigger`, `CodeModeHarness`, `CodeModeSession`, `HostKind`, `HostOptions`, `HostRun`, `McpConnection`, `McpProtocol`, `McpServerConfig`, `McpTransport`, `ToolCall`, `ToolCallInput`, `ToolCallLike`, `TurnEvent` | the harness's structural types |
+| `ActivationOptions`, `AssertResult`, `AutomationAction`, `AutomationApi`, `AutomationClient`, `AutomationHost`, `AutomationResult`, `AutomationSpec`, `AutomationTrigger`, `CodeModeHarness`, `CodeModeSession`, `HostKind`, `HostOptions`, `HostRun`, `McpConnection`, `McpProtocol`, `McpServerConfig`, `McpTransport`, `ToolCall`, `ToolCallInput`, `ToolCallLike`, `TurnEvent` | the harness's structural types |
 | `Git`, `GitResult`, `Io` | the git and output calls `main` takes |

@@ -183,22 +183,30 @@ describe("the examples", () => {
   })
 
   test("status reports an unreadable agent list as error, never as an empty unguarded list", async () => {
+    // The call's unguardedAgents() reader is the register's; a host whose list fails must make status say error.
+    const failing = { account: "default", unguardedAgents: async () => Promise.reject(new Error("the agent list is unavailable")) }
     const toolsModule = (await import(pathToFileURL(join(root, "examples", "tools", "handlers.js")).href)) as {
-      createHandlers(parts: object): { status: { run(): Promise<{ state: string; unguardedAgents: string[]; nextStep: unknown }> } }
+      createHandlers(parts: object): { status: { run(input: unknown, call: object): Promise<{ state: string; unguardedAgents: string[]; nextStep: unknown }> } }
     }
-    const failing = { access: { rules: [] }, agents: async () => Promise.reject(new Error("the agent list is unavailable")) }
-    const toolsStatus = await toolsModule.createHandlers({ manifest: manifestOf("tools"), version: "0.0.0", state: failing }).status.run()
+    const toolsStatus = await toolsModule.createHandlers({ manifest: manifestOf("tools"), version: "0.0.0", hostVersion: "2.4.1" }).status.run(undefined, failing)
     assert.equal(toolsStatus.state, "error")
     assert.deepEqual(toolsStatus.unguardedAgents, [], "the list is unknown, and the state says so")
     assert.match(String(toolsStatus.nextStep), /the agent list is unavailable/)
 
     const providerModule = (await import(pathToFileURL(join(root, "examples", "mcp", "provider.js")).href)) as { createTrellisProvider(): object }
     const mcpModule = (await import(pathToFileURL(join(root, "examples", "mcp", "handlers.js")).href)) as {
-      createHandlers(parts: object): { status: { run(): Promise<{ state: string; nextStep: unknown }> } }
+      createHandlers(parts: object): { status: { run(input: unknown, call: object): Promise<{ state: string; nextStep: unknown }> } }
     }
     const mcpStatus = await mcpModule
-      .createHandlers({ provider: providerModule.createTrellisProvider(), manifest: manifestOf("mcp"), options: { accounts: { work: {}, personal: {} } }, version: "0.0.0", state: failing })
-      .status.run()
+      .createHandlers({
+        provider: providerModule.createTrellisProvider(),
+        manifest: manifestOf("mcp"),
+        options: { accounts: { work: {}, personal: {} } },
+        version: "0.0.0",
+        hostVersion: "2.4.1",
+        accountProblems: [],
+      })
+      .status.run(undefined, failing)
     assert.equal(mcpStatus.state, "error")
     assert.match(String(mcpStatus.nextStep), /the agent list is unavailable/)
   })
@@ -249,7 +257,8 @@ describe("the examples", () => {
       manifest,
       options: { accounts: { work: {}, personal: {} } },
       version: "0.0.0",
-      state: {},
+      hostVersion: "2.4.1",
+      accountProblems: [],
     })
 
     // The committed page is what this handler answers today, not a hand-written shape.
@@ -275,14 +284,14 @@ describe("the examples", () => {
         word_count: { run(input: { text: string }, call: { account: string }): Promise<unknown> }
         read_note: { run(input: { id: string }, call: { account: string }): Promise<unknown> }
         plan_write_note: { run(input: { id: string; text: string }, call: { account: string }): Promise<{ method: string; output: { id: string; text: string; characters: number } }> }
-        write_note: { run(input: { planId: string }, call: { account: string; plan?: unknown; bus?: { emit(event: string, data: unknown): Promise<unknown> } }): Promise<unknown> }
+        write_note: { run(input: { planId: string }, call: { account: string; plan?: unknown; bus: { emit(event: string, data: unknown): Promise<unknown> } }): Promise<unknown> }
       }
     }
     const emitted: unknown[] = []
     const handlers = handlersModule.createHandlers({
       manifest: manifestOf("tools"),
       version: "0.0.0",
-      state: {},
+      hostVersion: "2.4.1",
     })
 
     assert.deepEqual(await handlers.word_count.run({ text: "One two three." }, call("default")), { words: 3, characters: 14 })
@@ -290,8 +299,8 @@ describe("the examples", () => {
     assert.equal(plan.method, "write_note")
     assert.equal(Object.hasOwn(plan, "planId"), false, "the register mints the planId")
     assert.deepEqual(plan.output, { id: "welcome", text: "A new note.", characters: 11 }, "the preview carries what the commit writes")
-    // The register keeps the plan handler's full answer and gives it to the commit as call.plan; `register(..., {bus:true})`
-    // puts the bus writer on the call.
+    // The register keeps the plan handler's full answer and gives it to the commit as call.plan; `register` always
+    // puts the bus writer on the call as call.bus.
     const bus = { emit: async (event: string, data: unknown) => (emitted.push({ event, data }), { ok: true }) }
     assert.deepEqual(await handlers.write_note.run({ planId: "minted-by-the-register" }, { ...call("default"), plan, bus }), { id: "welcome", text: "A new note." })
     assert.deepEqual(await handlers.read_note.run({ id: "welcome" }, call("default")), { id: "welcome", text: "A new note." })

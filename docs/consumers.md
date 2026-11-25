@@ -197,9 +197,9 @@ A decoded event is `{ type, name, event, data }`. `changed` carries `{ capabilit
 so a credential is `secret`, never `invalid`; the result then carries no part of the payload. `readBusEvent` throws only
 for a bad `options.name`; a payload never throws.
 
-The plugin side is `busEvents(name)`: `register` places it on its one RPC registration, and
-`register(..., { bus: true })` returns the writer as `registration.bus` (or `createBus(name, registration)` wraps the
-registration) to emit. An app never calls `busEvents`; it filters with `busEventType` and decodes with `readBusEvent`.
+The plugin side is `busEvents(name)`: `register` places it on its one RPC registration and builds the typed writer from
+it, which is `registration.bus` and every handler's `call.bus`. An app never calls `busEvents`; it filters with
+`busEventType` and decodes with `readBusEvent`.
 
 ## 4. Act: preview, then commit
 

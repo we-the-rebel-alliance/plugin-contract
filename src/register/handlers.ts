@@ -6,6 +6,7 @@
  * checks that every declared method has a handler and every handler is declared, so a manifest and its code cannot
  * drift apart.
  */
+import type { AccessRegistration } from "../access/agents.ts"
 import type { Bus } from "../bus.ts"
 import type { JsonSchema, Manifest, MethodItem } from "../manifest.ts"
 import { refuse } from "./errors.ts"
@@ -14,7 +15,7 @@ import { inputSchemaProblems, outputSchemaProblems, PLAN_OUTPUT, toolInputSchema
 /** Which door a call came through. */
 export type Door = "tool" | "codemode" | "rpc"
 
-/** What a handler knows about the call it runs: the session and agent, the resolved account, and the door. */
+/** What a handler knows about the call it runs: the session and agent, the resolved account, the bus and the door. */
 export interface MethodCall {
   readonly sessionID: string
   readonly agent: string
@@ -30,8 +31,12 @@ export interface MethodCall {
    * never part of it; the register mints the id the commit was called with.
    */
   readonly plan?: unknown
-  /** The bus writer, when `register` was wired with `{ bus: true }`; a handler emits its nudges here. */
-  readonly bus?: Bus | undefined
+  /** The typed bus writer, always present: `register` builds it from its one RPC registration (contract §10). */
+  readonly bus: Bus
+  /** The access rules this plugin generated, as `register` applied them. */
+  readonly access: AccessRegistration
+  /** The agents whose rules no longer give every generated rule its effect, asked when the call needs them. */
+  unguardedAgents(): Promise<readonly string[]>
   readonly door: Door
 }
 

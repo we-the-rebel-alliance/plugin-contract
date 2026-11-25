@@ -6,6 +6,7 @@ import { automationApi, createAutomation, type AutomationApi, type AutomationSpe
 import type { ToolCallLike } from "../src/internal/host/codemode.ts"
 import { waitForActivation } from "../src/internal/host/activation.ts"
 import { createCodeMode } from "../src/internal/host/codemode.ts"
+import { assertFailure } from "../src/internal/host/index.ts"
 import { connectMcpServer } from "../src/internal/host/mcp.ts"
 import { TurnLog } from "../src/internal/host/turn.ts"
 
@@ -21,6 +22,33 @@ describe("the host harness: activation before the first RPC", () => {
   test("fails at the bound with a code and a next step", async () => {
     let time = 0
     await assert.rejects(waitForActivation({ isActive: () => false, now: () => time, sleep: async (ms) => void (time += ms), pollMs: 10, timeoutMs: 50 }), /HOST_TIMEOUT: the plugin did not become active within 50 ms\. Next step: /)
+  })
+})
+
+describe("the host harness: the assert answer", () => {
+  test("a host error maps to its own code, its leading CODE:, the host's deny, or UNAVAILABLE", () => {
+    const answer = (error: unknown): { ok: boolean; code?: string; message?: string } => assertFailure(error)
+    assert.deepEqual(answer(new Error("PERMISSION_DENIED: the tool is refused. Next step: ask again.")), {
+      ok: false,
+      code: "PERMISSION_DENIED",
+      message: "PERMISSION_DENIED: the tool is refused. Next step: ask again.",
+    })
+    assert.equal(answer(Object.assign(new Error("no such account"), { data: { code: "ACCOUNT_UNKNOWN" } })).code, "ACCOUNT_UNKNOWN")
+    assert.equal(answer(Object.assign(new Error("no such account"), { code: "INPUT_INVALID" })).code, "INPUT_INVALID")
+    assert.equal(answer(Object.assign(new Error("x"), { _tag: "Permission.DeclinedError" })).code, "PERMISSION_DENIED")
+    assert.equal(answer(Object.assign(new Error("Permission denied: x"), { _tag: "Tool.Error", error: { _tag: "Permission.BlockedError" } })).code, "PERMISSION_DENIED")
+    assert.equal(answer(new Error("the transport fell over")).code, "UNAVAILABLE")
+    assert.equal(answer("not an error at all").code, "UNAVAILABLE")
+  })
+
+  test("a host message holding a secret is named by kind, never printed", () => {
+    const token = `ghp_${"a".repeat(36)}`
+    const refused = assertFailure(new Error(`the host refused the key ${token}`))
+    assert.equal(refused.ok, false)
+    const message = refused.ok ? "" : refused.message
+    assert.equal(message.includes(token), false)
+    assert.match(message, /held a secret/)
+    assert.equal(message.length <= 300, true)
   })
 })
 

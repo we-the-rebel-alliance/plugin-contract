@@ -508,6 +508,12 @@ export interface ProbeResult {
  * reuses this constant for its `probe` handler's output instead of copying the shape.
  */
 export declare const PROBE_SCHEMA: JsonSchema;
+/**
+ * The JSON Schema of a list-options answer (contract §11): `{ options: [{ id, label? }] }`, the shape a `list_*`
+ * method answers so a person can confirm a scope value. `id` is the value the read takes; `label` is what the person
+ * reads, at most 200 characters. A plugin reuses this constant instead of copying the shape.
+ */
+export declare const LIST_OPTIONS_SCHEMA: JsonSchema;
 /** `probe`'s input checked, or its problems, naming fields and never values. Anything but source and account is refused. */
 export declare function parseProbeInput(input: unknown): {
     ok: true;

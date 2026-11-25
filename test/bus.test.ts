@@ -1,7 +1,8 @@
-// The bus (contract §10, §13): a plugin merges `busEvents(name)` into its one RPC registration and wraps that
-// registration with `createBus(name, registration)`; an app reads one `/api/event` payload as a typed event or a
-// reason. The tests hold the writer, the reader, the one derivation between them (`rpc.<name>.<event>`) and the host's
-// registration rule: the last registration per id wins, so a second one would hide the plugin's methods.
+// The bus (contract §10, §13): `register` merges `busEvents(name)` into its one RPC registration and wraps that
+// registration with the typed writer, which every handler call reads as `call.bus`; an app reads one `/api/event`
+// payload as a typed event or a reason. The tests hold the writer (imported from its internal module, as `register`
+// does), the reader, the one derivation between them (`rpc.<name>.<event>`) and the host's registration rule: the last
+// registration per id wins, so a second one would hide the plugin's methods.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 import type { Plugin, Rpc } from "@opencode/plugin"
@@ -12,16 +13,15 @@ import {
   type Bus,
   type BusEventName,
   type BusEvents,
-  type BusRegistration,
   busEvents,
   busEventType,
   capabilityPattern,
-  createBus,
   isPluginName,
   readBusEvent,
   REASON_MAX,
   type ChangedData,
 } from "../src/bus.ts"
+import { createBus, type BusRegistration } from "../src/bus/writer.ts"
 import { makeRpcHost, RpcFailure } from "./support/rpc-host.ts"
 
 interface Emitted {
@@ -226,7 +226,7 @@ describe("one registration per plugin (OpenCode 2.4.1 RPC)", () => {
     output: { type: "object", additionalProperties: false, required: ["text"], properties: { text: { type: "string" } } },
   }
 
-  test("the plugin's method still resolves after busEvents is merged and createBus wraps the registration", async () => {
+  test("the plugin's method still resolves after busEvents is merged and the writer wraps the registration", async () => {
     const host = makeRpcHost()
     const definition = { id: "slack", methods: { echo: text, broken: text }, events: busEvents("slack") }
     const registration = await host.register(definition, {
@@ -362,6 +362,13 @@ describe("the bus reader (contract §10)", () => {
 })
 
 describe("the bus types (contract §3, §10)", () => {
+  test("the public entry exports the reader and the block, and never the writer's factory", async () => {
+    const entry = (await import("../src/bus.ts")) as Record<string, unknown>
+    assert.equal(Object.hasOwn(entry, "createBus"), false, "the writer is internal to register")
+    assert.equal(typeof entry["busEvents"], "function")
+    assert.equal(typeof entry["readBusEvent"], "function")
+  })
+
   test("the definition's event payload type is rpc.<name>.<event>", () => {
     const definition = {
       id: "slack",

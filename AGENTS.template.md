@@ -54,11 +54,15 @@ silent, they decide.
 - **Gate the host first.** Call `assertHost(ctx, manifest)` at the top of `setup`. It reads `ctx.app.version` against
   `capabilities.plugin.host.opencode` and refuses an untested release with `HOST_UNTESTED`, unless
   `options.allowUntestedHost` is true.
-- **Ask `register` for the bus.** Pass `{ bus: true }` to `register` when the plugin emits; the registration carries
-  `registration.bus` and each handler call carries `call.bus`. Do not keep a mutable placeholder or call `createBus`
-  around it.
-- **Reuse the output schemas.** `STATUS_SCHEMA` from `accounts` is the `status` answer; `PAGE_SCHEMA` and `PROBE_SCHEMA`
-  from `events` are an events source's `events_list` and `probe` answers. Copying those shapes into the plugin is drift.
+- **Emit through `call.bus`.** `register` builds the typed writer from its one RPC registration, returns it as
+  `registration.bus` and gives every handler call `call.bus`. Do not keep a mutable placeholder, call `ctx.rpc.register`
+  a second time, or wrap a registration yourself. Only the manifest's declared events are registered.
+- **Answer status with `statusAnswer`.** `statusAnswer` from `accounts` takes the manifest, the installed and host
+  versions, the account states, the problems setup recorded and `await call.unguardedAgents()`, and builds the
+  `STATUS_SCHEMA` answer. Keep no state between `register` and the handler.
+- **Reuse the output schemas.** `STATUS_SCHEMA` from `accounts` is the `status` answer; `PAGE_SCHEMA`, `PROBE_SCHEMA`
+  and `LIST_OPTIONS_SCHEMA` from `events` are an events source's `events_list`, `probe` and `list_*` answers. Copying
+  those shapes into the plugin is drift.
 - **Preview what the commit writes.** Put everything the commit will write into `output`, `reaches`, `changes`, `cost`
   and `trust`; private plan data is only for what the preview cannot show, and the commit must not trust a value the
   person did not see.

@@ -32,8 +32,8 @@ The first release in `we-the-rebel-alliance`: the contract at wire version 1, gr
 - **`events` and `cursor`:** the event and page model, `makeEvent`, `eventHash`, secret and instruction screening, page
   and fact checks, the one error table (`ERROR_CODES`, `SourceError`, `parseSourceError`), and the opaque cursor bound
   to plugin, source, account and scope with `foreign` and `malformed` refusals.
-- **`bus`:** the typed `changed`, `status` and `account` nudges, `busEvents` for the one registration, `createBus` to
-  emit, and `readBusEvent` to decode a payload and refuse a secret.
+- **`bus`:** the typed `changed`, `status` and `account` nudges, `busEvents` for the one registration, the writer
+  `register` builds for `registration.bus` and `call.bus`, and `readBusEvent` to decode a payload and refuse a secret.
 - **`grant`:** the Ed25519 compact action grant, `signGrant` for the host and `verifyGrant` for `register`, with every
   binding, the canonical input digest, the confirmation rule, the single-use `GrantStore`, and the published
   `GRANT_CODES` that all map to `GRANT_INVALID`.
@@ -57,21 +57,29 @@ The first release in `we-the-rebel-alliance`: the contract at wire version 1, gr
 - **The examples** under `examples/`: `integration` (accounts through the integration mechanism, with a fake provider),
   `mcp` (two aliases, `accounts.real: true`), and `tools` (methods only). Each is an installed package as an app finds
   it on disk, with a manifest, a server entry, a skill, generated docs and a recorded fixture, run through the kit by
-  `npm run conformance:self-test`. All three call `assertHost`, reuse the exported output schemas, and the tools example
-  takes its bus from `register` in one step.
+  `npm run conformance:self-test`. All three call `assertHost`, build their `status` answer with `statusAnswer` and the
+  call's own `unguardedAgents()`, reuse the exported output schemas, and take their bus from `register` in one step.
 - **Ergonomics at setup:** `manifest` exports `hostInRange`; `register` exports `assertHost`, so a plugin refuses an
-  untested release with `HOST_UNTESTED` in one call; `register(..., { bus: true })` returns `registration.bus` and gives
-  every handler `call.bus`, with no mutable placeholder; `accounts` exports `STATUS_SCHEMA`, and `events` exports
-  `PAGE_SCHEMA` and `PROBE_SCHEMA`, so a plugin reuses the answer shapes instead of copying them.
+  untested release with `HOST_UNTESTED` in one call; `register` always builds the bus writer from its one RPC
+  registration and gives it to every handler call as `call.bus` and to the plugin as `registration.bus`, with no flag,
+  no optional writer and no second registration; `accounts` exports `STATUS_SCHEMA` and `statusAnswer`, which builds the
+  whole `status` answer from the manifest, the installed and host versions, the account states, the problems and
+  `call.unguardedAgents()`, so a status handler keeps no state between `register` and the call; `events` exports
+  `PAGE_SCHEMA`, `PROBE_SCHEMA` and `LIST_OPTIONS_SCHEMA`, so a plugin reuses the answer shapes instead of copying them.
 - **Plan safety:** the register copies each recorded plan with `structuredClone`, so nothing the handler or the public
   answer holds can change `call.plan` later, and refuses a plan over `PLAN_MAX_BYTES` (64 KB of JSON) or one a copy
   cannot carry with `PLAN_INVALID`.
 - **Cancellation:** a cancelled call rejects the permission ask it opened (found by its source id), so a stale request
-  does not stay on the person's screen, and still answers the contract's cancellation refusal.
+  does not stay on the person's screen, and still answers the contract's cancellation refusal. Every RPC ask carries
+  the call's id as its source, fresh or not, so aborting an RPC read that asked rejects its ask too.
 - **`forbidden`:** a conformance fixture's signed grant claims are decoded and screened, so a secret inside a signed
   claim is `FORBIDDEN.secret`; a verified grant case with an address outside `example.test` and `example.com` is
   `FORBIDDEN.grant-email`.
-- **Conformance:** T1 proves on the real 2.4.1 host that a grant for one account alias cannot reach another alias's MCP
-  tools (`T1.grant-alias`), using the mcp example's two aliases and a real session fence.
+- **Conformance:** T1 proves on the real 2.4.1 host that a grant for one account alias allows that alias's MCP tool and
+  that another alias's tool is denied with exactly `PERMISSION_DENIED` (`T1.grant-alias`), using the mcp example's two
+  aliases and a real session fence. Each assert is bounded to 1.5 s, so a compiled rule that asks becomes a `TIMEOUT`
+  finding instead of hanging the kit, and `HostRun.assert` answers a contract code rather than throwing;
+  `grantAliasFindings` is exported and a stub-host test proves a leaky allow, an unanswered ask, a deny on the granted
+  alias's own tool and another deny code all fail.
 - **The docs check:** `test/docs.test.ts` compares every module page's `## Exports` table with the module's real export
   declarations, both directions, and fails if a name is missing or does not exist.

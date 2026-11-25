@@ -185,6 +185,35 @@ accountStatuses(accounts, {
 - A signal for an alias the plugin does not have is ignored: status never invents an account.
 - `NO_ACCOUNTS` is the empty list for a plugin that signs in to nothing.
 
+## The whole status answer
+
+`statusAnswer` assembles the answer `STATUS_SCHEMA` describes, so the handler keeps no state of its own:
+
+```ts
+import { accountStatuses, statusAnswer } from "@we-the-rebel-alliance/plugin-contract/accounts"
+
+// In the handler factory, which setup builds with the values it already has.
+async run(_input, call) {
+  return statusAnswer({
+    manifest,
+    version,                          // the installed package's version
+    hostVersion,                      // ctx.app.version, read once in setup
+    accounts: accountStatuses(profiles, signals),
+    problems,                         // what registering the accounts could not do
+    unguardedAgents: await call.unguardedAgents(),
+  })
+}
+```
+
+- `name` and `host` (`{ version, range, tested }`) come from the manifest.
+- `state` is `error` when `problems` is not empty, else `needs_sign_in` when an account is, else `ready`.
+- `nextStep` is the first problem, redacted; else the sign-in sentence; else `null`.
+- `unguardedAgents` and `access` come from the call, which `register` fills from its own registration: no handler reads
+  state written after `register` returned.
+
+An agent list that cannot be read is unknown, never zero: catch the error from `call.unguardedAgents()`, pass it as a
+`problems` entry, and the state says `error`.
+
 ## Two accounts, end to end
 
 The two aliases keep independent names, profiles, statuses, resolutions and cursors.
@@ -232,3 +261,4 @@ decodeBoundCursor({ plugin: "example", source: "messages", account: "personal" }
 | `registerAccounts`, `AccountsContext`, `AccountsRegistration`, `IntegrationEditor`, `IntegrationMethodRegistration`, `MCPEditor`, `MCPServerConfig`, `RegisterAccountsRequest`, `RegisteredAccount` | register one integration or MCP server per alias |
 | `resolveAccount`, `aliasesSentence`, `AccountCode`, `ResolvedAccount` | resolve the `account` of a call, and write its next step |
 | `ACCOUNT_STATES`, `accountStatus`, `accountStatuses`, `NO_ACCOUNTS`, `REASON_MAX`, `redactReason`, `STATUS_SCHEMA`, `AccountSignal`, `AccountState`, `AccountStatus` | status per alias, with its redacted reason and owner, and the JSON Schema of the `status` answer |
+| `statusAnswer`, `StatusInput`, `StatusAnswer` | the whole `status` answer from the manifest, the versions, the account states, the problems and the unguarded agents |

@@ -1,13 +1,10 @@
 // The Glyph plugin's one handler table: a tools-only plugin with no accounts and no sources.
 //
 // A read is a pure function. A write is planned first with `plan_write_note`, then committed with `write_note`, and the
-// commit emits the contract's `changed` bus event through `call.bus`, which `register(ctx, manifest, handlers,
-// { bus: true })` attaches.
-import { NO_ACCOUNTS, redactReason, STATUS_SCHEMA } from "../../dist/accounts.js"
-import { unguardedAgents } from "../../dist/access.js"
+// commit emits the contract's `changed` bus event through `call.bus`, which `register` always attaches.
+import { NO_ACCOUNTS, redactReason, STATUS_SCHEMA, statusAnswer } from "../../dist/accounts.js"
 import { COMMIT_INPUT, refusal, RegisterError } from "../../dist/register.js"
 
-const PLUGIN = "glyph"
 const OBJECT = { type: "object", additionalProperties: true }
 const EMPTY = { type: "object", properties: {}, additionalProperties: false }
 const COUNT = {
@@ -29,11 +26,9 @@ const NOTE = {
  * @param {object} parts
  * @param {object} parts.manifest the installed capabilities
  * @param {string} parts.version the installed package version, for status
- * @param {{ access?: { rules: unknown[] }, agents?: () => Promise<unknown[]>, hostVersion?: string }} [parts.state] registration state status reads
+ * @param {string} parts.hostVersion the OpenCode release the plugin runs on, for status
  */
-export function createHandlers({ manifest, version, state = {} }) {
-  const hostRange = manifest.plugin.host.opencode
-  const tested = manifest.plugin.host.tested
+export function createHandlers({ manifest, version, hostVersion }) {
   const notes = new Map([["welcome", "Glyph keeps short notes in memory."]])
 
   return {
@@ -41,26 +36,16 @@ export function createHandlers({ manifest, version, state = {} }) {
       description: "Read Glyph's state, its host range and its (empty) account list.",
       input: EMPTY,
       output: STATUS_SCHEMA,
-      async run() {
+      async run(_input, call) {
+        const problems = []
         let unguarded = []
-        let agentsError
-        if (state.access !== undefined && state.agents !== undefined) {
-          try {
-            unguarded = [...unguardedAgents(await state.agents(), state.access.rules)]
-          } catch (error) {
-            // An unreadable agent list is unknown, never zero: status says error, with a redacted next step.
-            agentsError = redactReason(error instanceof Error ? error.message : String(error)).slice(0, 200)
-          }
+        try {
+          unguarded = [...(await call.unguardedAgents())]
+        } catch (error) {
+          // An unreadable agent list is unknown, never zero: status says error, with a redacted next step.
+          problems.push(redactReason(error instanceof Error ? error.message : String(error)))
         }
-        return {
-          name: PLUGIN,
-          version,
-          host: { version: state.hostVersion ?? tested[0], range: hostRange, tested },
-          state: agentsError === undefined ? "ready" : "error",
-          accounts: [...NO_ACCOUNTS],
-          unguardedAgents: unguarded,
-          nextStep: agentsError ?? null,
-        }
+        return statusAnswer({ manifest, version, hostVersion, accounts: NO_ACCOUNTS, problems, unguardedAgents: unguarded })
       },
     },
 

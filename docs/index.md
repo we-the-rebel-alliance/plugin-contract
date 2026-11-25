@@ -21,7 +21,7 @@ describes the entry point a plugin or an app imports.
 - [register](register.md): doors 1–3 from one handler table, with input, account, permission and output checks.
 - [events](events.md): the event and page model, the normaliser, hash, secret screening and the error table.
 - [cursor](cursor.md): the opaque cursor codec, bound to plugin, source, account and scope.
-- [bus](bus.md): typed `changed`, `status` and `account` nudges, the writer and the reader.
+- [bus](bus.md): typed `changed`, `status` and `account` nudges a handler emits on `call.bus`, and the reader.
 - [grant](grant.md): the host-signed, single-use action grant — format, signer, verifier and every code.
 - [grant fences](access.md#grant-fences): the session rules a grant compiles to, on the same page as `access`.
 - [hints](hints.md): the generic hint file a source may ship for a model-based consumer.

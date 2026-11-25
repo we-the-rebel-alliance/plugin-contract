@@ -5,10 +5,12 @@ import { dirname, join } from "node:path"
 import { after, describe, test } from "node:test"
 import { fileURLToPath } from "node:url"
 import { REASON_MAX } from "../src/accounts.ts"
+import { serverOf, toolAction } from "../src/access.ts"
 import { runConformance, t0, t1 } from "../src/conformance.ts"
 import { readInstalledManifest, type Manifest } from "../src/manifest.ts"
 import { staticFindings } from "../src/internal/conformance/static.ts"
-import { hostRuntimeProblem } from "../src/internal/conformance/host.ts"
+import { grantAliasFindings, GRANT_ASSERT_TIMEOUT_MS, hostRuntimeProblem } from "../src/internal/conformance/host.ts"
+import type { AssertResult, HostRun } from "../src/internal/host/index.ts"
 import { declarationFindings, optionsFindings } from "../src/internal/conformance/declaration.ts"
 import { accountFindings } from "../src/internal/conformance/accounts.ts"
 import { actionFindings } from "../src/internal/conformance/actions.ts"
@@ -88,6 +90,23 @@ describe("the fixture plugin, and the real host", () => {
   test("T1 loads it on 2.4.1 and it refuses 2.5.0", { skip: skipHost, timeout: 30_000 }, async () => {
     assert.deepEqual(await t1(fixtureDirectory, "2.4.1"), [])
     assert.deepEqual(await t1(fixtureDirectory, "2.5.0"), [])
+  })
+
+  test("HostRun.assert answers ok for an allow and PERMISSION_DENIED for the host's own deny", { skip: skipHost, timeout: 30_000 }, async () => {
+    const { createHost } = await import("../src/internal/host/index.ts")
+    const run = await createHost({ directory: fixtureDirectory, version: "2.4.1", pluginId: "fixture", options: { access: "all" } })
+    try {
+      assert.equal(run.failure, undefined, run.failure ?? "")
+      const allowed = await run.session([])
+      assert.deepEqual(await run.assert({ sessionID: allowed, action: "fixture.status", resources: ["*"] }), { ok: true })
+      // The host's deny carries no contract code of its own: the harness reads its `Permission.BlockedError` as the code.
+      const denied = await run.session([{ action: "fixture.status", resource: "*", effect: "deny" }])
+      const refused = await run.assert({ sessionID: denied, action: "fixture.status", resources: ["*"] })
+      assert.equal(refused.ok, false)
+      assert.equal(refused.ok ? "" : refused.code, "PERMISSION_DENIED")
+    } finally {
+      await run.close()
+    }
   })
 
   test("T1 records the real namespace, tools, Code Mode entries and RPC events", { skip: skipHost, timeout: 30_000 }, async () => {
@@ -387,5 +406,92 @@ describe("recorded sources, accounts, status, actions and grants", () => {
     const { manifest } = fixture()
     const found = rpcConfirmationFindings(manifest, { calls: [{ method: "write_note", ask: "denied", expect: { code: "UNAVAILABLE" } }] })
     assert.ok(ids(found).includes("rpc.confirmation"))
+  })
+})
+
+describe("T1.grant-alias: the deny side is exactly PERMISSION_DENIED, and never a hang", () => {
+  /** The mcp example's fence: two aliases, each own MCP server, and the operation the grant names. */
+  let fence: { manifest: Manifest; aliases: readonly string[]; allowed: string; denied: string } | undefined
+  function fenceOf(): { manifest: Manifest; aliases: readonly string[]; allowed: string; denied: string } {
+    if (fence !== undefined) return fence
+    const installed = readInstalledManifest(join(here, "..", "examples", "mcp"))
+    assert.ok(installed.ok, installed.ok ? "" : installed.problems.join("\n"))
+    const manifest = installed.value.manifest
+    const aliases = ["work", "personal"] as const
+    const source = manifest.sources.find((entry) => (entry.operations ?? []).some((operation) => !operation.includes(".")))
+    assert.ok(source, "the mcp example declares a source with a bare MCP operation")
+    const operation = (source.operations ?? []).find((entry) => !entry.includes("."))
+    assert.ok(operation)
+    const work = serverOf(manifest.plugin.name, aliases[0], aliases)
+    const personal = serverOf(manifest.plugin.name, aliases[1], aliases)
+    assert.ok(work.ok && personal.ok)
+    fence = { manifest, aliases, allowed: toolAction(work.value, operation), denied: toolAction(personal.value, operation) }
+    return fence
+  }
+
+  /** The host a grant-alias check reads: a session id and the assert answers the test scripts; nothing else is used. */
+  function stubRun(assert: HostRun["assert"]): HostRun {
+    return {
+      host: "embedded-sdk",
+      version: "2.4.1",
+      tools: [],
+      agents: [],
+      asks: [],
+      call: async () => ({ ok: false, code: "UNAVAILABLE", message: "the stub has no RPC" }),
+      session: async () => "ses_grant_alias",
+      assert,
+      close: async () => {},
+    }
+  }
+
+  test("a leaky host that allows the other alias's tool is a T1.grant-alias error", async () => {
+    const { manifest, aliases, denied } = fenceOf()
+    const found = await grantAliasFindings(manifest, stubRun(async () => ({ ok: true })), aliases)
+    assert.deepEqual(ids(found), ["T1.grant-alias"])
+    assert.match(found[0]!.message, new RegExp(`allows personal's tool ${denied}`))
+  })
+
+  test("a host that asks never answers: the check reports TIMEOUT after its bound instead of hanging", async () => {
+    const { manifest, aliases, allowed } = fenceOf()
+    const run = stubRun((input) => (input.action === allowed ? Promise.resolve({ ok: true }) : new Promise<AssertResult>(() => {})))
+    const started = Date.now()
+    const found = await grantAliasFindings(manifest, run, aliases)
+    const elapsed = Date.now() - started
+    assert.deepEqual(ids(found), ["T1.grant-alias"])
+    assert.match(found[0]!.message, /TIMEOUT/)
+    assert.ok(elapsed >= GRANT_ASSERT_TIMEOUT_MS - 50, `the check waited ${elapsed} ms for the host's answer`)
+    assert.ok(elapsed < GRANT_ASSERT_TIMEOUT_MS * 8, `the check did not hang: ${elapsed} ms`)
+  })
+
+  test("a host that denies the other alias with PERMISSION_DENIED passes", async () => {
+    const { manifest, aliases, allowed } = fenceOf()
+    const run = stubRun(async (input) => (input.action === allowed ? { ok: true } : { ok: false, code: "PERMISSION_DENIED", message: "Permission denied" }))
+    assert.deepEqual(await grantAliasFindings(manifest, run, aliases), [])
+  })
+
+  test("a deny with another code is a finding: only PERMISSION_DENIED proves the fence", async () => {
+    const { manifest, aliases, allowed } = fenceOf()
+    const run = stubRun(async (input) => (input.action === allowed ? { ok: true } : { ok: false, code: "UNAVAILABLE", message: "the tool failed" }))
+    const found = await grantAliasFindings(manifest, run, aliases)
+    assert.deepEqual(ids(found), ["T1.grant-alias"])
+    assert.match(found[0]!.message, /does not deny personal's tool .* with PERMISSION_DENIED: the host answered UNAVAILABLE/)
+  })
+
+  test("a host that denies the granted alias's own tool is a finding", async () => {
+    const { manifest, aliases } = fenceOf()
+    const found = await grantAliasFindings(manifest, stubRun(async () => ({ ok: false, code: "PERMISSION_DENIED", message: "Permission denied" })), aliases)
+    assert.deepEqual(ids(found), ["T1.grant-alias"])
+    assert.match(found[0]!.message, /does not allow its own tool/)
+  })
+
+  test("one alias is no fence to prove: the check asserts nothing", async () => {
+    const { manifest } = fenceOf()
+    let asserted = 0
+    const run = stubRun(async () => {
+      asserted++
+      return { ok: true }
+    })
+    assert.deepEqual(await grantAliasFindings(manifest, run, ["work"]), [])
+    assert.equal(asserted, 0)
   })
 })

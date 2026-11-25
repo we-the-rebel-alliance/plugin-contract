@@ -1,7 +1,6 @@
 import assert from "node:assert/strict"
 import { generateKeyPairSync } from "node:crypto"
 import { describe, test } from "node:test"
-import { createBus } from "../src/bus.ts"
 import { signGrant } from "../src/grant.ts"
 import { manifestHash, checkManifest, type Manifest } from "../src/manifest.ts"
 import { assertHost, register, type HandlerTable, type MethodHandler } from "../src/register.ts"
@@ -327,12 +326,11 @@ describe("register: the per-alias server rule", () => {
 })
 
 describe("register: door 3", () => {
-  test("one RPC id carries the bus events, and createBus wraps that registration", async () => {
+  test("one RPC id carries the bus events, and the registration's writer is the one every call reads", async () => {
     const h = makeHarness()
     const registration = await register(h.ctx, demo, handlers())
     assert.equal(h.rpc.count("demo"), 1)
-    const bus = createBus("demo", registration)
-    assert.deepEqual(await bus.emit("changed", { capability: "demo.messages", account: "default", reason: "write" }), { ok: true })
+    assert.deepEqual(await registration.bus.emit("changed", { capability: "demo.messages", account: "default", reason: "write" }), { ok: true })
     assert.deepEqual(h.rpc.published.map((event) => event.type), ["rpc.demo.changed"])
   })
 
@@ -342,16 +340,21 @@ describe("register: door 3", () => {
     })
     const h = makeHarness()
     const registration = await register(h.ctx, onlyChanged, handlers())
-    const bus = createBus("demo", registration)
-    assert.deepEqual(await bus.emit("changed", { capability: "demo.messages", account: "default", reason: "write" }), { ok: true })
-    assert.deepEqual(await bus.emit("status", { state: "ready" }), { ok: false, reason: "unavailable" })
+    assert.deepEqual(await registration.bus.emit("changed", { capability: "demo.messages", account: "default", reason: "write" }), { ok: true })
+    assert.deepEqual(await registration.bus.emit("status", { state: "ready" }), { ok: false, reason: "unavailable" })
   })
 
   test("a read runs through the one gate, and an RPC gate never saves", async () => {
     const h = makeHarness()
     await register(h.ctx, demo, handlers())
     assert.deepEqual(await h.rpc.call("demo", "status", { sessionID: "s1", input: {} }), { ok: true })
-    assert.deepEqual(h.assertions, [{ sessionID: "s1", agent: "build", action: "demo.status", resources: ["default:*"] }])
+    const [asserted] = h.assertions
+    assert.equal(asserted?.sessionID, "s1")
+    assert.equal(asserted?.agent, "build")
+    assert.equal(asserted?.action, "demo.status")
+    assert.deepEqual(asserted?.resources, ["default:*"])
+    assert.match(asserted?.source?.id ?? "", /^rpc:/, "the read's gate carries the RPC call's id as its source")
+    assert.equal(asserted?.save, undefined, "an RPC gate never saves")
   })
 
   test("read-only still runs a read over RPC", async () => {
@@ -724,10 +727,12 @@ describe("register: the host gate", () => {
   })
 })
 
-describe("register: the one-step bus", () => {
-  test("register with { bus: true } returns the writer and gives it to every handler call", async () => {
+describe("register: the bus and the access on every call", () => {
+  test("register always returns the writer and gives it to every handler call, with the access and the unguarded agents", async () => {
     const h = makeHarness()
     let seen: unknown
+    let access: unknown
+    let unguarded: unknown
     const registration = await register(
       h.ctx,
       demo,
@@ -737,27 +742,29 @@ describe("register: the one-step bus", () => {
           output: OK,
           run: async (_input, call) => {
             seen = call.bus
+            access = call.access
+            unguarded = await call.unguardedAgents()
             return { ok: true }
           },
         }),
       }),
-      { bus: true },
     )
-    assert.ok(registration.bus, "the registration carries the bus writer")
     assert.equal(seen, undefined, "no handler ran yet")
     assert.deepEqual(await registration.bus.emit("changed", { capability: "demo.messages", account: "default", reason: "write" }), { ok: true })
     assert.deepEqual(h.rpc.published.map((event) => event.type), ["rpc.demo.changed"])
 
     await h.tools.get("demo_status")!.tool.execute({}, context())
     assert.equal(seen, registration.bus, "the tool door attaches the same writer")
+    assert.equal(access, registration.access, "the call carries the generated access")
+    assert.deepEqual(unguarded, [], "an agent that keeps every generated rule is not named")
     await h.rpc.call("demo", "status", { sessionID: "s1", input: {} })
     assert.equal(seen, registration.bus, "the RPC door attaches the same writer")
   })
 
-  test("without { bus: true } no writer is made, and a handler sees no call.bus", async () => {
-    const h = makeHarness()
-    let seen: unknown = "unset"
-    const registration = await register(
+  test("an agent whose rules were widened after setup is named by call.unguardedAgents()", async () => {
+    const h = makeHarness({ options: { access: "ask-changes" } })
+    let unguarded: readonly string[] | undefined
+    await register(
       h.ctx,
       demo,
       handlers({
@@ -765,15 +772,16 @@ describe("register: the one-step bus", () => {
           description: "Read the plugin's status.",
           output: OK,
           run: async (_input, call) => {
-            seen = call.bus
+            unguarded = await call.unguardedAgents()
             return { ok: true }
           },
         }),
       }),
     )
-    assert.equal(registration.bus, undefined)
+    // A later config `"*": "allow"` is exactly the widening `unguardedAgents` reports.
+    h.agents[0]!.permissions.push({ action: "*", resource: "*", effect: "allow" })
     await h.tools.get("demo_status")!.tool.execute({}, context())
-    assert.equal(seen, undefined)
+    assert.deepEqual(unguarded, ["build"])
   })
 })
 
@@ -857,5 +865,22 @@ describe("register: a cancelled call rejects its ask", () => {
     controller.abort()
     await assert.rejects(abandoned, /the call was cancelled while its permission ask was pending/)
     assert.deepEqual(h.pending(), [])
+  })
+
+  test("aborting an RPC read that asked rejects its ask too: every ask carries the RPC call's id", async () => {
+    const h = makeHarness({ holdAsks: true })
+    await register(h.ctx, demo, handlers())
+    // A read the session's rules turn into an ask is not a fresh one-call ask; its source is still the call's handle.
+    h.sessions.get("s1")!.permissions = [{ action: "demo.status", resource: "*", effect: "ask" }]
+    const controller = new AbortController()
+    const asked = h.waitForAsk()
+    const abandoned = h.rpc.call("demo", "status", { sessionID: "s1", input: {} }, { signal: controller.signal })
+    await asked
+    const pending = h.pending()
+    assert.equal(pending.length, 1)
+    assert.match(pending[0]!.source?.id ?? "", /^rpc:/, "the read's ask names the RPC call that opened it")
+    controller.abort()
+    await assert.rejects(abandoned, /the call was cancelled while its permission ask was pending/)
+    assert.deepEqual(h.pending(), [], "the stale ask was rejected, so nothing stays on the person's screen")
   })
 })

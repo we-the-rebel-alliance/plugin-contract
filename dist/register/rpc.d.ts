@@ -1,6 +1,6 @@
 import { type AccessLevel } from "../access.js";
 import { type GrantKeys, type GrantScope, type GrantStore } from "../grant.js";
-import { type BusRef, type CallEnvironment } from "./invoke.js";
+import { type BusReader, type CallEnvironment } from "./invoke.js";
 /** What the plugin wires into the grant verifier: the host's keys, the audience and the durable ledger. */
 export interface GrantWiring {
     /** The public keys the host signs with, by `kid`, and revoked ids. */
@@ -101,4 +101,4 @@ export interface RpcRegistration {
     dispose(): Promise<void>;
 }
 /** The RPC definition and handlers, and the one registration that carries the bus events. */
-export declare function installRpc(context: RpcContext, environment: CallEnvironment, level: AccessLevel, wiring?: GrantWiring, bus?: BusRef): Promise<RpcRegistration>;
+export declare function installRpc(context: RpcContext, environment: CallEnvironment, level: AccessLevel, wiring: GrantWiring | undefined, bus: BusReader): Promise<RpcRegistration>;

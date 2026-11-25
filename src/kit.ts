@@ -30,6 +30,7 @@ export {
 } from "./internal/host/index.ts"
 export type {
   ActivationOptions,
+  AssertResult,
   AutomationAction,
   AutomationApi,
   AutomationClient,

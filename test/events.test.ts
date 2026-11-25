@@ -5,6 +5,7 @@ import { describe, test } from "node:test"
 import { expect } from "./support/expect.ts"
 import { failureFromError } from "../src/internal/failure.ts"
 import { encodeBoundCursor, decodeBoundCursor, type CursorBinding } from "../src/cursor.ts"
+import { validate } from "../src/register/validate.ts"
 import {
   ACTOR_KINDS,
   ACTOR_ROLES,
@@ -29,6 +30,7 @@ import {
   isEventKind,
   isEventKindIn,
   sourceNamespace,
+  LIST_OPTIONS_SCHEMA,
   makeEvent,
   MAX_BYTES,
   MAX_PAGE_BYTES,
@@ -208,6 +210,31 @@ describe("removals[] (#27)", () => {
     expect(removalProblems({ ...eventsListResult(WHOSE, [], "c", false), removals: [removal("a", "deleted", "2099-01-01T00:00:00.000Z")] })).toEqual([])
     // resultProblems carries the same problems, so read refuses such a page.
     expect(resultProblems({ ...eventsListResult(WHOSE, [], "c", false, { asOf: AS_OF }), removals: [removal("a", "gone" as never)] })).toEqual(["removals[0].reason must be one of deleted, withheld, expired"])
+  })
+})
+
+describe("the list-options answer (LIST_OPTIONS_SCHEMA)", () => {
+  test("is { options: [{ id, label? }] }, closed at both levels", () => {
+    expect(LIST_OPTIONS_SCHEMA).toMatchObject({ type: "object", required: ["options"], additionalProperties: false })
+    const options = (LIST_OPTIONS_SCHEMA.properties as Record<string, Record<string, unknown>>)["options"]!
+    expect(options["type"]).toBe("array")
+    expect(options["items"]).toMatchObject({
+      type: "object",
+      properties: { id: { type: "string", minLength: 1 }, label: { type: "string", maxLength: 200 } },
+      required: ["id"],
+      additionalProperties: false,
+    })
+  })
+
+  test("accepts an id with or without a label, and refuses an option without an id or with an unknown key", () => {
+    expect(validate(LIST_OPTIONS_SCHEMA, { options: [{ id: "C1", label: "general" }, { id: "D2" }] }).ok).toBe(true)
+    expect(validate(LIST_OPTIONS_SCHEMA, { options: [] }).ok).toBe(true)
+    expect(validate(LIST_OPTIONS_SCHEMA, { options: [{ label: "general" }] }).ok).toBe(false)
+    expect(validate(LIST_OPTIONS_SCHEMA, { options: [{ id: "" }] }).ok).toBe(false)
+    expect(validate(LIST_OPTIONS_SCHEMA, { options: [{ id: "C1", label: "x".repeat(201) }] }).ok).toBe(false)
+    expect(validate(LIST_OPTIONS_SCHEMA, { options: [{ id: "C1", extra: true }] }).ok).toBe(false)
+    expect(validate(LIST_OPTIONS_SCHEMA, { options: [], extra: true }).ok).toBe(false)
+    expect(validate(LIST_OPTIONS_SCHEMA, {}).ok).toBe(false)
   })
 })
 

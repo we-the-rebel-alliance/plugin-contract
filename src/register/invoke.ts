@@ -8,6 +8,7 @@
  */
 import { DEFAULT_ALIAS } from "../accounts/alias.ts"
 import { resolveAccount, type AccountProfile } from "../accounts.ts"
+import { unguardedAgents, type AccessRegistration, type AgentLike } from "../access/agents.ts"
 import type { Bus } from "../bus.ts"
 import { manifestHash, type Manifest } from "../manifest.ts"
 import { planStore, type PlanReservation, type PlanStore } from "./plans.ts"
@@ -27,16 +28,22 @@ export interface CallEnvironment {
   readonly accounts: readonly AccountProfile[]
   /** The plans this plugin instance made: a commit runs as the account its plan recorded. */
   readonly plans: PlanStore
+  /** The rules `register` generated into every agent, and what status reads them from. */
+  readonly access: AccessRegistration
+  /** The host's agents as they are when the call asks, so status reads no state kept at setup. */
+  readonly agents: () => Promise<readonly AgentLike[]>
 }
 
-/** The bus writer `register` fills in after its RPC registration exists, so every door reads the same one. */
-export interface BusRef {
-  current?: Bus | undefined
-}
+/**
+ * The one bus writer, read when a handler runs. `register` creates it from its single RPC registration, which exists
+ * only after the doors are wired, so the doors hold this reader rather than a mutable placeholder; no call can run
+ * before `setup` returns.
+ */
+export type BusReader = () => Bus
 
 /** The handler table and account set, validated once at setup. */
-export function prepare(manifest: Manifest, handlers: HandlerTable, accounts: readonly AccountProfile[]): CallEnvironment {
-  return { name: manifest.plugin.name, manifest, hash: manifestHash(manifest), entries: methodEntries(manifest, handlers), accounts, plans: planStore() }
+export function prepare(manifest: Manifest, handlers: HandlerTable, accounts: readonly AccountProfile[], access: AccessRegistration, agents: () => Promise<readonly AgentLike[]>): CallEnvironment {
+  return { name: manifest.plugin.name, manifest, hash: manifestHash(manifest), entries: methodEntries(manifest, handlers), accounts, plans: planStore(), access, agents }
 }
 
 /**
@@ -139,9 +146,15 @@ function failureOf(entry: MethodEntry, error: unknown): Refusal {
 }
 
 /** Run a prepared call's handler, checking its answer and mapping its failure. */
-export async function execute(entry: MethodEntry, prepared: PreparedCall, call: Omit<MethodCall, "account" | "plan" | "bus">, plans: PlanStore, bus?: BusRef): Promise<unknown> {
+export async function execute(
+  environment: CallEnvironment,
+  entry: MethodEntry,
+  prepared: PreparedCall,
+  call: Omit<MethodCall, "account" | "plan" | "bus" | "access" | "unguardedAgents">,
+  bus: BusReader,
+): Promise<unknown> {
   if (prepared.reservation !== undefined) {
-    const taken = plans.consume(prepared.reservation)
+    const taken = environment.plans.consume(prepared.reservation)
     if (!taken.ok) throw new RegisterError(refusal(taken.code, taken.problems.join("; "), "Plan again, then commit with the new planId it answers."))
   }
   try {
@@ -151,12 +164,14 @@ export async function execute(entry: MethodEntry, prepared: PreparedCall, call: 
         ...call,
         account: prepared.account,
         ...(prepared.plan === undefined ? {} : { plan: prepared.plan }),
-        ...(bus?.current === undefined ? {} : { bus: bus.current }),
+        bus: bus(),
+        access: environment.access,
+        unguardedAgents: async () => unguardedAgents(await environment.agents(), environment.access.rules),
       }),
     )
     if (entry.item.plans === true) {
       const answer = value as Record<string, unknown>
-      const recorded = plans.record(answer, prepared.account, entry.commit ?? entry.name)
+      const recorded = environment.plans.record(answer, prepared.account, entry.commit ?? entry.name)
       if (!recorded.ok) {
         throw new RegisterError(refusal(recorded.code, recorded.problems.join("; "), "Answer a plan a copy can carry, at most 64 KB of JSON; preview everything the commit writes."))
       }
@@ -180,6 +195,6 @@ export function toolCall(
     readonly progress: (update: Readonly<Record<string, unknown>>) => Promise<void>
   },
   door: Exclude<Door, "rpc">,
-): Omit<MethodCall, "account"> {
+): Omit<MethodCall, "account" | "plan" | "bus" | "access" | "unguardedAgents"> {
   return { sessionID: context.sessionID, agent: context.agent, messageID: context.messageID, id: context.id, signal: context.signal, progress: context.progress, door }
 }

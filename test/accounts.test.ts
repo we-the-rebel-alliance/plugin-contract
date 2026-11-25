@@ -15,9 +15,12 @@ import {
   redactReason,
   registerAccounts,
   resolveAccount,
+  STATUS_SCHEMA,
+  statusAnswer,
 } from "../src/accounts.ts"
 import { decodeBoundCursor, encodeBoundCursor } from "../src/cursor.ts"
 import { checkManifest, type Manifest } from "../src/manifest.ts"
+import { validate } from "../src/register/validate.ts"
 import { manifest } from "./support/manifest.ts"
 
 const checkedManifest = (change: (value: any) => void = () => {}): Manifest => {
@@ -310,6 +313,40 @@ describe("status per alias", () => {
     assert.equal(redacted.reason.includes("secret"), false)
     assert.equal(redacted.reason.includes("sk_live"), false)
     assert.ok(redacted.reason.length <= 160, redacted.reason)
+  })
+})
+
+describe("statusAnswer", () => {
+  const value = checkedManifest()
+  const base = { manifest: value, version: "1.2.3", hostVersion: "2.4.9" }
+
+  test("assembles the identity, the host block and every alias, and the answer is what STATUS_SCHEMA describes", () => {
+    const answer = statusAnswer({ ...base, accounts: accountStatuses([{ alias: "work" }], { work: { state: "ready", owner: { id: "mailto:ana@example.com", label: "Ana" } } }), unguardedAgents: [] })
+    assert.deepEqual(answer, {
+      name: "demo",
+      version: "1.2.3",
+      host: { version: "2.4.9", range: ">=2.4.1 <2.5.0", tested: ["2.4.1"] },
+      state: "ready",
+      accounts: [{ alias: "work", state: "ready", owner: { id: "mailto:ana@example.com", label: "Ana" } }],
+      unguardedAgents: [],
+      nextStep: null,
+    })
+    const checked = validate(STATUS_SCHEMA, answer)
+    assert.deepEqual(checked.ok, true, checked.ok ? "" : checked.problems.join("; "))
+  })
+
+  test("state is error over needs_sign_in over ready; a problem is the redacted next step", () => {
+    const signedOut = statusAnswer({ ...base, accounts: accountStatuses([{ alias: "work" }], { work: { state: "needs_sign_in" } }), unguardedAgents: ["build"] })
+    assert.equal(signedOut.state, "needs_sign_in")
+    assert.equal(signedOut.nextStep, "Sign in to the account that needs it, then read status again.")
+    assert.deepEqual(signedOut.unguardedAgents, ["build"])
+
+    const token = `sk_live_${"9".repeat(40)}`
+    const failed = statusAnswer({ ...base, accounts: [], problems: [`accounts: the key ${token} was refused`], unguardedAgents: [] })
+    assert.equal(failed.state, "error")
+    assert.equal(failed.nextStep?.includes("sk_live"), false, "a problem is redacted before it reaches nextStep")
+    assert.ok((failed.nextStep?.length ?? 0) <= 160)
+    assert.deepEqual(failed.accounts, [], "a plugin with no accounts answers an empty list, never a default")
   })
 })
 

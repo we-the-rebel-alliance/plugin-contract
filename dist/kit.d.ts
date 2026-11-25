@@ -19,4 +19,4 @@ export type { ForbiddenOptions } from "./kit/forbidden.js";
 export { redactText, redactValue } from "./kit/record.js";
 export { loadConformance } from "./kit/conformance.js";
 export { automationApi, connectMcpServer, createAutomation, createCodeMode, createHost, mcpAddress, TurnLog, waitForActivation, } from "./internal/host/index.js";
-export type { ActivationOptions, AutomationAction, AutomationApi, AutomationClient, AutomationHost, AutomationResult, AutomationSpec, AutomationTrigger, CodeModeHarness, CodeModeSession, HostKind, HostOptions, HostRun, McpConnection, McpProtocol, McpServerConfig, McpTransport, ToolCall, ToolCallInput, ToolCallLike, TurnEvent, } from "./internal/host/index.js";
+export type { ActivationOptions, AssertResult, AutomationAction, AutomationApi, AutomationClient, AutomationHost, AutomationResult, AutomationSpec, AutomationTrigger, CodeModeHarness, CodeModeSession, HostKind, HostOptions, HostRun, McpConnection, McpProtocol, McpServerConfig, McpTransport, ToolCall, ToolCallInput, ToolCallLike, TurnEvent, } from "./internal/host/index.js";

@@ -15,20 +15,23 @@ export default {
   async setup(context) {
     assertHost(context, manifest)
 
+    const options = context.options ?? {}
     const provider = createTrellisProvider()
-    const state = { hostVersion: context.app.version, accountProblems: [], access: undefined, agents: undefined }
-    const handlers = createHandlers({ provider, manifest, options: context.options ?? {}, version: pkg.version, state })
-
     const accounts = await registerAccounts(context, {
       manifest,
-      options: context.options ?? {},
+      options,
       server: (_account, name) => ({ type: "remote", url: mcpServerUrl(name), oauth: {} }),
     })
-    state.accountProblems = [...accounts.problems]
+    const handlers = createHandlers({
+      provider,
+      manifest,
+      options,
+      version: pkg.version,
+      hostVersion: context.app.version,
+      accountProblems: [...accounts.problems],
+    })
 
     const registration = await register(context, manifest, handlers)
-    state.access = registration.access
-    state.agents = async () => (await context.agent.list()).data
     return () => registration.dispose()
   },
 }
