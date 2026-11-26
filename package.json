@@ -19,6 +19,7 @@
     "dist",
     "bin",
     "LICENSE",
+    "NOTICE",
     "README.md"
   ],
   "exports": {
