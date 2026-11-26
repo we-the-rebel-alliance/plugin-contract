@@ -61,6 +61,8 @@ The first release in `we-the-rebel-alliance`: the contract at wire version 1, gr
   `sourceReader`, which asks a broker first and reads embedded otherwise. A registry target with no version and no own
   cache entry is reported, never bound to another entry for the package.
 - **`hints`:** the generic hint file, its strict frontmatter, the forbidden consumer decisions and `hintProblems`.
+- **Notices:** the root `NOTICE` carries the verbatim MIT text of `zod` 4.6.7, bundled into every `dist/` entry, and
+  the Public Suffix List's MPL-2.0 notice; `npm pack` ships it beside `dist/THIRD-PARTY-NOTICES.md`.
 - **`schemas`:** every published JSON Schema by name, generated from the zod source of truth and bundled at the release.
 - **The conformance kit (`conformance`):** T0 (namespace and skill budgets, tool references, pin evidence, generated
   docs), T1 (the plugin loads on 2.4.1, its doors and permissions hold, LD-5's RPC refusal, a clean `HOST_UNTESTED` for
