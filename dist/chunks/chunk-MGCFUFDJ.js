@@ -486,7 +486,7 @@ var PROBE_SCHEMA = {
     cost: { type: "object", additionalProperties: true },
     trust: { type: "string", enum: [TRUST] }
   },
-  required: ["source", "account", "owner", "trust"],
+  required: ["account", "owner", "trust"],
   additionalProperties: false
 };
 var LIST_OPTIONS_SCHEMA = {

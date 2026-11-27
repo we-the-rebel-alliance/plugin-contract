@@ -146,9 +146,9 @@ The register resolves the account through the `accounts` module before the handl
 
 The input is checked against the handler's schema (`INPUT_INVALID`), the answer against its output schema
 (`SCHEMA_VIOLATION`). A schema with `additionalProperties: false` also refuses an unknown key. A plugin reuses the
-package's output schemas instead of copying them: `STATUS_SCHEMA` from `accounts` for `status`, `PAGE_SCHEMA`,
-`PROBE_SCHEMA` and `LIST_OPTIONS_SCHEMA` from `events` for an events source's `events_list`, `probe` and its `list_*`
-scope suggest.
+package's output schemas instead of copying them: `STATUS_SCHEMA` from `accounts` for `status`, `PAGE_SCHEMA`
+and `LIST_OPTIONS_SCHEMA` from `events` for an events source's `events_list` and its `list_*` scope suggest, and
+`PROBE_SCHEMA` for any plugin's `probe` (its `source` is optional, so a plugin with no source uses it too).
 
 A `plans: true` method answers the committing `method` and §8's preview fields it carries (`output`, `reaches`,
 `changes`, `cost`, `trust`), and any private plan data; it must not answer a `planId` (`PLAN_INVALID`). The register
