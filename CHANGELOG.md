@@ -13,6 +13,11 @@ The first release in `we-the-rebel-alliance`: the contract at wire version 1, gr
   code such as `SKILLS_INVALID` that only `status` shows (#73). `plugin-kit docs` writes them after the contract's codes in
   the generated errors table, and conformance (`status.code`) refuses a recorded `status.nextStep` that starts with a code
   neither the contract nor the manifest holds. A plugin with no extra codes is unchanged.
+- **`FORBIDDEN.secret`:** the scan no longer flags `const token = pageToken`, `const token = ++renderToken`, a typed
+  parameter such as `login(password: string)` or `set(key: string, token: MintedToken)`, or the format `header.payload.signature`
+  in a code span. It judges where a value sits (a declaration, a signature, a code span) and sets aside only what the
+  syntax proves is no literal, so a quoted value, a config or environment line and every known token shape stay findings.
+  The 44-row true-positive corpus is the regression test; `secretKinds`, and so event screening, is unchanged (#71).
 - **Examples' `since` paging:** the integration and mcp examples carry the read's `since` window in the cursor, so a
   `since` read paged one event at a time returns every matching event exactly once (#70).
 - **`FORBIDDEN.main-branch`:** only a `main` link under the plugin's own GitHub owner is a finding, read from

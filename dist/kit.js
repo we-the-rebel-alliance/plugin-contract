@@ -12,24 +12,25 @@ import {
   mcpAddress,
   renderGeneratedDocs,
   waitForActivation
-} from "./chunks/chunk-BF6VWXIP.js";
+} from "./chunks/chunk-RXK4QNVE.js";
 import "./chunks/chunk-ED3MMWUJ.js";
-import "./chunks/chunk-ALJQQZS4.js";
+import "./chunks/chunk-YJ5T4GBI.js";
 import "./chunks/chunk-6WEY3U6L.js";
-import "./chunks/chunk-W2RX5AE2.js";
-import "./chunks/chunk-WI3TKOVX.js";
+import "./chunks/chunk-DX4ZJKA2.js";
+import "./chunks/chunk-EIS4VUTX.js";
 import {
   checkManifest
-} from "./chunks/chunk-MMRHULPF.js";
-import "./chunks/chunk-B5YANR2C.js";
+} from "./chunks/chunk-VWLKUJ4F.js";
+import "./chunks/chunk-FPPWEKTV.js";
 import {
   TESTED_OPENCODE,
   eventHash
-} from "./chunks/chunk-JQQUFJFK.js";
+} from "./chunks/chunk-23QX3HFN.js";
 import "./chunks/chunk-FTEX4OOT.js";
 import {
+  secretFindings,
   secretKinds
-} from "./chunks/chunk-L3NVT2DE.js";
+} from "./chunks/chunk-M7EFVHR5.js";
 import "./chunks/chunk-OJKZGBMB.js";
 import "./chunks/chunk-4YITQAYJ.js";
 import "./chunks/chunk-7KJXMIQH.js";
@@ -457,8 +458,8 @@ function verifiesGrantToken(token, publicKey) {
   if (parts.length !== 3 || parts.some((part) => part.length === 0)) return false;
   try {
     const key = createPublicKey(publicKey);
-    const signature = Buffer.from(parts[2], "base64url");
-    return verify(null, Buffer.from(`${parts[0]}.${parts[1]}`, "utf8"), key, signature);
+    const signature2 = Buffer.from(parts[2], "base64url");
+    return verify(null, Buffer.from(`${parts[0]}.${parts[1]}`, "utf8"), key, signature2);
   } catch {
     return false;
   }
@@ -483,6 +484,57 @@ function fixturePublicKey(value) {
   if (typeof grants !== "object" || grants === null) return void 0;
   const key = grants["publicKey"];
   return isEd25519PublicKey(key) ? key : void 0;
+}
+
+// src/kit/secret-scan.ts
+var DECLARATION = /\b(?:const|let|var|val|final)\s+(?:[\w$<>[\].?]+\s+)?$/;
+var FUNCTION_START = /^\s*(?:(?:export|default|public|private|protected|static|abstract|async|override|declare|pub)\s+)*(?:function\*?|def|fn|func|fun|constructor)\b/;
+var AFTER_SIGNATURE = /^\s*(?::|=>|->|\{)/;
+var EXPRESSION = /^(?:\+\+|--|!)?[A-Za-z_$][\w$.<>[\]|?]*$/;
+var OPERAND = /^[^\s,;)]*/;
+var FORMAT_PARTS = /^(?:header|payload|claims|body|signature|sig)(?:\.(?:header|payload|claims|body|signature|sig))+$/;
+function enclosingParenthesis(line, offset) {
+  const open = [];
+  for (let index = 0; index < offset; index++) {
+    const char = line[index];
+    if (char === "(" || char === "[" || char === "{") open.push(index);
+    else if (char === ")" || char === "]" || char === "}") open.pop();
+  }
+  const innermost = open.pop();
+  return innermost !== void 0 && line[innermost] === "(" ? innermost : void 0;
+}
+function signature(line, open, valueOffset) {
+  if (!/[\w$>]/.test(line[open - 1] ?? "")) return false;
+  if (FUNCTION_START.test(line.slice(0, open))) return true;
+  let depth = 0;
+  for (let index = valueOffset; index < line.length; index++) {
+    const char = line[index];
+    if (char === "(") depth++;
+    else if (char === ")") {
+      if (depth === 0) return AFTER_SIGNATURE.test(line.slice(index + 1));
+      depth--;
+    }
+  }
+  return false;
+}
+function setAside(text, finding) {
+  const site = finding.assignment;
+  if (site === void 0) return false;
+  if (site.quote === "`") return FORMAT_PARTS.test(site.value);
+  if (site.quote !== void 0) return false;
+  const lineStart = text.lastIndexOf("\n", finding.index - 1) + 1;
+  const lineEnd = text.indexOf("\n", site.valueIndex);
+  const line = text.slice(lineStart, lineEnd === -1 ? text.length : lineEnd);
+  const rest = line.slice(site.valueIndex - lineStart);
+  const operand = OPERAND.exec(rest)[0];
+  if (!EXPRESSION.test(operand) || /^\s+[\w$'"`]/.test(rest.slice(operand.length))) return false;
+  const keyOffset = finding.index - lineStart;
+  if (site.separator.includes("=")) return DECLARATION.test(line.slice(0, keyOffset));
+  const open = enclosingParenthesis(line, keyOffset);
+  return open !== void 0 && signature(line, open, site.valueIndex - lineStart);
+}
+function forbiddenSecretKinds(text) {
+  return [...new Set(secretFindings(text).filter((finding) => !setAside(text, finding)).map((finding) => finding.kind))];
 }
 
 // src/kit/forbidden.ts
@@ -648,7 +700,7 @@ function forbiddenFindings(dir, options = {}) {
           });
         }
       }
-      const kinds = secretKinds(scanLines[index] ?? line);
+      const kinds = forbiddenSecretKinds(scanLines[index] ?? line);
       for (const kind of kinds) {
         reportedKinds.add(kind);
         const key = `secret:${lineNumber}:${kind}`;
@@ -663,7 +715,7 @@ function forbiddenFindings(dir, options = {}) {
         });
       }
     }
-    for (const kind of secretKinds(withoutGrants)) {
+    for (const kind of forbiddenSecretKinds(withoutGrants)) {
       const key = `whole:${kind}`;
       if (seen.has(key) || reportedKinds.has(kind)) continue;
       seen.add(key);
