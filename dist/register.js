@@ -12,7 +12,6 @@ import {
 } from "./chunks/chunk-ED3MMWUJ.js";
 import {
   applyAccess,
-  effectFor,
   evaluate,
   methodAction,
   unguardedAgents
@@ -571,7 +570,7 @@ async function invoke(context, environment, level, entry, wiring, raw, rpc, fres
     if (!plain4(input)) throw new RegisterError(refusal("INPUT_INVALID", "the RPC envelope needs an input object", "Pass the method's input as the envelope's input."));
     const resolved = await rulesOf(context, sessionID);
     const nonRead = entry.item.class !== "read";
-    if (effectFor(entry.item, level) === "deny") {
+    if (entry.item.effect === "deny") {
       throw new RegisterError(refusal("PERMISSION_DENIED", `${environment.name}.${entry.name} is off under the plugin's access setting`, "Change the method's effect or the plugin's access setting."));
     }
     const callID = `rpc:${randomUUID2()}`;

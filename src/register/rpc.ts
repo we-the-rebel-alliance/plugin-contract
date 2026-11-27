@@ -18,7 +18,7 @@
  */
 import { randomUUID } from "node:crypto"
 import type { Plugin } from "@opencode/plugin"
-import { effectFor, methodAction, type AccessLevel } from "../access.ts"
+import { methodAction, type AccessLevel } from "../access.ts"
 import { busEvents } from "../bus.ts"
 import { verifyGrant, type GrantKeys, type GrantScope, type GrantStore } from "../grant.ts"
 import type { JsonSchema } from "../manifest.ts"
@@ -223,9 +223,10 @@ async function invoke(
     if (!plain(input)) throw new RegisterError(refusal("INPUT_INVALID", "the RPC envelope needs an input object", "Pass the method's input as the envelope's input."))
     const resolved = await rulesOf(context, sessionID)
     const nonRead = entry.item.class !== "read"
-    // The plugin's own setting is final for every class, a read too: a fenced session allows the method, and that allow
-    // must never override a method the plugin turned off.
-    if (effectFor(entry.item, level) === "deny") {
+    // A method's own `effect: "deny"` is final for every class, a read too: a fenced session allows the method, and that
+    // allow must never override a method the plugin turned off. The level's own refusals stay below, so each message
+    // names the setting that actually decides the call.
+    if (entry.item.effect === "deny") {
       throw new RegisterError(refusal("PERMISSION_DENIED", `${environment.name}.${entry.name} is off under the plugin's access setting`, "Change the method's effect or the plugin's access setting."))
     }
     const callID = `rpc:${randomUUID()}`

@@ -436,6 +436,7 @@ describe("register: door 3", () => {
     await assert.rejects(h.rpc.call("demo", "send_message", { sessionID: "s1", input, grant: token, consumer: "consumer:demo" }), (error: unknown) => {
       assert.ok(error instanceof RpcDeclaredFailure)
       assert.equal((error.data as { code: string }).code, "PERMISSION_DENIED")
+      assert.equal((error.data as { next: string }).next, "Set access to ask-changes, or use the agent tool in a session that allows it.")
       return true
     })
   })
