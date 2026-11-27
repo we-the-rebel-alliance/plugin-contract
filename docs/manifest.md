@@ -116,7 +116,12 @@ One table covers every callable, so a consumer knows how risky a call is before 
 
 ```json
 {
-  "status": { "class": "read", "accounts": "none" },
+  "status": {
+    "class": "read",
+    "description": "Read the plugin's state and its accounts.",
+    "input": { "type": "object", "properties": {}, "additionalProperties": false },
+    "accounts": "none"
+  },
   "probe": { "class": "read", "accounts": "optional", "operations": ["example.users.get"] },
   "events_list": { "class": "read", "accounts": "optional" },
   "plan_send": { "class": "read", "plans": true, "accounts": "optional" },
@@ -128,12 +133,18 @@ One table covers every callable, so a consumer knows how risky a call is before 
 | Field | Meaning |
 |---|---|
 | `class` | `read`, `write`, `send`, `share`, `delete`, `export` or `admin`. Required. |
+| `description` | The live agent tool's description. Optional. |
+| `input` | The live agent tool's input, as JSON Schema 2020-12. Optional. It is the full tool input: the register's `account` for a method that takes one, and exactly `{ planId }` for a commit. |
 | `accounts` | `optional` when the method takes an `account`, `none` when it does not. Defaults to `none`. |
 | `operations` | The provider operations the method may assert, for grants and session rules. |
 | `plans` | `true` for a method that dry-runs a change; the register mints its `planId`, and the plan commits once, only through that method. |
 | `commits` | The planning method this method commits. It then takes only `{ planId }`. |
 | `effect` | A narrowing of `access`: `ask` or `deny`, never `allow`. |
 | `pinned` | `true` for the one method Code Mode sends on every turn. |
+
+A plugin fills `description` and `input` from its tool definitions at build time, so an app can show how to call a method
+before the provider is connected. `T1.methods` checks each declared value against the live tool. Both are optional, and
+a method without them is unchanged.
 
 Rules:
 

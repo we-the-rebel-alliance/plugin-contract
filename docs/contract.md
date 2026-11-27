@@ -90,7 +90,9 @@ again. Nothing said over RPC is trusted as a manifest.
   },
   "options": { "type": "object", "properties": { "access": {}, "accounts": {}, "allowUntestedHost": {} } },
   "methods": {
-    "status":      { "class": "read", "accounts": "none" },
+    "status":      { "class": "read", "accounts": "none",
+                     "description": "Read the plugin's state and its accounts.",
+                     "input": { "type": "object", "properties": {}, "additionalProperties": false } },
     "probe":       { "class": "read", "accounts": "optional", "operations": ["gmail.users.getProfile"] },
     "events_list": { "class": "read", "accounts": "optional" },
     "plan":        { "class": "read", "plans": true, "accounts": "optional" },
@@ -159,12 +161,17 @@ One table covers every callable, including pass-through MCP tools, so a consumer
 | Field | Meaning |
 |---|---|
 | `class` | `read`, `write`, `send` (reaches someone), `share` (widens access), `delete`, `export` (leaves the provider), `admin` |
+| `description` | the live agent tool's description; a plugin fills it from the tool definition at build time |
+| `input` | the live agent tool's input, as JSON Schema 2020-12, including `account` and a commit's `{ planId }` |
 | `accounts` | `optional` (takes `account`), `none` |
 | `operations` | the provider operations it may assert, for grants and session rules |
 | `plans: true` | dry-runs a change; the register mints its `planId` and the method answers `{ method, … }`; a commit reserves it before confirmation, consumes it at handler start, and only that method may commit it |
 | `commits: "<method>"` | takes only `{ planId }` from that planning method; a consumer refuses any other input |
 | `effect` | optional narrowing of access: `ask` or `deny`; never `allow` |
 | `pinned` | `true` for a method whose signature Code Mode sends on every turn. None by default; at most one per plugin, only when session data shows most of the plugin's sessions call it, within about 1,000 tokens |
+
+`description` and `input` are optional. When a method declares them, conformance (`T1.methods`) checks they are the live
+tool's, so an app can plan a call before the provider is connected.
 
 **Access** (option `access`), generated into every agent's rules with `ctx.agent.transform` by the `access` module:
 
@@ -330,6 +337,7 @@ Remote apps can't read the disk, and RPC is untrusted for manifests. The **catal
 
 - The manifest validates; names follow §3; `plugin.host` matches the built bundle.
 - Every method in `methods` is registered through doors 1 and 3, and every registered tool is in `methods`.
+- A method's declared `description` and `input` are the live tool's (`T1.methods`).
 - Method names fit their class: `delete_*` and `remove_*` are `delete`; `send_*` and `post_*` are `send`; `share_*` is `share`.
 - `options` validates the plugin's defaults; `accounts` behaviour holds with two recorded aliases
   (`ACCOUNT_REQUIRED`, `ACCOUNT_UNKNOWN`), plus a per-account cursor that doesn't cross over only when the plugin

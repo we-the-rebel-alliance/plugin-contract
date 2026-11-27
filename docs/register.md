@@ -55,6 +55,10 @@ const handlers = {
 | `output` | The answer's JSON Schema. A `plans` method answers `{ method, … }`; the register mints the `planId` and the door publishes `PLAN_OUTPUT`. |
 | `run(input, call)` | The work. `call` carries the session, agent, message id, call id, signal, progress, resolved `account`, `bus`, `unguardedAgents()` and door. |
 
+A method's `capabilities.methods` entry may also carry the handler's `description` and the live tool's full `input`
+schema: `account` for a method that takes one, and `{ planId }` for a commit. Conformance (`T1.methods`) checks them
+against the tool the register builds.
+
 `register` refuses a declared method with no handler, a handler the manifest does not declare, and a handler for a
 pass-through MCP method (`mcp:*`). A pass-through MCP method is declared in `methods` for its class and access rule; the
 vendor's server owns its tool, so this module does not register or proxy it. Its tool name keeps the vendor's case,

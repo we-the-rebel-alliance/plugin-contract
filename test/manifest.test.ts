@@ -105,6 +105,24 @@ describe("the manifest", () => {
     has(manifest((m) => (m.methods.status.pinned = false)), "capabilities.methods.status.pinned")
   })
 
+  test("carries a method's description and live tool input, and refuses a malformed one (#80)", () => {
+    const value = manifest((m) => {
+      m.methods.status.description = "Read the demo's status."
+      m.methods.status.input = { type: "object", properties: {}, additionalProperties: false }
+    })
+    assert.deepEqual(problems(value), [])
+    const checked = checkManifest(value)
+    assert.equal(checked.ok, true, checked.ok ? "" : checked.problems.join("\n"))
+    if (checked.ok) {
+      assert.equal(checked.value.methods.status?.description, "Read the demo's status.")
+      assert.deepEqual(checked.value.methods.status?.input, { type: "object", properties: {}, additionalProperties: false })
+    }
+    has(manifest((m) => (m.methods.status.description = "")), "capabilities.methods.status.description")
+    has(manifest((m) => (m.methods.status.description = 1)), "capabilities.methods.status.description")
+    has(manifest((m) => (m.methods.status.input = "not a schema")), "capabilities.methods.status.input")
+    has(manifest((m) => (m.methods.status.input = { type: "nonsense" })), "capabilities.methods.status.input")
+  })
+
   test("checks a method's name against its class (#44, linear#28)", () => {
     has(manifest((m) => (m.methods.delete_message = { class: "write" })), "a delete_* or remove_* method must be class delete")
     has(manifest((m) => (m.methods.remove_message = { class: "read" })), "a delete_* or remove_* method must be class delete")

@@ -176,6 +176,19 @@
               "admin"
             ]
           },
+          "description": {
+            "description": "The live tool's description.",
+            "type": "string",
+            "minLength": 1
+          },
+          "input": {
+            "description": "The live tool's input, as JSON Schema 2020-12.",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
           "accounts": {
             "description": "optional when the method takes an account, none when it does not. Defaults to none.",
             "type": "string",

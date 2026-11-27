@@ -139,6 +139,8 @@ var methodName = string().refine((value) => METHOD_NAME.test(value) || MCP_METHO
 });
 var methodItem = strictObject({
   class: _enum(METHOD_CLASSES),
+  description: string().min(1).optional().describe("The live tool's description."),
+  input: record(string(), unknown()).optional().describe("The live tool's input, as JSON Schema 2020-12."),
   accounts: _enum(METHOD_ACCOUNTS).optional().describe("optional when the method takes an account, none when it does not. Defaults to none."),
   operations: array(string().regex(OPERATION, { error: "must be a provider operation of letters, digits, dots, underscores or hyphens" })).min(1).optional(),
   plans: literal(true).optional().describe("The method dry-runs a change and answers { planId, method }."),
@@ -357,6 +359,7 @@ function crossProblems(value, parsed) {
   for (const [methodNameValue, item] of Object.entries(methods)) {
     const record2 = objectRecord(item);
     if (record2["pinned"] === true) pinned++;
+    if (record2["input"] !== void 0) for (const problem of jsonSchemaProblems(record2["input"], "input")) issue(["methods", methodNameValue, "input"], problem.replace(/^input: /, ""));
     const commits = record2["commits"];
     if (typeof commits === "string") {
       const target = methods[commits];

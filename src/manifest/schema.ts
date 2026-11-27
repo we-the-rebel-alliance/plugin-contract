@@ -117,6 +117,8 @@ const methodName = z
 const methodItem = z
   .strictObject({
     class: z.enum(METHOD_CLASSES),
+    description: z.string().min(1).optional().describe("The live tool's description."),
+    input: z.record(z.string(), z.unknown()).optional().describe("The live tool's input, as JSON Schema 2020-12."),
     accounts: z.enum(METHOD_ACCOUNTS).optional().describe("optional when the method takes an account, none when it does not. Defaults to none."),
     operations: z.array(z.string().regex(OPERATION, { error: "must be a provider operation of letters, digits, dots, underscores or hyphens" })).min(1).optional(),
     plans: z.literal(true).optional().describe("The method dry-runs a change and answers { planId, method }."),
@@ -425,6 +427,7 @@ function crossProblems(value: Record<string, unknown>, parsed: Record<string, un
   for (const [methodNameValue, item] of Object.entries(methods)) {
     const record = objectRecord(item)
     if (record["pinned"] === true) pinned++
+    if (record["input"] !== undefined) for (const problem of jsonSchemaProblems(record["input"], "input")) issue(["methods", methodNameValue, "input"], problem.replace(/^input: /, ""))
     const commits = record["commits"]
     if (typeof commits === "string") {
       const target = methods[commits]

@@ -4,7 +4,7 @@ import {
 } from "./chunks/chunk-B7IIQ5TU.js";
 import {
   MANIFEST_SCHEMA
-} from "./chunks/chunk-K3R6R6QY.js";
+} from "./chunks/chunk-OT3Q6HN7.js";
 import {
   OUTPUTS
 } from "./chunks/chunk-Q3OAT7PA.js";

@@ -143,6 +143,24 @@ describe("the fixture plugin, and the real host", () => {
     assert.ok(ids(await t1(directory, "2.4.1")).includes("T1.codemode"))
   })
 
+  test("a method description that is not the live tool's is refused", { skip: skipHost, timeout: 30_000 }, async () => {
+    const directory = copy()
+    const file = join(directory, "package.json")
+    const pkg = JSON.parse(readFileSync(file, "utf8"))
+    pkg.capabilities.methods.status.description = "Read something else."
+    writeFileSync(file, JSON.stringify(pkg, null, 2))
+    assert.ok(ids(await t1(directory, "2.4.1")).includes("T1.methods"))
+  })
+
+  test("a method input that is not the live tool's is refused", { skip: skipHost, timeout: 30_000 }, async () => {
+    const directory = copy()
+    const file = join(directory, "package.json")
+    const pkg = JSON.parse(readFileSync(file, "utf8"))
+    pkg.capabilities.methods.events_list.input.properties.cursor = { type: "number" }
+    writeFileSync(file, JSON.stringify(pkg, null, 2))
+    assert.ok(ids(await t1(directory, "2.4.1")).includes("T1.methods"))
+  })
+
   test("an RPC events block that does not match the manifest is refused", { skip: skipHost, timeout: 30_000 }, async () => {
     const directory = copy()
     writeCustom(directory, { events: false })
