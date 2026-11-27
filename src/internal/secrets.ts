@@ -158,9 +158,9 @@ export interface SecretFinding {
 /** Every secret in one piece of text, in the order the patterns find them, each with its position. */
 export function secretFindings(text: unknown): SecretFinding[] {
   const value = String(text ?? "")
-  const found: SecretFinding[] = []
+  const findings: SecretFinding[] = []
   const add = (kind: string, index: number, assignment?: AssignmentSite): void => {
-    found.push(assignment === undefined ? { kind, index } : { kind, index, assignment })
+    findings.push(assignment === undefined ? { kind, index } : { kind, index, assignment })
   }
   const privateKey = new RegExp(PRIVATE_KEY_BLOCK.source).exec(value)
   if (privateKey) add("private key", privateKey.index)
@@ -183,19 +183,19 @@ export function secretFindings(text: unknown): SecretFinding[] {
     // In a URL query (`?token=…&page=2`) the value must look random.
     const query = /[?&]/.test(value[match.index - 1] ?? "")
     const password = /pass|pwd/i.test(key)
-    let found = credentialValue(quoted ?? bare, quoted !== undefined, key, query)
-    if (!found && password && quoted === undefined && !query) {
+    let credential = credentialValue(quoted ?? bare, quoted !== undefined, key, query)
+    if (!credential && password && quoted === undefined && !query) {
       const start = match.index + match[0].length - (bare ?? "").length
       const end = value.indexOf("\n", start)
-      found = passphrase(value.slice(start, end === -1 ? value.length : end))
+      credential = passphrase(value.slice(start, end === -1 ? value.length : end))
     }
-    if (!found) continue
-    const text = quoted ?? bare ?? ""
+    if (!credential) continue
+    const written = quoted ?? bare ?? ""
     const quote = quoted === undefined ? undefined : match[4] !== undefined ? '"' : match[5] !== undefined ? "'" : "`"
-    const valueIndex = match.index + match[0].length - text.length - (quote === undefined ? 0 : 1)
-    add(password ? "password" : /token/i.test(key) ? "token" : "api key", match.index, { separator: match[3]!, quote, valueIndex, value: text })
+    const valueIndex = match.index + match[0].length - written.length - (quote === undefined ? 0 : 1)
+    add(password ? "password" : /token/i.test(key) ? "token" : "api key", match.index, { separator: match[3]!, quote, valueIndex, value: written })
   }
-  return found
+  return findings
 }
 
 /** The kinds of secret in one piece of text: "private key", "api key", "token", "password", "connection string". */

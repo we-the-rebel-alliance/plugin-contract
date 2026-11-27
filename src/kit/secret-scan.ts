@@ -14,6 +14,10 @@
  *   value, an object literal inside the parentheses and prose in spaced parentheses stay findings.
  * - **A named format:** the token format written out in a markdown code span, such as `header.payload.signature`.
  *
+ * In the first two cases the value must also be able to be an expression or a type: an identifier or member access, with
+ * an optional prefix operator, generics, arrays or unions. A padded base64 value, a passphrase or a value with symbols is
+ * never one, so it stays a finding in the same position.
+ *
  * Every other finding stands: a key and value in a config file, an environment line, a quoted literal and every
  * known token shape. `test/fixtures/secret-corpus.txt` pins both sides.
  *
@@ -29,6 +33,12 @@ const FUNCTION_START = /^\s*(?:(?:export|default|public|private|protected|static
 
 /** What follows the closing parenthesis of a signature: a return type, an arrow or a body. */
 const AFTER_SIGNATURE = /^\s*(?::|=>|->|\{)/
+
+/** What an expression or a type can be: an identifier or member access, with a prefix operator, generics, arrays or unions. */
+const EXPRESSION = /^(?:\+\+|--|!)?[A-Za-z_$][\w$.<>[\]|?]*$/
+
+/** The operand that starts at a value: up to the first space, comma, semicolon or closing parenthesis. */
+const OPERAND = /^[^\s,;)]*/
 
 /** The parts of a token format, joined by dots: `header.payload.signature`. */
 const FORMAT_PARTS = /^(?:header|payload|claims|body|signature|sig)(?:\.(?:header|payload|claims|body|signature|sig))+$/
@@ -70,6 +80,10 @@ function setAside(text: string, finding: SecretFinding): boolean {
   const lineStart = text.lastIndexOf("\n", finding.index - 1) + 1
   const lineEnd = text.indexOf("\n", site.valueIndex)
   const line = text.slice(lineStart, lineEnd === -1 ? text.length : lineEnd)
+  // The whole operand, not the part the detector read, must be an expression or a type, and no further word may follow it.
+  const rest = line.slice(site.valueIndex - lineStart)
+  const operand = OPERAND.exec(rest)![0]
+  if (!EXPRESSION.test(operand) || /^\s+[\w$'"`]/.test(rest.slice(operand.length))) return false
   const keyOffset = finding.index - lineStart
   if (site.separator.includes("=")) return DECLARATION.test(line.slice(0, keyOffset))
   const open = enclosingParenthesis(line, keyOffset)

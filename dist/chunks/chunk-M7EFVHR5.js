@@ -76,9 +76,9 @@ function credentialValue(value, quoted, key, query) {
 }
 function secretFindings(text) {
   const value = String(text ?? "");
-  const found = [];
+  const findings = [];
   const add = (kind, index, assignment) => {
-    found.push(assignment === void 0 ? { kind, index } : { kind, index, assignment });
+    findings.push(assignment === void 0 ? { kind, index } : { kind, index, assignment });
   };
   const privateKey = new RegExp(PRIVATE_KEY_BLOCK.source).exec(value);
   if (privateKey) add("private key", privateKey.index);
@@ -99,19 +99,19 @@ function secretFindings(text) {
     if (crossed && bare !== void 0 && /^[A-Za-z_][\w.-]*[:=]/.test(bare)) continue;
     const query = /[?&]/.test(value[match.index - 1] ?? "");
     const password = /pass|pwd/i.test(key);
-    let found2 = credentialValue(quoted ?? bare, quoted !== void 0, key, query);
-    if (!found2 && password && quoted === void 0 && !query) {
+    let credential = credentialValue(quoted ?? bare, quoted !== void 0, key, query);
+    if (!credential && password && quoted === void 0 && !query) {
       const start = match.index + match[0].length - (bare ?? "").length;
       const end = value.indexOf("\n", start);
-      found2 = passphrase(value.slice(start, end === -1 ? value.length : end));
+      credential = passphrase(value.slice(start, end === -1 ? value.length : end));
     }
-    if (!found2) continue;
-    const text2 = quoted ?? bare ?? "";
+    if (!credential) continue;
+    const written = quoted ?? bare ?? "";
     const quote = quoted === void 0 ? void 0 : match[4] !== void 0 ? '"' : match[5] !== void 0 ? "'" : "`";
-    const valueIndex = match.index + match[0].length - text2.length - (quote === void 0 ? 0 : 1);
-    add(password ? "password" : /token/i.test(key) ? "token" : "api key", match.index, { separator: match[3], quote, valueIndex, value: text2 });
+    const valueIndex = match.index + match[0].length - written.length - (quote === void 0 ? 0 : 1);
+    add(password ? "password" : /token/i.test(key) ? "token" : "api key", match.index, { separator: match[3], quote, valueIndex, value: written });
   }
-  return found;
+  return findings;
 }
 function secretKinds(text) {
   return [...new Set(secretFindings(text).map((finding) => finding.kind))];

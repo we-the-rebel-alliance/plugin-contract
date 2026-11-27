@@ -326,6 +326,9 @@ describe("plugin-kit forbidden", () => {
       "login(password: Summer2024);",
       "token: MintedToken",
       "export TOKEN=pageToken123",
+      "val secret = Q2xpZW50U2VjcmV0VmFsdWUxMjM0NTY=",
+      "let password = correct horse battery staple",
+      "# call(password: Tr0ub4dor&3) -> ok",
     ]) assert.notDeepEqual(kinds(line), [], line)
     // A known token shape is flagged wherever it sits.
     assert.deepEqual(kinds("const token = ghp_abcdefghijklmnop1234"), ["token"])

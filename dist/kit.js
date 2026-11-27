@@ -12,25 +12,25 @@ import {
   mcpAddress,
   renderGeneratedDocs,
   waitForActivation
-} from "./chunks/chunk-OYAXX37U.js";
+} from "./chunks/chunk-NCMM7CIW.js";
 import "./chunks/chunk-ED3MMWUJ.js";
-import "./chunks/chunk-UYMNA7MA.js";
+import "./chunks/chunk-63PT3CCH.js";
 import "./chunks/chunk-6WEY3U6L.js";
-import "./chunks/chunk-362SOQ3B.js";
-import "./chunks/chunk-MYSB66WF.js";
+import "./chunks/chunk-XEFQZ74Q.js";
+import "./chunks/chunk-PRMVZYO2.js";
 import {
   checkManifest
-} from "./chunks/chunk-ZATNN7Z6.js";
-import "./chunks/chunk-RYYJ7H3I.js";
+} from "./chunks/chunk-VPOEFLD4.js";
+import "./chunks/chunk-XMLYM6NG.js";
 import {
   TESTED_OPENCODE,
   eventHash
-} from "./chunks/chunk-VMXJ6IND.js";
+} from "./chunks/chunk-UO6KFUDW.js";
 import "./chunks/chunk-FTEX4OOT.js";
 import {
   secretFindings,
   secretKinds
-} from "./chunks/chunk-OX23BZE2.js";
+} from "./chunks/chunk-M7EFVHR5.js";
 import "./chunks/chunk-OJKZGBMB.js";
 import "./chunks/chunk-4YITQAYJ.js";
 import "./chunks/chunk-7KJXMIQH.js";
@@ -490,6 +490,8 @@ function fixturePublicKey(value) {
 var DECLARATION = /\b(?:const|let|var|val|final)\s+(?:[\w$<>[\].?]+\s+)?$/;
 var FUNCTION_START = /^\s*(?:(?:export|default|public|private|protected|static|abstract|async|override|declare|pub)\s+)*(?:function\*?|def|fn|func|fun|constructor)\b/;
 var AFTER_SIGNATURE = /^\s*(?::|=>|->|\{)/;
+var EXPRESSION = /^(?:\+\+|--|!)?[A-Za-z_$][\w$.<>[\]|?]*$/;
+var OPERAND = /^[^\s,;)]*/;
 var FORMAT_PARTS = /^(?:header|payload|claims|body|signature|sig)(?:\.(?:header|payload|claims|body|signature|sig))+$/;
 function enclosingParenthesis(line, offset) {
   const open = [];
@@ -523,6 +525,9 @@ function setAside(text, finding) {
   const lineStart = text.lastIndexOf("\n", finding.index - 1) + 1;
   const lineEnd = text.indexOf("\n", site.valueIndex);
   const line = text.slice(lineStart, lineEnd === -1 ? text.length : lineEnd);
+  const rest = line.slice(site.valueIndex - lineStart);
+  const operand = OPERAND.exec(rest)[0];
+  if (!EXPRESSION.test(operand) || /^\s+[\w$'"`]/.test(rest.slice(operand.length))) return false;
   const keyOffset = finding.index - lineStart;
   if (site.separator.includes("=")) return DECLARATION.test(line.slice(0, keyOffset));
   const open = enclosingParenthesis(line, keyOffset);
