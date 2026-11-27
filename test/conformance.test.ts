@@ -265,6 +265,14 @@ describe("T0", () => {
     assert.deepEqual(rows({ "mcp:crawl": { class: "send", effect: "ask" } }), [])
     assert.deepEqual(rows({ "mcp:research": { class: "read", effect: "ask" } }), [])
     assert.deepEqual(rows({ "mcp:extract": { class: "read", operations: ["extract"] } }), [])
+    const wildcardRows = (wildcard: Record<string, unknown>, row: Record<string, unknown>): string[] => {
+      const value = clone(installed.manifest) as any
+      for (const method of Object.keys(value.methods)) if (method.startsWith("mcp:")) delete value.methods[method]
+      Object.assign(value.methods, { "mcp:*": wildcard, "mcp:search": row })
+      return declarationFindings({ ...installed, manifest: value }).filter((finding) => finding.id === "methods.mcp-wildcard").map((finding) => finding.path ?? "")
+    }
+    assert.deepEqual(wildcardRows({ class: "read", operations: ["a", "b"] }, { class: "read", operations: ["b", "a"] }), ["capabilities.methods.mcp:search"])
+    assert.deepEqual(wildcardRows({ class: "send" }, { class: "read" }), [])
   })
 
   test("a pinned method without evidence is refused", () => {

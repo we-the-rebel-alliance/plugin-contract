@@ -10733,7 +10733,9 @@ var PREFIXES = [
 ];
 var RISK = { read: 0, write: 1, export: 2, send: 3, share: 4, delete: 5, admin: 6 };
 function sameRule(row, wildcard) {
-  return row.class === wildcard.class && row.effect === wildcard.effect && JSON.stringify(row.operations ?? []) === JSON.stringify(wildcard.operations ?? []);
+  const operations = new Set(wildcard.operations ?? []);
+  const same = (row.operations ?? []).length === operations.size && (row.operations ?? []).every((operation) => operations.has(operation));
+  return row.class === wildcard.class && row.effect === wildcard.effect && same;
 }
 function methodName(method) {
   return method.startsWith("mcp:") ? method.slice("mcp:".length) : method;

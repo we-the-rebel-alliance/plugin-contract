@@ -535,7 +535,9 @@ export declare function probeResult(identity: EventsListIdentity, extras?: {
     readonly cost?: EventsCost;
 }): ProbeResult;
 /**
- * A probe answer's problems, one sentence each; none when it keeps the contract. Its keys are exactly
+ * A source's probe answer's problems, one sentence each; none when it keeps the contract for a source, so `source` is
+ * required here (`read` checks a source's probe with this). A plugin with no source has no source to name: it checks its
+ * probe against `PROBE_SCHEMA`, where `source` is optional. Its keys are exactly
  * `source, account, owner, scopes?, cost?, trust`, so a probe that returned content (events, data, text) fails. With
  * `expected`, the source and the account must be the ones asked for.
  */

@@ -123,6 +123,12 @@ describe("probe (plugin-contract#8, #4)", () => {
     expect(validate(PROBE_SCHEMA, { ...noSource, events: [] }).ok).toBe(false)
   })
 
+  test("probeResultProblems still requires source, as read checks a source's probe; a source-less probe is checked by PROBE_SCHEMA", () => {
+    const noSource = { account: "work", owner: OWNER, trust: "untrusted" }
+    expect(probeResultProblems(noSource)).toEqual(["the probe answer's source must be a lowercase name such as gmail"])
+    expect(validate(PROBE_SCHEMA, noSource).ok).toBe(true)
+  })
+
   test("finds a probe that read content, has no owner label, or answers for another source or account", () => {
     const answer = probeResult(WHOSE)
     expect(probeResultProblems({ ...answer, events: [] })).toEqual([expect.stringContaining('the field "events": a probe reads no content')])

@@ -185,7 +185,7 @@ the tools, the plugin has no handler for them (§9), and they take no `account` 
 to name and no preview and commit for an action to name. Such a plugin shows that a tool reaches someone or costs money
 through its `class` (`send`, `write`) and an `effect` of `ask`, which the access rules enforce. The kit warns
 (`methods.mcp-wildcard`) about an `mcp:<tool>` row only when it repeats `mcp:*` exactly, so a row with its own class,
-`effect` or `operations` is kept and raises no warning.
+`effect` or `operations` is kept and raises no warning (operations compared as a set).
 
 ## 7. Sources (reads)
 

@@ -35,7 +35,9 @@ const RISK: Readonly<Record<MethodClass, number>> = { read: 0, write: 1, export:
 
 /** True when two rows give a tool the same class, effect and operations, so the second adds nothing to the first. */
 function sameRule(row: MethodItem, wildcard: MethodItem): boolean {
-  return row.class === wildcard.class && row.effect === wildcard.effect && JSON.stringify(row.operations ?? []) === JSON.stringify(wildcard.operations ?? [])
+  const operations = new Set(wildcard.operations ?? [])
+  const same = (row.operations ?? []).length === operations.size && (row.operations ?? []).every((operation) => operations.has(operation))
+  return row.class === wildcard.class && row.effect === wildcard.effect && same
 }
 
 /** The name a method is judged by: a pass-through MCP tool's own name, without `mcp:`. */
