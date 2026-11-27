@@ -47,6 +47,15 @@ in full.
   automation", never "cron job"; charts unpins its five tools; boxd, colab and databricks drop their cost-line hooks.
 - **LD-9: Frankfurt only.** Lanes and CI use `fra`, never `auto` or `nyc`.
 
+## Decision of 27 November
+
+- **D12: a tools-only plugin over a vendor's MCP server declares no `sources` and no `actions`.** The vendor's server
+  owns the tools, `register` has no handler for an `mcp:` method, and the tool takes no `account`, so there is no read
+  for a source to name and no preview and commit for an action to name. Such a plugin classifies its tools under
+  `methods` (`mcp:*` and `mcp:<tool>`) and shows a sending or billed tool by its class and `effect: "ask"` (contract §6,
+  plugin-contract#74 item 3). Confirmed by the master on plugin-contract#74
+  (https://github.com/we-the-rebel-alliance/plugin-contract/issues/74#issuecomment-7228215308).
+
 ## Old open questions
 
 The questions the earlier `docs/events.md` left open (Q1–Q20), and where v0 settles each. Two are not settled.

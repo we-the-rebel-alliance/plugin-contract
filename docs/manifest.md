@@ -144,6 +144,7 @@ Rules:
 - `delete_*` and `remove_*` are class `delete`; `send_*` and `post_*` are class `send`; `share_*` is class `share`
   (contract §16, joe-broadhead/opencode-linear#28). The rule applies to contract method names, not to `mcp:<tool>`.
 - Pass-through MCP tools are declared as `mcp:<tool>` or `mcp:*` and keep the vendor's case (`mcp:getJiraIssue`). Two tool names that normalise to the same effective OpenCode action (`files.delete` and `files_delete`), or that differ only in case (OpenCode's matcher is case-insensitive on Windows), are refused at both names.
+- A tools-only plugin over a vendor's MCP server declares `mcp:*` and `mcp:<tool>` rows, with `sources` and `actions` empty (contract §6). It marks a tool that reaches someone or costs money with its class and `effect: "ask"`. `methods.mcp-wildcard` warns only about a row that has the same class, `effect` and `operations` as `mcp:*`; a row that differs is kept, in either direction, so a plugin's reviewer is the check on a row that lowers a tool's class below `mcp:*`.
 
 ### `sources`
 

@@ -4,7 +4,7 @@ import { createHash } from "node:crypto"
 import { describe, test } from "node:test"
 import { expect } from "./support/expect.ts"
 import { failureFromError } from "../src/internal/failure.ts"
-import { PROBE } from "../src/internal/events.ts"
+import { PROBE, PROBE_SCHEMA } from "../src/internal/events.ts"
 import { encodeBoundCursor, decodeBoundCursor, type CursorBinding } from "../src/cursor.ts"
 import { validate } from "../src/register/validate.ts"
 import {
@@ -111,6 +111,22 @@ describe("probe (plugin-contract#8, #4)", () => {
     expect(answer).toEqual({ source: "demo", account: "work", owner: OWNER, scopes: ["gmail.readonly"], cost: { units: [{ per: "call", count: 1 }], usd: 0.01 }, trust: "untrusted" })
     expect(probeResultProblems(answer, { source: "demo", account: "work" })).toEqual([])
     expect(probeResultProblems(probeResult(WHOSE))).toEqual([])
+  })
+
+  test("PROBE_SCHEMA is contract §11's shape: a source-less plugin's answer has no source, and content is still refused", () => {
+    const noSource = { account: "work", owner: OWNER, trust: "untrusted" }
+    expect(validate(PROBE_SCHEMA, noSource)).toEqual({ ok: true, value: noSource })
+    const withSource = probeResult(WHOSE)
+    expect(validate(PROBE_SCHEMA, withSource).ok).toBe(true)
+    expect(validate(PROBE_SCHEMA, { account: "work", owner: OWNER }).ok).toBe(false)
+    expect(validate(PROBE_SCHEMA, { owner: OWNER, trust: "untrusted" }).ok).toBe(false)
+    expect(validate(PROBE_SCHEMA, { ...noSource, events: [] }).ok).toBe(false)
+  })
+
+  test("probeResultProblems still requires source, as read checks a source's probe; a source-less probe is checked by PROBE_SCHEMA", () => {
+    const noSource = { account: "work", owner: OWNER, trust: "untrusted" }
+    expect(probeResultProblems(noSource)).toEqual(["the probe answer's source must be a lowercase name such as gmail"])
+    expect(validate(PROBE_SCHEMA, noSource).ok).toBe(true)
   })
 
   test("finds a probe that read content, has no owner label, or answers for another source or account", () => {

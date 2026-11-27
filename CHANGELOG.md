@@ -25,6 +25,11 @@ The first release in `we-the-rebel-alliance`: the contract at wire version 1, gr
   has no owner to flag.
 - **`plugin-kit release` outside a plugin:** it reads the package before the check and refuses a `package.json` with no
   `capabilities` with one `KIT_NOT_A_PLUGIN` error naming `scripts/release.mjs`; no conformance or check runs.
+- **Tools-only plugins over a vendor's MCP server (#74):** `PROBE_SCHEMA` makes `source` optional, as contract §11's probe
+  has none, so a plugin with no source reuses it. `methods.mcp-wildcard` warns only about an `mcp:<tool>` row that repeats
+  `mcp:*` exactly (class, `effect` and `operations`); a row with its own class or `effect` is kept without a warning. The
+  contract and the manifest page say that such a plugin declares no `sources` or `actions` and shows a billed or sending tool
+  by its class and `effect: "ask"`.
 - **`accounts` conformance:** a recorded cross-account cursor is required only when the plugin declares an events source
   (#77); a snapshot-only or no-source plugin no longer has to invent one. The contract and the missing-fixture hint say
   the same.

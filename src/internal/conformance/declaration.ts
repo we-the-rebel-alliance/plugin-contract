@@ -10,7 +10,7 @@
  * - a source's operations are among its method's;
  * - an action's preview is a `read` and its commit is not;
  * - the package is `@we-the-rebel-alliance/<name>-plugin`;
- * - one `mcp:*` method is not repeated by specific pass-through tools.
+ * - a specific pass-through tool is not a copy of `mcp:*`; one that classifies the tool differently is kept.
  */
 import { METHOD_CLASSES, type ActionItem, type Manifest, type MethodClass, type MethodItem, type SourceItem } from "../../manifest.ts"
 import * as z from "zod"
@@ -32,6 +32,13 @@ const PREFIXES: readonly { readonly pattern: RegExp; readonly class: MethodClass
 
 /** How much a class may do, lowest first. A name never asks a plugin to lower a class the person already chose. */
 const RISK: Readonly<Record<MethodClass, number>> = { read: 0, write: 1, export: 2, send: 3, share: 4, delete: 5, admin: 6 }
+
+/** True when two rows give a tool the same class, effect and operations, so the second adds nothing to the first. */
+function sameRule(row: MethodItem, wildcard: MethodItem): boolean {
+  const operations = new Set(wildcard.operations ?? [])
+  const same = (row.operations ?? []).length === operations.size && (row.operations ?? []).every((operation) => operations.has(operation))
+  return row.class === wildcard.class && row.effect === wildcard.effect && same
+}
 
 /** The name a method is judged by: a pass-through MCP tool's own name, without `mcp:`. */
 function methodName(method: string): string {
@@ -89,11 +96,12 @@ export function declarationFindings(installed: { readonly package: string; reado
         }),
       )
     }
-    if (method.startsWith("mcp:") && method !== "mcp:*" && manifest.methods["mcp:*"] !== undefined) {
+    const wildcard = manifest.methods["mcp:*"]
+    if (method.startsWith("mcp:") && method !== "mcp:*" && wildcard !== undefined && sameRule(item, wildcard)) {
       findings.push(
-        warning("methods.mcp-wildcard", `${method} is listed beside mcp:*, which already covers every pass-through MCP tool`, {
+        warning("methods.mcp-wildcard", `${method} is listed beside mcp:*, and classifies the tool as the wildcard does`, {
           path: `capabilities.methods.${method}`,
-          fix: "Keep mcp:* and remove the specific pass-through tools it covers.",
+          fix: "Remove the row, or give the tool its own class, effect or operations where it differs from mcp:*.",
         }),
       )
     }
