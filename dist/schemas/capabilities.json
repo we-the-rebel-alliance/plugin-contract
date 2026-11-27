@@ -837,6 +837,35 @@
       },
       "additionalProperties": false,
       "description": "The bus events the plugin emits. Each is declared with an empty object."
+    },
+    "errors": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "surface": {
+            "type": "string",
+            "enum": [
+              "status"
+            ]
+          },
+          "meaning": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "surface",
+          "meaning"
+        ],
+        "additionalProperties": false,
+        "description": "One error code the plugin declares beyond the contract's table."
+      },
+      "description": "The plugin's own error codes, beyond the contract's table (§12). Absent: the plugin uses only the contract's."
     }
   },
   "required": [

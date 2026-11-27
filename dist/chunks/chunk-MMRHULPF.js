@@ -2,12 +2,14 @@
 import {
   isExtensionOutput,
   isOutputName
-} from "./chunk-PHAILRZF.js";
+} from "./chunk-B5YANR2C.js";
 import {
   ACCOUNT_MECHANISMS,
   ACTION_EFFECTS,
   COST_CLASSES,
   DETAIL_FIELDS,
+  ERROR_CODES,
+  ERROR_SURFACES,
   EVENT_KINDS,
   EXTENSION_KEY,
   FACT_TYPES,
@@ -24,7 +26,7 @@ import {
   SOURCE_SIGNALS,
   TESTED_OPENCODE,
   isEventKindIn
-} from "./chunk-4FRULGHN.js";
+} from "./chunk-JQQUFJFK.js";
 import {
   _enum,
   array,
@@ -100,6 +102,7 @@ var DOMAIN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9]
 var ICON_TYPE = /^image\/[a-z0-9][a-z0-9.+-]*$/;
 var FILE_PATH = /^[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)*\.md$/;
 var PRICE_PER = /^[a-z][a-z0-9-]{0,31}$/;
+var ERROR_CODE = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$/;
 var PROFILE_REF = "#/options/properties/accounts/additionalProperties";
 var nonEmpty = (max) => string().min(1).max(max);
 var vendor = strictObject({
@@ -233,6 +236,16 @@ var events = strictObject({
   status: strictObject({}).optional().describe("The plugin's state changed."),
   account: strictObject({}).optional().describe("An account signed in, out, or needs sign-in.")
 }).describe("The bus events the plugin emits. Each is declared with an empty object.");
+var errorItem = strictObject({
+  surface: _enum(ERROR_SURFACES),
+  meaning: string().min(1).max(200).refine((value) => !/[\u0000-\u001f\u007f]/.test(value), { error: "must be one line of plain text" })
+}).describe("One error code the plugin declares beyond the contract's table.");
+var errorsField = record(string(), errorItem).superRefine((codes, context) => {
+  for (const name of Object.keys(codes)) {
+    if (!ERROR_CODE.test(name) || name.length > 40) context.addIssue({ code: "custom", path: [name], message: "must be an upper-case code of at most 40 characters, such as SKILLS_INVALID" });
+    else if (ERROR_CODES.includes(name)) context.addIssue({ code: "custom", path: [name], message: "is in the contract's error table already, so the plugin does not declare it" });
+  }
+}).describe("The plugin's own error codes, beyond the contract's table (\xA712). Absent: the plugin uses only the contract's.");
 function jsonSchemaProblems(schema, what) {
   if (!plain(schema)) return [`${what} must be a JSON Schema object`];
   try {
@@ -299,7 +312,8 @@ var FIELDS = {
   methods: { schema: methodsField, required: true },
   sources: { schema: sourcesField, required: true },
   actions: { schema: actionsField, required: true },
-  events: { schema: eventsField, required: true }
+  events: { schema: eventsField, required: true },
+  errors: { schema: errorsField, required: false }
 };
 var top = looseObject({
   version: versionField,
@@ -309,7 +323,8 @@ var top = looseObject({
   methods: methodsField,
   sources: sourcesField,
   actions: actionsField,
-  events: eventsField
+  events: eventsField,
+  errors: errorsField.optional()
 });
 var asObject = (value) => plain(value) ? value : void 0;
 var objectRecord = (value) => asObject(value) ?? {};

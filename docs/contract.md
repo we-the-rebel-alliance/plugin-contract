@@ -124,6 +124,7 @@ again. Nothing said over RPC is trusted as a manifest.
 | `sources` | Read capabilities an app can bind to (§7). |
 | `actions` | Writes an app can offer a person (§8). |
 | `events` | The bus events the plugin emits (§10). |
+| `errors` | Optional. The plugin's own error codes, each `{ surface, meaning }` (§12). |
 | `x-<app>` | Optional app-only hints. Never required, never read by another app, never read by the conformance kit beyond its name. |
 
 ## 5. Accounts
@@ -267,7 +268,11 @@ Every failure reads `CODE: What happened. Next step: What to do.` One table:
 `CURSOR_EXPIRED`, `RATE_LIMITED`, `BUDGET_EXCEEDED`, `SOURCE_DISABLED`, `TOO_LARGE`, `INPUT_INVALID`, `SOURCE_UNKNOWN`,
 `SCHEMA_VIOLATION`, `PERMISSION_DENIED`, `PLAN_INVALID`, `PLAN_USED`, `GRANT_INVALID`, `HOST_UNTESTED`, `OPTIONS_INVALID`, `UNAVAILABLE`.
 
-A plugin uses these codes; it does not declare its own.
+A plugin uses these codes. A failure a handler throws is always one of them. A plugin may also show a code of its own
+in `status.nextStep`, such as `SKILLS_INVALID` for a bundled skill that is missing while the plugin still starts, and
+declares it in `capabilities.errors`: `{ "SKILLS_INVALID": { "surface": "status", "meaning": "…" } }`. A code the table
+holds cannot be redeclared. The generated errors table lists the contract's codes, then the plugin's, and conformance
+refuses a recorded status that starts with a code that neither names (`status.code`).
 
 ## 13. Trust and consent
 

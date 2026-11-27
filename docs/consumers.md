@@ -372,6 +372,9 @@ Every failure reads `CODE: What happened. Next step: What to do.` The one table 
 | `OPTIONS_INVALID` | the plugin's options cannot be read; fix the configuration |
 | `UNAVAILABLE` | the installed manifest declares no such source, act or method, the host cannot read the plugin's status, or the table does not hold the plugin's own code; read the message and next step |
 
+A plugin may show a code of its own in `status.nextStep`. Its manifest declares each one in `errors`, with the `status`
+surface and a meaning, so an app reads the installed manifest to explain it. It is never a failure of a read or an act.
+
 A `ReadFailure` carries `{ code, message, next, retryAfterSec? }`. A plugin's own refusal, as a `SourceError` or an error
 in the table's form, is read with `parseSourceError`; a code the table does not hold is `UNAVAILABLE`. An undeclared
 source or act is `UNAVAILABLE` from `read` and `act`; a plugin's own `SOURCE_UNKNOWN` passes through as itself. Treat an

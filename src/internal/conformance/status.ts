@@ -8,7 +8,7 @@
  */
 import { ACCOUNT_STATES, REASON_MAX } from "../../accounts.ts"
 import { BUS_EVENTS, OPENCODE_RANGE, ownerProblems, type Manifest } from "../../manifest.ts"
-import { secretKinds } from "../events.ts"
+import { ERROR_CODES, secretKinds } from "../events.ts"
 import { error, warning, type Finding } from "./report.ts"
 
 /** What a plugin records about its bus and status. */
@@ -65,6 +65,10 @@ export function statusFindings(manifest: Manifest, version: string, answer: unkn
   }
   if (answer["nextStep"] !== null && answer["nextStep"] !== undefined && (typeof answer["nextStep"] !== "string" || answer["nextStep"].length > 200)) {
     findings.push(error("status.shape", "status.nextStep must be one line of at most 200 characters, or null", { path: "fixtures/conformance.json" }))
+  }
+  const leading = typeof answer["nextStep"] === "string" ? /^([A-Z][A-Z0-9_]+):/.exec(answer["nextStep"])?.[1] : undefined
+  if (leading !== undefined && !(ERROR_CODES as readonly string[]).includes(leading) && !Object.hasOwn(manifest.errors ?? {}, leading)) {
+    findings.push(error("status.code", `status.nextStep starts with ${leading}, which is neither in the contract's error table nor declared in capabilities.errors`, { path: "capabilities.errors", fix: `Declare ${leading} in capabilities.errors with surface "status" and its meaning, or use a code from the contract's table.` }))
   }
   const host = answer["host"]
   if (!plain(host)) findings.push(error("status.host", "status.host must be { version, range, tested }", { path: "fixtures/conformance.json" }))
