@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { generateKeyPairSync } from "node:crypto"
 import { describe, test } from "node:test"
+import { sessionRules } from "../src/access.ts"
 import { signGrant } from "../src/grant.ts"
 import { manifestHash, checkManifest, type Manifest } from "../src/manifest.ts"
 import { assertHost, register, type HandlerTable, type MethodHandler } from "../src/register.ts"
@@ -377,6 +378,38 @@ describe("register: door 3", () => {
     assert.equal(h.assertions.length, 0, "the plugin's deny is checked before the session gate")
   })
 
+  describe("a read inside a fenced session", () => {
+    const fence = (m: Manifest) => {
+      const rules = sessionRules(m.sources[0]!, { source: "demo.messages", account: "default" }, ["default"])
+      assert.equal(rules.ok, true)
+      return rules.ok ? rules.value : []
+    }
+
+    test("runs when the method is on", async () => {
+      const h = makeHarness()
+      await register(h.ctx, demo, handlers())
+      h.sessions.get("s1")!.permissions = [...fence(demo)]
+      assert.deepEqual(await h.rpc.call("demo", "events_list", { sessionID: "s1", input: { account: "default" } }), { account: "default", cursor: null })
+    })
+
+    test("is refused when the method's effect is deny, whatever the fence allows", async () => {
+      const own = value((m) => {
+        m.methods["events_list"].effect = "deny"
+      })
+      let ran = false
+      const h = makeHarness()
+      await register(h.ctx, own, handlers({ events_list: handler({ description: "List events.", run: async () => ((ran = true), {}) }) }))
+      h.sessions.get("s1")!.permissions = [...fence(own)]
+      await assert.rejects(h.rpc.call("demo", "events_list", { sessionID: "s1", input: { account: "default" } }), (error: unknown) => {
+        assert.ok(error instanceof RpcDeclaredFailure)
+        assert.equal((error.data as { code: string }).code, "PERMISSION_DENIED")
+        return true
+      })
+      assert.equal(ran, false, "the handler never ran")
+      assert.equal(h.assertions.length, 0, "the plugin's deny is checked before the session gate")
+    })
+  })
+
   test("read-only refuses a non-read over RPC even with a valid grant", async () => {
     const { publicKey, privateKey } = generateKeyPairSync("ed25519")
     const now = 1_800_000_000
@@ -403,6 +436,7 @@ describe("register: door 3", () => {
     await assert.rejects(h.rpc.call("demo", "send_message", { sessionID: "s1", input, grant: token, consumer: "consumer:demo" }), (error: unknown) => {
       assert.ok(error instanceof RpcDeclaredFailure)
       assert.equal((error.data as { code: string }).code, "PERMISSION_DENIED")
+      assert.equal((error.data as { next: string }).next, "Set access to ask-changes, or use the agent tool in a session that allows it.")
       return true
     })
   })

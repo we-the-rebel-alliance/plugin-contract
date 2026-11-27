@@ -9,6 +9,9 @@ as it applies before 1.0: while `0.x`, a minor release may break, so plugins and
 The first release in `we-the-rebel-alliance`: the contract at wire version 1, greenfield, with no compatibility path to
 `source-contract` v0.x.
 
+- **A fenced read cannot override a method's `effect: "deny"` (#76):** the RPC door checks the plugin's own
+  access setting for a read as well as a write, so a read method the plugin turned off is refused with
+  `PERMISSION_DENIED` even in a session whose fence allows its method, as a brokered read does.
 - **`capabilities.errors`:** an optional map of a plugin's own error codes, each `{ surface: "status", meaning }`, for a
   code such as `SKILLS_INVALID` that only `status` shows (#73). `plugin-kit docs` writes them after the contract's codes in
   the generated errors table, and conformance (`status.code`) refuses a recorded `status.nextStep` that starts with a code

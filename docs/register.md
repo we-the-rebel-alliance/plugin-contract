@@ -93,12 +93,14 @@ uses. The envelope is strict: an unknown key is `rpc.invalid_input`, not silentl
 
 Every call passes one gate, `ctx.permission.assert`, once (OpenCode 2.4.1 `PermissionDomain.assert`,
 `@opencode/plugin/dist/promise/permission.d.ts`). A tool's `permission` option only hides a fully denied tool and
-`tool.add` adds no ask, so the register calls the gate itself for every door. A **read** runs when the rules allow it, or asks when they
-say `ask`; a `deny` refuses it. The plugin's own `access` level is final: under `read-only` a non-read RPC call is
-refused even with a grant; under `ask-changes` or `all` it needs an ask or a valid grant. An `allow` rule is not a
-confirmation. RPC asks never save: an answer applies to that one call. A call's `signal` cancels a pending ask: the
-gate rejects the request it opened (found by the call's source id, which every RPC ask carries) so nothing stays on the
-person's screen, refuses at once, and a commit releases its plan instead of holding it until expiry.
+`tool.add` adds no ask, so the register calls the gate itself for every door. A **read** runs when the rules
+allow it, or asks when they say `ask`; a `deny` refuses it. The plugin's own `access` level is final: a method
+whose `effect` is `deny` is refused with `PERMISSION_DENIED` over RPC, a read too, even in a fenced session that
+allows it; under `read-only` a non-read RPC call is refused even with a grant; under `ask-changes` or `all` it
+needs an ask or a valid grant. An `allow` rule is not a confirmation. RPC asks never save: an answer applies to
+that one call. A call's `signal` cancels a pending ask: the gate rejects the request it opened (found by the
+call's source id, which every RPC ask carries) so nothing stays on the person's screen, refuses at once, and a
+commit releases its plan instead of holding it until expiry.
 
 A **non-read** method over RPC needs one of contract §8's two confirmations (LD-5):
 

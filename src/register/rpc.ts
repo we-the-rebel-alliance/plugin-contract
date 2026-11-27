@@ -18,7 +18,7 @@
  */
 import { randomUUID } from "node:crypto"
 import type { Plugin } from "@opencode/plugin"
-import { effectFor, methodAction, type AccessLevel } from "../access.ts"
+import { methodAction, type AccessLevel } from "../access.ts"
 import { busEvents } from "../bus.ts"
 import { verifyGrant, type GrantKeys, type GrantScope, type GrantStore } from "../grant.ts"
 import type { JsonSchema } from "../manifest.ts"
@@ -223,6 +223,12 @@ async function invoke(
     if (!plain(input)) throw new RegisterError(refusal("INPUT_INVALID", "the RPC envelope needs an input object", "Pass the method's input as the envelope's input."))
     const resolved = await rulesOf(context, sessionID)
     const nonRead = entry.item.class !== "read"
+    // A method's own `effect: "deny"` is final for every class, a read too: a fenced session allows the method, and that
+    // allow must never override a method the plugin turned off. The level's own refusals stay below, so each message
+    // names the setting that actually decides the call.
+    if (entry.item.effect === "deny") {
+      throw new RegisterError(refusal("PERMISSION_DENIED", `${environment.name}.${entry.name} is off under the plugin's access setting`, "Change the method's effect or the plugin's access setting."))
+    }
     const callID = `rpc:${randomUUID()}`
     let gated = false
     let fresh = false
@@ -230,9 +236,6 @@ async function invoke(
       // The plugin's own setting is final: a caller's session rules can narrow it, never widen it (contract §13).
       if (level === "read-only") {
         throw new RegisterError(refusal("PERMISSION_DENIED", `${environment.name}.${entry.name} is a ${entry.item.class} and the plugin's access is read-only`, "Set access to ask-changes, or use the agent tool in a session that allows it."))
-      }
-      if (effectFor(entry.item, level) === "deny") {
-        throw new RegisterError(refusal("PERMISSION_DENIED", `${environment.name}.${entry.name} is off under the plugin's access setting`, "Change the method's effect or the plugin's access setting."))
       }
       if (raw["grant"] !== undefined) {
         if (wiring === undefined) throw new RegisterError(refusal("GRANT_INVALID", "this plugin has no grant verifier, so it cannot accept a grant", "Use a permission ask in a session, or configure the plugin's grant verifier."))
