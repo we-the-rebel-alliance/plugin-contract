@@ -23,7 +23,7 @@ concurrency:
 jobs:
   build:
     name: Build the Release files
-    runs-on: ubuntu-24.04
+    runs-on: boxd-public
     timeout-minutes: 20
     permissions:
       contents: read
@@ -63,7 +63,7 @@ jobs:
   publish:
     name: Publish the GitHub Release
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: boxd-public
     timeout-minutes: 10
     permissions:
       contents: write
