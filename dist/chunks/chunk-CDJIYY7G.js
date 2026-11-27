@@ -1,7 +1,7 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   isEventKind
-} from "./chunk-4FRULGHN.js";
+} from "./chunk-23QX3HFN.js";
 import {
   validator
 } from "./chunk-FTEX4OOT.js";

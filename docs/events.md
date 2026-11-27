@@ -87,8 +87,9 @@ does not.
 
 ## Errors
 
-Every failure reads `CODE: What happened. Next step: What to do.` from one table (contract §12). A plugin may add a code;
-it declares the code in its manifest. The events module exports `ERROR_CODES`, `SourceError` and `parseSourceError`, and
+Every failure reads `CODE: What happened. Next step: What to do.` from one table (contract §12). A thrown
+failure is always in the table. A plugin may add a code that only `status` shows, and declares it in
+`capabilities.errors` (contract §12). The events module exports `ERROR_CODES`, `SourceError` and `parseSourceError`, and
 `errorCodeOf` answers whether a code is in the table.
 
 ## Conformance

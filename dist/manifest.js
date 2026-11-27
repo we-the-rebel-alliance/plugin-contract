@@ -12,14 +12,15 @@ import {
   maxBytesOf,
   methodAccounts,
   readInstalledManifest
-} from "./chunks/chunk-US3HZZEZ.js";
-import "./chunks/chunk-PHAILRZF.js";
+} from "./chunks/chunk-VWLKUJ4F.js";
+import "./chunks/chunk-FPPWEKTV.js";
 import {
   ACCOUNT_MECHANISMS,
   ACTION_EFFECTS,
   BUS_EVENTS,
   COST_CLASSES,
   DETAIL_FIELDS,
+  ERROR_SURFACES,
   EXTENSION_KEY,
   MANIFEST_VERSION,
   MAX_BYTES_DEFAULT,
@@ -42,9 +43,9 @@ import {
   ownerOrgProblems,
   ownerProblems,
   thumbnailUrlProblems
-} from "./chunks/chunk-4FRULGHN.js";
+} from "./chunks/chunk-23QX3HFN.js";
 import "./chunks/chunk-FTEX4OOT.js";
-import "./chunks/chunk-L3NVT2DE.js";
+import "./chunks/chunk-M7EFVHR5.js";
 import "./chunks/chunk-4YITQAYJ.js";
 import "./chunks/chunk-7KJXMIQH.js";
 import "./chunks/chunk-WLRWVIVP.js";
@@ -54,6 +55,7 @@ export {
   BUS_EVENTS,
   COST_CLASSES,
   DETAIL_FIELDS,
+  ERROR_SURFACES,
   EXTENSION_KEY,
   MANIFEST_SCHEMA,
   MANIFEST_VERSION,

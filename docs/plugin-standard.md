@@ -133,7 +133,7 @@ fetch, and the kit checks that none of it duplicates the kit.
    confirmed by an OpenCode ask, or by a host-signed action grant verified by the contract's `grant` module.
 7. **Nudges:** emit `changed` after any write the plugin makes, and on any webhook or push it receives.
 8. **Errors:** `CODE: What happened. Next step: What to do.`, from the contract's table. A plugin uses the contract's
-   codes; it does not declare its own.
+   codes. A code that only `status` shows is declared in `capabilities.errors`; no other code is.
 9. **Untrusted data:** every answer is marked `trust: "untrusted"`; events are screened for secrets. Status and logs never
    carry credentials, URL query strings or tokens: reasons are redacted and cut to 160 characters.
 10. **Transforms** are cheap, synchronous and never throw. Failures are recorded for status.

@@ -9,7 +9,7 @@
  *   <!-- /generated:capabilities -->
  *
  * `plugin-kit docs` writes them, and T0 fails when one drifts. The sections are `capabilities` (the methods, sources,
- * actions and bus events), `errors` (the contract's codes), `configuration` (the options and their defaults), `accounts`
+ * actions and bus events), `errors` (the contract's codes, then the plugin's own), `configuration` (the options and their defaults), `accounts`
  * (the mechanism and the profile fields) and `automations` (each events source's method and cadence). A doc file the
  * plugin does not ship is not this check's business: the kit's forbidden and docs checks own the file set.
  */
@@ -68,7 +68,7 @@ function list(values: readonly string[] | undefined): string {
 export function renderGeneratedDocs(manifest: Manifest): Readonly<Record<DocsSection, string>> {
   return {
     capabilities: renderCapabilities(manifest),
-    errors: renderErrors(),
+    errors: renderErrors(manifest),
     configuration: renderConfiguration(manifest),
     accounts: renderAccounts(manifest),
     automations: renderAutomations(manifest),
@@ -108,9 +108,10 @@ function renderCapabilities(manifest: Manifest): string {
   ].join("\n")
 }
 
-function renderErrors(): string {
+function renderErrors(manifest: Manifest): string {
   const rows = ["| Code | Meaning |", "|---|---|"]
   for (const name of ERROR_CODES) rows.push(`| \`${name}\` | ${CODE_MEANING[name] ?? "a failure the contract defines"} |`)
+  for (const [name, item] of Object.entries(manifest.errors ?? {})) rows.push(`| \`${cell(name)}\` | ${cell(item.meaning)}, shown in ${item.surface} |`)
   return rows.join("\n")
 }
 

@@ -4,22 +4,22 @@ import {
 } from "./chunk-ED3MMWUJ.js";
 import {
   acceptAnswer
-} from "./chunk-A25A2PTL.js";
+} from "./chunk-YJ5T4GBI.js";
 import {
   effectFor,
   evaluate,
   serverOf,
   sessionRules,
   toolAction
-} from "./chunk-X3273KH4.js";
+} from "./chunk-EIS4VUTX.js";
 import {
   maxBytesOf,
   methodAccounts,
   readInstalledManifest
-} from "./chunk-US3HZZEZ.js";
+} from "./chunk-VWLKUJ4F.js";
 import {
   checkOutput
-} from "./chunk-PHAILRZF.js";
+} from "./chunk-FPPWEKTV.js";
 import {
   BUS_EVENTS,
   ERROR_CODES,
@@ -35,10 +35,10 @@ import {
   removalProblems,
   sourceNamespace,
   thumbnailUrlProblems
-} from "./chunk-4FRULGHN.js";
+} from "./chunk-23QX3HFN.js";
 import {
   secretKinds
-} from "./chunk-L3NVT2DE.js";
+} from "./chunk-M7EFVHR5.js";
 import {
   ACCOUNT_STATES,
   REASON_MAX,
@@ -11844,7 +11844,7 @@ function list(values) {
 function renderGeneratedDocs(manifest) {
   return {
     capabilities: renderCapabilities(manifest),
-    errors: renderErrors(),
+    errors: renderErrors(manifest),
     configuration: renderConfiguration(manifest),
     accounts: renderAccounts(manifest),
     automations: renderAutomations(manifest)
@@ -11882,9 +11882,10 @@ function renderCapabilities(manifest) {
     events.length === 0 ? "None." : events.map((event) => `\`rpc.${manifest.plugin.name}.${event}\``).join(", ")
   ].join("\n");
 }
-function renderErrors() {
+function renderErrors(manifest) {
   const rows = ["| Code | Meaning |", "|---|---|"];
   for (const name of ERROR_CODES) rows.push(`| \`${name}\` | ${CODE_MEANING[name] ?? "a failure the contract defines"} |`);
+  for (const [name, item] of Object.entries(manifest.errors ?? {})) rows.push(`| \`${cell(name)}\` | ${cell(item.meaning)}, shown in ${item.surface} |`);
   return rows.join("\n");
 }
 function typeOf(schema) {
@@ -12192,6 +12193,10 @@ function statusFindings(manifest, version, answer, aliases) {
   }
   if (answer["nextStep"] !== null && answer["nextStep"] !== void 0 && (typeof answer["nextStep"] !== "string" || answer["nextStep"].length > 200)) {
     findings.push(error("status.shape", "status.nextStep must be one line of at most 200 characters, or null", { path: "fixtures/conformance.json" }));
+  }
+  const leading = typeof answer["nextStep"] === "string" ? /^([A-Z][A-Z0-9_]+):/.exec(answer["nextStep"])?.[1] : void 0;
+  if (leading !== void 0 && !ERROR_CODES.includes(leading) && !Object.hasOwn(manifest.errors ?? {}, leading)) {
+    findings.push(error("status.code", `status.nextStep starts with ${leading}, which is neither in the contract's error table nor declared in capabilities.errors`, { path: "capabilities.errors", fix: `Declare ${leading} in capabilities.errors with surface "status" and its meaning, or use a code from the contract's table.` }));
   }
   const host = answer["host"];
   if (!plain2(host)) findings.push(error("status.host", "status.host must be { version, range, tested }", { path: "fixtures/conformance.json" }));

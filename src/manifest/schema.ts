@@ -10,7 +10,7 @@
 import * as z from "zod"
 import { existsSync, readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
-import { EVENT_KINDS, FACT_TYPES, isEventKindIn } from "../internal/events.ts"
+import { ERROR_CODES, EVENT_KINDS, FACT_TYPES, isEventKindIn } from "../internal/events.ts"
 import { isExtensionOutput, isOutputName } from "../outputs.ts"
 import type { Checked, Validator } from "../internal/checked.ts"
 import { canonicalJson, manifestHash } from "./canonical.ts"
@@ -19,6 +19,7 @@ import {
   ACCOUNT_MECHANISMS,
   COST_CLASSES,
   DETAIL_FIELDS,
+  ERROR_SURFACES,
   EXTENSION_KEY,
   MANIFEST_VERSION,
   MAX_BYTES_DEFAULT,
@@ -54,6 +55,7 @@ const DOMAIN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-
 const ICON_TYPE = /^image\/[a-z0-9][a-z0-9.+-]*$/
 const FILE_PATH = /^[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)*\.md$/
 const PRICE_PER = /^[a-z][a-z0-9-]{0,31}$/
+const ERROR_CODE = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$/
 const PROFILE_REF = "#/options/properties/accounts/additionalProperties"
 
 const nonEmpty = (max: number) => z.string().min(1).max(max)
@@ -259,6 +261,27 @@ const events = z
   })
   .describe("The bus events the plugin emits. Each is declared with an empty object.")
 
+const errorItem = z
+  .strictObject({
+    surface: z.enum(ERROR_SURFACES),
+    meaning: z
+      .string()
+      .min(1)
+      .max(200)
+      .refine((value) => !/[\u0000-\u001f\u007f]/.test(value), { error: "must be one line of plain text" }),
+  })
+  .describe("One error code the plugin declares beyond the contract's table.")
+
+const errorsField = z
+  .record(z.string(), errorItem)
+  .superRefine((codes, context) => {
+    for (const name of Object.keys(codes)) {
+      if (!ERROR_CODE.test(name) || name.length > 40) context.addIssue({ code: "custom", path: [name], message: "must be an upper-case code of at most 40 characters, such as SKILLS_INVALID" })
+      else if ((ERROR_CODES as readonly string[]).includes(name)) context.addIssue({ code: "custom", path: [name], message: "is in the contract's error table already, so the plugin does not declare it" })
+    }
+  })
+  .describe("The plugin's own error codes, beyond the contract's table (§12). Absent: the plugin uses only the contract's.")
+
 /** A JSON Schema this package can read, or the problems with it. */
 function jsonSchemaProblems(schema: unknown, what: string): string[] {
   if (!plain(schema)) return [`${what} must be a JSON Schema object`]
@@ -344,6 +367,7 @@ const FIELDS = {
   sources: { schema: sourcesField, required: true },
   actions: { schema: actionsField, required: true },
   events: { schema: eventsField, required: true },
+  errors: { schema: errorsField, required: false },
 } as const
 
 /** The shape used only to generate the published JSON Schema. Values are checked field by field in `checkManifest`. */
@@ -356,6 +380,7 @@ const top = z.looseObject({
   sources: sourcesField,
   actions: actionsField,
   events: eventsField,
+  errors: errorsField.optional(),
 })
 
 const asObject = (value: unknown): Record<string, unknown> | undefined => (plain(value) ? value : undefined)
