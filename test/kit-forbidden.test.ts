@@ -7,6 +7,8 @@ import { describe, test } from "node:test"
 import { forbiddenFindings } from "../src/kit.ts"
 import { ALLOW_FILE } from "../src/kit/forbidden.ts"
 import { FORBIDDEN_APPS } from "../src/kit/forbidden-apps.ts"
+import { forbiddenSecretKinds } from "../src/kit/secret-scan.ts"
+import { secretKinds } from "../src/internal/secrets.ts"
 
 /** The true-positive corpus from the #69 review, one row per line: `<kind> | <line> | <expectation>`. */
 const corpus = readFileSync(new URL("./fixtures/secret-corpus.txt", import.meta.url), "utf8")
@@ -270,7 +272,7 @@ describe("plugin-kit forbidden", () => {
     })
   })
 
-  test("the reviewer's corpus is flagged by the unchanged v0.0.0 detector through forbidden, with the known false positives pinned to #71", () => {
+  test("the reviewer's corpus: every flagged row is still flagged through forbidden, and the six false positives are not", () => {
     const local = temp()
     try {
       const rows = corpus.map((row, index) => ({ ...row, path: `corpus/${String(index).padStart(2, "0")}.txt` }))
@@ -282,13 +284,51 @@ describe("plugin-kit forbidden", () => {
       )
       for (const row of rows) {
         const label = `${row.kind} | ${row.line}`
-        if (row.expected === "flagged") assert.ok(flagged.has(row.path), `the v0.0.0 detector must flag: ${label}`)
-        else if (row.expected === "not flagged (known false negative on master)") assert.equal(flagged.has(row.path), false, `the v0.0.0 detector does not flag: ${label}`)
-        else if (row.expected === "not flagged (known false positive on master)") assert.ok(flagged.has(row.path), `known false positive (#71), pinned until the redesign: ${label}`)
+        if (row.expected === "flagged") assert.ok(flagged.has(row.path), `forbidden must flag: ${label}`)
+        else if (row.expected === "not flagged (known false negative on master)") assert.equal(flagged.has(row.path), false, `forbidden does not flag: ${label}`)
+        else if (row.expected === "not flagged (known false positive on master)") assert.equal(flagged.has(row.path), false, `forbidden must not flag code or prose: ${label}`)
         else throw new Error(`unknown corpus expectation "${row.expected}" for: ${label}`)
       }
     } finally {
       local.cleanup()
     }
+  })
+
+  test("the contract's secretKinds is unchanged, so an event is refused exactly as before", () => {
+    for (const row of corpus) {
+      if (row.expected === "not flagged (known false negative on master)") assert.deepEqual(secretKinds(row.line), [], row.line)
+      else assert.notDeepEqual(secretKinds(row.line), [], row.line)
+    }
+  })
+
+  test("a position that proves no literal is set aside, and a literal in the same position is not", () => {
+    const kinds = (line: string): string[] => forbiddenSecretKinds(line)
+    for (const line of [
+      "const token = pageToken",
+      "  export const password = Summer2024Value",
+      "let token = ++renderToken",
+      "final String apiKey = configKey",
+      "function login(user: string, password: string) {",
+      "  async refresh(token: MintedToken): Promise<void> {",
+      "def login(password: str) -> None:",
+      "set(key: string, token: MintedToken): void",
+      "export function parseToken(token: unknown): ParsedToken {",
+      "// The grant's token: `header.payload.signature`, base64url",
+    ]) assert.deepEqual(kinds(line), [], line)
+    for (const line of [
+      "const token = 'Xk9fJ2mQ7vL1pR8sT3wY6zA4bC5dE0gH'",
+      "const password = `Summer2024`",
+      "function login(password: 'Summer2024') {",
+      "login(password: Summer2024)",
+      "f({ token: Abc123Def456Ghi })",
+      "see (token: Xk9fJ2mQ7vL1pR8sT3wY6zA4bC5dE0gH)",
+      "The grant's token: `Xk9fJ2mQ7vL1pR8sT3wY6zA4bC5dE0gH`",
+      "login(password: Summer2024);",
+      "token: MintedToken",
+      "export TOKEN=pageToken123",
+    ]) assert.notDeepEqual(kinds(line), [], line)
+    // A known token shape is flagged wherever it sits.
+    assert.deepEqual(kinds("const token = ghp_abcdefghijklmnop1234"), ["token"])
+    assert.deepEqual(kinds("function login(ghp_abcdefghijklmnop1234: string) {"), ["token"])
   })
 })

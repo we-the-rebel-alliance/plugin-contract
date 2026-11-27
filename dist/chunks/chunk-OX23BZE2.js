@@ -74,19 +74,23 @@ function credentialValue(value, quoted, key, query) {
   if (v.length < (loose ? 8 : 6)) return false;
   return /\d/.test(v) || /[^A-Za-z0-9]/.test(v) || /.[A-Z]/.test(v);
 }
-function secretKinds(text) {
+function secretFindings(text) {
   const value = String(text ?? "");
-  const kinds = /* @__PURE__ */ new Set();
-  if (new RegExp(PRIVATE_KEY_BLOCK.source).test(value)) kinds.add("private key");
+  const found = [];
+  const add = (kind, index, assignment) => {
+    found.push(assignment === void 0 ? { kind, index } : { kind, index, assignment });
+  };
+  const privateKey = new RegExp(PRIVATE_KEY_BLOCK.source).exec(value);
+  if (privateKey) add("private key", privateKey.index);
   for (const [kind, pattern, valid] of SHAPED) {
-    for (const match of value.matchAll(pattern)) if (!documentation(match[0]) && (!valid || valid(match[0]))) kinds.add(kind);
+    for (const match of value.matchAll(pattern)) if (!documentation(match[0]) && (!valid || valid(match[0]))) add(kind, match.index);
   }
-  for (const match of value.matchAll(BEARER)) if (tokenShaped(match[1])) kinds.add("token");
+  for (const match of value.matchAll(BEARER)) if (tokenShaped(match[1])) add("token", match.index);
   for (const match of value.matchAll(AUTH_HEADER)) {
     const v = String(match[1] ?? match[2] ?? match[3] ?? "").trim().replace(/^(?:Bearer|Basic|Token|Bot)\s+/i, "");
-    if (tokenShaped(v)) kinds.add("token");
+    if (tokenShaped(v)) add("token", match.index);
   }
-  for (const match of value.matchAll(CONNECTION)) if (match[2].length >= 3 && !documentation(match[2])) kinds.add("connection string");
+  for (const match of value.matchAll(CONNECTION)) if (match[2].length >= 3 && !documentation(match[2])) add("connection string", match.index);
   for (const match of value.matchAll(ASSIGNMENT)) {
     const key = match[2];
     const quoted = match[4] ?? match[5] ?? match[6];
@@ -95,17 +99,25 @@ function secretKinds(text) {
     if (crossed && bare !== void 0 && /^[A-Za-z_][\w.-]*[:=]/.test(bare)) continue;
     const query = /[?&]/.test(value[match.index - 1] ?? "");
     const password = /pass|pwd/i.test(key);
-    let found = credentialValue(quoted ?? bare, quoted !== void 0, key, query);
-    if (!found && password && quoted === void 0 && !query) {
+    let found2 = credentialValue(quoted ?? bare, quoted !== void 0, key, query);
+    if (!found2 && password && quoted === void 0 && !query) {
       const start = match.index + match[0].length - (bare ?? "").length;
       const end = value.indexOf("\n", start);
-      found = passphrase(value.slice(start, end === -1 ? value.length : end));
+      found2 = passphrase(value.slice(start, end === -1 ? value.length : end));
     }
-    if (found) kinds.add(password ? "password" : /token/i.test(key) ? "token" : "api key");
+    if (!found2) continue;
+    const text2 = quoted ?? bare ?? "";
+    const quote = quoted === void 0 ? void 0 : match[4] !== void 0 ? '"' : match[5] !== void 0 ? "'" : "`";
+    const valueIndex = match.index + match[0].length - text2.length - (quote === void 0 ? 0 : 1);
+    add(password ? "password" : /token/i.test(key) ? "token" : "api key", match.index, { separator: match[3], quote, valueIndex, value: text2 });
   }
-  return [...kinds];
+  return found;
+}
+function secretKinds(text) {
+  return [...new Set(secretFindings(text).map((finding) => finding.kind))];
 }
 
 export {
+  secretFindings,
   secretKinds
 };

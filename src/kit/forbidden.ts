@@ -8,9 +8,11 @@
  * - `FORBIDDEN.main-branch`: a link points at a `main` branch of a repository under the plugin's own GitHub owner,
  *   read from its `package.json` `repository`. Every repository in the org uses `master`; a third-party repository's
  *   `main` branch is legitimate, and a package with no repository has no owner to flag.
- * - `FORBIDDEN.secret`: a credential is committed. The detector is the contract's own (`secretKinds`), so a fixture, a
- *   doc and an event are judged by one set of patterns. A conformance fixture's signed grant claims are decoded and
- *   screened too: a secret inside a signed claim is found even though the raw token is public test data.
+ * - `FORBIDDEN.secret`: a credential is committed. The detector is the contract's own (`secretFindings`), so a fixture,
+ *   a doc and an event are judged by one set of patterns; `secret-scan.ts` then sets aside an assignment whose position
+ *   (a declaration, a parameter's type annotation) proves it holds no literal. A conformance fixture's signed grant
+ *   claims are decoded and screened too: a secret inside a signed claim is found even though the raw token is public
+ *   test data.
  * - `FORBIDDEN.grant-email`: a verified grant case carries a real person's email. A fixture uses `example.test` or
  *   `example.com`; the decoded claims, the plain input and the plain request are all scanned, and the finding names the
  *   case rather than the address.
@@ -24,6 +26,7 @@ import { isTextFile, readJson, readText, relativePath, walkFiles } from "./files
 import { FORBIDDEN_APPS, type ForbiddenApp } from "./forbidden-apps.ts"
 import { verifiedGrantTokens } from "./grant-token.ts"
 import { repositoryOwner, type PackageJson } from "./plugin.ts"
+import { forbiddenSecretKinds } from "./secret-scan.ts"
 import type { CommandContext, Finding } from "./types.ts"
 import { hasError, sortFindings } from "./types.ts"
 import { print } from "./output.ts"
@@ -239,7 +242,7 @@ export function forbiddenFindings(dir: string, options: ForbiddenOptions = {}): 
           })
         }
       }
-      const kinds = secretKinds(scanLines[index] ?? line)
+      const kinds = forbiddenSecretKinds(scanLines[index] ?? line)
       for (const kind of kinds) {
         reportedKinds.add(kind)
         const key = `secret:${lineNumber}:${kind}`
@@ -255,7 +258,7 @@ export function forbiddenFindings(dir: string, options: ForbiddenOptions = {}): 
       }
     }
     // A private key block can span lines, so one line at a time would miss the header without its body.
-    for (const kind of secretKinds(withoutGrants)) {
+    for (const kind of forbiddenSecretKinds(withoutGrants)) {
       const key = `whole:${kind}`
       if (seen.has(key) || reportedKinds.has(kind)) continue
       seen.add(key)
