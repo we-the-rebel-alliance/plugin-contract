@@ -398,6 +398,46 @@ describe("a probe owner's organizations (#44 item 2)", () => {
   })
 })
 
+describe("capabilities.errors", () => {
+  const skills = { SKILLS_INVALID: { surface: "status", meaning: "a bundled skills/<id>/SKILL.md is missing or has invalid frontmatter; the plugin still starts" } }
+
+  test("is optional, and a plugin that declares none is unchanged", () => {
+    assert.deepEqual(problems(manifest()), [])
+    assert.deepEqual(problems(manifest((m) => (m.errors = {}))), [])
+  })
+
+  test("accepts a plugin's own code with its surface and meaning", () => {
+    const checked = checkManifest(manifest((m) => (m.errors = skills)))
+    assert.ok(checked.ok)
+    assert.deepEqual(checked.value.errors, skills)
+  })
+
+  test("refuses a surface, a meaning or a key the table does not define", () => {
+    has(manifest((m) => (m.errors = { SKILLS_INVALID: { surface: "tool", meaning: "x" } })), "capabilities.errors.SKILLS_INVALID.surface")
+    has(manifest((m) => (m.errors = { SKILLS_INVALID: { meaning: "x" } })), "capabilities.errors.SKILLS_INVALID.surface")
+    has(manifest((m) => (m.errors = { SKILLS_INVALID: { surface: "status" } })), "capabilities.errors.SKILLS_INVALID.meaning")
+    has(manifest((m) => (m.errors = { SKILLS_INVALID: { surface: "status", meaning: "" } })), "capabilities.errors.SKILLS_INVALID.meaning")
+    has(manifest((m) => (m.errors = { SKILLS_INVALID: { surface: "status", meaning: "two\nlines" } })), "one line of plain text")
+    has(manifest((m) => (m.errors = { SKILLS_INVALID: { surface: "status", meaning: "x".repeat(201) } })), "capabilities.errors.SKILLS_INVALID.meaning")
+    has(manifest((m) => (m.errors = { SKILLS_INVALID: { surface: "status", meaning: "x", next: "y" } })), "capabilities.errors.SKILLS_INVALID.next")
+    has(manifest((m) => (m.errors = [])), "capabilities.errors")
+  })
+
+  test("refuses a code that is not upper case, or that the contract's table holds already", () => {
+    has(manifest((m) => (m.errors = { skills_invalid: skills.SKILLS_INVALID })), "capabilities.errors.skills_invalid")
+    has(manifest((m) => (m.errors = { "SKILLS-INVALID": skills.SKILLS_INVALID })), "capabilities.errors.SKILLS-INVALID")
+    has(manifest((m) => (m.errors = { [`A${"B".repeat(40)}`]: skills.SKILLS_INVALID })), "at most 40 characters")
+    has(manifest((m) => (m.errors = { UNAVAILABLE: skills.SKILLS_INVALID })), "is in the contract's error table already")
+  })
+
+  test("is part of the hash, and the published JSON Schema accepts it", () => {
+    assert.notEqual(manifestHash(manifest()), manifestHash(manifest((m) => (m.errors = skills))))
+    const schema = MANIFEST_SCHEMA.jsonSchema()
+    assert.ok((schema["properties"] as Record<string, unknown>)["errors"])
+    assert.equal(z.fromJSONSchema(schema as never).safeParse(manifest((m) => (m.errors = skills))).success, true)
+  })
+})
+
 describe("MANIFEST_SCHEMA", () => {
   test("is named capabilities and generates a JSON Schema with every top-level key", () => {
     assert.equal(MANIFEST_SCHEMA.name, "capabilities")

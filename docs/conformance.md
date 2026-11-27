@@ -125,7 +125,7 @@ it, so the account behaviour is proven by execution, not only by a recording.
 | Check | Proves |
 |---|---|
 | `events.emitted`, `events.declared` | every emitted bus event is declared, and every declared one is emitted |
-| `status.*` | the status answer's shape, its host range, one entry per alias, and no secret |
+| `status.*` | the status answer's shape, its host range, one entry per alias, no secret, and a leading code that is in the contract's table or `capabilities.errors` |
 | `actions.preview` | a recorded preview is `{ output, …, trust: "untrusted" }` |
 | `actions.recorded` | every non-local action records a preview and a commit |
 | `grants.*` | the recorded grants verify, and #40's wrong audience, replay, expiry and digest mismatch are refused |

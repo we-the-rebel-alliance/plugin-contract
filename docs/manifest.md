@@ -48,6 +48,7 @@ app ignores and no app may require.
 | `sources` | yes | The reads an app can bind to. May be empty for a tools-only plugin. |
 | `actions` | yes | The writes an app can offer a person. May be empty. |
 | `events` | yes | The bus events the plugin emits. |
+| `errors` | no | The plugin's own error codes, beyond the contract's table (§12). Absent: only the contract's codes. |
 | `x-<app>` | no | App-only hints. Never required, never read by another app. |
 
 ### `plugin`
@@ -199,6 +200,31 @@ object; the data's shape is the contract's.
 ```json
 { "changed": {}, "status": {}, "account": {} }
 ```
+
+### `errors`
+
+A plugin may answer a code outside the contract's table when the answer is not a failure of a call. The usual case is a
+code in `status.nextStep`, such as a bundled skill that is missing while the plugin still starts and its tools still
+work. The plugin declares each such code, so the generated errors table is complete and conformance can check it.
+
+```json
+{
+  "SKILLS_INVALID": {
+    "surface": "status",
+    "meaning": "a bundled skills/<id>/SKILL.md is missing or has invalid frontmatter; the plugin still starts"
+  }
+}
+```
+
+- The key is an upper-case code of at most 40 characters (`A` to `Z`, digits and `_`), and not one the contract's table
+  holds already.
+- `surface` is where the code is shown. Only `status` exists: a code a handler throws is read as `UNAVAILABLE`, so a
+  thrown failure uses the contract's table.
+- `meaning` is one line of plain text, at most 200 characters.
+- `plugin-kit docs` writes each declared code after the contract's codes in the generated errors table, and the code
+  is part of the manifest hash.
+- Conformance refuses a recorded `status.nextStep` that starts with a code the table and the manifest both lack
+  (`status.code`).
 
 ## Validation and error paths
 
@@ -354,5 +380,5 @@ that a URL is:
 |---|---|
 | `MANIFEST_SCHEMA`, `MANIFEST_VERSION`, `OPENCODE_RANGE`, `TESTED_OPENCODE`, `checkManifest`, `manifestProblems`, `readInstalledManifest`, `findInstalledPackage`, `canonicalJson`, `manifestHash` | the schema, the validator, the installed read and the canonical hash |
 | `findAction`, `findMethod`, `findSource`, `maxBytesOf`, `methodAccounts`, `hostInRange`, `MAX_BYTES_DEFAULT`, `MAX_BYTES_LIMIT`, `PLUGIN_NAME`, `SERVICE_ID_MAX`, `SERVICE_LABEL_MAX`, `OWNER_ORGS_LIMIT`, `THUMBNAIL_URL_MAX`, `EXTENSION_KEY` | the lookups, the host-range predicate and the published limits |
-| `ACTION_EFFECTS`, `ACCOUNT_MECHANISMS`, `BUS_EVENTS`, `COST_CLASSES`, `DETAIL_FIELDS`, `METHOD_ACCOUNTS`, `METHOD_CLASSES`, `METHOD_EFFECTS`, `SOURCE_KINDS`, `SOURCE_SIGNALS`, `SCHEME_QUALIFIED`, `hostMatches`, `thumbnailUrlProblems`, `ownerProblems`, `ownerOrgProblems` | the closed sets and the checks built on them |
-| `ActionEffect`, `ActionItem`, `AccountMechanism`, `AccountsInfo`, `BusEvent`, `Cadence`, `Cost`, `CostClass`, `Detail`, `DetailField`, `HostRange`, `Icon`, `InstalledManifest`, `JsonSchema`, `Manifest`, `ManifestEvents`, `MethodAccounts`, `MethodClass`, `MethodEffect`, `MethodItem`, `Owner`, `OwnerOrg`, `PluginInfo`, `Price`, `Scope`, `Service`, `SourceEvents`, `SourceItem`, `SourceKind`, `SourceSignal`, `SourceSnapshot`, `Suggest`, `Vendor` | the manifest's types |
+| `ACTION_EFFECTS`, `ACCOUNT_MECHANISMS`, `BUS_EVENTS`, `COST_CLASSES`, `DETAIL_FIELDS`, `METHOD_ACCOUNTS`, `METHOD_CLASSES`, `METHOD_EFFECTS`, `SOURCE_KINDS`, `SOURCE_SIGNALS`, `ERROR_SURFACES`, `SCHEME_QUALIFIED`, `hostMatches`, `thumbnailUrlProblems`, `ownerProblems`, `ownerOrgProblems` | the closed sets and the checks built on them |
+| `ActionEffect`, `ActionItem`, `AccountMechanism`, `AccountsInfo`, `BusEvent`, `Cadence`, `Cost`, `CostClass`, `Detail`, `DetailField`, `ErrorItem`, `ErrorSurface`, `HostRange`, `Icon`, `InstalledManifest`, `JsonSchema`, `Manifest`, `ManifestEvents`, `MethodAccounts`, `MethodClass`, `MethodEffect`, `MethodItem`, `Owner`, `OwnerOrg`, `PluginInfo`, `Price`, `Scope`, `Service`, `SourceEvents`, `SourceItem`, `SourceKind`, `SourceSignal`, `SourceSnapshot`, `Suggest`, `Vendor` | the manifest's types |

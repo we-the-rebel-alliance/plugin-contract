@@ -45,6 +45,9 @@ export type CostClass = (typeof COST_CLASSES)[number];
 /** What an action does beyond the person's own machine (§8). */
 export declare const ACTION_EFFECTS: readonly ["local", "notify", "spend", "irreversible"];
 export type ActionEffect = (typeof ACTION_EFFECTS)[number];
+/** Where a plugin's own error code is shown (§12). A code a handler throws is read as `UNAVAILABLE`, so only `status` has one. */
+export declare const ERROR_SURFACES: readonly ["status"];
+export type ErrorSurface = (typeof ERROR_SURFACES)[number];
 /** The bus events a manifest may declare (§10). */
 export declare const BUS_EVENTS: readonly ["changed", "status", "account"];
 export type BusEvent = (typeof BUS_EVENTS)[number];
@@ -247,6 +250,13 @@ export interface ActionItem {
     /** JSON Schema 2020-12 for the answer's `output`. */
     readonly output: JsonSchema;
 }
+/** One error code a plugin declares beyond the contract's table (§12). */
+export interface ErrorItem {
+    /** Where the code is shown: `status`. */
+    readonly surface: ErrorSurface;
+    /** What the code means, in one line of at most 200 characters. */
+    readonly meaning: string;
+}
 /** The bus events a plugin emits (§10). Each is declared with an empty object. */
 export interface ManifestEvents {
     readonly changed?: Readonly<Record<string, never>> | undefined;
@@ -267,6 +277,8 @@ export interface Manifest {
     readonly actions: readonly ActionItem[];
     /** The bus events the plugin emits. */
     readonly events: ManifestEvents;
+    /** The plugin's own error codes, beyond the contract's table. Absent: it uses only the contract's. */
+    readonly errors?: Readonly<Record<string, ErrorItem>> | undefined;
     /** App-only hints. Never required, never read by another app. */
     readonly [extension: `x-${string}`]: unknown;
 }

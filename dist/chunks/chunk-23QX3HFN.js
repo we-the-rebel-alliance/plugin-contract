@@ -27,6 +27,7 @@ var SOURCE_KINDS = ["events", "snapshot"];
 var SOURCE_SIGNALS = ["bus", "mcp-events", "webhook"];
 var COST_CLASSES = ["free", "metered", "billed"];
 var ACTION_EFFECTS = ["local", "notify", "spend", "irreversible"];
+var ERROR_SURFACES = ["status"];
 var BUS_EVENTS = ["changed", "status", "account"];
 var MAX_BYTES_LIMIT = 1048576;
 var MAX_BYTES_DEFAULT = 65536;
@@ -935,6 +936,7 @@ export {
   SOURCE_SIGNALS,
   COST_CLASSES,
   ACTION_EFFECTS,
+  ERROR_SURFACES,
   BUS_EVENTS,
   MAX_BYTES_LIMIT,
   MAX_BYTES_DEFAULT,

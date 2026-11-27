@@ -9,6 +9,10 @@ as it applies before 1.0: while `0.x`, a minor release may break, so plugins and
 The first release in `we-the-rebel-alliance`: the contract at wire version 1, greenfield, with no compatibility path to
 `source-contract` v0.x.
 
+- **`capabilities.errors`:** an optional map of a plugin's own error codes, each `{ surface: "status", meaning }`, for a
+  code such as `SKILLS_INVALID` that only `status` shows (#73). `plugin-kit docs` writes them after the contract's codes in
+  the generated errors table, and conformance (`status.code`) refuses a recorded `status.nextStep` that starts with a code
+  neither the contract nor the manifest holds. A plugin with no extra codes is unchanged.
 - **`FORBIDDEN.secret`:** the scan no longer flags `const token = pageToken`, `const token = ++renderToken`, a typed
   parameter such as `login(password: string)` or `set(key: string, token: MintedToken)`, or the format `header.payload.signature`
   in a code span. It judges where a value sits (a declaration, a signature, a code span) and sets aside only what the

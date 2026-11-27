@@ -403,6 +403,18 @@ describe("recorded sources, accounts, status, actions and grants", () => {
     assert.ok(ids(actionFindings(manifest, action)).includes("actions.recorded"))
   })
 
+  test("a code that leads status.nextStep is in the contract's table or declared in capabilities.errors", () => {
+    const { manifest, recorded } = fixture()
+    const withNext = (nextStep: string | null) => ({ ...clone(recorded.events.status), nextStep })
+    const own = "SKILLS_INVALID: A bundled skill is missing. Next step: Reinstall the plugin."
+    assert.deepEqual(statusFindings(manifest, "1.0.0", withNext("NEEDS_SIGN_IN: Sign in. Next step: Sign in again."), ["work", "personal"]), [])
+    assert.deepEqual(statusFindings(manifest, "1.0.0", withNext("Sign in to the account that needs it."), ["work", "personal"]), [])
+    assert.deepEqual(statusFindings(manifest, "1.0.0", withNext(null), ["work", "personal"]), [])
+    assert.ok(ids(statusFindings(manifest, "1.0.0", withNext(own), ["work", "personal"])).includes("status.code"))
+    const declared = { ...manifest, errors: { SKILLS_INVALID: { surface: "status", meaning: "a bundled skill is missing" } } } as Manifest
+    assert.deepEqual(statusFindings(declared, "1.0.0", withNext(own), ["work", "personal"]), [])
+  })
+
   test("a redacted reason on a not-ready account is accepted; an oversized, non-string or unknown field is refused", () => {
     const { manifest, recorded } = fixture()
     const status = clone(recorded.events.status)
