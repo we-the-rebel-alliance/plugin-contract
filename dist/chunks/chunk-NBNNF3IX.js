@@ -4,22 +4,22 @@ import {
 } from "./chunk-ED3MMWUJ.js";
 import {
   acceptAnswer
-} from "./chunk-YJ5T4GBI.js";
+} from "./chunk-4N5HQWL5.js";
 import {
   effectFor,
   evaluate,
   serverOf,
   sessionRules,
   toolAction
-} from "./chunk-EIS4VUTX.js";
+} from "./chunk-BJRXF77R.js";
 import {
   maxBytesOf,
   methodAccounts,
   readInstalledManifest
-} from "./chunk-VWLKUJ4F.js";
+} from "./chunk-K3R6R6QY.js";
 import {
   checkOutput
-} from "./chunk-FPPWEKTV.js";
+} from "./chunk-Q3OAT7PA.js";
 import {
   BUS_EVENTS,
   ERROR_CODES,
@@ -35,7 +35,7 @@ import {
   removalProblems,
   sourceNamespace,
   thumbnailUrlProblems
-} from "./chunk-23QX3HFN.js";
+} from "./chunk-MGCFUFDJ.js";
 import {
   secretKinds
 } from "./chunk-M7EFVHR5.js";
@@ -10732,6 +10732,9 @@ var PREFIXES = [
   { pattern: /^admin_/, class: "admin", because: "a method that administers the provider is class admin" }
 ];
 var RISK = { read: 0, write: 1, export: 2, send: 3, share: 4, delete: 5, admin: 6 };
+function sameRule(row, wildcard) {
+  return row.class === wildcard.class && row.effect === wildcard.effect && JSON.stringify(row.operations ?? []) === JSON.stringify(wildcard.operations ?? []);
+}
 function methodName(method) {
   return method.startsWith("mcp:") ? method.slice("mcp:".length) : method;
 }
@@ -10781,11 +10784,12 @@ function declarationFindings(installed) {
         })
       );
     }
-    if (method.startsWith("mcp:") && method !== "mcp:*" && manifest.methods["mcp:*"] !== void 0) {
+    const wildcard = manifest.methods["mcp:*"];
+    if (method.startsWith("mcp:") && method !== "mcp:*" && wildcard !== void 0 && sameRule(item, wildcard)) {
       findings.push(
-        warning("methods.mcp-wildcard", `${method} is listed beside mcp:*, which already covers every pass-through MCP tool`, {
+        warning("methods.mcp-wildcard", `${method} is listed beside mcp:*, and classifies the tool as the wildcard does`, {
           path: `capabilities.methods.${method}`,
-          fix: "Keep mcp:* and remove the specific pass-through tools it covers."
+          fix: "Remove the row, or give the tool its own class, effect or operations where it differs from mcp:*."
         })
       );
     }

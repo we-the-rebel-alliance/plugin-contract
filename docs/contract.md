@@ -179,6 +179,14 @@ setting: there is no `allow`, so a method can never widen the person's level. A 
 wins. An agent that lacks the generated rules is named in status,
 never patched.
 
+**A tools-only plugin over a vendor's MCP server** declares its pass-through tools here, `mcp:*` for the default and
+`mcp:<tool>` for each tool that differs, and nothing else: `sources` and `actions` are empty. The vendor's server owns
+the tools, the plugin has no handler for them (§9), and they take no `account` input, so there is no read for a source
+to name and no preview and commit for an action to name. Such a plugin shows that a tool reaches someone or costs money
+through its `class` (`send`, `write`) and an `effect` of `ask`, which the access rules enforce. The kit warns
+(`methods.mcp-wildcard`) about an `mcp:<tool>` row only when it repeats `mcp:*` exactly, so a row with its own class,
+`effect` or `operations` is kept and raises no warning.
+
 ## 7. Sources (reads)
 
 | Field | Meaning |
@@ -258,7 +266,8 @@ Nudges carry no content. An app re-reads through door 3.
 
 - **`status`** (every plugin): `{ name, version, host: { version, range, tested }, state, accounts: [{ alias, state, owner?, reason? }],
   unguardedAgents, nextStep }`. Failure reasons are cut to one line of 160 characters and redacted.
-- **`probe`** (plugins with accounts): `{ account, owner, scopes?, cost?, trust }`. It reads no content.
+- **`probe`** (plugins with accounts): `{ account, owner, scopes?, cost?, trust }`. It reads no content. A source's probe
+  also names its `source`; a plugin with no source leaves it out. `PROBE_SCHEMA` accepts both.
 
 ## 12. Errors
 

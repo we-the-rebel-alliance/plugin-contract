@@ -110,7 +110,7 @@ codes. `npm run conformance:self-test` runs the kit over the examples in `exampl
 | `makeEvent`, `eventHash`, `screenEvents`, `secretKinds`, `oldestFirst` | normalise an event, hash it, and refuse a secret or instruction-shaped text |
 | `resultProblems`, `eventProblems`, `factProblems`, `removalProblems`, `scopeProblems`, `fitPage` | the checks and the page-size fit |
 | `eventsListResult`, `parseEventsListInput`, `parseProbeInput`, `probeResult`, `probeResultProblems`, `sinceTime`, `startTime` | the events call: its input, its default window and its answer |
-| `PAGE_SCHEMA`, `PROBE_SCHEMA`, `LIST_OPTIONS_SCHEMA`, `EVENTS_LIST_INPUT_SCHEMA` | the JSON Schema of an events page, of a probe answer, of a `list_*` method's `{ options }` answer, and of `events_list`'s input, for a handler's `output` and `input` |
+| `PAGE_SCHEMA`, `PROBE_SCHEMA`, `LIST_OPTIONS_SCHEMA`, `EVENTS_LIST_INPUT_SCHEMA` | the JSON Schema of an events page, of a probe answer (`source` is optional, as a source-less plugin has none), of a `list_*` method's `{ options }` answer, and of `events_list`'s input, for a handler's `output` and `input` |
 | `extensionNamespace`, `isEventKind`, `isEventKindIn`, `isExtensionName`, `sourceNamespace` | the `x-<name>/<kind>` namespace rules |
 | `ERROR_CODES`, `ErrorCode`, `errorCodeOf`, `SourceError`, `parseSourceError` | the one error table (contract §12) |
 | `EventProblemOptions`, `ScreenOptions`, `ParseOptions` | the options of the checks |

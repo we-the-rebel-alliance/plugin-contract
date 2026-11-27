@@ -887,9 +887,10 @@ export interface ProbeResult {
 }
 
 /**
- * The JSON Schema of a probe answer (contract §11): whose the source is, the sign-in's scopes, what the probe cost, and
- * the untrusted marker. It has no field for content, so a probe that returned an event or its text fails. A source
- * reuses this constant for its `probe` handler's output instead of copying the shape.
+ * The JSON Schema of a probe answer (contract §11): whose the account is, the sign-in's scopes, what the probe cost, and
+ * the untrusted marker. `source` is named by a source's probe and left out by a plugin with no source. It has no field
+ * for content, so a probe that returned an event or its text fails. A plugin reuses this constant for its `probe`
+ * handler's output instead of copying the shape.
  */
 export const PROBE_SCHEMA: JsonSchema = {
   type: "object",
@@ -901,7 +902,7 @@ export const PROBE_SCHEMA: JsonSchema = {
     cost: { type: "object", additionalProperties: true },
     trust: { type: "string", enum: [TRUST] },
   },
-  required: ["source", "account", "owner", "trust"],
+  required: ["account", "owner", "trust"],
   additionalProperties: false,
 }
 
