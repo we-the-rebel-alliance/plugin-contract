@@ -4,20 +4,20 @@ import {
 } from "./chunk-ED3MMWUJ.js";
 import {
   acceptAnswer
-} from "./chunk-QTK7SH6K.js";
+} from "./chunk-R5VS2G5D.js";
 import {
   effectFor,
   evaluate,
   serverOf,
   sessionRules,
   toolAction
-} from "./chunk-4P7YE6IB.js";
+} from "./chunk-MLDKZD3W.js";
 import {
   canonicalJson,
   maxBytesOf,
   methodAccounts,
   readInstalledManifest
-} from "./chunk-IQOYF6JI.js";
+} from "./chunk-HKNJTBII.js";
 import {
   checkOutput
 } from "./chunk-Q3OAT7PA.js";
@@ -12157,7 +12157,8 @@ function staticFindings(directory, manifest, options = {}) {
   const declared = new Set(Object.keys(manifest.methods).filter((method) => !method.startsWith("mcp:")));
   const mcpWildcard = Object.hasOwn(manifest.methods, "mcp:*");
   const mcpTools = new Set(Object.keys(manifest.methods).filter((method) => method.startsWith("mcp:") && method !== "mcp:*").map((method) => method.slice("mcp:".length)));
-  const known = (method) => declared.has(method) || mcpTools.has(method) || mcpWildcard;
+  const guestTools = new Set(manifest.guestTools ?? []);
+  const known = (method) => declared.has(method) || mcpTools.has(method) || mcpWildcard || guestTools.has(method);
   const seen = /* @__PURE__ */ new Set();
   for (const file of proseFiles(directory)) {
     const text = readFileSync3(join3(directory, file), "utf8");

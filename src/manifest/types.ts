@@ -323,6 +323,8 @@ export interface Manifest {
   readonly options: JsonSchema
   /** Every callable, including pass-through MCP tools (`mcp:<tool>` or `mcp:*`). */
   readonly methods: Readonly<Record<string, MethodItem>>
+  /** Tools a plugin's helper adds on another machine, such as the guest's `done` tool. Names for T0, not host methods. */
+  readonly guestTools?: readonly string[] | undefined
   readonly sources: readonly SourceItem[]
   readonly actions: readonly ActionItem[]
   /** The bus events the plugin emits. */

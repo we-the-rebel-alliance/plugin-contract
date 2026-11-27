@@ -182,7 +182,8 @@ export function staticFindings(directory: string, manifest: Manifest, options: {
   const declared = new Set(Object.keys(manifest.methods).filter((method) => !method.startsWith("mcp:")))
   const mcpWildcard = Object.hasOwn(manifest.methods, "mcp:*")
   const mcpTools = new Set(Object.keys(manifest.methods).filter((method) => method.startsWith("mcp:") && method !== "mcp:*").map((method) => method.slice("mcp:".length)))
-  const known = (method: string): boolean => declared.has(method) || mcpTools.has(method) || mcpWildcard
+  const guestTools = new Set(manifest.guestTools ?? [])
+  const known = (method: string): boolean => declared.has(method) || mcpTools.has(method) || mcpWildcard || guestTools.has(method)
   const seen = new Set<string>()
   for (const file of proseFiles(directory)) {
     const text = readFileSync(join(directory, file), "utf8")

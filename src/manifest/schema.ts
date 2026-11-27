@@ -331,6 +331,11 @@ const optionsField = z.record(z.string(), z.unknown()).describe("JSON Schema 202
  */
 const normalizedMCPTool = (tool: string): string => tool.replace(/[^A-Za-z0-9_-]/g, "_").toLowerCase()
 
+const guestToolsField = z
+  .array(z.string().regex(METHOD_NAME, { error: "must be a tool name such as done" }))
+  .max(64)
+  .describe("Tools a plugin's helper adds on another machine, such as the guest's done tool. They are names for T0, not methods this plugin registers.")
+
 const methodsField = z
   .record(methodName, methodItem)
   .superRefine((methods, context) => {
@@ -375,6 +380,7 @@ const FIELDS = {
   accounts: { schema: accountsInfo, required: false },
   options: { schema: optionsField, required: true },
   methods: { schema: methodsField, required: true },
+  guestTools: { schema: guestToolsField, required: false },
   sources: { schema: sourcesField, required: true },
   actions: { schema: actionsField, required: true },
   events: { schema: eventsField, required: true },
@@ -388,6 +394,7 @@ const top = z.looseObject({
   accounts: accountsInfo.optional(),
   options: optionsField,
   methods: methodsField,
+  guestTools: guestToolsField.optional(),
   sources: sourcesField,
   actions: actionsField,
   events: eventsField,
@@ -452,6 +459,15 @@ function crossProblems(value: Record<string, unknown>, parsed: Record<string, un
     }
   }
   if (pinned > 1) issue(["methods"], "at most one method may be pinned")
+
+  const guestTools = Array.isArray(parsed["guestTools"]) ? parsed["guestTools"] : []
+  const seenGuestTools = new Set<string>()
+  for (const [index, tool] of guestTools.entries()) {
+    if (typeof tool !== "string") continue
+    if (seenGuestTools.has(tool)) issue(["guestTools", index], `"${tool}" is declared twice`)
+    seenGuestTools.add(tool)
+    if (Object.hasOwn(methods, tool)) issue(["guestTools", index], `"${tool}" is also a declared method; a guest tool is not a host method`)
+  }
 
   const sourceIds = new Set<string>()
   const serviceLabels = new Map<string, string>()

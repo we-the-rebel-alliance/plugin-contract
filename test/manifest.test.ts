@@ -270,6 +270,13 @@ describe("the manifest", () => {
     assert.deepEqual(problems(manifest((m) => { delete m.methods.probe; delete m.accounts })), [])
   })
 
+  test("guest tools are declared names for T0, not host methods", () => {
+    assert.deepEqual(problems(manifest((m) => (m.guestTools = ["done"]))), [])
+    has(manifest((m) => (m.guestTools = ["Done"])), "capabilities.guestTools[0]")
+    has(manifest((m) => (m.guestTools = ["done", "done"])), "declared twice")
+    has(manifest((m) => (m.guestTools = ["status"])), "also a declared method")
+  })
+
   test("every problem names its path from capabilities, and manifestProblems returns them", () => {
     const found = problems(manifest((m) => (m.methods.send_message.class = "nope")))
     assert.ok(found.every((problem) => problem.startsWith("capabilities.")), found.join("\n"))
