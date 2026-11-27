@@ -73,7 +73,8 @@ Each takes the plugin's declared aliases as its last argument: the host reads th
   `<account>:<operation>`; a bare operation, an MCP tool, as `<server>_<operation>` on `*`.
 - `detailRules(source, detailId, grant, aliases)` — the source's rules plus the detail's declared method.
 - `probeRules(source, account, identityOperations, probeAction?, aliases)` — the probe action and its identity
-  operations.
+  operations. `read.probe` passes the `methods.probe` action and the operations that method declares; a caller supplies
+  neither.
 - `actSessionRules(manifest, act, grant, phase, aliases)` — deny everything, then allow that phase's method and its
   operations; a preview session cannot run the commit, and a commit runs in its own grant fence.
 - `grantCovers(grant, request)` — the grant's source, account and scope cover a read.

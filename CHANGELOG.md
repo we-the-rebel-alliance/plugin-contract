@@ -70,6 +70,9 @@ The first release in `we-the-rebel-alliance`: the contract at wire version 1, gr
 - **`read`, `act`, `params` and `pick`:** fenced reads with cursors, detail reads and `probe`; preview then commit of the
   register-minted `{ planId }` under the host-signed action grant; relative times, windows and `$me`; and field
   selection checked against the output schema.
+- **`read.probe`:** a probe is fenced only by the plugin's declared `methods.probe` action and operations, and a caller
+  can no longer pass `identityOperations` to widen it (#8). The contract states the tool path `<name>.probe`, the
+  `{ source?, account }` input and the owner id at `owner.id`.
 - **`catalog`:** installed manifests from the OpenCode 2.4.1 npm cache, including its generations, rejected siblings,
   Git keys and hosted Git URLs; a manifest read once, validated and hashed; the broker request keyed on `consumer`; and
   `sourceReader`, which asks a broker first and reads embedded otherwise. A registry target with no version and no own
