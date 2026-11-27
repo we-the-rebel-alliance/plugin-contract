@@ -53,8 +53,8 @@ in full.
   owns the tools, `register` has no handler for an `mcp:` method, and the tool takes no `account`, so there is no read
   for a source to name and no preview and commit for an action to name. Such a plugin classifies its tools under
   `methods` (`mcp:*` and `mcp:<tool>`) and shows a sending or billed tool by its class and `effect: "ask"` (contract §6,
-  plugin-contract#74 item 3). **Awaiting the lead's confirmation on plugin-contract#74:** this entry stands as the
-  rule once that comment is linked here.
+  plugin-contract#74 item 3). Confirmed by the master on plugin-contract#74
+  (https://github.com/we-the-rebel-alliance/plugin-contract/issues/74#issuecomment-7228215308).
 
 ## Old open questions
 
