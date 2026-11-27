@@ -151,6 +151,10 @@ const answer = await probe(host, { installed, source: "acme.messages", account: 
 if (answer.ok) showOwner(answer.answer.owner) // { id, label, verified?, orgs? }, and scopes
 ```
 
+A probe is fenced by the plugin's declared `methods.probe` action, `<name>.probe`, and the provider operations in
+`methods.probe.operations`. The caller supplies neither, and `answer.owner.id` is the signed-in id a `$me` param
+resolves to.
+
 ### Reads through a broker
 
 An app with a host broker passes a transport to `sourceReader`. It builds the one `BrokerRequest` for you and checks a

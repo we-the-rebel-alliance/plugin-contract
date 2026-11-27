@@ -9,7 +9,7 @@ import {
 import {
   detailRules,
   grantCovers,
-  namespaceOf,
+  methodAction,
   probeRules,
   sessionRules
 } from "./chunk-BJRXF77R.js";
@@ -257,13 +257,13 @@ async function probe(host, request) {
   if (!source) return { ok: false, failure: failure("UNAVAILABLE", `${request.installed.package} declares no source ${request.source}`, "Check the source id.") };
   const method = findMethod(request.installed.manifest, "probe");
   if (method === void 0) return { ok: false, failure: failure("PERMISSION_DENIED", `${request.installed.package} declares no probe method`, "Declare probe in the manifest's methods.") };
-  const identity = request.identityOperations ?? method.operations ?? [];
+  const operations = method.operations ?? [];
   const name = typeof source.input?.["source"] === "string" ? { source: source.input["source"] } : {};
   const accounts = await statusAliases(host, request.installed);
   if (!accounts.ok) return { ok: false, failure: accounts.failure };
   const called = await fencedCall(
     host,
-    probeRules(source, request.account, identity, `${namespaceOf(source)}.probe`, accounts.value),
+    probeRules(source, request.account, operations, methodAction(request.installed.manifest.plugin.name, "probe"), accounts.value),
     { package: request.installed.package, method: "probe", input: { ...name, account: request.account }, ...request.signal ? { signal: request.signal } : {} },
     `probe ${source.id}`
   );

@@ -16,6 +16,10 @@ that list, and status that is unavailable is refused rather than defaulted.
 4. The answer is checked: the account, `trust: "untrusted"`, the size against the source's `maxBytes`, and an events
    page's shape or a snapshot's output schema. `pick` keeps only the selected paths.
 
+A probe is not a read of content. It runs under the plugin's declared `methods.probe` action, `<name>.probe`, and the
+provider operations that method declares in `methods.probe.operations`; a caller cannot supply or widen them. The
+answer's `owner.id` is the signed-in id, the one `$me` resolves to and a broker keys its cache on.
+
 ## Exports
 
 | Export | Does |
@@ -23,7 +27,7 @@ that list, and status that is unavailable is refused rather than defaulted.
 | `read` | `read(host, request)` reads a source under a grant; never throws for a refused or failed read |
 | `statusAliases` | `statusAliases(host, installed)` reads the plugin's `status.accounts`, the aliases a fence may name |
 | `readDetail` | `readDetail(host, request)` reads one declared detail of an event, pinned to the confirmed scope |
-| `probe` | `probe(host, request)` reads the signed-in owner and scopes; it reads no content |
+| `probe` | `probe(host, request)` reads the signed-in owner and scopes under the declared `methods.probe` action and operations; it reads no content |
 | `checkReadRequest` | the checks before any call, and the source and scope to read |
 | `acceptAnswer` | `acceptAnswer(source, account, answer, options?)` checks an answer as a read does, then applies `pick` |
 | `detailFields` | the event fields a detail may take, and nothing else |

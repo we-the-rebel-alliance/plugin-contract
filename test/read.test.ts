@@ -263,14 +263,26 @@ describe("detail reads", () => {
 describe("probe", () => {
   const good = { source: "messages", account: ana, owner: { id: `mailto:${ana}`, label: "Ana" }, scopes: ["demo.read"], trust: "untrusted" }
 
-  test("runs fenced to the probe method and the identity operations, and checks the account it answers", async () => {
-    const fake = fakeHost(() => good, () => [["demo.probe", "*"], ["demo.probe", `${ana}:demo.users.get`]])
-    const answer = await probe(fake.host, { installed: demo, source: "demo.messages", account: ana, identityOperations: ["demo.users.get"] })
+  test("runs fenced to the probe action and the operations the manifest declares, and checks the account it answers", async () => {
+    const fake = fakeHost(() => good, () => [["demo.probe", "*"], ["demo.read", `${ana}:demo.users.get`]])
+    const answer = await probe(fake.host, { installed: demo, source: "demo.messages", account: ana })
     assert.equal(answer.ok, true, answer.ok ? "" : answer.failure.message)
-    const content = await probe(fakeHost(() => good, () => [["demo.events_list", "*"]]).host, { installed: demo, source: "demo.messages", account: ana, identityOperations: ["demo.users.get"] })
+    const content = await probe(fakeHost(() => good, () => [["demo.events_list", "*"]]).host, { installed: demo, source: "demo.messages", account: ana })
     assert.equal(content.ok ? "ok" : content.failure.code, "PERMISSION_DENIED")
-    const wrong = await probe(fakeHost(() => ({ account: "ben@example.com", owner: { id: "mailto:ben@example.com", label: "Ben" }, trust: "untrusted" })).host, { installed: demo, source: "demo.messages", account: ana, identityOperations: [] })
+    const wrong = await probe(fakeHost(() => ({ account: "ben@example.com", owner: { id: "mailto:ben@example.com", label: "Ben" }, trust: "untrusted" })).host, { installed: demo, source: "demo.messages", account: ana })
     assert.equal(wrong.ok ? "ok" : wrong.failure.code, "ACCOUNT_MISMATCH")
+  })
+
+  test("fences a probe to the manifest's operations, never a caller's wider list (#8)", async () => {
+    const fake = fakeHost(() => good, () => [["demo.read", `${ana}:demo.users.delete`]])
+    const outcome = await probe(fake.host, {
+      installed: demo,
+      source: "demo.messages",
+      account: ana,
+      // @ts-expect-error a caller cannot supply identity operations
+      identityOperations: ["demo.users.delete"],
+    })
+    assert.equal(outcome.ok ? "ok" : outcome.failure.code, "PERMISSION_DENIED")
   })
 
   test("ProbeAnswer.owner carries the provider's organizations (#44 item 2)", async () => {
@@ -280,13 +292,13 @@ describe("probe", () => {
       owner: { id: `mailto:${ana}`, label: "Ana", orgs: [{ id: "domain:example.com", label: "example.com" }] },
       trust: "untrusted",
     }
-    const replied = await probe(fakeHost(() => answer).host, { installed: demo, source: "demo.messages", account: ana, identityOperations: [] })
+    const replied = await probe(fakeHost(() => answer).host, { installed: demo, source: "demo.messages", account: ana })
     assert.equal(replied.ok, true, replied.ok ? "" : replied.failure.message)
     if (replied.ok) assert.deepEqual(replied.answer.owner.orgs, [{ id: "domain:example.com", label: "example.com" }])
   })
 
   test("a source that is not signed in is NEEDS_SIGN_IN to a consumer, never an owner: null", async () => {
-    const outcome = await probe(fakeHost(() => ({ ...good, owner: null })).host, { installed: demo, source: "demo.messages", account: ana, identityOperations: [] })
+    const outcome = await probe(fakeHost(() => ({ ...good, owner: null })).host, { installed: demo, source: "demo.messages", account: ana })
     assert.equal(outcome.ok ? "ok" : outcome.failure.code, "NEEDS_SIGN_IN")
   })
 
@@ -305,7 +317,7 @@ describe("probe", () => {
   ]
   for (const [name, answer, ok] of answers) {
     test(`one probe check: ${name} ${ok ? "passes" : "fails"} (#8, D230)`, async () => {
-      const viaRead = await probe(fakeHost(() => answer).host, { installed: demo, source: "demo.messages", account: ana, identityOperations: [] })
+      const viaRead = await probe(fakeHost(() => answer).host, { installed: demo, source: "demo.messages", account: ana })
       const viaEvents = probeResultProblems(answer, { source: "messages", account: ana })
       assert.equal(viaRead.ok, ok, viaRead.ok ? "" : viaRead.failure.message)
       assert.equal(viaEvents.length === 0, ok, viaEvents.join("; "))

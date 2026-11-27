@@ -268,6 +268,9 @@ Nudges carry no content. An app re-reads through door 3.
   unguardedAgents, nextStep }`. Failure reasons are cut to one line of 160 characters and redacted.
 - **`probe`** (plugins with accounts): `{ account, owner, scopes?, cost?, trust }`. It reads no content. A source's probe
   also names its `source`; a plugin with no source leaves it out. `PROBE_SCHEMA` accepts both.
+- The host calls the plugin's `probe` method (`<name>.probe`) once per source with `{ source?, account }`; the method's
+  declared `operations` are the only provider operations it may assert, and a consumer cannot supply or widen them. The
+  owner id a host keys its cache on, and `$me` resolves to, is `owner.id`.
 
 ## 12. Errors
 

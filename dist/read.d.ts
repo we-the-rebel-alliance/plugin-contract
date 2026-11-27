@@ -192,15 +192,15 @@ export interface ProbeAnswer {
     readonly trust: "untrusted";
 }
 /**
- * Probes a source for an account, in a session fenced by the plugin's `methods.probe` action and the identity
- * operations it declares, or the identity operations the caller passes. The source's own method action fences the
- * read; `probe` adds no content. The call is `probe` with `{ source?, account }`.
+ * Probes a source for an account, in a session fenced by the plugin's `methods.probe` action and the provider
+ * operations that method declares. The descriptor is the only source of those operations: a caller cannot supply or
+ * widen them. The source's own method action fences a read; `probe` adds no content. The call is `probe` with
+ * `{ source?, account }`, and the answer's owner id is `owner.id`.
  */
 export declare function probe(host: ReadHost, request: {
     readonly installed: InstalledManifest;
     readonly source: string;
     readonly account: string;
-    readonly identityOperations?: readonly string[];
     readonly signal?: AbortSignal;
 }): Promise<{
     readonly ok: true;

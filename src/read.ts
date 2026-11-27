@@ -19,7 +19,7 @@ import type { Checked } from "./internal/checked.ts"
 import { PAGE, probeResultProblems, resultProblems } from "./internal/events.ts"
 import { failure, failureFromError, type ReadFailure } from "./internal/failure.ts"
 import { resolveSince, type ParamsContext } from "./params.ts"
-import { detailRules, grantCovers, namespaceOf, probeRules, sessionRules, type Grant, type PermissionRule } from "./access.ts"
+import { detailRules, grantCovers, methodAction, probeRules, sessionRules, type Grant, type PermissionRule } from "./access.ts"
 import { pick, pickProblemsForOutput } from "./pick.ts"
 import { checkOutput, isOutputName } from "./outputs.ts"
 
@@ -359,22 +359,23 @@ export interface ProbeAnswer {
 }
 
 /**
- * Probes a source for an account, in a session fenced by the plugin's `methods.probe` action and the identity
- * operations it declares, or the identity operations the caller passes. The source's own method action fences the
- * read; `probe` adds no content. The call is `probe` with `{ source?, account }`.
+ * Probes a source for an account, in a session fenced by the plugin's `methods.probe` action and the provider
+ * operations that method declares. The descriptor is the only source of those operations: a caller cannot supply or
+ * widen them. The source's own method action fences a read; `probe` adds no content. The call is `probe` with
+ * `{ source?, account }`, and the answer's owner id is `owner.id`.
  */
-export async function probe(host: ReadHost, request: { readonly installed: InstalledManifest; readonly source: string; readonly account: string; readonly identityOperations?: readonly string[]; readonly signal?: AbortSignal }): Promise<{ readonly ok: true; readonly answer: ProbeAnswer } | { readonly ok: false; readonly failure: ReadFailure }> {
+export async function probe(host: ReadHost, request: { readonly installed: InstalledManifest; readonly source: string; readonly account: string; readonly signal?: AbortSignal }): Promise<{ readonly ok: true; readonly answer: ProbeAnswer } | { readonly ok: false; readonly failure: ReadFailure }> {
   const source = findSource(request.installed.manifest, request.source)
   if (!source) return { ok: false, failure: failure("UNAVAILABLE", `${request.installed.package} declares no source ${request.source}`, "Check the source id.") }
   const method = findMethod(request.installed.manifest, "probe")
   if (method === undefined) return { ok: false, failure: failure("PERMISSION_DENIED", `${request.installed.package} declares no probe method`, "Declare probe in the manifest's methods.") }
-  const identity = request.identityOperations ?? method.operations ?? []
+  const operations = method.operations ?? []
   const name = typeof source.input?.["source"] === "string" ? { source: source.input["source"] } : {}
   const accounts = await statusAliases(host, request.installed)
   if (!accounts.ok) return { ok: false, failure: accounts.failure }
   const called = await fencedCall(
     host,
-    probeRules(source, request.account, identity, `${namespaceOf(source)}.probe`, accounts.value),
+    probeRules(source, request.account, operations, methodAction(request.installed.manifest.plugin.name, "probe"), accounts.value),
     { package: request.installed.package, method: "probe", input: { ...name, account: request.account }, ...(request.signal ? { signal: request.signal } : {}) },
     `probe ${source.id}`,
   )
