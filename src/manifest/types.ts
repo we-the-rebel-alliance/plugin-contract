@@ -144,9 +144,9 @@ export interface AccountsInfo {
 export interface MethodItem {
   /** What the method does: `read`, `write`, `send`, `share`, `delete`, `export` or `admin`. */
   readonly class: MethodClass
-  /** The live tool's description. Optional: a plugin fills it from the tool definition at build time. */
+  /** The tool's description. Optional: a plugin fills it from the tool definition at build time. Not on `mcp:*`. */
   readonly description?: string | undefined
-  /** The live tool's input, as JSON Schema 2020-12, including `account` and a commit's `{ planId }`. */
+  /** The tool's input, as JSON Schema 2020-12; a register method includes `account` and a commit's `{ planId }`. Not on `mcp:*`. */
   readonly input?: JsonSchema | undefined
   /** `optional` when it takes an `account`, `none` when it does not. Defaults to `none`. */
   readonly accounts?: MethodAccounts | undefined

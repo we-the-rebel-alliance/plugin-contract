@@ -9,10 +9,12 @@ as it applies before 1.0: while `0.x`, a minor release may break, so plugins and
 The first release in `we-the-rebel-alliance`: the contract at wire version 1, greenfield, with no compatibility path to
 `source-contract` v0.x.
 
-- **`capabilities.methods` descriptions and inputs (#80):** each method may carry its live agent tool's `description` and
-  full `input` schema, including `account` and a commit's `{ planId }`. A plugin fills them from its tool definitions at
-  build time, so an app can show how to call a method before the provider is connected. Conformance (`T1.methods`)
-  checks every declared value against the live tool; both stay optional.
+- **`capabilities.methods` descriptions and inputs (#80):** each method may carry its `description` and `input` schema;
+  on a register method the input is the live tool's, including `account` and a commit's `{ planId }`. A plugin fills them
+  from its tool definitions at build time, so an app can show how to call a method before the provider is connected.
+  Conformance (`T1.methods`) checks every register method's declared values against the live tool. An `mcp:<tool>` row
+  carries the plugin's own claim from the vendor's tool definition and is not checked; `mcp:*` carries neither field.
+  Both fields stay optional.
 - **A fenced read cannot override a method's `effect: "deny"` (#76):** the RPC door checks the plugin's own
   access setting for a read as well as a write, so a read method the plugin turned off is refused with
   `PERMISSION_DENIED` even in a session whose fence allows its method, as a brokered read does.

@@ -57,7 +57,8 @@ const handlers = {
 
 A method's `capabilities.methods` entry may also carry the handler's `description` and the live tool's full `input`
 schema: `account` for a method that takes one, and `{ planId }` for a commit. Conformance (`T1.methods`) checks them
-against the tool the register builds.
+against the tool the register builds. A pass-through MCP row describes the vendor's tool, which T1 does not load, so its
+values are the plugin's own claim; `mcp:*` carries neither field.
 
 `register` refuses a declared method with no handler, a handler the manifest does not declare, and a handler for a
 pass-through MCP method (`mcp:*`). A pass-through MCP method is declared in `methods` for its class and access rule; the

@@ -12,7 +12,7 @@ import {
   maxBytesOf,
   methodAccounts,
   readInstalledManifest
-} from "./chunks/chunk-OT3Q6HN7.js";
+} from "./chunks/chunk-IQOYF6JI.js";
 import "./chunks/chunk-Q3OAT7PA.js";
 import {
   ACCOUNT_MECHANISMS,

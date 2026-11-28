@@ -7,7 +7,7 @@
  * - the plugin id is the manifest's name (`T1.id`);
  * - every non-MCP method is a tool with permission `<name>.<method>`, exposed to Code Mode, and an RPC method under
  *   `<name>`, with the declared bus events in its events block (`T1.doors`, `T1.codemode`, `T1.events`);
- * - a declared `description` or `input` is the live tool's (`T1.methods`);
+ * - a declared register method's `description` or `input` is the live tool's (`T1.methods`);
  * - the access matrix holds for every real agent at `all`, `ask-changes` and `read-only`, using `effectFor` from
  *   `./access` (`T1.permissions`);
  * - a non-read method over RPC with an allow rule and no grant is refused (LD-5, `T1.rpc-confirmation`);
@@ -185,7 +185,10 @@ function codemodeFindings(manifest: Manifest, run: HostRun): Finding[] {
   return findings
 }
 
-/** A declared method's description and input, when it carries them, are the live tool's. */
+/**
+ * A declared register method's description and input, when it carries them, are the live tool's. A pass-through MCP
+ * row describes the vendor's tool, which this host does not load, so its values are the plugin's claim and not checked.
+ */
 function methodFindings(manifest: Manifest, run: HostRun): Finding[] {
   const findings: Finding[] = []
   for (const [method, item] of Object.entries(manifest.methods)) {

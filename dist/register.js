@@ -15,10 +15,10 @@ import {
   evaluate,
   methodAction,
   unguardedAgents
-} from "./chunks/chunk-XZPVIG7N.js";
+} from "./chunks/chunk-4P7YE6IB.js";
 import {
   manifestHash
-} from "./chunks/chunk-OT3Q6HN7.js";
+} from "./chunks/chunk-IQOYF6JI.js";
 import "./chunks/chunk-Q3OAT7PA.js";
 import {
   MAX_BYTES_DEFAULT,

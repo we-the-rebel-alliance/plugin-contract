@@ -123,6 +123,19 @@ describe("the manifest", () => {
     has(manifest((m) => (m.methods.status.input = { type: "nonsense" })), "capabilities.methods.status.input")
   })
 
+  test("lets a named MCP tool carry description and input, and refuses both on the mcp:* wildcard (#80)", () => {
+    const named = manifest((m) => {
+      m.methods["mcp:getIssue"] = {
+        class: "read",
+        description: "Read one issue.",
+        input: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+      }
+    })
+    assert.deepEqual(problems(named), [])
+    has(manifest((m) => (m.methods["mcp:*"].description = "Any pass-through tool.")), "capabilities.methods.mcp:*.description")
+    has(manifest((m) => (m.methods["mcp:*"].input = { type: "object" })), "capabilities.methods.mcp:*.input")
+  })
+
   test("checks a method's name against its class (#44, linear#28)", () => {
     has(manifest((m) => (m.methods.delete_message = { class: "write" })), "a delete_* or remove_* method must be class delete")
     has(manifest((m) => (m.methods.remove_message = { class: "read" })), "a delete_* or remove_* method must be class delete")

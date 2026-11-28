@@ -210,7 +210,8 @@ describe("the fixture plugin, and the real host", () => {
   test("a declared method with no tool is a doors finding", { skip: skipHost, timeout: 30_000 }, async () => {
     const directory = copy()
     writeCustom(directory, { missingTool: "status" })
-    assert.ok(ids(await t1(directory, "2.4.1")).includes("T1.doors"))
+    const found = await t1(directory, "2.4.1")
+    assert.ok(found.some((finding) => finding.id === "T1.doors" && finding.path === "capabilities.methods.status"))
   })
 
   test("a plugin with the wrong id is refused", { skip: skipHost, timeout: 30_000 }, async () => {

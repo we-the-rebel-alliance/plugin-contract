@@ -117,8 +117,8 @@ const methodName = z
 const methodItem = z
   .strictObject({
     class: z.enum(METHOD_CLASSES),
-    description: z.string().min(1).optional().describe("The live tool's description."),
-    input: z.record(z.string(), z.unknown()).optional().describe("The live tool's input, as JSON Schema 2020-12."),
+    description: z.string().min(1).optional().describe("The tool's description. Not on mcp:*, which has no one tool."),
+    input: z.record(z.string(), z.unknown()).optional().describe("The tool's input, as JSON Schema 2020-12. Not on mcp:*, which has no one tool."),
     accounts: z.enum(METHOD_ACCOUNTS).optional().describe("optional when the method takes an account, none when it does not. Defaults to none."),
     operations: z.array(z.string().regex(OPERATION, { error: "must be a provider operation of letters, digits, dots, underscores or hyphens" })).min(1).optional(),
     plans: z.literal(true).optional().describe("The method dry-runs a change and answers { planId, method }."),
@@ -334,6 +334,15 @@ const normalizedMCPTool = (tool: string): string => tool.replace(/[^A-Za-z0-9_-]
 const methodsField = z
   .record(methodName, methodItem)
   .superRefine((methods, context) => {
+    const wildcard = methods["mcp:*"]
+    for (const field of ["description", "input"] as const) {
+      if (wildcard?.[field] === undefined) continue
+      context.addIssue({
+        code: "custom",
+        path: ["mcp:*", field],
+        message: `mcp:* is a wildcard and has no one tool, so it cannot carry a ${field === "description" ? "description" : "input schema"}; put it on an mcp:<tool> row`,
+      })
+    }
     const groups = new Map<string, string[]>()
     for (const name of Object.keys(methods)) {
       if (!name.startsWith("mcp:") || name === "mcp:*") continue

@@ -133,8 +133,8 @@ One table covers every callable, so a consumer knows how risky a call is before 
 | Field | Meaning |
 |---|---|
 | `class` | `read`, `write`, `send`, `share`, `delete`, `export` or `admin`. Required. |
-| `description` | The live agent tool's description. Optional. |
-| `input` | The live agent tool's input, as JSON Schema 2020-12. Optional. It is the full tool input: the register's `account` for a method that takes one, and exactly `{ planId }` for a commit. |
+| `description` | The tool's description. Optional. On a register method it is the live agent tool's, checked by T1; on an `mcp:<tool>` row it is the plugin's claim from the vendor's tool definition. Not on `mcp:*`. |
+| `input` | The tool's input, as JSON Schema 2020-12. Optional. On a register method it is the full live tool input: `account` for a method that takes one, and exactly `{ planId }` for a commit. On an `mcp:<tool>` row it is the plugin's claim. Not on `mcp:*`. |
 | `accounts` | `optional` when the method takes an `account`, `none` when it does not. Defaults to `none`. |
 | `operations` | The provider operations the method may assert, for grants and session rules. |
 | `plans` | `true` for a method that dry-runs a change; the register mints its `planId`, and the plan commits once, only through that method. |
@@ -143,8 +143,10 @@ One table covers every callable, so a consumer knows how risky a call is before 
 | `pinned` | `true` for the one method Code Mode sends on every turn. |
 
 A plugin fills `description` and `input` from its tool definitions at build time, so an app can show how to call a method
-before the provider is connected. `T1.methods` checks each declared value against the live tool. Both are optional, and
-a method without them is unchanged.
+before the provider is connected. On a register method, `T1.methods` checks each declared value against the live tool.
+An `mcp:<tool>` row carries the plugin's own claim from the vendor's tool definition; T1 does not load the vendor's
+server, so it does not check that claim. `mcp:*` is a wildcard with no one tool, so it carries neither field. Both fields
+are optional, and a method without them is unchanged.
 
 Rules:
 
@@ -155,6 +157,7 @@ Rules:
 - `delete_*` and `remove_*` are class `delete`; `send_*` and `post_*` are class `send`; `share_*` is class `share`
   (contract §16, joe-broadhead/opencode-linear#28). The rule applies to contract method names, not to `mcp:<tool>`.
 - Pass-through MCP tools are declared as `mcp:<tool>` or `mcp:*` and keep the vendor's case (`mcp:getJiraIssue`). Two tool names that normalise to the same effective OpenCode action (`files.delete` and `files_delete`), or that differ only in case (OpenCode's matcher is case-insensitive on Windows), are refused at both names.
+- `mcp:*` is a wildcard and carries no `description` or `input`; an `mcp:<tool>` row may carry them as the plugin's own claim from the vendor's tool definition, which T1 does not check because the vendor's server owns the tool.
 - A tools-only plugin over a vendor's MCP server declares `mcp:*` and `mcp:<tool>` rows, with `sources` and `actions` empty (contract §6). It marks a tool that reaches someone or costs money with its class and `effect: "ask"`. `methods.mcp-wildcard` warns only about a row that has the same class, `effect` and `operations` as `mcp:*`; a row that differs is kept, in either direction, so a plugin's reviewer is the check on a row that lowers a tool's class below `mcp:*`.
 
 ### `sources`

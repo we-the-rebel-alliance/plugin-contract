@@ -161,8 +161,8 @@ One table covers every callable, including pass-through MCP tools, so a consumer
 | Field | Meaning |
 |---|---|
 | `class` | `read`, `write`, `send` (reaches someone), `share` (widens access), `delete`, `export` (leaves the provider), `admin` |
-| `description` | the live agent tool's description; a plugin fills it from the tool definition at build time |
-| `input` | the live agent tool's input, as JSON Schema 2020-12, including `account` and a commit's `{ planId }` |
+| `description` | the tool's description; on a register method it is the live agent tool's, and `mcp:*` cannot carry it |
+| `input` | the tool's input, as JSON Schema 2020-12; on a register method it includes `account` and a commit's `{ planId }`, and `mcp:*` cannot carry it |
 | `accounts` | `optional` (takes `account`), `none` |
 | `operations` | the provider operations it may assert, for grants and session rules |
 | `plans: true` | dry-runs a change; the register mints its `planId` and the method answers `{ method, … }`; a commit reserves it before confirmation, consumes it at handler start, and only that method may commit it |
@@ -170,8 +170,10 @@ One table covers every callable, including pass-through MCP tools, so a consumer
 | `effect` | optional narrowing of access: `ask` or `deny`; never `allow` |
 | `pinned` | `true` for a method whose signature Code Mode sends on every turn. None by default; at most one per plugin, only when session data shows most of the plugin's sessions call it, within about 1,000 tokens |
 
-`description` and `input` are optional. When a method declares them, conformance (`T1.methods`) checks they are the live
-tool's, so an app can plan a call before the provider is connected.
+`description` and `input` are optional. On a register method, conformance (`T1.methods`) checks they are the live tool's,
+so an app can plan a call before the provider is connected. An `mcp:<tool>` row carries the plugin's own claim from the
+vendor's tool definition, and T1 does not check it because the vendor's server owns the tool. `mcp:*` is a wildcard with
+no one tool, so it carries neither field.
 
 **Access** (option `access`), generated into every agent's rules with `ctx.agent.transform` by the `access` module:
 
@@ -190,9 +192,10 @@ never patched.
 `mcp:<tool>` for each tool that differs, and nothing else: `sources` and `actions` are empty. The vendor's server owns
 the tools, the plugin has no handler for them (§9), and they take no `account` input, so there is no read for a source
 to name and no preview and commit for an action to name. Such a plugin shows that a tool reaches someone or costs money
-through its `class` (`send`, `write`) and an `effect` of `ask`, which the access rules enforce. The kit warns
-(`methods.mcp-wildcard`) about an `mcp:<tool>` row only when it repeats `mcp:*` exactly, so a row with its own class,
-`effect` or `operations` is kept and raises no warning (operations compared as a set).
+through its `class` (`send`, `write`) and an `effect` of `ask`, which the access rules enforce. An `mcp:<tool>` row may
+also carry `description` and `input` from the vendor's tool definition as the plugin's own claim; `mcp:*` carries
+neither. The kit warns (`methods.mcp-wildcard`) about an `mcp:<tool>` row only when it repeats `mcp:*` exactly, so a row
+with its own class, `effect` or `operations` is kept and raises no warning (operations compared as a set).
 
 ## 7. Sources (reads)
 
@@ -337,7 +340,7 @@ Remote apps can't read the disk, and RPC is untrusted for manifests. The **catal
 
 - The manifest validates; names follow §3; `plugin.host` matches the built bundle.
 - Every method in `methods` is registered through doors 1 and 3, and every registered tool is in `methods`.
-- A method's declared `description` and `input` are the live tool's (`T1.methods`).
+- A register method's declared `description` and `input` are the live tool's (`T1.methods`); an `mcp:<tool>` row's values are the plugin's own claim, and `mcp:*` carries neither.
 - Method names fit their class: `delete_*` and `remove_*` are `delete`; `send_*` and `post_*` are `send`; `share_*` is `share`.
 - `options` validates the plugin's defaults; `accounts` behaviour holds with two recorded aliases
   (`ACCOUNT_REQUIRED`, `ACCOUNT_UNKNOWN`), plus a per-account cursor that doesn't cross over only when the plugin

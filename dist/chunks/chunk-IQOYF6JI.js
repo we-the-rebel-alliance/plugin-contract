@@ -139,8 +139,8 @@ var methodName = string().refine((value) => METHOD_NAME.test(value) || MCP_METHO
 });
 var methodItem = strictObject({
   class: _enum(METHOD_CLASSES),
-  description: string().min(1).optional().describe("The live tool's description."),
-  input: record(string(), unknown()).optional().describe("The live tool's input, as JSON Schema 2020-12."),
+  description: string().min(1).optional().describe("The tool's description. Not on mcp:*, which has no one tool."),
+  input: record(string(), unknown()).optional().describe("The tool's input, as JSON Schema 2020-12. Not on mcp:*, which has no one tool."),
   accounts: _enum(METHOD_ACCOUNTS).optional().describe("optional when the method takes an account, none when it does not. Defaults to none."),
   operations: array(string().regex(OPERATION, { error: "must be a provider operation of letters, digits, dots, underscores or hyphens" })).min(1).optional(),
   plans: literal(true).optional().describe("The method dry-runs a change and answers { planId, method }."),
@@ -283,6 +283,15 @@ var versionField = literal(MANIFEST_VERSION);
 var optionsField = record(string(), unknown()).describe("JSON Schema 2020-12 of the plugin's options. It must include access.");
 var normalizedMCPTool = (tool) => tool.replace(/[^A-Za-z0-9_-]/g, "_").toLowerCase();
 var methodsField = record(methodName, methodItem).superRefine((methods, context) => {
+  const wildcard = methods["mcp:*"];
+  for (const field of ["description", "input"]) {
+    if (wildcard?.[field] === void 0) continue;
+    context.addIssue({
+      code: "custom",
+      path: ["mcp:*", field],
+      message: `mcp:* is a wildcard and has no one tool, so it cannot carry a ${field === "description" ? "description" : "input schema"}; put it on an mcp:<tool> row`
+    });
+  }
   const groups = /* @__PURE__ */ new Map();
   for (const name of Object.keys(methods)) {
     if (!name.startsWith("mcp:") || name === "mcp:*") continue;
