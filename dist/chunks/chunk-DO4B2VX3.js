@@ -1,7 +1,7 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   verifyGrant
-} from "./chunk-ED3MMWUJ.js";
+} from "./chunk-EGSVFMLE.js";
 import {
   acceptAnswer
 } from "./chunk-6T2KJSNG.js";

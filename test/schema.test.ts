@@ -1,6 +1,7 @@
 // The schema bundle: every schema the package publishes, and the facts a plugin derives in code.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
+import { AUDIT_SCHEMA } from "../src/audit.ts"
 import { HINT_SCHEMA } from "../src/hints.ts"
 import { MANIFEST_SCHEMA } from "../src/manifest.ts"
 import { OUTPUTS } from "../src/outputs.ts"
@@ -18,10 +19,11 @@ describe("the published schema bundle", () => {
     }
   })
 
-  test("the manifest, the output shapes, the facts and the hint file are the bundle", () => {
+  test("the manifest, the output shapes, the facts, the hint file and the audit report are the bundle", () => {
     const names = new Set(SCHEMAS.map((schema) => schema.name))
     assert.ok(names.has(MANIFEST_SCHEMA.name))
     assert.ok(names.has(HINT_SCHEMA.name))
+    assert.ok(names.has(AUDIT_SCHEMA.name))
     for (const output of Object.values(OUTPUTS)) assert.ok(names.has(output.name), output.name)
     for (const fact of Object.values(FACT_SCHEMAS)) assert.ok(names.has(fact.name), fact.name)
     // The old v0.3 `sources` block is gone: capabilities is the one manifest.

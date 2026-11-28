@@ -3,8 +3,9 @@ import {
   HINT_SCHEMA
 } from "./chunks/chunk-YBCGJKUX.js";
 import {
-  AUDIT_REPORT_SCHEMA
-} from "./chunks/chunk-OLSEJRBM.js";
+  AUDIT_SCHEMA
+} from "./chunks/chunk-AR2AU7W4.js";
+import "./chunks/chunk-UP4MI2EO.js";
 import "./chunks/chunk-QRQ6DMVY.js";
 import {
   MANIFEST_SCHEMA
@@ -67,7 +68,7 @@ var FACT_SCHEMAS = {
 };
 
 // src/schemas.ts
-var SCHEMAS = [MANIFEST_SCHEMA, ...Object.values(OUTPUTS), ...Object.values(FACT_SCHEMAS), HINT_SCHEMA, AUDIT_REPORT_SCHEMA];
+var SCHEMAS = [MANIFEST_SCHEMA, ...Object.values(OUTPUTS), ...Object.values(FACT_SCHEMAS), HINT_SCHEMA, AUDIT_SCHEMA];
 export {
   SCHEMAS
 };

@@ -24,6 +24,11 @@ Legend:
   them; a plugin lists only the ones it has.
 - **Suggested cadence:** the smallest `suggestMinutes` in the manifest, as `2 min`, `1 hour` or `1 day`.
 - **Status:** `planned`, `in progress`, `supported`, `failing`.
+- **Built on the company's MCP server:** `built on it` when the manifest has `accounts.via: "mcp"` and the plugin passes
+  the server's tools through (`mcp:*` or `mcp:<tool>` rows) or calls them from `src/provider/`; `no server to build on`
+  when there is no outside company, or the company has no MCP server, with one clause of evidence (a link to the
+  company's docs, or "our own code"); `not yet` when a company server exists or may exist and the plugin does not use
+  it, with a link to the task that will settle it.
 
 ## Data sources
 
@@ -44,6 +49,7 @@ Legend:
 | affinity | `affinity-plugin` | mcp (single server → multi) | `affinity.meetings` (events: meeting), `affinity.companies` (snapshot: list) | write, delete | bus | 15 min | A | planned |
 | elevenlabs | `elevenlabs-plugin` | mcp (single → multi; `region` per profile) | `elevenlabs.conversations` (events: session), `elevenlabs.conversations.list` (snapshot: list) | write, send, delete | bus | 2 min | A | planned |
 | specter | `specter-plugin` | mcp (single → multi) | `specter.saved` (events: x-specter/company) | — | bus | 1 day | A | planned |
+| docusign | `docusign-plugin` | mcp (profile per alias) | `docusign.messages` (events: message) | — | — | 1 min | A | planned |
 | bigquery | `bigquery-plugin` | integration (multi → multi) | `bigquery.jobs` (events: x-bigquery/job), `bigquery.saved` (snapshot: table) | write, admin | bus | — | B | planned |
 | databricks | `databricks-plugin` | integration (multi → multi) | `databricks.queries` (to declare), `databricks.runs` (events: to declare), `databricks.saved` (snapshot: table) | write, admin | bus | — | B | planned |
 | colab | `colab-plugin` | integration (multi → multi) | `colab.runs` (events: x-colab/run) (to declare) | write | bus | — | B | planned |
@@ -65,6 +71,38 @@ Legend:
 | browse | `browse-plugin` | local (the person's browser) | — | write, send | — | — | C | planned |
 | utilities | `utilities-plugin` | — | — | write | — | — | C | planned |
 | voice | `voice-plugin` | — | — | write | — | — | C | planned |
+
+## Built on the company's MCP server
+
+| Plugin | Company | Company's MCP server | Mark |
+|---|---|---|---|
+| gws | Google Workspace | none found yet | **not yet**: [plugin-contract#103](https://github.com/we-the-rebel-alliance/plugin-contract/issues/103) |
+| slack | Slack | https://mcp.slack.com/mcp | **built on it** |
+| x | X | https://api.x.com/mcp | **built on it** |
+| github | GitHub | https://api.githubcopilot.com/mcp/ | **built on it** |
+| linear | Linear | https://mcp.linear.app/mcp | **built on it** |
+| jira | Atlassian | https://mcp.atlassian.com/v2/mcp?tools=all | **built on it** |
+| notion | Notion | https://mcp.notion.com/mcp | **built on it** |
+| granola | Granola | https://mcp.granola.ai/mcp | **built on it** |
+| wisprflow | Wispr Flow | https://api.wisprflow.ai/connect/mcp | **built on it** |
+| plaud | Plaud | https://mcp.plaud.ai/mcp | **built on it** |
+| metaview | Metaview | https://mcp.metaview.ai/mcp | **built on it** |
+| ashby | Ashby | https://mcp.ashbyhq.com/mcp/v1 | **built on it** |
+| affinity | Affinity | https://mcp.affinity.co/mcp | **built on it** |
+| elevenlabs | ElevenLabs | https://api.elevenlabs.io/v1/mcp (region per profile) | **built on it** |
+| specter | Specter | https://mcp.tryspecter.com/mcp | **built on it** |
+| docusign | Docusign | https://mcp.docusign.com/mcp | **built on it** |
+| bigquery | Google Cloud | none found yet | **not yet**: [plugin-contract#103](https://github.com/we-the-rebel-alliance/plugin-contract/issues/103) |
+| databricks | Databricks | none found yet | **not yet**: [plugin-contract#103](https://github.com/we-the-rebel-alliance/plugin-contract/issues/103) |
+| colab | Google Colab | none found yet | **not yet**: [plugin-contract#103](https://github.com/we-the-rebel-alliance/plugin-contract/issues/103) |
+| boxd | — (ours) | none | **no server to build on**: our own code |
+| tavily | Tavily | https://mcp.tavily.com/mcp/ | **built on it** |
+| openrouter | OpenRouter | https://mcp.openrouter.ai/mcp | **built on it** |
+| inference | OpenRouter | none for typed extraction | **no server to build on**: [OpenRouter's MCP server](https://openrouter.ai/docs/guides/overview/mcp-server) tests prompts and live data, not typed extraction |
+| charts | — (ours) | none | **no server to build on**: our own code |
+| browse | — (ours) | none | **no server to build on**: our own code, the browse extension |
+| utilities | — (ours) | none | **no server to build on**: our own code |
+| voice | — (ours) | none | **no server to build on**: our own code |
 
 ## Not on the contract
 

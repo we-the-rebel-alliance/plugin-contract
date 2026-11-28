@@ -352,15 +352,15 @@ that answer from the same catalog listing and grant records the app already hold
 app may render it or export it as JSON.
 
 ```ts
-import { auditReport, renderAuditReport, AUDIT_REPORT_SCHEMA } from "@we-the-rebel-alliance/plugin-contract/audit"
+import { auditReport, renderAuditReport, AUDIT_SCHEMA } from "@we-the-rebel-alliance/plugin-contract/audit"
 
 const listing = await listInstalledPlugins(ctx)
 const report = auditReport({
   person: "ana@example.com",
-  installed: listing.plugins,             // CatalogPlugin[], or InstalledManifest[]
-  options: {                              // each plugin's stored options; access defaults to all
-    "@we-the-rebel-alliance/harbour-plugin": { access: "read-only" },
-    "@we-the-rebel-alliance/trellis-plugin": { access: "ask-changes" },
+  plugins: listing.plugins,               // CatalogPlugin[], or InstalledManifest[]
+  access: {                               // each plugin's options.access, by plugin name; defaults to all
+    harbour: "read-only",
+    trellis: "ask-changes",
   },
   grants: [
     { ...readGrant, person: "ana@example.com", grantedAt: "2026-11-20T10:00:00.000Z" },
@@ -372,7 +372,7 @@ const markdown = renderAuditReport(report) // deterministic Markdown for the aud
 
 // Or export the JSON and check it against the published schema.
 const exported = JSON.stringify(report, null, 2) // dist/schemas/audit.json is the same shape
-const checked = AUDIT_REPORT_SCHEMA.check(JSON.parse(exported))
+const checked = AUDIT_SCHEMA.check(JSON.parse(exported))
 if (!checked.ok) throw new Error(checked.problems.join("\n"))
 ```
 

@@ -31,11 +31,11 @@ describes the entry point a plugin or an app imports.
 
 - [read](read.md): fenced reads, detail reads and `probe`, through the catalog or embedded.
 - [act](act.md): preview then commit of a register-minted plan under a host-signed action grant.
+- [audit](audit.md): what each installed plugin may read and do for a person, with the grant behind it, as a report and
+  deterministic Markdown.
 - [params](params.md): relative times, windows and `$me`, resolved at read time.
 - [pick](pick.md): field selection, checked against the output's schema.
 - [catalog](catalog.md): installed manifests, the broker request and the consumer's reader.
-- [audit](audit.md): what each installed plugin may read and do for a person, with the grant behind it, as a report and
-  deterministic Markdown.
 - [outputs](outputs.md): the snapshot shape registry and its JSON Schemas.
 
 ## Conformance and the kit

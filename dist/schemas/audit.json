@@ -3,7 +3,8 @@
   "type": "object",
   "properties": {
     "person": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1
     },
     "plugins": {
       "type": "array",
@@ -11,13 +12,16 @@
         "type": "object",
         "properties": {
           "package": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1
           },
           "version": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1
           },
           "manifestHash": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1
           },
           "access": {
             "type": "string",
@@ -27,13 +31,269 @@
               "read-only"
             ]
           },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "method": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "operations": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "accounts": {
+                  "type": "string",
+                  "enum": [
+                    "optional",
+                    "none"
+                  ]
+                },
+                "private": {
+                  "type": "boolean"
+                },
+                "cost": {
+                  "type": "object",
+                  "properties": {
+                    "class": {
+                      "type": "string",
+                      "enum": [
+                        "free",
+                        "metered",
+                        "billed"
+                      ]
+                    },
+                    "units": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "per": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "usd": {
+                            "type": "number",
+                            "minimum": 0
+                          }
+                        },
+                        "required": [
+                          "per",
+                          "usd"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "class"
+                  ],
+                  "additionalProperties": false
+                },
+                "grants": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "consumer": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "account": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "scope": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "manifestHash": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "disabled": {
+                        "type": "boolean"
+                      },
+                      "person": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "grantedAt": {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                      },
+                      "stale": {
+                        "type": "boolean",
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "consumer",
+                      "account",
+                      "scope",
+                      "manifestHash",
+                      "disabled",
+                      "person",
+                      "grantedAt"
+                    ],
+                    "additionalProperties": false,
+                    "description": "One grant behind a source or an action, and the binding the person consented to."
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "method",
+                "operations",
+                "accounts",
+                "private",
+                "cost",
+                "grants"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "preview": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "commit": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "operations": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "confirmation": {
+                  "type": "string",
+                  "enum": [
+                    "required",
+                    "optional"
+                  ]
+                },
+                "grants": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "consumer": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "account": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "scope": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "manifestHash": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "disabled": {
+                        "type": "boolean"
+                      },
+                      "person": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "grantedAt": {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                      },
+                      "stale": {
+                        "type": "boolean",
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "consumer",
+                      "account",
+                      "scope",
+                      "manifestHash",
+                      "disabled",
+                      "person",
+                      "grantedAt"
+                    ],
+                    "additionalProperties": false,
+                    "description": "One grant behind a source or an action, and the binding the person consented to."
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "preview",
+                "commit",
+                "operations",
+                "confirmation",
+                "grants"
+              ],
+              "additionalProperties": false
+            }
+          },
           "methods": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
                 "method": {
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1
                 },
                 "class": {
                   "type": "string",
@@ -70,224 +330,6 @@
               ],
               "additionalProperties": false
             }
-          },
-          "sources": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "id": {
-                  "type": "string"
-                },
-                "method": {
-                  "type": "string"
-                },
-                "operations": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "accounts": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "private": {
-                  "type": "boolean"
-                },
-                "cost": {
-                  "type": "object",
-                  "properties": {
-                    "class": {
-                      "type": "string",
-                      "enum": [
-                        "free",
-                        "metered",
-                        "billed"
-                      ]
-                    },
-                    "units": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "per": {
-                            "type": "string"
-                          },
-                          "usd": {
-                            "type": "number"
-                          }
-                        },
-                        "required": [
-                          "per",
-                          "usd"
-                        ],
-                        "additionalProperties": false
-                      }
-                    }
-                  },
-                  "required": [
-                    "class"
-                  ],
-                  "additionalProperties": false
-                },
-                "grants": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "consumer": {
-                        "type": "string"
-                      },
-                      "account": {
-                        "type": "string"
-                      },
-                      "scope": {
-                        "type": "object",
-                        "propertyNames": {
-                          "type": "string"
-                        },
-                        "additionalProperties": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        }
-                      },
-                      "manifestHash": {
-                        "type": "string"
-                      },
-                      "disabled": {
-                        "type": "boolean"
-                      },
-                      "stale": {
-                        "type": "boolean"
-                      },
-                      "person": {
-                        "type": "string"
-                      },
-                      "grantedAt": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "consumer",
-                      "account",
-                      "scope",
-                      "manifestHash",
-                      "disabled",
-                      "stale",
-                      "person",
-                      "grantedAt"
-                    ],
-                    "additionalProperties": false
-                  }
-                }
-              },
-              "required": [
-                "id",
-                "method",
-                "operations",
-                "accounts",
-                "private",
-                "cost",
-                "grants"
-              ],
-              "additionalProperties": false
-            }
-          },
-          "actions": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "id": {
-                  "type": "string"
-                },
-                "preview": {
-                  "type": "string"
-                },
-                "commit": {
-                  "type": "string"
-                },
-                "operations": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "confirmation": {
-                  "type": "string",
-                  "enum": [
-                    "required",
-                    "none"
-                  ]
-                },
-                "grants": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "consumer": {
-                        "type": "string"
-                      },
-                      "account": {
-                        "type": "string"
-                      },
-                      "scope": {
-                        "type": "object",
-                        "propertyNames": {
-                          "type": "string"
-                        },
-                        "additionalProperties": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        }
-                      },
-                      "manifestHash": {
-                        "type": "string"
-                      },
-                      "disabled": {
-                        "type": "boolean"
-                      },
-                      "stale": {
-                        "type": "boolean"
-                      },
-                      "person": {
-                        "type": "string"
-                      },
-                      "grantedAt": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "consumer",
-                      "account",
-                      "scope",
-                      "manifestHash",
-                      "disabled",
-                      "stale",
-                      "person",
-                      "grantedAt"
-                    ],
-                    "additionalProperties": false
-                  }
-                }
-              },
-              "required": [
-                "id",
-                "preview",
-                "commit",
-                "operations",
-                "confirmation",
-                "grants"
-              ],
-              "additionalProperties": false
-            }
           }
         },
         "required": [
@@ -295,9 +337,9 @@
           "version",
           "manifestHash",
           "access",
-          "methods",
           "sources",
-          "actions"
+          "actions",
+          "methods"
         ],
         "additionalProperties": false
       }
@@ -307,27 +349,20 @@
       "items": {
         "type": "object",
         "properties": {
-          "kind": {
+          "problem": {
             "type": "string",
-            "enum": [
-              "read",
-              "act"
-            ]
-          },
-          "target": {
-            "type": "string"
-          },
-          "reason": {
-            "type": "string"
+            "minLength": 1
           },
           "grant": {
             "type": "object",
             "properties": {
               "consumer": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1
               },
               "account": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1
               },
               "scope": {
                 "type": "object",
@@ -335,26 +370,38 @@
                   "type": "string"
                 },
                 "additionalProperties": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  ]
                 }
               },
               "manifestHash": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1
               },
               "disabled": {
                 "type": "boolean"
               },
-              "stale": {
-                "type": "boolean"
-              },
               "person": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1
               },
               "grantedAt": {
-                "type": "string"
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+              },
+              "stale": {
+                "type": "boolean",
+                "const": true
               }
             },
             "required": [
@@ -363,17 +410,15 @@
               "scope",
               "manifestHash",
               "disabled",
-              "stale",
               "person",
               "grantedAt"
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "description": "One grant behind a source or an action, and the binding the person consented to."
           }
         },
         "required": [
-          "kind",
-          "target",
-          "reason",
+          "problem",
           "grant"
         ],
         "additionalProperties": false
@@ -385,5 +430,6 @@
     "plugins",
     "problems"
   ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "description": "What each installed plugin may read and do for one person, and the grant behind each declaration."
 }

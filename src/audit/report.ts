@@ -1,433 +1,358 @@
 /**
- * The audit report: what each installed plugin may read and do for one person, with the grant behind each declaration
- * (contract §6, §7, §8 and §13; issue #94).
+ * The audit report: for one person, what every installed plugin may read and do, and the grant behind each declaration
+ * (contract §15; issue #94).
  *
- * The input is the catalog's installed manifests, the person's `options.access` per plugin, and the person's grant
- * records. A grant record is a read `Grant` or an `ActGrant` with the person who gave it and the time they gave it
- * beside it, because the grant types carry neither. The report is plain data, validates against
- * `dist/schemas/audit.json`, and carries no credential, token or provider value.
- *
- * A grant whose plugin, source or action is not installed goes to `problems`, never dropped and never thrown. A grant
- * whose manifest hash is not the installed manifest's hash is marked `stale`; a grant the person turned off is marked
- * `disabled`. The renderer is `renderAuditReport` in `./render.ts`.
+ * The report is evidence for an auditor, not a read: it is built from the installed manifests, the person's access
+ * level per plugin and the grant records the host keeps. It never asks a provider, reads a clock or carries content, a
+ * credential or a token. A grant for a plugin, source or action that is not installed is kept in `problems` with its
+ * binding, never dropped and never thrown.
  */
 import * as z from "zod"
-import {
-  ACCESS_LEVELS,
-  accessLevel,
-  DEFAULT_ACCESS,
-  effectFor,
-  type AccessLevel,
-  type ActGrant,
-  type Grant,
-} from "../access.ts"
-import { COST_CLASSES, METHOD_CLASSES, METHOD_EFFECTS } from "../manifest.ts"
-import type { Cost, InstalledManifest, MethodClass, MethodEffect } from "../manifest.ts"
+import { ACCESS_LEVELS, accessLevel, effectFor, type AccessLevel, type ActGrant, type Grant } from "../access.ts"
+import type { CatalogPlugin } from "../catalog.ts"
+import { canonicalScope } from "../grant/input.ts"
 import type { Validator } from "../internal/checked.ts"
 import { validator } from "../internal/validator.ts"
+import {
+  COST_CLASSES,
+  METHOD_ACCOUNTS,
+  METHOD_CLASSES,
+  METHOD_EFFECTS,
+  type Cost,
+  type InstalledManifest,
+  type MethodClass,
+  type MethodEffect,
+  type MethodItem,
+} from "../manifest.ts"
 
-/** What an access level gives one method: it runs, it asks first, or it is off. */
+/** The effect an access level and a method give a call, as an auditor reads it. */
 export type AuditAccess = "runs" | "asks first" | "off"
 
-/** Whether an action needs a person's confirmation: every effect but `local` does (contract §8). */
-export type AuditConfirmation = "required" | "none"
-
-/** One piece of grant evidence under a source or action. It names no credential. */
-export interface AuditGrant {
-  /** Who reads or acts: the grant's consumer, such as `notes`. */
-  readonly consumer: string
-  /** The account alias the person confirmed. */
-  readonly account: string
-  /** The scope the person confirmed, with keys and list values in canonical order. */
-  readonly scope: Readonly<Record<string, readonly string[]>>
-  /** The manifest hash the person consented to. */
-  readonly manifestHash: string
-  /** The person turned this binding off. */
-  readonly disabled: boolean
-  /** The grant's hash is not the installed manifest's hash, so the person must consent again. */
-  readonly stale: boolean
-  /** Who gave the grant. */
-  readonly person: string
-  /** When they gave it, ISO 8601. */
-  readonly grantedAt: string
-}
-
-/**
- * One of the person's grant records: a read `Grant` or an `ActGrant` with `person` and `grantedAt` beside it. A record
- * may also wrap the grant in `grant`, for a store that keeps the evidence in its own row.
- */
-export type AuditGrantRecord =
-  | ((Grant | ActGrant) & { readonly person: string; readonly grantedAt: string })
-  | { readonly grant: Grant | ActGrant; readonly person: string; readonly grantedAt: string }
-
-/** One method, its declared narrowing and what the person's access level makes of it. */
+/** One method a plugin declares, and the effect the person's level gives it. */
 export interface AuditMethod {
-  /** The method's name, as `capabilities.methods` keys it. */
+  /** The method's name in the manifest, such as `events_list` or `mcp:*`. */
   readonly method: string
   readonly class: MethodClass
-  /** The manifest's own narrowing, when it declares one. */
+  /** The method's own narrowing, when it declares one. */
   readonly effect?: MethodEffect | undefined
-  /** What the access level gives the method: `runs`, `asks first` or `off`. */
+  /** What the person's access level gives it, from the same `effectFor` the access rules use. */
   readonly access: AuditAccess
 }
 
-/** One source the plugin declares, with the grants behind it. */
+/** One grant behind a source or an action, as the report shows it. */
+export interface AuditGrantBinding {
+  /** Who the grant was issued to. */
+  readonly consumer: string
+  /** The account alias the person confirmed. */
+  readonly account: string
+  /** The confirmed scope, in canonical form: keys sorted, each list sorted and without repeats. */
+  readonly scope: Readonly<Record<string, string | readonly string[]>>
+  /** The manifest hash the person consented to. */
+  readonly manifestHash: string
+  /** The person turned the binding off. */
+  readonly disabled: boolean
+  /** The person who gave the grant. */
+  readonly person: string
+  /** When the person gave it, ISO 8601. */
+  readonly grantedAt: string
+  /** The installed manifest's hash is not the one the grant names, so consent is stale. */
+  readonly stale?: true | undefined
+}
+
+/** One source a plugin declares, and every grant behind it. */
 export interface AuditSource {
   readonly id: string
   /** The declared method that reads the source. */
   readonly method: string
   /** The provider operations the source's reads assert. */
   readonly operations: readonly string[]
-  /** The accounts the grants behind this source name, sorted. */
-  readonly accounts: readonly string[]
-  /** True when everything the source reads is personal. */
+  /** Whether the reading method takes an account. */
+  readonly accounts: "optional" | "none"
+  /** Everything the source reads is personal. */
   readonly private: boolean
+  /** What one read costs, as the manifest declares it. */
   readonly cost: Cost
-  readonly grants: readonly AuditGrant[]
+  readonly grants: readonly AuditGrantBinding[]
 }
 
-/** One action the plugin declares, with the grants behind it. */
+/** One action a plugin declares, and every grant behind it. */
 export interface AuditAction {
   readonly id: string
-  /** The declared method that previews the action. */
+  /** The declared method that previews the action. It writes nothing. */
   readonly preview: string
   /** The declared method that commits the action. */
   readonly commit: string
-  /** The provider operations the preview and the commit assert. */
+  /** The operations the preview and commit methods declare, in declaration order and without repeats. */
   readonly operations: readonly string[]
-  /** The action's confirmation rule: every effect but `local` needs one. */
-  readonly confirmation: AuditConfirmation
-  readonly grants: readonly AuditGrant[]
+  /** Whether the action always needs the person's confirmation. A non-`local` action does. */
+  readonly confirmation: "required" | "optional"
+  readonly grants: readonly AuditGrantBinding[]
 }
 
-/** One installed plugin as the audit shows it. */
+/** One installed plugin, its declarations and the person's access level. */
 export interface AuditPlugin {
   readonly package: string
   readonly version: string
   readonly manifestHash: string
   readonly access: AccessLevel
-  readonly methods: readonly AuditMethod[]
   readonly sources: readonly AuditSource[]
   readonly actions: readonly AuditAction[]
+  readonly methods: readonly AuditMethod[]
 }
 
-/** A grant whose plugin, source or action is not installed: kept, with the reason. */
+/** A grant that names something the installed plugins do not declare, kept with its binding. */
 export interface AuditProblem {
-  readonly kind: "read" | "act"
-  /** The grant's source id or action id. */
-  readonly target: string
-  /** Why it is not in a plugin's table. */
-  readonly reason: string
-  /** The grant itself, so the evidence is never lost. */
-  readonly grant: AuditGrant
+  /** What is missing, in one sentence. */
+  readonly problem: string
+  readonly grant: AuditGrantBinding
 }
 
-/** What an auditor receives: one person, every installed plugin, and the grants that do not fit. */
+/** The evidence an auditor reads: one person, every installed plugin, and every grant that could not be placed. */
 export interface AuditReport {
   readonly person: string
   readonly plugins: readonly AuditPlugin[]
   readonly problems: readonly AuditProblem[]
 }
 
-/** The report's input: the installed plugins, the person's access levels and grant records. */
-export interface AuditInput {
-  /** The person the report is about. */
+/** A read grant with the person and moment the host keeps beside it; the grant types carry neither. */
+export interface ReadGrantRecord extends Grant {
   readonly person: string
-  /** The catalog's installed plugins (`CatalogPlugin[]` or `InstalledManifest[]`). */
-  readonly installed?: readonly InstalledManifest[]
-  /** An alias for `installed`, for a caller that names the catalogue's `plugins` list directly. */
-  readonly plugins?: readonly InstalledManifest[]
-  /** The person's grants, each with `person` and `grantedAt`. */
-  readonly grants?: readonly AuditGrantRecord[]
-  /**
-   * The access level per plugin, keyed by package or plugin name. A single level applies to every plugin. The value
-   * is `options.access`, and its default is `all`.
-   */
-  readonly access?: AccessLevel | Readonly<Record<string, AccessLevel | Readonly<Record<string, unknown>>>>
-  /** Each plugin's stored options, keyed by package or plugin name; `options.access` is read from here. */
-  readonly options?: Readonly<Record<string, AccessLevel | Readonly<Record<string, unknown>>>>
+  readonly grantedAt: string
 }
 
-/** The input's access level for one plugin: `access` first, then `options.access`, then `all`. */
-function levelFor(input: AuditInput, installed: InstalledManifest): AccessLevel {
-  const keys = [installed.package, installed.manifest.plugin.name]
-  const read = (value: AccessLevel | Readonly<Record<string, unknown>> | undefined): AccessLevel | undefined => {
-    if (value === undefined) return undefined
-    if (typeof value === "string") return (ACCESS_LEVELS as readonly string[]).includes(value) ? (value as AccessLevel) : undefined
-    const checked = accessLevel(value)
-    return checked.ok ? checked.value : undefined
-  }
-  if (typeof input.access === "string") {
-    const level = read(input.access)
-    if (level !== undefined) return level
-  } else if (input.access !== undefined) {
-    for (const key of keys) {
-      const level = read(input.access[key])
-      if (level !== undefined) return level
-    }
-  }
-  for (const key of keys) {
-    const level = read(input.options?.[key])
-    if (level !== undefined) return level
-  }
-  return DEFAULT_ACCESS
+/** An action grant with the person and moment the host keeps beside it; the grant types carry neither. */
+export interface ActGrantRecord extends ActGrant {
+  readonly person: string
+  readonly grantedAt: string
 }
 
-/** What one access effect reads as in the report. */
-function accessText(effect: "allow" | "ask" | "deny"): AuditAccess {
+/** One of the person's grant records: a read grant or an action grant. */
+export type AuditGrantRecord = ReadGrantRecord | ActGrantRecord
+
+/** What `auditReport` reads: the installed plugins, the person's access level per plugin, and their grants. */
+export interface AuditInput {
+  /** The person this report is for. */
+  readonly person: string
+  /** `listInstalledPlugins`' plugins, or any installed manifests. */
+  readonly plugins: readonly (InstalledManifest | CatalogPlugin)[]
+  /** The `options.access` level by plugin name. A plugin not named here is `all`. */
+  readonly access?: Readonly<Record<string, AccessLevel>> | undefined
+  /** The person's grant records; each carries the `person` and `grantedAt` the grant types do not. */
+  readonly grants?: readonly AuditGrantRecord[] | undefined
+}
+
+const auditAccess = z.enum(["runs", "asks first", "off"])
+const auditScope = z.record(z.string(), z.union([z.string(), z.array(z.string())]))
+const price = z.strictObject({ per: z.string().min(1), usd: z.number().finite().nonnegative() })
+const cost = z.strictObject({ class: z.enum(COST_CLASSES), units: z.array(price).min(1).optional() })
+const grantBinding = z
+  .strictObject({
+    consumer: z.string().min(1),
+    account: z.string().min(1),
+    scope: auditScope,
+    manifestHash: z.string().min(1),
+    disabled: z.boolean(),
+    person: z.string().min(1),
+    grantedAt: z.iso.datetime({ offset: true }),
+    stale: z.literal(true).optional(),
+  })
+  .describe("One grant behind a source or an action, and the binding the person consented to.")
+const auditMethod = z.strictObject({
+  method: z.string().min(1),
+  class: z.enum(METHOD_CLASSES),
+  effect: z.enum(METHOD_EFFECTS).optional(),
+  access: auditAccess,
+})
+const auditSource = z.strictObject({
+  id: z.string().min(1),
+  method: z.string().min(1),
+  operations: z.array(z.string()),
+  accounts: z.enum(METHOD_ACCOUNTS),
+  private: z.boolean(),
+  cost,
+  grants: z.array(grantBinding),
+})
+const auditAction = z.strictObject({
+  id: z.string().min(1),
+  preview: z.string().min(1),
+  commit: z.string().min(1),
+  operations: z.array(z.string()),
+  confirmation: z.enum(["required", "optional"]),
+  grants: z.array(grantBinding),
+})
+const auditPlugin = z.strictObject({
+  package: z.string().min(1),
+  version: z.string().min(1),
+  manifestHash: z.string().min(1),
+  access: z.enum(ACCESS_LEVELS),
+  sources: z.array(auditSource),
+  actions: z.array(auditAction),
+  methods: z.array(auditMethod),
+})
+const auditProblem = z.strictObject({ problem: z.string().min(1), grant: grantBinding })
+const auditReportSchema = z
+  .strictObject({ person: z.string().min(1), plugins: z.array(auditPlugin), problems: z.array(auditProblem) })
+  .describe("What each installed plugin may read and do for one person, and the grant behind each declaration.")
+
+/** The audit report schema, published as `dist/schemas/audit.json`. */
+export const AUDIT_SCHEMA: Validator<AuditReport> = validator("audit", auditReportSchema)
+
+/** What a permission rule's effect reads as in an audit report. */
+function accessOf(effect: "allow" | "ask" | "deny"): AuditAccess {
   return effect === "allow" ? "runs" : effect === "ask" ? "asks first" : "off"
 }
 
-/** A scope with keys sorted and each list sorted without repeats; provider text is kept as it is. */
-function canonicalScope(scope: Grant["scope"] | undefined): Readonly<Record<string, readonly string[]>> {
-  const out: Record<string, readonly string[]> = {}
-  for (const key of Object.keys(scope ?? {}).sort()) {
-    out[key] = [...new Set(scope?.[key] ?? [])].sort()
+/** The operations of the methods named, in declaration order and without repeats. */
+function operationsOf(...methods: readonly (MethodItem | undefined)[]): string[] {
+  const seen = new Set<string>()
+  const operations: string[] = []
+  for (const method of methods) {
+    for (const operation of method?.operations ?? []) {
+      if (seen.has(operation)) continue
+      seen.add(operation)
+      operations.push(operation)
+    }
   }
-  return out
+  return operations
 }
 
-/** The grant, the person and the time, whichever record shape the caller keeps. */
-function recordOf(record: AuditGrantRecord): { readonly grant: Grant | ActGrant; readonly person: string; readonly grantedAt: string } {
-  const wrapped = record as { readonly grant?: Grant | ActGrant; readonly person: string; readonly grantedAt: string }
-  if (wrapped.grant !== undefined && !("consumer" in record)) {
-    return { grant: wrapped.grant, person: wrapped.person, grantedAt: wrapped.grantedAt }
+/** A method's declaration and the effect the access level gives it. */
+function methodOf(name: string, item: MethodItem, level: AccessLevel): AuditMethod {
+  return {
+    method: name,
+    class: item.class,
+    ...(item.effect === undefined ? {} : { effect: item.effect }),
+    access: accessOf(effectFor(item, level)),
   }
-  const grant = record as (Grant | ActGrant) & { readonly person: string; readonly grantedAt: string }
-  return { grant, person: grant.person, grantedAt: grant.grantedAt }
 }
 
-/** The grant's evidence, with `stale` compared with the installed manifest when there is one. */
-function evidenceOf(grant: Grant | ActGrant, person: string, grantedAt: string, installed: InstalledManifest | undefined): AuditGrant {
+/** The canonical scope of a grant; the raw binding when it is not one canonicalScope reads, which is never thrown. */
+function scopeOf(grant: AuditGrantRecord): AuditGrantBinding["scope"] {
+  const scope = "scope" in grant ? grant.scope : undefined
+  try {
+    return canonicalScope(scope)
+  } catch {
+    return scope ?? {}
+  }
+}
+
+/** One grant as the report shows it; `stale` only when an installed hash says the consent is old. */
+function bindingOf(grant: AuditGrantRecord, installedHash?: string): AuditGrantBinding {
   return {
     consumer: grant.consumer,
     account: grant.account,
-    scope: "source" in grant ? canonicalScope(grant.scope) : {},
+    scope: scopeOf(grant),
     manifestHash: grant.manifestHash,
-    disabled: grant.disabled === true,
-    stale: installed !== undefined && grant.manifestHash !== installed.hash,
-    person,
-    grantedAt,
+    disabled: grant.disabled ?? false,
+    person: grant.person,
+    grantedAt: grant.grantedAt,
+    ...(installedHash !== undefined && grant.manifestHash !== installedHash ? { stale: true as const } : {}),
   }
 }
 
-/** Each operation once, in declaration order. */
-function operationsOf(...lists: readonly (readonly string[] | undefined)[]): readonly string[] {
-  const seen = new Set<string>()
-  const out: string[] = []
-  for (const list of lists) {
-    for (const operation of list ?? []) {
-      if (seen.has(operation)) continue
-      seen.add(operation)
-      out.push(operation)
-    }
-  }
-  return out
+/** The access level the input names for a plugin, or `all`; an invalid level is a caller error, never a wider default. */
+function levelOf(input: AuditInput, installed: InstalledManifest): AccessLevel {
+  const raw = input.access?.[installed.manifest.plugin.name]
+  const checked = accessLevel(raw === undefined ? {} : { access: raw })
+  if (!checked.ok) throw new Error(`audit: the access level for ${installed.manifest.plugin.name} is invalid: ${checked.problems.join("; ")}`)
+  return checked.value
 }
 
-/** The plugin name a source or action id begins with: `<name>.<capability>`. */
-function namespaceOf(id: string): string {
-  return id.split(".")[0] ?? id
-}
+/** A source while its grants are being placed: the same declaration, with a list the builder fills. */
+type MutableSource = Omit<AuditSource, "grants"> & { grants: AuditGrantBinding[] }
 
-/** What a source declares, before its grants are attached. */
-type SourceWithoutGrants = Omit<AuditSource, "accounts" | "grants">
-/** What an action declares, before its grants are attached. */
-type ActionWithoutGrants = Omit<AuditAction, "grants">
+/** An action while its grants are being placed. */
+type MutableAction = Omit<AuditAction, "grants"> & { grants: AuditGrantBinding[] }
 
-interface PendingPlugin {
-  readonly installed: InstalledManifest
-  readonly access: AccessLevel
-  readonly methods: readonly AuditMethod[]
-  readonly sources: readonly SourceWithoutGrants[]
-  readonly actions: readonly ActionWithoutGrants[]
-  readonly sourceIds: ReadonlySet<string>
-  readonly actionIds: ReadonlySet<string>
-}
+/** A plugin while its grants are being placed. */
+type MutablePlugin = Omit<AuditPlugin, "sources" | "actions"> & { sources: MutableSource[]; actions: MutableAction[] }
 
-/** Build the audit report for one person. Never throws for a grant that does not fit: it goes to `problems`. */
-export function auditReport(input: AuditInput): AuditReport {
-  const installed = input.installed ?? input.plugins ?? []
-  const pending: PendingPlugin[] = installed.map((entry) => {
-    const level = levelFor(input, entry)
-    const methods = Object.entries(entry.manifest.methods).map(([method, item]): AuditMethod => ({
-      method,
-      class: item.class,
-      ...(item.effect === undefined ? {} : { effect: item.effect }),
-      access: accessText(effectFor(item, level)),
-    }))
-    const sources = entry.manifest.sources.map((source): SourceWithoutGrants => ({
+/** One installed plugin's declarations, with empty grant lists for the grants to fill. */
+function reportOf(installed: InstalledManifest, level: AccessLevel): MutablePlugin {
+  const manifest = installed.manifest
+  const method = (name: string): MethodItem | undefined => manifest.methods[name]
+  return {
+    package: installed.package,
+    version: installed.version,
+    manifestHash: installed.hash,
+    access: level,
+    sources: manifest.sources.map((source) => ({
       id: source.id,
       method: source.method,
-      operations: source.operations ?? [],
-      private: source.private === true,
-      cost: source.cost,
-    }))
-    const actions = entry.manifest.actions.map((action): ActionWithoutGrants => {
-      const preview = entry.manifest.methods[action.preview]
-      const commit = entry.manifest.methods[action.commit]
-      return {
-        id: action.id,
-        preview: action.preview,
-        commit: action.commit,
-        operations: operationsOf(preview?.operations, commit?.operations),
-        confirmation: action.effect === "local" ? "none" : "required",
-      }
-    })
-    return {
-      installed: entry,
-      access: level,
-      methods,
-      sources,
-      actions,
-      sourceIds: new Set(sources.map((source) => source.id)),
-      actionIds: new Set(actions.map((action) => action.id)),
-    }
-  })
-  const byName = new Map<string, PendingPlugin>()
-  for (const entry of pending) {
-    const name = entry.installed.manifest.plugin.name
-    if (!byName.has(name)) byName.set(name, entry)
-  }
-
-  const grants = new Map<string, AuditGrant[]>()
-  const problems: AuditProblem[] = []
-  for (const record of input.grants ?? []) {
-    const { grant, person, grantedAt } = recordOf(record)
-    const read = "source" in grant
-    const target = read ? grant.source : grant.action
-    const kind = read ? "read" : "act"
-    const entry = byName.get(namespaceOf(target))
-    if (entry === undefined) {
-      problems.push({
-        kind,
-        target,
-        reason: `the plugin "${namespaceOf(target)}" is not installed`,
-        grant: evidenceOf(grant, person, grantedAt, undefined),
-      })
-      continue
-    }
-    if (read && !entry.sourceIds.has(target)) {
-      problems.push({
-        kind,
-        target,
-        reason: `the source "${target}" is not declared by ${entry.installed.package}`,
-        grant: evidenceOf(grant, person, grantedAt, entry.installed),
-      })
-      continue
-    }
-    if (!read && !entry.actionIds.has(target)) {
-      problems.push({
-        kind,
-        target,
-        reason: `the action "${target}" is not declared by ${entry.installed.package}`,
-        grant: evidenceOf(grant, person, grantedAt, entry.installed),
-      })
-      continue
-    }
-    const key = `${kind}\u0000${target}`
-    const held = grants.get(key)
-    const evidence = evidenceOf(grant, person, grantedAt, entry.installed)
-    if (held === undefined) grants.set(key, [evidence])
-    else held.push(evidence)
-  }
-
-  const plugins = pending.map((entry): AuditPlugin => ({
-    package: entry.installed.package,
-    version: entry.installed.version,
-    manifestHash: entry.installed.hash,
-    access: entry.access,
-    methods: entry.methods,
-    sources: entry.sources.map((source): AuditSource => {
-      const held = grants.get(`read\u0000${source.id}`) ?? []
-      return {
-        ...source,
-        accounts: [...new Set(held.map((grant) => grant.account))].sort(),
-        grants: held,
-      }
-    }),
-    actions: entry.actions.map((action): AuditAction => ({
-      ...action,
-      grants: grants.get(`act\u0000${action.id}`) ?? [],
+      operations: [...(source.operations ?? [])],
+      accounts: method(source.method)?.accounts ?? "none",
+      private: source.private ?? false,
+      cost: {
+        class: source.cost.class,
+        ...(source.cost.units === undefined ? {} : { units: source.cost.units.map((unit) => ({ per: unit.per, usd: unit.usd })) }),
+      },
+      grants: [],
     })),
-  }))
-  return { person: input.person, plugins, problems }
+    actions: manifest.actions.map((action) => ({
+      id: action.id,
+      preview: action.preview,
+      commit: action.commit,
+      operations: operationsOf(method(action.preview), method(action.commit)),
+      confirmation: action.effect === "local" ? "optional" : "required",
+      grants: [],
+    })),
+    methods: Object.entries(manifest.methods).map(([name, item]) => methodOf(name, item, level)),
+  }
 }
 
-const scopeSchema = z.record(z.string(), z.array(z.string()))
-const grantSchema = z
-  .object({
-    consumer: z.string(),
-    account: z.string(),
-    scope: scopeSchema,
-    manifestHash: z.string(),
-    disabled: z.boolean(),
-    stale: z.boolean(),
-    person: z.string(),
-    grantedAt: z.string(),
-  })
-  .strict()
-const methodSchema = z
-  .object({
-    method: z.string(),
-    class: z.enum(METHOD_CLASSES),
-    effect: z.enum(METHOD_EFFECTS).optional(),
-    access: z.enum(["runs", "asks first", "off"]),
-  })
-  .strict()
-const costSchema = z
-  .object({
-    class: z.enum(COST_CLASSES),
-    units: z.array(z.object({ per: z.string(), usd: z.number() }).strict()).optional(),
-  })
-  .strict()
-const sourceSchema = z
-  .object({
-    id: z.string(),
-    method: z.string(),
-    operations: z.array(z.string()),
-    accounts: z.array(z.string()),
-    private: z.boolean(),
-    cost: costSchema,
-    grants: z.array(grantSchema),
-  })
-  .strict()
-const actionSchema = z
-  .object({
-    id: z.string(),
-    preview: z.string(),
-    commit: z.string(),
-    operations: z.array(z.string()),
-    confirmation: z.enum(["required", "none"]),
-    grants: z.array(grantSchema),
-  })
-  .strict()
-const pluginSchema = z
-  .object({
-    package: z.string(),
-    version: z.string(),
-    manifestHash: z.string(),
-    access: z.enum(ACCESS_LEVELS),
-    methods: z.array(methodSchema),
-    sources: z.array(sourceSchema),
-    actions: z.array(actionSchema),
-  })
-  .strict()
-const problemSchema = z
-  .object({
-    kind: z.enum(["read", "act"]),
-    target: z.string(),
-    reason: z.string(),
-    grant: grantSchema,
-  })
-  .strict()
-const reportSchema = z
-  .object({
-    person: z.string(),
-    plugins: z.array(pluginSchema),
-    problems: z.array(problemSchema),
-  })
-  .strict()
+/** True for an action grant, whose id is `action`; a read grant names a source. */
+function isActGrant(grant: AuditGrantRecord): grant is ActGrantRecord {
+  return typeof (grant as { readonly action?: unknown }).action === "string"
+}
 
-/** The report's schema, published as `dist/schemas/audit.json`. */
-export const AUDIT_REPORT_SCHEMA: Validator<AuditReport> = validator("audit", reportSchema)
+/** The plugin name a source or action id begins with, which is the manifest's plugin name (contract §3). */
+const pluginOf = (id: string): string => id.split(".")[0] ?? id
+
+/**
+ * Builds the audit report for one person: every installed plugin's sources, actions and methods under the person's
+ * access level, with the grants behind each, and every grant that names something not installed in `problems`.
+ */
+export function auditReport(input: AuditInput): AuditReport {
+  const contexts = input.plugins.map((installed) => ({ installed, report: reportOf(installed, levelOf(input, installed)) }))
+  const byName = new Map<string, (typeof contexts)[number]>()
+  for (const context of contexts) byName.set(context.installed.manifest.plugin.name, context)
+
+  const problems: AuditProblem[] = []
+  for (const grant of input.grants ?? []) {
+    const act = isActGrant(grant)
+    const id = act ? grant.action : grant.source
+    if (typeof id !== "string" || id === "") {
+      problems.push({ problem: "the grant names neither a source nor an action", grant: bindingOf(grant) })
+      continue
+    }
+    const context = byName.get(pluginOf(id))
+    const binding = bindingOf(grant, context?.installed.hash)
+    if (context === undefined) {
+      problems.push({ problem: `the plugin "${pluginOf(id)}" is not installed`, grant: binding })
+      continue
+    }
+    if (act) {
+      const action = context.report.actions.find((entry) => entry.id === grant.action)
+      if (action === undefined) {
+        problems.push({
+          problem: `the action "${grant.action}" is not declared by ${context.installed.package} ${context.installed.version}`,
+          grant: binding,
+        })
+        continue
+      }
+      action.grants.push(binding)
+      continue
+    }
+    const source = context.report.sources.find((entry) => entry.id === grant.source)
+    if (source === undefined) {
+      problems.push({
+        problem: `the source "${grant.source}" is not declared by ${context.installed.package} ${context.installed.version}`,
+        grant: binding,
+      })
+      continue
+    }
+    source.grants.push(binding)
+  }
+
+  return { person: input.person, plugins: contexts.map((context) => context.report), problems }
+}

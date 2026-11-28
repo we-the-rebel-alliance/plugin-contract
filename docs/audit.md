@@ -1,57 +1,58 @@
 # `audit`
 
-`audit` builds the evidence an auditor asks for: what each installed plugin may read and do for one person, and the
-grant behind each declaration (contract §6, §7, §8 and §13). It is an app-side module: it reads the catalog's installed
-manifests and the person's grant records, and answers a plain value. `renderAuditReport` turns that value into
-deterministic Markdown.
+The audit report answers the question an auditor asks first: for one person, what may each installed plugin read and do,
+and who granted it? It is built from the installed manifests, the person's access level per plugin and the grant records
+the host keeps. It is evidence only: the report carries declarations and grant bindings, never provider content, a
+credential or a token (contract §15; issue #94). `renderAuditReport` turns the report into deterministic Markdown for an
+auditor.
 
-```js
-import { auditReport, renderAuditReport } from "@we-the-rebel-alliance/plugin-contract/audit"
+```ts
+import { AUDIT_SCHEMA, auditReport, renderAuditReport } from "@we-the-rebel-alliance/plugin-contract/audit"
+import { listInstalledPlugins } from "@we-the-rebel-alliance/plugin-contract/catalog"
 
+const listing = await listInstalledPlugins(ctx)
 const report = auditReport({
   person: "ana@example.com",
-  installed: listing.plugins,             // CatalogPlugin[], or InstalledManifest[]
-  options: { "@we-the-rebel-alliance/harbour-plugin": { access: "read-only" } },
+  plugins: listing.plugins,
+  access: { demo: "ask-changes" },
   grants: [
-    { ...readGrant, person: "ana@example.com", grantedAt: "2026-11-20T10:00:00.000Z" },
-    { ...actGrant, person: "ana@example.com", grantedAt: "2026-11-20T10:05:00.000Z" },
+    {
+      consumer: "notes",
+      source: "demo.messages",
+      account: "default",
+      scope: { channels: ["C1"] },
+      manifestHash: listing.plugins[0]!.hash,
+      person: "ana@example.com",
+      grantedAt: "2026-11-28T09:00:00Z",
+    },
   ],
 })
 
-const markdown = renderAuditReport(report)
+AUDIT_SCHEMA.check(report) // { ok: true, value: report }
+const markdown = renderAuditReport(report) // the report as Markdown for an auditor
 ```
 
-## The report
+`plugins` takes the catalog's `CatalogPlugin[]` or any `InstalledManifest[]`. `access` maps a plugin's name to its
+`options.access` level; a plugin it does not name is `all`. A grant record is a read `Grant` or an `ActGrant` from
+`access`, with `person` and `grantedAt` beside it, because the grant types carry neither.
 
-`AuditReport` is `{ person, plugins, problems }`. The report is plain data, so an app may store it or send it as JSON
-and check it against `dist/schemas/audit.json` with `AUDIT_REPORT_SCHEMA`. It carries no credential, token or provider
-value: only declarations and grant bindings.
+## What the report holds
 
-Each entry in `plugins` names the package, its version, its manifest hash and the person's `access` level. It holds:
+- **Per plugin:** its package, version and manifest hash, and the access level the person has for it.
+- **Every source:** its id, reading method, declared operations, whether that method takes an account, whether it reads
+  personal content, and its cost.
+- **Every action:** its id, preview and commit methods, the operations those methods declare, and its confirmation rule.
+  A non-`local` action always needs the person's confirmation; a `local` one may carry it.
+- **Every method:** its class, its own declared `effect` when it has one, and what the access level gives it: `runs`,
+  `asks first` or `off`. The last comes from `effectFor`, the same function the access rules use, so the report cannot
+  drift from the rules a call meets.
+- **Under each source or action:** every grant behind it, with its consumer, account, canonical scope, manifest hash,
+  whether it is disabled, the person who granted it and when, and `stale: true` when its manifest hash is not the
+  installed one. A stale or disabled grant is kept: it is part of the evidence, not an error.
 
-- `methods`: every method with its `class`, the manifest's declared `effect` when it has one, and what the access level
-  gives it: `runs`, `asks first` or `off`. The last value comes from `effectFor`, the same rule the access levels use.
-- `sources`: every declared source with its read `method`, `operations`, the `accounts` named by its grants, `private`
-  and `cost`.
-- `actions`: every declared action with its `preview` and `commit` methods, their `operations`, its confirmation rule
-  and its grants.
-
-A grant under a source or action is `{ consumer, account, scope, manifestHash, disabled, stale, person, grantedAt }`.
-The `scope` is canonical: keys sorted and each list sorted without repeats. `stale` is true when the grant's manifest
-hash is not the installed manifest's hash, so the person must consent again. `disabled` is true when the person turned
-the binding off.
-
-A grant whose plugin, source or action is not installed is never dropped and never thrown. It is listed under
-`problems` with its target, the reason and the whole grant, so the evidence survives even when the plugin has gone.
-
-## The input
-
-`installed` accepts a `CatalogPlugin[]` from `listInstalledPlugins` or an `InstalledManifest[]`; `plugins` is an alias
-for the catalogue's own list. The access level is read per plugin, keyed by package or plugin name, from `access` first
-and then from `options[plugin].access`; both default to `all`. `access` may also be one level for every plugin.
-
-Each record in `grants` is a read `Grant` or an `ActGrant` with `person` and `grantedAt` beside it, because the grant
-types carry neither. A store that keeps the grant in its own row may wrap it as `{ grant, person, grantedAt }`.
+A grant whose plugin is not installed, or whose source or action is not declared by the installed plugin, is not
+dropped: it is listed in `problems` with its binding and one sentence saying what is missing. `auditReport` never throws
+for such a grant.
 
 ## Markdown
 
@@ -62,15 +63,10 @@ A stale or disabled grant is marked in its cell, and every entry under `problems
 The output is deterministic: the same report makes the same bytes. Provider text is data, so a pipe or a newline in a
 grant's scope is escaped and cannot break a table.
 
-## Errors
-
-`audit` has no error codes and does not throw for a grant that does not fit. An unmatched grant becomes a `problem`.
-The report's own shape is checked with `AUDIT_REPORT_SCHEMA`, whose JSON Schema is `dist/schemas/audit.json`.
-
 ## Exports
 
 | Export | Does |
 |---|---|
-| `AUDIT_REPORT_SCHEMA`, `auditReport`, `renderAuditReport` | the report's validator, `auditReport(input)` to build it, and `renderAuditReport(report)` to render it as Markdown |
-| `AuditReport`, `AuditPlugin`, `AuditMethod`, `AuditSource`, `AuditAction`, `AuditGrant`, `AuditProblem`, `AuditInput` | the report, its plugin, method, source, action, grant and problem shapes, and the input |
-| `AuditAccess`, `AuditConfirmation`, `AuditGrantRecord` | what a method runs as, an action's confirmation rule, and one of the person's grant records |
+| `auditReport`, `renderAuditReport`, `AuditInput`, `AuditReport` | `auditReport(input)` builds one person's report from installed plugins, access levels and grant records; `renderAuditReport(report)` renders it as deterministic Markdown |
+| `AUDIT_SCHEMA`, `AuditPlugin`, `AuditSource`, `AuditAction`, `AuditMethod`, `AuditAccess` | the report's validator, published as `dist/schemas/audit.json`, and the plugin, source, action and method shapes |
+| `AuditGrantBinding`, `ReadGrantRecord`, `ActGrantRecord`, `AuditGrantRecord`, `AuditProblem` | a grant as the report shows it, the read and action records it is built from, and a grant that could not be placed |

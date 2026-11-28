@@ -7,7 +7,7 @@
  * the end. The output is deterministic: the same report renders the same bytes. Provider text is data: a pipe or a
  * newline in a scope is escaped, so it cannot break a table.
  */
-import type { AuditGrant, AuditReport, AuditSource } from "./report.ts"
+import type { AuditGrantBinding, AuditReport, AuditSource } from "./report.ts"
 
 const LINE_BREAK = /\r\n|\r|\n/g
 
@@ -27,12 +27,12 @@ function list(values: readonly string[]): string {
 }
 
 /** The scope as canonical JSON: sorted keys and lists, with provider text escaped by JSON. */
-function scopeText(scope: Readonly<Record<string, readonly string[]>>): string {
+function scopeText(scope: Readonly<Record<string, string | readonly string[]>>): string {
   return JSON.stringify(scope)
 }
 
 /** One grant's evidence, as a person reads it. */
-function grantText(grant: AuditGrant): string {
+function grantText(grant: AuditGrantBinding): string {
   const marks = [grant.stale ? "stale" : "", grant.disabled ? "disabled" : ""].filter((mark) => mark !== "")
   const suffix = marks.length === 0 ? "" : ` (${marks.join(", ")})`
   return `${grant.consumer} on ${grant.account}, scope ${scopeText(grant.scope)}, granted ${grant.grantedAt} by ${grant.person}${suffix}`
@@ -78,7 +78,7 @@ export function renderAuditReport(report: AuditReport): string {
           cell(source.id),
           cell(source.method),
           list(source.operations),
-          list(source.accounts),
+          cell(source.accounts),
           source.private ? "yes" : "no",
           cell(costText(source.cost)),
         ]
@@ -111,8 +111,7 @@ export function renderAuditReport(report: AuditReport): string {
     lines.push("No problems.")
   } else {
     for (const problem of report.problems) {
-      const where = `${line(problem.kind)} ${line(problem.target)}`
-      lines.push(`- **problem:** ${where}: ${line(problem.reason)}. ${line(grantText(problem.grant))}`)
+      lines.push(`- **problem:** ${line(problem.problem)}. ${line(grantText(problem.grant))}`)
     }
   }
   return `${lines.join("\n").replace(/\n+$/, "")}\n`

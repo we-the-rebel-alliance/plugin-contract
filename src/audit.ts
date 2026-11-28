@@ -1,20 +1,22 @@
 /**
- * `audit`: the evidence an auditor asks for — what each installed plugin may read and do for one person, and the grant
- * behind each declaration (contract §6, §7, §8 and §13; issues #83, #94 and #95).
+ * `audit`: what each installed plugin may read and do for one person, and the grant behind each declaration (contract
+ * §15; issue #94). The report is evidence for an auditor: declarations and grant bindings only, never content, a
+ * credential or a token.
  *
- *   const report = auditReport({ person, installed: listing.plugins, options, grants })
- *   const markdown = renderAuditReport(report)
+ *   const report = auditReport({ person, plugins: listing.plugins, access: { demo: "ask-changes" }, grants })
+ *   AUDIT_SCHEMA.check(report) // the same shape, published as dist/schemas/audit.json
+ *   const markdown = renderAuditReport(report) // deterministic Markdown for an auditor
  *
- * The report is plain data and validates against `dist/schemas/audit.json`. It is deterministic, carries no credential,
- * token or provider value, and puts a grant whose plugin, source or action is not installed under `problems` rather
- * than dropping it or throwing.
+ * A grant for a plugin, source or action that is not installed is kept in `problems` with its binding, never dropped
+ * and never thrown. `docs/audit.md` is the guide.
  */
-export { AUDIT_REPORT_SCHEMA, auditReport } from "./audit/report.ts"
+export { AUDIT_SCHEMA, auditReport } from "./audit/report.ts"
+export { renderAuditReport } from "./audit/render.ts"
 export type {
+  ActGrantRecord,
   AuditAccess,
   AuditAction,
-  AuditConfirmation,
-  AuditGrant,
+  AuditGrantBinding,
   AuditGrantRecord,
   AuditInput,
   AuditMethod,
@@ -22,5 +24,5 @@ export type {
   AuditProblem,
   AuditReport,
   AuditSource,
+  ReadGrantRecord,
 } from "./audit/report.ts"
-export { renderAuditReport } from "./audit/render.ts"

@@ -19,7 +19,7 @@ Access: read-only
 
 | Source | Method | Operations | Accounts | Private | Cost | Grant |
 | --- | --- | --- | --- | --- | --- | --- |
-| harbour.notes | events_list | harbour.users.get, harbour.notes.list, harbour.notes.get | work | yes | free | notes on work, scope {"spaces":["space-research"]}, granted 2026-11-20T10:00:00.000Z by Ana Silva (disabled) |
+| harbour.notes | events_list | harbour.users.get, harbour.notes.list, harbour.notes.get | optional | yes | free | notes on work, scope {"spaces":["space-research"]}, granted 2026-11-20T10:00:00.000Z by Ana Silva (disabled) |
 
 ### What it may do
 
@@ -45,7 +45,7 @@ Access: ask-changes
 
 | Source | Method | Operations | Accounts | Private | Cost | Grant |
 | --- | --- | --- | --- | --- | --- | --- |
-| trellis.messages | events_list | trellis.users.get, messages_search, messages_read | personal | yes | free | digest on personal, scope {"channels":["C-RESEARCH"]}, granted 2026-11-20T10:05:00.000Z by Ana Silva (stale) |
+| trellis.messages | events_list | trellis.users.get, messages_search, messages_read | optional | yes | free | digest on personal, scope {"channels":["C-RESEARCH"]}, granted 2026-11-20T10:05:00.000Z by Ana Silva (stale) |
 
 ### What it may do
 
@@ -76,4 +76,4 @@ No actions.
 
 ## Problems
 
-- **problem:** read ghost.messages: the plugin "ghost" is not installed. notes on work, scope {}, granted 2026-11-20T10:10:00.000Z by Ana Silva
+- **problem:** the plugin "ghost" is not installed. notes on work, scope {}, granted 2026-11-20T10:10:00.000Z by Ana Silva
