@@ -67,6 +67,7 @@ bundles only what it imports.
 | `params` | app | relative times, windows and `$me`, resolved at read time | [params](docs/params.md) |
 | `pick` | app | field selection, checked against the output's schema | [pick](docs/pick.md) |
 | `catalog` | app, catalog | installed manifests, the broker request and the consumer's reader | [catalog](docs/catalog.md) |
+| `audit` | app | what each installed plugin may read and do for a person, with the grant behind it, and its Markdown report | [audit](docs/audit.md) |
 | `hints` | plugin | the generic hint file: frontmatter, limits and checks | [hints](docs/hints.md) |
 | `schemas` | both | every published JSON Schema, by name | [schemas](docs/schemas.md) |
 | `conformance` | CI | T0, T1 and every recorded check, as one report | [conformance](docs/conformance.md) |
@@ -103,7 +104,7 @@ the host harness. A new plugin starts from `plugin-template`.
 - [The contract, v0](docs/contract.md): the manifest, accounts, methods and access, sources, actions, doors, bus events,
   status, errors, trust, catalog, modules, conformance and versions.
 - [The plugin standard](docs/plugin-standard.md): what every `<name>-plugin` repository must be.
-- [How an app uses the contract](docs/consumers.md): discover, read, subscribe, act, the grant flow and the errors.
+- [How an app uses the contract](docs/consumers.md): discover, read, subscribe, act, the grant flow, the audit report and the errors.
 - [Decisions](docs/decisions.md): the settled decisions behind v0.
 - [Supported plugins](SUPPORTED.md): the plugins and their state.
 - [AGENTS.template.md](AGENTS.template.md): the agent guide every plugin starts from.

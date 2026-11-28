@@ -39,6 +39,10 @@
       "types": "./dist/act.d.ts",
       "default": "./dist/act.js"
     },
+    "./audit": {
+      "types": "./dist/audit.d.ts",
+      "default": "./dist/audit.js"
+    },
     "./bus": {
       "types": "./dist/bus.d.ts",
       "default": "./dist/bus.js"

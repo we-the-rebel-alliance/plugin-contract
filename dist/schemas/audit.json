@@ -1,0 +1,389 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "person": {
+      "type": "string"
+    },
+    "plugins": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "package": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "manifestHash": {
+            "type": "string"
+          },
+          "access": {
+            "type": "string",
+            "enum": [
+              "all",
+              "ask-changes",
+              "read-only"
+            ]
+          },
+          "methods": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "method": {
+                  "type": "string"
+                },
+                "class": {
+                  "type": "string",
+                  "enum": [
+                    "read",
+                    "write",
+                    "send",
+                    "share",
+                    "delete",
+                    "export",
+                    "admin"
+                  ]
+                },
+                "effect": {
+                  "type": "string",
+                  "enum": [
+                    "ask",
+                    "deny"
+                  ]
+                },
+                "access": {
+                  "type": "string",
+                  "enum": [
+                    "runs",
+                    "asks first",
+                    "off"
+                  ]
+                }
+              },
+              "required": [
+                "method",
+                "class",
+                "access"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "method": {
+                  "type": "string"
+                },
+                "operations": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "accounts": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "private": {
+                  "type": "boolean"
+                },
+                "cost": {
+                  "type": "object",
+                  "properties": {
+                    "class": {
+                      "type": "string",
+                      "enum": [
+                        "free",
+                        "metered",
+                        "billed"
+                      ]
+                    },
+                    "units": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "per": {
+                            "type": "string"
+                          },
+                          "usd": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "per",
+                          "usd"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "class"
+                  ],
+                  "additionalProperties": false
+                },
+                "grants": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "consumer": {
+                        "type": "string"
+                      },
+                      "account": {
+                        "type": "string"
+                      },
+                      "scope": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "manifestHash": {
+                        "type": "string"
+                      },
+                      "disabled": {
+                        "type": "boolean"
+                      },
+                      "stale": {
+                        "type": "boolean"
+                      },
+                      "person": {
+                        "type": "string"
+                      },
+                      "grantedAt": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "consumer",
+                      "account",
+                      "scope",
+                      "manifestHash",
+                      "disabled",
+                      "stale",
+                      "person",
+                      "grantedAt"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "method",
+                "operations",
+                "accounts",
+                "private",
+                "cost",
+                "grants"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "preview": {
+                  "type": "string"
+                },
+                "commit": {
+                  "type": "string"
+                },
+                "operations": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "confirmation": {
+                  "type": "string",
+                  "enum": [
+                    "required",
+                    "none"
+                  ]
+                },
+                "grants": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "consumer": {
+                        "type": "string"
+                      },
+                      "account": {
+                        "type": "string"
+                      },
+                      "scope": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "manifestHash": {
+                        "type": "string"
+                      },
+                      "disabled": {
+                        "type": "boolean"
+                      },
+                      "stale": {
+                        "type": "boolean"
+                      },
+                      "person": {
+                        "type": "string"
+                      },
+                      "grantedAt": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "consumer",
+                      "account",
+                      "scope",
+                      "manifestHash",
+                      "disabled",
+                      "stale",
+                      "person",
+                      "grantedAt"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "preview",
+                "commit",
+                "operations",
+                "confirmation",
+                "grants"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "package",
+          "version",
+          "manifestHash",
+          "access",
+          "methods",
+          "sources",
+          "actions"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "problems": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "read",
+              "act"
+            ]
+          },
+          "target": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "grant": {
+            "type": "object",
+            "properties": {
+              "consumer": {
+                "type": "string"
+              },
+              "account": {
+                "type": "string"
+              },
+              "scope": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "manifestHash": {
+                "type": "string"
+              },
+              "disabled": {
+                "type": "boolean"
+              },
+              "stale": {
+                "type": "boolean"
+              },
+              "person": {
+                "type": "string"
+              },
+              "grantedAt": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "consumer",
+              "account",
+              "scope",
+              "manifestHash",
+              "disabled",
+              "stale",
+              "person",
+              "grantedAt"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "kind",
+          "target",
+          "reason",
+          "grant"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "person",
+    "plugins",
+    "problems"
+  ],
+  "additionalProperties": false
+}

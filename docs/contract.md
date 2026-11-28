@@ -333,6 +333,7 @@ Remote apps can't read the disk, and RPC is untrusted for manifests. The **catal
 | `params`, `pick` | app | relative times, `$me`, field selection |
 | `outputs` | both | the snapshot shape registry and its JSON Schemas |
 | `catalog` | app, catalog | installed manifests |
+| `audit` | app | what each installed plugin may read and do for a person, with the grant behind it, and its Markdown report |
 | `conformance` | CI | the kit (§16) |
 | `kit` | dev | the `plugin-kit` binary: `check`, `docs`, `record`, `conformance`, `hosts`, `release`, `supported`, `forbidden`; a devDependency, never bundled |
 | `mcp-events` | plugin | optional; MCP Events adapter over events sources (later) |
