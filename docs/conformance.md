@@ -44,7 +44,7 @@ T1.
 | `T0.namespace-length` | the namespace text the plugin registers with `ctx.tool.namespace` is one line of at most 400 characters |
 | `T0.skill-length` | every `skills/**/SKILL.md` has a description of at most 300 characters |
 | `T0.skill-name` | every skill is `<name>` or `<name>-<topic>` |
-| `T0.tools` | no text names a tool the manifest does not declare (`tools.<name>.<method>`, and `<name>_<method>` in a skill) |
+| `T0.tools` | no text names a tool the manifest does not declare (`tools.<name>.<method>`, and `<name>_<method>` in a skill), except a name in `guestTools` |
 | `T0.pinned` | a pinned method has session evidence declared in the fixture |
 | `T0.docs-*` | every generated doc section matches the manifest |
 

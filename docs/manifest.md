@@ -45,6 +45,7 @@ app ignores and no app may require.
 | `accounts` | no | How accounts work (§5). Absent: the plugin signs in to nothing. |
 | `options` | yes | JSON Schema 2020-12 of the plugin's options. Must include `access`. |
 | `methods` | yes | Every callable, including pass-through MCP tools. |
+| `guestTools` | no | Tools a plugin's helper adds on another machine, such as the guest's `done` tool. Names for T0, not methods this plugin registers. |
 | `sources` | yes | The reads an app can bind to. May be empty for a tools-only plugin. |
 | `actions` | yes | The writes an app can offer a person. May be empty. |
 | `events` | yes | The bus events the plugin emits. |
@@ -159,6 +160,7 @@ Rules:
 - Pass-through MCP tools are declared as `mcp:<tool>` or `mcp:*` and keep the vendor's case (`mcp:getJiraIssue`). Two tool names that normalise to the same effective OpenCode action (`files.delete` and `files_delete`), or that differ only in case (OpenCode's matcher is case-insensitive on Windows), are refused at both names.
 - `mcp:*` is a wildcard and carries no `description` or `input`; an `mcp:<tool>` row may carry them as the plugin's own claim from the vendor's tool definition, which T1 does not check because the vendor's server owns the tool.
 - A tools-only plugin over a vendor's MCP server declares `mcp:*` and `mcp:<tool>` rows, with `sources` and `actions` empty (contract §6). It marks a tool that reaches someone or costs money with its class and `effect: "ask"`. `methods.mcp-wildcard` warns only about a row that has the same class, `effect` and `operations` as `mcp:*`; a row that differs is kept, in either direction, so a plugin's reviewer is the check on a row that lowers a tool's class below `mcp:*`.
+- `guestTools` names the tools a plugin's helper adds on another machine, such as the guest's `done` tool. They are not methods this plugin registers: T0 accepts `<plugin>_<guestTool>` in a skill, and the name must not collide with a declared method.
 
 ### `sources`
 

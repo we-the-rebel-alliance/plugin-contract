@@ -261,6 +261,15 @@ describe("T0", () => {
     writeFileSync(join(good, "AGENTS.md"), "Call `fixture_list_files`.\n")
     assert.ok(!ids(staticFindings(good, fixture().manifest, { namespace: "fixture" })).includes("T0.tools"))
   })
+  test("a declared guest tool is accepted in a skill, and an undeclared one is refused", () => {
+    const directory = copy()
+    writeFileSync(join(directory, "skills", "fixture", "SKILL.md"), "---\nname: fixture\ndescription: A fixture skill.\n---\nCall `fixture_done`.\n")
+    const { manifest } = fixture()
+    assert.ok(ids(staticFindings(directory, manifest, { namespace: "fixture" })).includes("T0.tools"))
+    const declared = { ...manifest, guestTools: ["done"] }
+    assert.ok(!ids(staticFindings(directory, declared, { namespace: "fixture" })).includes("T0.tools"))
+  })
+
   test("a vendor-cased pass-through MCP tool is accepted, and warns only beside mcp:*", () => {
     const { manifest, installed } = fixture()
     const value = clone(manifest) as any

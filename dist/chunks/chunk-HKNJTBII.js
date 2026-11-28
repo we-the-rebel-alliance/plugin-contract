@@ -282,6 +282,7 @@ function optionProblems(schema) {
 var versionField = literal(MANIFEST_VERSION);
 var optionsField = record(string(), unknown()).describe("JSON Schema 2020-12 of the plugin's options. It must include access.");
 var normalizedMCPTool = (tool) => tool.replace(/[^A-Za-z0-9_-]/g, "_").toLowerCase();
+var guestToolsField = array(string().regex(METHOD_NAME, { error: "must be a tool name such as done" })).max(64).describe("Tools a plugin's helper adds on another machine, such as the guest's done tool. They are names for T0, not methods this plugin registers.");
 var methodsField = record(methodName, methodItem).superRefine((methods, context) => {
   const wildcard = methods["mcp:*"];
   for (const field of ["description", "input"]) {
@@ -321,6 +322,7 @@ var FIELDS = {
   accounts: { schema: accountsInfo, required: false },
   options: { schema: optionsField, required: true },
   methods: { schema: methodsField, required: true },
+  guestTools: { schema: guestToolsField, required: false },
   sources: { schema: sourcesField, required: true },
   actions: { schema: actionsField, required: true },
   events: { schema: eventsField, required: true },
@@ -332,6 +334,7 @@ var top = looseObject({
   accounts: accountsInfo.optional(),
   options: optionsField,
   methods: methodsField,
+  guestTools: guestToolsField.optional(),
   sources: sourcesField,
   actions: actionsField,
   events: eventsField,
@@ -384,6 +387,14 @@ function crossProblems(value, parsed) {
     }
   }
   if (pinned > 1) issue(["methods"], "at most one method may be pinned");
+  const guestTools = Array.isArray(parsed["guestTools"]) ? parsed["guestTools"] : [];
+  const seenGuestTools = /* @__PURE__ */ new Set();
+  for (const [index, tool] of guestTools.entries()) {
+    if (typeof tool !== "string") continue;
+    if (seenGuestTools.has(tool)) issue(["guestTools", index], `"${tool}" is declared twice`);
+    seenGuestTools.add(tool);
+    if (Object.hasOwn(methods, tool)) issue(["guestTools", index], `"${tool}" is also a declared method; a guest tool is not a host method`);
+  }
   const sourceIds = /* @__PURE__ */ new Set();
   const serviceLabels = /* @__PURE__ */ new Map();
   for (const [index, item] of objectList(value["sources"]).entries()) {

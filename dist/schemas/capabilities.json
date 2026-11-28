@@ -236,6 +236,15 @@
       },
       "description": "Every callable, including pass-through MCP tools."
     },
+    "guestTools": {
+      "maxItems": 64,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]*$"
+      },
+      "description": "Tools a plugin's helper adds on another machine, such as the guest's done tool. They are names for T0, not methods this plugin registers."
+    },
     "sources": {
       "type": "array",
       "items": {

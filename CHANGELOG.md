@@ -22,6 +22,9 @@ The first release in `we-the-rebel-alliance`: the contract at wire version 1, gr
   code such as `SKILLS_INVALID` that only `status` shows (#73). `plugin-kit docs` writes them after the contract's codes in
   the generated errors table, and conformance (`status.code`) refuses a recorded `status.nextStep` that starts with a code
   neither the contract nor the manifest holds. A plugin with no extra codes is unchanged.
+- **`capabilities.guestTools` (#93):** an optional list of up to 64 method-shaped names for tools a plugin's helper adds
+  on another machine, such as the boxd guest's `done`. T0 accepts `<plugin>_<guestTool>` in a skill for a declared name;
+  a repeat or a collision with a declared method is refused. The list registers nothing and grants nothing.
 - **`FORBIDDEN.secret`:** the scan no longer flags `const token = pageToken`, `const token = ++renderToken`, a typed
   parameter such as `login(password: string)` or `set(key: string, token: MintedToken)`, or the format `header.payload.signature`
   in a code span. It judges where a value sits (a declaration, a signature, a code span) and sets aside only what the
