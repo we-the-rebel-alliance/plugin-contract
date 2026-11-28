@@ -127,6 +127,7 @@ again. Nothing said over RPC is trusted as a manifest.
 | `actions` | Writes an app can offer a person (§8). |
 | `events` | The bus events the plugin emits (§10). |
 | `errors` | Optional. The plugin's own error codes, each `{ surface, meaning }` (§12). |
+| `guestTools` | Optional. Tools a plugin's helper adds on another machine, such as the boxd guest's `done`: names T0 accepts in the plugin's text, never methods it registers (§16). |
 | `x-<app>` | Optional app-only hints. Never required, never read by another app, never read by the conformance kit beyond its name. |
 
 ## 5. Accounts
@@ -352,7 +353,8 @@ Remote apps can't read the disk, and RPC is untrusted for manifests. The **catal
 - Generated docs (§ plugin standard) match the manifest.
 - No top-level key other than the manifest's own, and no app-specific key outside `x-<app>`.
 - **T0 (static), a hard gate on every pull request:** the namespace line is at most 400 characters; each skill
-  description at most 300; no text names a tool that doesn't exist; no pinned method without evidence.
+  description at most 300; no text names a tool that doesn't exist, except a name in `guestTools`; no pinned method
+  without evidence.
 - **T1 (host), a hard gate on every pull request:** the plugin loads on every supported host; its permissions hold; an
   unsupported host gets a clean refusal (`HOST_UNTESTED`).
 
