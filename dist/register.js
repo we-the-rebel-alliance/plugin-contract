@@ -9,22 +9,24 @@ import {
 } from "./chunks/chunk-DTQJCQ7P.js";
 import {
   verifyGrant
-} from "./chunks/chunk-ED3MMWUJ.js";
+} from "./chunks/chunk-EGSVFMLE.js";
+import "./chunks/chunk-UP4MI2EO.js";
 import {
   applyAccess,
   evaluate,
   methodAction,
   unguardedAgents
-} from "./chunks/chunk-MLDKZD3W.js";
+} from "./chunks/chunk-QRQ6DMVY.js";
 import {
   manifestHash
-} from "./chunks/chunk-HKNJTBII.js";
-import "./chunks/chunk-Q3OAT7PA.js";
+} from "./chunks/chunk-SLJRXAP6.js";
+import "./chunks/chunk-7N2GP7UG.js";
 import {
   MAX_BYTES_DEFAULT,
   errorCodeOf,
   hostInRange
-} from "./chunks/chunk-MGCFUFDJ.js";
+} from "./chunks/chunk-RUQH3YH7.js";
+import "./chunks/chunk-7KJXMIQH.js";
 import {
   problemsOf
 } from "./chunks/chunk-FTEX4OOT.js";
@@ -44,7 +46,6 @@ import {
   string,
   unknown
 } from "./chunks/chunk-4YITQAYJ.js";
-import "./chunks/chunk-7KJXMIQH.js";
 import "./chunks/chunk-WLRWVIVP.js";
 
 // src/register/rpc.ts

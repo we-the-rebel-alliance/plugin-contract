@@ -31,6 +31,7 @@ describes the entry point a plugin or an app imports.
 
 - [read](read.md): fenced reads, detail reads and `probe`, through the catalog or embedded.
 - [act](act.md): preview then commit of a register-minted plan under a host-signed action grant.
+- [audit](audit.md): what each plugin may read and do for a person, with the grants behind each declaration.
 - [params](params.md): relative times, windows and `$me`, resolved at read time.
 - [pick](pick.md): field selection, checked against the output's schema.
 - [catalog](catalog.md): installed manifests, the broker request and the consumer's reader.

@@ -12,20 +12,22 @@ import {
   mcpAddress,
   renderGeneratedDocs,
   waitForActivation
-} from "./chunks/chunk-5OYG4QE4.js";
-import "./chunks/chunk-ED3MMWUJ.js";
-import "./chunks/chunk-R5VS2G5D.js";
+} from "./chunks/chunk-DO4B2VX3.js";
+import "./chunks/chunk-EGSVFMLE.js";
+import "./chunks/chunk-UP4MI2EO.js";
+import "./chunks/chunk-6T2KJSNG.js";
+import "./chunks/chunk-53VCHUIL.js";
 import "./chunks/chunk-6WEY3U6L.js";
-import "./chunks/chunk-KFRWS24W.js";
-import "./chunks/chunk-MLDKZD3W.js";
+import "./chunks/chunk-QRQ6DMVY.js";
 import {
   checkManifest
-} from "./chunks/chunk-HKNJTBII.js";
-import "./chunks/chunk-Q3OAT7PA.js";
+} from "./chunks/chunk-SLJRXAP6.js";
+import "./chunks/chunk-7N2GP7UG.js";
 import {
   TESTED_OPENCODE,
   eventHash
-} from "./chunks/chunk-MGCFUFDJ.js";
+} from "./chunks/chunk-RUQH3YH7.js";
+import "./chunks/chunk-7KJXMIQH.js";
 import "./chunks/chunk-FTEX4OOT.js";
 import {
   secretFindings,
@@ -33,7 +35,6 @@ import {
 } from "./chunks/chunk-M7EFVHR5.js";
 import "./chunks/chunk-OJKZGBMB.js";
 import "./chunks/chunk-4YITQAYJ.js";
-import "./chunks/chunk-7KJXMIQH.js";
 import "./chunks/chunk-WLRWVIVP.js";
 
 // src/kit/cli.ts
