@@ -60,7 +60,7 @@ Legend:
 |---|---|---|---|---|---|---|---|---|
 | tavily | `tavily-plugin` | mcp (single → multi) | — | — | — | — | C | planned |
 | openrouter | `openrouter-plugin` | mcp (single → multi) | — | — | — | — | C | planned |
-| inference | `inference-plugin` | — (uses OpenRouter) | — | — | — | — | C | planned |
+| inference | `inference-plugin` | integration (profile per alias) | — | send | — | — | C | supported |
 | charts | `charts-plugin` | — | — | write | — | — | C | planned |
 | browse | `browse-plugin` | local (the person's browser) | — | write, send | — | — | C | planned |
 | utilities | `utilities-plugin` | — | — | write | — | — | C | planned |
