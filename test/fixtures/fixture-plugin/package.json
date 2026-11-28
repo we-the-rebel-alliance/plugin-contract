@@ -40,13 +40,46 @@
       "additionalProperties": false
     },
     "methods": {
-      "status": { "class": "read", "accounts": "none" },
+      "status": {
+        "class": "read",
+        "description": "Read the fixture's status.",
+        "input": { "type": "object", "properties": {}, "additionalProperties": false },
+        "accounts": "none"
+      },
       "probe": { "class": "read", "accounts": "optional", "operations": ["fixture.users.get"] },
-      "events_list": { "class": "read", "accounts": "optional", "operations": ["fixture.messages.list", "fixture.users.get"] },
+      "events_list": {
+        "class": "read",
+        "description": "List fixture messages.",
+        "input": {
+          "type": "object",
+          "properties": {
+            "source": { "type": "string" },
+            "cursor": { "type": "string" },
+            "thumbnails": { "type": "boolean" },
+            "scope": { "type": "object", "additionalProperties": true },
+            "account": { "type": "string", "description": "The account alias, such as work; omit it when the plugin has one account." }
+          },
+          "additionalProperties": false
+        },
+        "accounts": "optional",
+        "operations": ["fixture.messages.list", "fixture.users.get"]
+      },
       "read_message": { "class": "read", "accounts": "optional", "operations": ["fixture.messages.get"] },
       "list_channels": { "class": "read", "accounts": "optional", "operations": ["fixture.channels.list"] },
       "plan_send": { "class": "read", "plans": true, "accounts": "optional", "operations": ["fixture.messages.create"] },
-      "send_message": { "class": "send", "commits": "plan_send", "accounts": "optional", "operations": ["fixture.messages.create"] },
+      "send_message": {
+        "class": "send",
+        "commits": "plan_send",
+        "description": "Send a planned message.",
+        "input": {
+          "type": "object",
+          "properties": { "planId": { "type": "string", "minLength": 1 } },
+          "required": ["planId"],
+          "additionalProperties": false
+        },
+        "accounts": "optional",
+        "operations": ["fixture.messages.create"]
+      },
       "write_note": { "class": "write", "accounts": "optional", "operations": ["fixture.notes.create"] },
       "delete_note": { "class": "delete", "accounts": "optional", "operations": ["fixture.notes.delete"] },
       "share_note": { "class": "share", "accounts": "optional", "operations": ["fixture.notes.share"] },

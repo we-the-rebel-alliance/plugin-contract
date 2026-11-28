@@ -60,6 +60,7 @@ is not a T0 finding: the file set belongs to the kit's `docs` and `forbidden` ch
 | `T1.host-unavailable` | T1 ran on Node 24 or Bun; on Node 22 the embedded host cannot parse `await using`, and this is an error |
 | `T1.id` | the plugin's id is `capabilities.plugin.name` |
 | `T1.doors` | every non-MCP method is an agent tool with permission `<name>.<method>` and an RPC method under id `<name>`, and nothing else is registered |
+| `T1.methods` | on a register method, the declared `description` and `input` are the live agent tool's; `input` is the full tool input, including `account` and a commit's `{ planId }`. Pass-through MCP rows are the vendor's tools, which T1 does not load, so it does not check their claims. |
 | `T1.permissions` | the access matrix holds for every real primary agent at `all`, `ask-changes` and `read-only` (a plugin whose methods are all reads has one matrix, so only `all` is run), using the one `effectFor` from `./access` |
 | `T1.codemode` | every tool is exposed to Code Mode, and only a declared pinned method is pinned |
 | `T1.events` | the one RPC registration carries exactly the manifest's bus events |

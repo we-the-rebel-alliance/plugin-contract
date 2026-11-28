@@ -4,19 +4,20 @@ import {
 } from "./chunk-ED3MMWUJ.js";
 import {
   acceptAnswer
-} from "./chunk-S7G5C6BC.js";
+} from "./chunk-QTK7SH6K.js";
 import {
   effectFor,
   evaluate,
   serverOf,
   sessionRules,
   toolAction
-} from "./chunk-BJRXF77R.js";
+} from "./chunk-4P7YE6IB.js";
 import {
+  canonicalJson,
   maxBytesOf,
   methodAccounts,
   readInstalledManifest
-} from "./chunk-K3R6R6QY.js";
+} from "./chunk-IQOYF6JI.js";
 import {
   checkOutput
 } from "./chunk-Q3OAT7PA.js";
@@ -11581,13 +11582,14 @@ async function inspectHost(directory, manifest, host, options = {}) {
     else if (run.namespace.name !== manifest.plugin.name) findings.push(error("T1.doors", `the tool namespace is ${run.namespace.name}, and the plugin's name is ${manifest.plugin.name}`, { path: run.entry }));
     findings.push(...doorFindings(manifest, run));
     findings.push(...codemodeFindings(manifest, run));
+    findings.push(...methodFindings(manifest, run));
     findings.push(...eventFindings(manifest, run));
     findings.push(...pinnedFindings(manifest, run));
     findings.push(...await permissionFindings(directory, manifest, host, run, pluginOptions, options.accounts ?? []));
     findings.push(...await rpcFindings(manifest, run, options.inputs ?? {}, options.accounts ?? []));
     findings.push(...await grantAliasFindings(manifest, run, options.accounts ?? []));
     if (options.realAccounts === true) findings.push(...await accountFindings2(manifest, run, options.accounts ?? [], options.inputs ?? {}, options.accountMethod, options.accountCursor));
-    const checks = ["T1.id", "T1.doors", "T1.codemode", "T1.events", "T1.pinned", "T1.permissions"];
+    const checks = ["T1.id", "T1.doors", "T1.codemode", "T1.methods", "T1.events", "T1.pinned", "T1.permissions"];
     if (run.rpc !== void 0) checks.push("T1.rpc-confirmation");
     if (grantAliasApplies(manifest, options.accounts ?? [])) checks.push("T1.grant-alias");
     if (options.realAccounts === true && manifest.accounts !== void 0 && (options.accounts ?? []).length >= 2) checks.push("T1.accounts");
@@ -11637,6 +11639,39 @@ function codemodeFindings(manifest, run) {
     if (!pinned && method !== void 0 && manifest.methods[method]?.pinned === true) findings.push(error("T1.codemode", `${method} declares pinned: true and its Code Mode entry is not pinned`, { path: `capabilities.methods.${method}.pinned` }));
   }
   return findings;
+}
+function methodFindings(manifest, run) {
+  const findings = [];
+  for (const [method, item] of Object.entries(manifest.methods)) {
+    if (method.startsWith("mcp:")) continue;
+    if (item.description === void 0 && item.input === void 0) continue;
+    const tool = run.tools.find((entry) => entry.permission === `${manifest.plugin.name}.${method}`);
+    if (tool === void 0) continue;
+    if (item.description !== void 0 && item.description !== tool.description) {
+      findings.push(
+        error("T1.methods", `${method}'s description in capabilities.methods does not match the live tool's`, {
+          path: `capabilities.methods.${method}.description`,
+          fix: `Generate capabilities.methods.${method}.description from the handler's tool description.`
+        })
+      );
+    }
+    if (item.input !== void 0 && !sameJson(item.input, tool.input)) {
+      findings.push(
+        error("T1.methods", `${method}'s input schema in capabilities.methods does not match the live tool's`, {
+          path: `capabilities.methods.${method}.input`,
+          fix: `Generate capabilities.methods.${method}.input from the live tool's input schema, including account and a commit's planId.`
+        })
+      );
+    }
+  }
+  return findings;
+}
+function sameJson(left, right) {
+  try {
+    return canonicalJson(left) === canonicalJson(right);
+  } catch {
+    return false;
+  }
 }
 function eventFindings(manifest, run) {
   const declared = Object.keys(manifest.events);

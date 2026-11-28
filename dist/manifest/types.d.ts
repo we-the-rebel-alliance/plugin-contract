@@ -114,6 +114,10 @@ export interface AccountsInfo {
 export interface MethodItem {
     /** What the method does: `read`, `write`, `send`, `share`, `delete`, `export` or `admin`. */
     readonly class: MethodClass;
+    /** The tool's description. Optional: a plugin fills it from the tool definition at build time. Not on `mcp:*`. */
+    readonly description?: string | undefined;
+    /** The tool's input, as JSON Schema 2020-12; a register method includes `account` and a commit's `{ planId }`. Not on `mcp:*`. */
+    readonly input?: JsonSchema | undefined;
     /** `optional` when it takes an `account`, `none` when it does not. Defaults to `none`. */
     readonly accounts?: MethodAccounts | undefined;
     /** The provider operations it may assert, for grants and session rules. */

@@ -7,6 +7,7 @@
  * - the plugin id is the manifest's name (`T1.id`);
  * - every non-MCP method is a tool with permission `<name>.<method>`, exposed to Code Mode, and an RPC method under
  *   `<name>`, with the declared bus events in its events block (`T1.doors`, `T1.codemode`, `T1.events`);
+ * - a declared register method's `description` or `input` is the live tool's (`T1.methods`);
  * - the access matrix holds for every real agent at `all`, `ask-changes` and `read-only`, using `effectFor` from
  *   `./access` (`T1.permissions`);
  * - a non-read method over RPC with an allow rule and no grant is refused (LD-5, `T1.rpc-confirmation`);
@@ -18,7 +19,7 @@
  * An unsupported release must refuse with `HOST_UNTESTED` and a next step, unless `allowUntestedHost` is true.
  */
 import { effectFor, evaluate, serverOf, sessionRules, toolAction, type AccessLevel, type PermissionRule } from "../../access.ts"
-import { hostInRange, OPENCODE_RANGE, type Manifest } from "../../manifest.ts"
+import { canonicalJson, hostInRange, OPENCODE_RANGE, type Manifest } from "../../manifest.ts"
 import { createHost, type AssertResult, type HostRun } from "../host/index.ts"
 import { error, warning, type Finding } from "./report.ts"
 
@@ -104,13 +105,14 @@ export async function inspectHost(directory: string, manifest: Manifest, host: s
     else if (run.namespace.name !== manifest.plugin.name) findings.push(error("T1.doors", `the tool namespace is ${run.namespace.name}, and the plugin's name is ${manifest.plugin.name}`, { path: run.entry }))
     findings.push(...doorFindings(manifest, run))
     findings.push(...codemodeFindings(manifest, run))
+    findings.push(...methodFindings(manifest, run))
     findings.push(...eventFindings(manifest, run))
     findings.push(...pinnedFindings(manifest, run))
     findings.push(...(await permissionFindings(directory, manifest, host, run, pluginOptions, options.accounts ?? [])))
     findings.push(...(await rpcFindings(manifest, run, options.inputs ?? {}, options.accounts ?? [])))
     findings.push(...(await grantAliasFindings(manifest, run, options.accounts ?? [])))
     if (options.realAccounts === true) findings.push(...(await accountFindings(manifest, run, options.accounts ?? [], options.inputs ?? {}, options.accountMethod, options.accountCursor)))
-    const checks = ["T1.id", "T1.doors", "T1.codemode", "T1.events", "T1.pinned", "T1.permissions"]
+    const checks = ["T1.id", "T1.doors", "T1.codemode", "T1.methods", "T1.events", "T1.pinned", "T1.permissions"]
     if (run.rpc !== undefined) checks.push("T1.rpc-confirmation")
     if (grantAliasApplies(manifest, options.accounts ?? [])) checks.push("T1.grant-alias")
     if (options.realAccounts === true && manifest.accounts !== undefined && (options.accounts ?? []).length >= 2) checks.push("T1.accounts")
@@ -181,6 +183,46 @@ function codemodeFindings(manifest: Manifest, run: HostRun): Finding[] {
     if (!pinned && method !== undefined && manifest.methods[method]?.pinned === true) findings.push(error("T1.codemode", `${method} declares pinned: true and its Code Mode entry is not pinned`, { path: `capabilities.methods.${method}.pinned` }))
   }
   return findings
+}
+
+/**
+ * A declared register method's description and input, when it carries them, are the live tool's. A pass-through MCP
+ * row describes the vendor's tool, which this host does not load, so its values are the plugin's claim and not checked.
+ */
+function methodFindings(manifest: Manifest, run: HostRun): Finding[] {
+  const findings: Finding[] = []
+  for (const [method, item] of Object.entries(manifest.methods)) {
+    if (method.startsWith("mcp:")) continue
+    if (item.description === undefined && item.input === undefined) continue
+    const tool = run.tools.find((entry) => entry.permission === `${manifest.plugin.name}.${method}`)
+    if (tool === undefined) continue // doors names it
+    if (item.description !== undefined && item.description !== tool.description) {
+      findings.push(
+        error("T1.methods", `${method}'s description in capabilities.methods does not match the live tool's`, {
+          path: `capabilities.methods.${method}.description`,
+          fix: `Generate capabilities.methods.${method}.description from the handler's tool description.`,
+        }),
+      )
+    }
+    if (item.input !== undefined && !sameJson(item.input, tool.input)) {
+      findings.push(
+        error("T1.methods", `${method}'s input schema in capabilities.methods does not match the live tool's`, {
+          path: `capabilities.methods.${method}.input`,
+          fix: `Generate capabilities.methods.${method}.input from the live tool's input schema, including account and a commit's planId.`,
+        }),
+      )
+    }
+  }
+  return findings
+}
+
+/** Two JSON values are the same when their canonical JSON is, so key order does not matter. */
+function sameJson(left: unknown, right: unknown): boolean {
+  try {
+    return canonicalJson(left) === canonicalJson(right)
+  } catch {
+    return false
+  }
 }
 
 /** The RPC events block declares exactly the manifest's bus events, and no other. */
