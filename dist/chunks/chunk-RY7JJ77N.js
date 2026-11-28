@@ -2,7 +2,7 @@
 import {
   isExtensionOutput,
   outputValidator
-} from "./chunk-Q3OAT7PA.js";
+} from "./chunk-JNM2JWUJ.js";
 
 // src/pick.ts
 var MAX_PICK_PATHS = 50;
