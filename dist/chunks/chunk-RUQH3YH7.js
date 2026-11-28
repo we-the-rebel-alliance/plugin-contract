@@ -1,11 +1,11 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
-  secretKinds
-} from "./chunk-M7EFVHR5.js";
-import {
   MAX_CURSOR_LENGTH,
   canonicalScope
 } from "./chunk-7KJXMIQH.js";
+import {
+  secretKinds
+} from "./chunk-M7EFVHR5.js";
 
 // src/manifest/types.ts
 var MANIFEST_VERSION = 1;

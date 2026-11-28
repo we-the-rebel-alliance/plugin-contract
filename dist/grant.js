@@ -1,9 +1,13 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
+  GRANT_CODES,
+  signGrant,
+  verifyGrant
+} from "./chunks/chunk-EGSVFMLE.js";
+import {
   DEFAULT_CLOCK_SKEW_SEC,
   DEFAULT_MAX_LIFETIME_SEC,
   GRANT_ALG,
-  GRANT_CODES,
   GRANT_INVALID,
   GRANT_TYP,
   GrantInputError,
@@ -14,10 +18,8 @@ import {
   MAX_LIFETIME_SEC,
   canonicalJson,
   canonicalScope,
-  digestInput,
-  signGrant,
-  verifyGrant
-} from "./chunks/chunk-ED3MMWUJ.js";
+  digestInput
+} from "./chunks/chunk-UP4MI2EO.js";
 import "./chunks/chunk-WLRWVIVP.js";
 export {
   DEFAULT_CLOCK_SKEW_SEC,

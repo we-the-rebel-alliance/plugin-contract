@@ -1,22 +1,29 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   HINT_SCHEMA
-} from "./chunks/chunk-B7IIQ5TU.js";
+} from "./chunks/chunk-YBCGJKUX.js";
+import {
+  AUDIT_SCHEMA
+} from "./chunks/chunk-TUYA6NJV.js";
+import "./chunks/chunk-UP4MI2EO.js";
+import "./chunks/chunk-QRQ6DMVY.js";
 import {
   MANIFEST_SCHEMA
-} from "./chunks/chunk-HKNJTBII.js";
+} from "./chunks/chunk-SLJRXAP6.js";
 import {
   OUTPUTS
-} from "./chunks/chunk-Q3OAT7PA.js";
+} from "./chunks/chunk-7N2GP7UG.js";
 import {
   ATTENDANCE_RESPONSES,
   COMMITMENT_STATES,
   EVENT_LIMITS
-} from "./chunks/chunk-MGCFUFDJ.js";
+} from "./chunks/chunk-RUQH3YH7.js";
+import "./chunks/chunk-7KJXMIQH.js";
 import {
   validator
 } from "./chunks/chunk-FTEX4OOT.js";
 import "./chunks/chunk-M7EFVHR5.js";
+import "./chunks/chunk-OJKZGBMB.js";
 import {
   _enum,
   boolean,
@@ -24,7 +31,6 @@ import {
   object,
   string
 } from "./chunks/chunk-4YITQAYJ.js";
-import "./chunks/chunk-7KJXMIQH.js";
 import "./chunks/chunk-WLRWVIVP.js";
 
 // src/internal/schema/facts.ts
@@ -62,7 +68,7 @@ var FACT_SCHEMAS = {
 };
 
 // src/schemas.ts
-var SCHEMAS = [MANIFEST_SCHEMA, ...Object.values(OUTPUTS), ...Object.values(FACT_SCHEMAS), HINT_SCHEMA];
+var SCHEMAS = [MANIFEST_SCHEMA, ...Object.values(OUTPUTS), ...Object.values(FACT_SCHEMAS), HINT_SCHEMA, AUDIT_SCHEMA];
 export {
   SCHEMAS
 };
